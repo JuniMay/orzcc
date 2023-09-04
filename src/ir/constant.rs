@@ -21,3 +21,40 @@ pub struct ConstantData {
     /// Kind of the constant
     pub kind: ConstantKind,
 }
+
+impl ConstantData {
+    pub fn mk_zero(ty: Type) -> ConstantData {
+        Self {
+            ty,
+            kind: ConstantKind::Zero,
+        }
+    }
+
+    pub fn mk_undef(ty: Type) -> ConstantData {
+        Self {
+            ty,
+            kind: ConstantKind::Undef,
+        }
+    }
+
+    pub fn mk_bytes(ty: Type, bytes: Vec<u8>) -> ConstantData {
+        Self {
+            ty,
+            kind: ConstantKind::Bytes(bytes),
+        }
+    }
+
+    pub fn mk_array(ty: Type, elems: Vec<Constant>) -> ConstantData {
+        Self {
+            ty,
+            kind: ConstantKind::Array(elems),
+        }
+    }
+
+    pub fn mk_struct(ty: Type, fields: Vec<Constant>) -> ConstantData {
+        Self {
+            ty,
+            kind: ConstantKind::Struct(fields),
+        }
+    }
+}

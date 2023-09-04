@@ -1,11 +1,13 @@
 use super::{
     block::{BlockCall, BlockData},
+    constant::ConstantData,
     function::FunctionData,
     global::GlobalData,
     instructions::{BinaryOp, InstData, UnaryOp},
+    layout::Layout,
     module::Module,
     types::{TyKind, Type},
-    value::{Block, Constant, Function, Global, Inst, Value, ValueData, ValueKind}, layout::Layout,
+    value::{Block, Constant, Function, Global, Inst, Value, ValueData, ValueKind},
 };
 
 /// The builder for constructing an IR.
@@ -32,9 +34,7 @@ impl<'a> Builder<'a> {
     /// Add a value by its data into the module and return the value.
     fn add_value(&mut self, ty: Type, kind: ValueKind) -> Value {
         let value = self.module.allocate_id();
-        self.module
-            .values
-            .insert(value, ValueData::new(ty, kind));
+        self.module.values.insert(value, ValueData::new(ty, kind));
         value
     }
 
@@ -56,6 +56,11 @@ impl<'a> Builder<'a> {
     /// Add a global and its data into the module.
     fn add_global(&mut self, global: Global, data: GlobalData) {
         self.module.globals.insert(global, data);
+    }
+
+    /// Add a constant and its data into the module.
+    fn add_constant(&mut self, constant: Constant, data: ConstantData) {
+        self.module.constants.insert(constant, data);
     }
 
     /// Add an identified type into the module.
@@ -122,10 +127,7 @@ impl<'a> Builder<'a> {
         mutable: bool,
     ) -> Value {
         let value = self.add_value(ty.clone(), ValueKind::Global);
-        self.add_global(
-            value.into(),
-            GlobalData::new(name, ty, init, mutable),
-        );
+        self.add_global(value.into(), GlobalData::new(name, ty, init, mutable));
         value
     }
 
@@ -135,6 +137,19 @@ impl<'a> Builder<'a> {
     pub fn create_block(&mut self, params: Vec<Value>) -> Value {
         let value = self.add_value(Type::mk_void(), ValueKind::Block);
         self.add_block(value.into(), BlockData::new(params));
+        value
+    }
+
+    /// Create a new constant from its data
+    pub fn create_constant(&mut self, data: ConstantData) -> Value {
+        let value = self.add_value(data.ty.clone(), ValueKind::Constant);
+        self.add_constant(value.into(), data);
+        value
+    }
+
+    /// Create a new block param
+    pub fn create_param(&mut self, ty: Type) -> Value {
+        let value = self.add_value(ty, ValueKind::BlockParam);
         value
     }
 
@@ -151,7 +166,7 @@ impl<'a> Builder<'a> {
     /// Set current block to `block`.
     pub fn set_curr_block(&mut self, block: Value) {
         let value_data = self.module.values.get(&block).unwrap();
-        if let ValueKind::Function = value_data.kind {
+        if let ValueKind::Block = value_data.kind {
             self.curr_block = Some(block.into());
         } else {
             assert!(false, "value is not a block");

@@ -6,7 +6,7 @@ use super::instructions::InstData;
 use super::layout::Layout;
 use super::types::Type;
 use super::value::{Block, Constant, Function, Global, Inst, Value, ValueData, ValueKind};
-use super::{GLOBAL_PREFIX, IDENTIFIER_PREFIX};
+use super::{GLOBAL_PREFIX, IDENTIFIER_PREFIX, INDENT};
 use crate::ir::constant::ConstantKind;
 use crate::ir::types::TyKind;
 use std::collections::{HashMap, HashSet};
@@ -379,7 +379,7 @@ impl Module {
     fn block_to_string(&self, block: Block) -> String {
         let block_data = self.blocks.get(&block).unwrap();
 
-        let mut res = format!("{}", self.block_name_allocator.get_name(block).unwrap());
+        let mut res = format!("\n{}", self.block_name_allocator.get_name(block).unwrap());
 
         if !block_data.params.is_empty() {
             res.push_str("(");
@@ -397,6 +397,7 @@ impl Module {
         res.push_str(":\n");
 
         for (inst, _inst_node) in self.layout.get_insts(block).unwrap().iter() {
+            res.push_str(INDENT);
             res.push_str(self.inst_to_string(inst).as_str());
             res.push_str("\n");
         }

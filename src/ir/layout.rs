@@ -173,8 +173,7 @@ impl Layout {
     ///
     /// This will replace the existed layout (if any).
     fn init_local_layout(&mut self, function: Function) -> Result<(), LayoutOpErr> {
-        self.local_layouts
-            .insert(function, BlockList::new());
+        self.local_layouts.insert(function, BlockList::new());
         Ok(())
     }
 
