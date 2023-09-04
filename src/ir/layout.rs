@@ -1,35 +1,30 @@
+use core::panic;
 use std::collections::HashMap;
 
-use crate::adt::{BiLinkedList, BiLinkedNode};
+use crate::collections::{BiLinkedList, BiLinkedListErr, BiLinkedNode};
 
-use super::{block::Block, inst::Inst};
+use super::value::{Block, Function, Global, Inst};
 
 /// Instruction node
 pub struct InstNode {
-    inst: Inst,
     prev: Option<Inst>,
     next: Option<Inst>,
 }
 
 impl BiLinkedNode<Inst> for InstNode {
-    fn new(key: Inst) -> Self {
+    fn new() -> Self {
         InstNode {
-            inst: key,
             prev: None,
             next: None,
         }
     }
 
-    fn curr(&self) -> &Inst {
-        return &self.inst;
+    fn next(&self) -> Option<Inst> {
+        self.next
     }
 
-    fn next(&self) -> Option<&Inst> {
-        return self.next.as_ref();
-    }
-
-    fn prev(&self) -> Option<&Inst> {
-        return self.prev.as_ref();
+    fn prev(&self) -> Option<Inst> {
+        self.prev
     }
 
     fn set_next(&mut self, next: Option<Inst>) {
@@ -45,8 +40,6 @@ pub type InstList = BiLinkedList<Inst, InstNode>;
 
 /// Block node in the linked list
 pub struct BlockNode {
-    block: Block,
-
     prev: Option<Block>,
     next: Option<Block>,
 
@@ -54,25 +47,20 @@ pub struct BlockNode {
 }
 
 impl BiLinkedNode<Block> for BlockNode {
-    fn new(key: Block) -> Self {
+    fn new() -> Self {
         Self {
-            block: key,
             prev: None,
             next: None,
             insts: InstList::new(),
         }
     }
 
-    fn curr(&self) -> &Block {
-        &self.block
+    fn prev(&self) -> Option<Block> {
+        self.prev
     }
 
-    fn prev(&self) -> Option<&Block> {
-        self.prev.as_ref()
-    }
-
-    fn next(&self) -> Option<&Block> {
-        self.next.as_ref()
+    fn next(&self) -> Option<Block> {
+        self.next
     }
 
     fn set_prev(&mut self, prev: Option<Block>) {
@@ -86,19 +74,277 @@ impl BiLinkedNode<Block> for BlockNode {
 
 pub type BlockList = BiLinkedList<Block, BlockNode>;
 
-/// Layout of instruction and blocks inside a certain function.
+/// Layout of globals, functions, blocks and instructions.
 pub struct Layout {
-    /// Blocks.
-    pub blocks: BlockList,
+    /// Layout (sequence) of global values.
+    pub globals: Vec<Global>,
+
+    /// Layout (sequence) of identified types.
+    ///
+    /// This is indexed by the name/identifier, the actual type should be fetched from module.
+    pub identified_types: Vec<String>,
+
+    /// Layout (sequence) of functions.
+    pub functions: Vec<Function>,
+
+    /// Local layouts, indexed by function.
+    pub local_layouts: HashMap<Function, BlockList>,
+
     /// Instruction to block mapping.
     pub inst_blocks: HashMap<Inst, Block>,
+
+    /// Block to function mapping.
+    pub block_functions: HashMap<Block, Function>,
+}
+
+/// Errors in layout operations
+#[derive(Debug)]
+pub enum LayoutOpErr {
+    /// Duplicated global value in insertion.
+    GlobalDuplicate(Global),
+
+    /// Duplicated function value in insertion.
+    FunctionDuplicate(Function),
+
+    /// Duplicated identified type in insertion.
+    TypeDuplicate(String),
+
+    /// Duplicated instruction in inertion.
+    InstDuplicate(Inst),
+
+    /// Duplicated block in insertion.
+    BlockDuplicate(Block),
+
+    /// Parent function cannot indexed in the layout mapping
+    ///
+    /// This is usually caused by removing an block or inserting an instruction.
+    ParentFunctionNotFound(Block),
+
+    /// Parent block cannot be indexed in the layout mapping
+    ///
+    /// This is usually caused by removing an instruction.
+    ParentBlockNotFound(Inst),
+
+    /// Block cannot be found in a local layout (in the linked list).
+    BlockNodeNotFound(Block),
+
+    /// Instruction cannot be found in a local layout (in the linked list).
+    InstNodeNotFound(Inst),
+
+    /// Local layout cannot be found in `local_layouts`
+    LocalLayoutNotFound(Function),
 }
 
 impl Layout {
     pub fn new() -> Self {
         Self {
-            blocks: BlockList::new(),
+            globals: Vec::new(),
+            identified_types: Vec::new(),
+            functions: Vec::new(),
+            local_layouts: HashMap::new(),
             inst_blocks: HashMap::new(),
+            block_functions: HashMap::new(),
         }
+    }
+
+    /// Append a global to the layout
+    ///
+    /// If `global` already exists, return `LayoutOpErr::GlobalDuplicate(gloabl)`.
+    pub fn append_global(&mut self, global: Global) -> Result<(), LayoutOpErr> {
+        if self.globals.iter().any(|g| g == &global) {
+            return Err(LayoutOpErr::GlobalDuplicate(global));
+        }
+        self.globals.push(global);
+        Ok(())
+    }
+
+    /// Append an identified type to the layout
+    ///
+    /// If `name` already exiest, return `LayoutOpErr::TypeDuplicate(name)`.
+    pub fn append_identified_type(&mut self, name: String) -> Result<(), LayoutOpErr> {
+        if self.identified_types.iter().any(|t| t == &name) {
+            return Err(LayoutOpErr::TypeDuplicate(name));
+        }
+        self.identified_types.push(name);
+        Ok(())
+    }
+
+    /// Init the local layout of `function`.
+    ///
+    /// This will replace the existed layout (if any).
+    fn init_local_layout(&mut self, function: Function) -> Result<(), LayoutOpErr> {
+        self.local_layouts
+            .insert(function, BlockList::new());
+        Ok(())
+    }
+
+    /// Append function to the layout.
+    ///
+    /// If `function` exists, return `LayoutOpErr::FunctionDuplicate(function)`.
+    ///
+    /// This will also (re-)initialize the corresponding local layout.
+    pub fn append_function(&mut self, function: Function) -> Result<(), LayoutOpErr> {
+        if self.functions.iter().any(|f| f == &function) {
+            return Err(LayoutOpErr::FunctionDuplicate(function));
+        }
+        self.init_local_layout(function)?;
+        self.functions.push(function);
+        Ok(())
+    }
+
+    /// Get the blocks (`BlockList`) by `function`.
+    ///
+    /// If `function` is not a key of `local_layouts`,
+    /// return `LayoutOpErr::LocalLayoutNotFound(function)`.
+    fn get_blocks_mut(&mut self, function: Function) -> Result<&mut BlockList, LayoutOpErr> {
+        self.local_layouts
+            .get_mut(&function)
+            .ok_or(LayoutOpErr::LocalLayoutNotFound(function))
+    }
+
+    pub fn get_blocks(&self, function: Function) -> Result<&BlockList, LayoutOpErr> {
+        self.local_layouts
+            .get(&function)
+            .ok_or(LayoutOpErr::LocalLayoutNotFound(function))
+    }
+
+    pub fn append_block(&mut self, block: Block, function: Function) -> Result<(), LayoutOpErr> {
+        self.get_blocks_mut(function)?
+            .append(block)
+            .map_err(|e| match e {
+                BiLinkedListErr::KeyDuplicated(_) => LayoutOpErr::BlockDuplicate(block),
+                _ => panic!("unexpected error: {:?}", e),
+            })?;
+
+        self.block_functions.insert(block, function);
+
+        Ok(())
+    }
+
+    pub fn insert_block_before(
+        &mut self,
+        block: Block,
+        before: Block,
+        function: Function,
+    ) -> Result<(), LayoutOpErr> {
+        self.get_blocks_mut(function)?
+            .insert_before(block, before)
+            .map_err(|e| match e {
+                BiLinkedListErr::KeyDuplicated(_) => LayoutOpErr::BlockDuplicate(block),
+                BiLinkedListErr::NodeNotFound(_) => LayoutOpErr::BlockNodeNotFound(before),
+            })?;
+
+        self.block_functions.insert(block, function);
+
+        Ok(())
+    }
+
+    fn get_parent_function(&self, block: Block) -> Result<&Function, LayoutOpErr> {
+        self.block_functions
+            .get(&block)
+            .ok_or(LayoutOpErr::ParentFunctionNotFound(block))
+    }
+
+    fn get_parent_block(&self, inst: Inst) -> Result<&Block, LayoutOpErr> {
+        self.inst_blocks
+            .get(&inst)
+            .ok_or(LayoutOpErr::ParentBlockNotFound(inst))
+    }
+
+    pub fn remove_block(&mut self, block: Block) -> Result<(), LayoutOpErr> {
+        let function = self.get_parent_function(block)?;
+
+        self.get_blocks_mut(*function)?
+            .remove(block)
+            .map_err(|e| match e {
+                BiLinkedListErr::NodeNotFound(_) => LayoutOpErr::BlockNodeNotFound(block),
+                _ => panic!("unexpected error: {:?}", e),
+            })?;
+
+        self.block_functions.remove(&block);
+
+        Ok(())
+    }
+
+    fn get_insts_mut(&mut self, block: Block) -> Result<&mut InstList, LayoutOpErr> {
+        let function = self
+            .block_functions
+            .get(&block)
+            .ok_or(LayoutOpErr::ParentFunctionNotFound(block))?;
+
+        let blocks = self
+            .local_layouts
+            .get_mut(function)
+            .ok_or(LayoutOpErr::LocalLayoutNotFound(*function))?;
+
+        Ok(&mut blocks
+            .nodes
+            .get_mut(&block)
+            .ok_or(LayoutOpErr::BlockNodeNotFound(block))?
+            .insts)
+    }
+
+    pub fn get_insts(&self, block: Block) -> Result<&InstList, LayoutOpErr> {
+        let function = self
+            .block_functions
+            .get(&block)
+            .ok_or(LayoutOpErr::ParentFunctionNotFound(block))?;
+
+        let blocks = self
+            .local_layouts
+            .get(function)
+            .ok_or(LayoutOpErr::LocalLayoutNotFound(*function))?;
+
+        Ok(&blocks
+            .nodes
+            .get(&block)
+            .ok_or(LayoutOpErr::BlockNodeNotFound(block))?
+            .insts)
+    }
+
+    pub fn append_inst(&mut self, inst: Inst, block: Block) -> Result<(), LayoutOpErr> {
+        self.get_insts_mut(block)?
+            .append(inst)
+            .map_err(|e| match e {
+                BiLinkedListErr::KeyDuplicated(_) => LayoutOpErr::InstDuplicate(inst),
+                _ => panic!("unexpected error: {:?}", e),
+            })?;
+
+        self.inst_blocks.insert(inst, block);
+
+        Ok(())
+    }
+
+    pub fn insert_inst_before(
+        &mut self,
+        inst: Inst,
+        before: Inst,
+        block: Block,
+    ) -> Result<(), LayoutOpErr> {
+        self.get_insts_mut(block)?
+            .insert_before(inst, before)
+            .map_err(|e| match e {
+                BiLinkedListErr::KeyDuplicated(_) => LayoutOpErr::InstDuplicate(inst),
+                BiLinkedListErr::NodeNotFound(_) => LayoutOpErr::InstNodeNotFound(before),
+            })?;
+
+        self.inst_blocks.insert(inst, block);
+
+        Ok(())
+    }
+
+    pub fn remove_inst(&mut self, inst: Inst) -> Result<(), LayoutOpErr> {
+        let block = self.get_parent_block(inst)?;
+
+        self.get_insts_mut(*block)?
+            .remove(inst)
+            .map_err(|e| match e {
+                BiLinkedListErr::NodeNotFound(_) => LayoutOpErr::InstNodeNotFound(inst),
+                _ => panic!("unexpected error: {:?}", e),
+            })?;
+
+        self.inst_blocks.remove(&inst);
+
+        Ok(())
     }
 }

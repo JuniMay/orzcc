@@ -1,20 +1,7 @@
 use crate::ir::value::Value;
 use std::fmt::{self};
 
-use super::{block::BlockCall, ty::Type};
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Inst(usize);
-
-impl Inst {
-    pub fn new(id: usize) -> Self {
-        Self(id)
-    }
-
-    pub fn index(&self) -> usize {
-        self.0
-    }
-}
+use super::{block::BlockCall, types::Type};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum BinaryOp {
@@ -79,7 +66,7 @@ impl fmt::Display for UnaryOp {
 /// Instruction data
 pub enum InstData {
     /// Alloca
-    Alloca { ty: Type },
+    Alloc { ty: Type },
     /// Load
     Load { ty: Type, addr: Value },
     /// Store

@@ -1,26 +1,12 @@
-use super::value::Value;
-
-/// Reference to the block
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Block(usize);
-
-impl Block {
-    pub fn new(id: usize) -> Self {
-        Block(id)
-    }
-
-    pub fn index(&self) -> usize {
-        self.0
-    }
-}
+use super::value::{Block, Value};
 
 /// A block call with arguments
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BlockCall {
     /// The callee block
-    block: Block,
+    pub block: Block,
     /// The arguments
-    args: Vec<Value>,
+    pub args: Vec<Value>,
 }
 
 impl BlockCall {

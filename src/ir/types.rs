@@ -25,6 +25,8 @@ pub enum TyKind {
     Fn(Vec<Type>, Type),
     /// Struct
     Struct(Option<String>, Vec<Type>),
+    /// A label
+    Label,
 }
 
 #[derive(Debug, Clone)]
@@ -34,14 +36,14 @@ impl fmt::Display for TyKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TyKind::Void => write!(f, "void"),
-            TyKind::Int(bits) => write!(f, "int{}", bits),
+            TyKind::Int(bits) => write!(f, "i{}", bits),
             TyKind::Half => write!(f, "half"),
             TyKind::Float => write!(f, "float"),
             TyKind::Double => write!(f, "double"),
             TyKind::Ptr => write!(f, "*"),
             TyKind::Array(size, ty) => write!(f, "[{}x{}]", size, ty),
             TyKind::Fn(params, ret) => {
-                write!(f, "fn(")?;
+                write!(f, "(")?;
                 let mut is_first = true;
                 for param in params {
                     if !is_first {
@@ -68,6 +70,7 @@ impl fmt::Display for TyKind {
                     write!(f, " }}")
                 }
             }
+            TyKind::Label => write!(f, "label"),
         }
     }
 }
@@ -100,6 +103,7 @@ impl Type {
                 }
                 bits
             }
+            TyKind::Label => 0,
         }
     }
 
@@ -141,5 +145,9 @@ impl Type {
 
     pub fn mk_struct(name: Option<String>, fields: Vec<Type>) -> Type {
         Type(Rc::new(TyKind::Struct(name, fields)))
+    }
+
+    pub fn mk_label() -> Type {
+        Type(Rc::new(TyKind::Label))
     }
 }

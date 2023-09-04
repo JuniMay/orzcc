@@ -1,20 +1,10 @@
-use super::{constant::Constant, ty::Type};
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Global(usize);
-
-impl Global {
-    pub fn new(id: usize) -> Self {
-        Self(id)
-    }
-
-    pub fn index(&self) -> usize {
-        self.0
-    }
-}
+use super::{types::Type, value::Constant};
 
 /// Data of a global value
+#[derive(Debug, Clone)]
 pub struct GlobalData {
+    /// Name of the value
+    pub name: String,
     /// Type of the value
     pub ty: Type,
     /// Initializer of the value
@@ -24,7 +14,12 @@ pub struct GlobalData {
 }
 
 impl GlobalData {
-    pub fn new(ty: Type, init: Constant, mutable: bool) -> GlobalData {
-        GlobalData { ty, init, mutable }
+    pub fn new(name: String, ty: Type, init: Constant, mutable: bool) -> GlobalData {
+        GlobalData {
+            name,
+            ty,
+            init,
+            mutable,
+        }
     }
 }
