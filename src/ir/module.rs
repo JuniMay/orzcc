@@ -270,7 +270,7 @@ impl Module {
             ConstantKind::Zero => String::from("zero"),
             ConstantKind::Undef => String::from("undef"),
             ConstantKind::Bytes(ref bytes) => {
-                let mut res = String::new();
+                let mut res = String::from("0x");
                 for byte in bytes.iter().rev() {
                     res.push_str(&format!("{:02x}", byte));
                 }
@@ -401,7 +401,6 @@ impl Module {
             res.push_str(self.inst_to_string(inst).as_str());
             res.push_str("\n");
         }
-
         res
     }
 
@@ -414,7 +413,6 @@ impl Module {
         );
         for (block, _block_node) in self.layout.local_layouts.get(&function).unwrap().iter() {
             res.push_str(self.block_to_string(block).as_str());
-            res.push_str("\n");
         }
         res.push_str("}");
         res

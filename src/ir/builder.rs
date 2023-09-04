@@ -4,7 +4,7 @@ use super::{
     function::FunctionData,
     global::GlobalData,
     instructions::{BinaryOp, InstData, UnaryOp},
-    layout::Layout,
+    layout::{Layout, LayoutOpErr},
     module::Module,
     types::{TyKind, Type},
     value::{Block, Constant, Function, Global, Inst, Value, ValueData, ValueKind},
@@ -100,6 +100,25 @@ impl<'a> Builder<'a> {
         &mut self.module.layout
     }
 
+    pub fn append_function(&mut self, function: Function) -> Result<&mut Self, LayoutOpErr> {
+        self.module.layout.append_function(function)?;
+        Ok(self)
+    }
+
+    pub fn append_block(&mut self, block: Block) -> Result<&mut Self, LayoutOpErr> {
+        self.module
+            .layout
+            .append_block(block, self.curr_fn.unwrap())?;
+        Ok(self)
+    }
+
+    pub fn append_inst(&mut self, inst: Inst) -> Result<&mut Self, LayoutOpErr> {
+        self.module
+            .layout
+            .append_inst(inst, self.curr_block.unwrap())?;
+        Ok(self)
+    }
+
     /// Create a new function from name, param types and return type and return the value.
     ///
     /// This does not change the layout.
@@ -135,7 +154,7 @@ impl<'a> Builder<'a> {
     ///
     /// This does not change the layout.
     pub fn create_block(&mut self, params: Vec<Value>) -> Value {
-        let value = self.add_value(Type::mk_void(), ValueKind::Block);
+        let value = self.add_value(Type::mk_label(), ValueKind::Block);
         self.add_block(value.into(), BlockData::new(params));
         value
     }
@@ -154,56 +173,58 @@ impl<'a> Builder<'a> {
     }
 
     /// Set current function to `function`.
-    pub fn set_curr_fn(&mut self, function: Value) {
+    pub fn set_curr_fn(&mut self, function: Value) -> &mut Self {
         let value_data = self.module.values.get(&function).unwrap();
         if let ValueKind::Function = value_data.kind {
             self.curr_fn = Some(function.into());
         } else {
             assert!(false, "value is not a function");
         }
+        self
     }
 
     /// Set current block to `block`.
-    pub fn set_curr_block(&mut self, block: Value) {
+    pub fn set_curr_block(&mut self, block: Value) -> &mut Self {
         let value_data = self.module.values.get(&block).unwrap();
         if let ValueKind::Block = value_data.kind {
             self.curr_block = Some(block.into());
         } else {
             assert!(false, "value is not a block");
         }
+        self
     }
 
-    pub fn alloc(&mut self, ty: Type) -> Value {
+    pub fn mk_alloc(&mut self, ty: Type) -> Value {
         let value = self.add_value(Type::mk_ptr(), ValueKind::Inst);
         self.add_inst(value.into(), InstData::Alloc { ty });
         value
     }
 
-    pub fn load(&mut self, ty: Type, addr: Value) -> Value {
+    pub fn mk_load(&mut self, ty: Type, addr: Value) -> Value {
         let value = self.add_value(ty.clone(), ValueKind::Inst);
         self.add_inst(value.into(), InstData::Load { ty, addr });
         value
     }
 
-    pub fn store(&mut self, val: Value, addr: Value) -> Value {
+    pub fn mk_store(&mut self, val: Value, addr: Value) -> Value {
         let value = self.add_value(Type::mk_void(), ValueKind::Inst);
         self.add_inst(value.into(), InstData::Store { val, addr });
         value
     }
 
-    pub fn binary(&mut self, op: BinaryOp, lhs: Value, rhs: Value) -> Value {
+    pub fn mk_binary(&mut self, op: BinaryOp, lhs: Value, rhs: Value) -> Value {
         let value = self.add_value(self.get_value_type(&lhs), ValueKind::Inst);
         self.add_inst(value.into(), InstData::Binary { op, lhs, rhs });
         value
     }
 
-    pub fn unary(&mut self, op: UnaryOp, val: Value) -> Value {
+    pub fn mk_unary(&mut self, op: UnaryOp, val: Value) -> Value {
         let value = self.add_value(self.get_value_type(&val), ValueKind::Inst);
         self.add_inst(value.into(), InstData::Unary { op, val });
         value
     }
 
-    pub fn br(&mut self, block: Block, args: Vec<Value>) -> Value {
+    pub fn mk_br(&mut self, block: Block, args: Vec<Value>) -> Value {
         let value = self.add_value(Type::mk_void(), ValueKind::Inst);
         self.add_inst(
             value.into(),
@@ -214,7 +235,7 @@ impl<'a> Builder<'a> {
         value
     }
 
-    pub fn condbr(
+    pub fn mk_condbr(
         &mut self,
         cond: Value,
         block_then: Block,
@@ -234,13 +255,13 @@ impl<'a> Builder<'a> {
         value
     }
 
-    pub fn ret(&mut self, val: Option<Value>) -> Value {
+    pub fn mk_ret(&mut self, val: Option<Value>) -> Value {
         let value = self.add_value(Type::mk_void(), ValueKind::Inst);
         self.add_inst(value.into(), InstData::Ret { val });
         value
     }
 
-    pub fn call(&mut self, fn_ty: Type, fn_val: Value, args: Vec<Value>) -> Value {
+    pub fn mk_call(&mut self, fn_ty: Type, fn_val: Value, args: Vec<Value>) -> Value {
         let value = self.add_value(
             self.get_ret_type(&fn_ty)
                 .expect("`fn_ty` should be a function type"),
