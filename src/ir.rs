@@ -6,6 +6,7 @@ pub mod global;
 pub mod instructions;
 pub mod layout;
 pub mod module;
+pub mod printer;
 pub mod types;
 pub mod value;
 

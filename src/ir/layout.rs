@@ -147,6 +147,18 @@ impl Layout {
         }
     }
 
+    /// Reset the layout to be empty.
+    ///
+    /// Note that the data of functions, instructions, blocks, etc., will remains.
+    pub fn clear(&mut self) {
+        self.globals.clear();
+        self.identified_types.clear();
+        self.functions.clear();
+        self.local_layouts.clear();
+        self.inst_blocks.clear();
+        self.block_functions.clear();
+    }
+
     /// Append a global to the layout
     ///
     /// If `global` already exists, return `LayoutOpErr::GlobalDuplicate(gloabl)`.
@@ -191,7 +203,7 @@ impl Layout {
         Ok(())
     }
 
-    /// Get the blocks (`BlockList`) by `function`.
+    /// Get the blocks (`BlockList`) by `function` as mutable..
     ///
     /// If `function` is not a key of `local_layouts`,
     /// return `LayoutOpErr::LocalLayoutNotFound(function)`.
@@ -201,12 +213,17 @@ impl Layout {
             .ok_or(LayoutOpErr::LocalLayoutNotFound(function))
     }
 
+    /// Get the blocks (`BlockList`) by `function` as immutable..
+    ///
+    /// If `function` is not a key of `local_layouts`,
+    /// return `LayoutOpErr::LocalLayoutNotFound(function)`.
     pub fn get_blocks(&self, function: Function) -> Result<&BlockList, LayoutOpErr> {
         self.local_layouts
             .get(&function)
             .ok_or(LayoutOpErr::LocalLayoutNotFound(function))
     }
 
+    /// Append `block` to `function`.
     pub fn append_block(&mut self, block: Block, function: Function) -> Result<(), LayoutOpErr> {
         self.get_blocks_mut(function)?
             .append(block)
@@ -220,6 +237,7 @@ impl Layout {
         Ok(())
     }
 
+    /// Insert `block` at `before` in `function`.
     pub fn insert_block_before(
         &mut self,
         block: Block,
@@ -238,18 +256,23 @@ impl Layout {
         Ok(())
     }
 
+    /// Get the parent function of a block.
     fn get_parent_function(&self, block: Block) -> Result<&Function, LayoutOpErr> {
         self.block_functions
             .get(&block)
             .ok_or(LayoutOpErr::ParentFunctionNotFound(block))
     }
 
+    /// Get the parent block of an instruction.
     fn get_parent_block(&self, inst: Inst) -> Result<&Block, LayoutOpErr> {
         self.inst_blocks
             .get(&inst)
             .ok_or(LayoutOpErr::ParentBlockNotFound(inst))
     }
 
+    /// Remove `block` from the layout
+    ///
+    /// This does not change the data of instructions and the block itself.
     pub fn remove_block(&mut self, block: Block) -> Result<(), LayoutOpErr> {
         let function = self.get_parent_function(block)?;
 
@@ -265,6 +288,7 @@ impl Layout {
         Ok(())
     }
 
+    /// Get the insts (`InstList`) by `block` as mutable
     fn get_insts_mut(&mut self, block: Block) -> Result<&mut InstList, LayoutOpErr> {
         let function = self
             .block_functions
@@ -283,6 +307,7 @@ impl Layout {
             .insts)
     }
 
+    /// Get the insts (`InstList`) by `block` as immutable.
     pub fn get_insts(&self, block: Block) -> Result<&InstList, LayoutOpErr> {
         let function = self
             .block_functions
@@ -301,6 +326,7 @@ impl Layout {
             .insts)
     }
 
+    /// Append `inst` to `block`.
     pub fn append_inst(&mut self, inst: Inst, block: Block) -> Result<(), LayoutOpErr> {
         self.get_insts_mut(block)?
             .append(inst)
@@ -314,6 +340,7 @@ impl Layout {
         Ok(())
     }
 
+    /// Insert `inst` at `before` in `block`.
     pub fn insert_inst_before(
         &mut self,
         inst: Inst,
@@ -332,6 +359,9 @@ impl Layout {
         Ok(())
     }
 
+    /// Remove `inst` from the layout.
+    ///
+    /// This does not change the data of the instruction.
     pub fn remove_inst(&mut self, inst: Inst) -> Result<(), LayoutOpErr> {
         let block = self.get_parent_block(inst)?;
 

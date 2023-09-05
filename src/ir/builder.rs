@@ -10,10 +10,13 @@ use super::{
     value::{Block, Constant, Function, Global, Inst, Value, ValueData, ValueKind},
 };
 
-/// The builder for constructing an IR.
+/// The builder for constructing an IR module.
 pub struct Builder<'a> {
     /// The module.
     module: &'a mut Module,
+
+    /// The layout.
+    layout: &'a mut Layout,
 
     /// Current working function.
     curr_fn: Option<Function>,
@@ -23,9 +26,10 @@ pub struct Builder<'a> {
 }
 
 impl<'a> Builder<'a> {
-    pub fn new(module: &'a mut Module) -> Self {
+    pub fn new(module: &'a mut Module, layout: &'a mut Layout) -> Self {
         Self {
             module,
+            layout,
             curr_fn: None,
             curr_block: None,
         }
@@ -93,29 +97,25 @@ impl<'a> Builder<'a> {
     }
 
     pub fn layout(&self) -> &Layout {
-        &self.module.layout
+        &self.layout
     }
 
     pub fn layout_mut(&mut self) -> &mut Layout {
-        &mut self.module.layout
+        &mut self.layout
     }
 
     pub fn append_function(&mut self, function: Function) -> Result<&mut Self, LayoutOpErr> {
-        self.module.layout.append_function(function)?;
+        self.layout.append_function(function)?;
         Ok(self)
     }
 
     pub fn append_block(&mut self, block: Block) -> Result<&mut Self, LayoutOpErr> {
-        self.module
-            .layout
-            .append_block(block, self.curr_fn.unwrap())?;
+        self.layout.append_block(block, self.curr_fn.unwrap())?;
         Ok(self)
     }
 
     pub fn append_inst(&mut self, inst: Inst) -> Result<&mut Self, LayoutOpErr> {
-        self.module
-            .layout
-            .append_inst(inst, self.curr_block.unwrap())?;
+        self.layout.append_inst(inst, self.curr_block.unwrap())?;
         Ok(self)
     }
 

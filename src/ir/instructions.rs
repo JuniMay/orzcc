@@ -100,3 +100,13 @@ pub enum InstData {
         args: Vec<Value>,
     },
 }
+
+impl InstData {
+    /// If the instruction is a terminator.
+    pub fn is_terminator(&self) -> bool {
+        match self {
+            InstData::Ret { .. } | InstData::CondBr { .. } | InstData::Br { .. } => true,
+            _ => false,
+        }
+    }
+}

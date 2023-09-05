@@ -26,6 +26,8 @@ pub enum TyKind {
     /// Struct
     Struct(Option<String>, Vec<Type>),
     /// A label
+    ///
+    /// Block in the IR can have the same name as operands and can be distinguished by `label` type.
     Label,
 }
 
@@ -43,31 +45,30 @@ impl fmt::Display for TyKind {
             TyKind::Ptr => write!(f, "*"),
             TyKind::Array(size, ty) => write!(f, "[{}x{}]", size, ty),
             TyKind::Fn(params, ret) => {
-                write!(f, "(")?;
-                let mut is_first = true;
-                for param in params {
-                    if !is_first {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}", param)?;
-                    is_first = false;
-                }
-                write!(f, ") -> {}", ret)
+                write!(
+                    f,
+                    "({}) -> {}",
+                    params
+                        .iter()
+                        .map(|ty| format!("{}", ty))
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    ret
+                )
             }
             TyKind::Struct(name, fields) => {
                 if let Some(name) = name {
                     write!(f, "{}{}", IDENTIFIER_PREFIX, name)
                 } else {
-                    write!(f, "{{ ")?;
-                    let mut is_first = true;
-                    for field in fields {
-                        if !is_first {
-                            write!(f, ", ")?;
-                        }
-                        write!(f, "{}", field)?;
-                        is_first = false;
-                    }
-                    write!(f, " }}")
+                    write!(
+                        f,
+                        "{{ {} }}",
+                        fields
+                            .iter()
+                            .map(|ty| format!("{}", ty))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )
                 }
             }
             TyKind::Label => write!(f, "label"),
