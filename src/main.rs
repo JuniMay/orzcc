@@ -1,6 +1,10 @@
 use ir::{builder::Builder, layout::LayoutOpErr, module::Module, types::Type};
 
-use crate::ir::{constant::ConstantData, instructions::BinaryOp, layout::Layout, printer::Printer};
+use crate::ir::{
+    entities::{BinaryOp, ConstantData},
+    layout::Layout,
+    printer::Printer,
+};
 
 pub mod backend;
 pub mod collections;

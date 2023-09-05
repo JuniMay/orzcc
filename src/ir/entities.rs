@@ -1,7 +1,127 @@
-use crate::ir::value::Value;
-use std::fmt::{self};
+use std::fmt;
 
-use super::{block::BlockCall, types::Type};
+use super::{
+    types::Type,
+    value::{Block, Constant, Value},
+};
+
+/// A block call with arguments
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct BlockCall {
+    /// The callee block
+    pub block: Block,
+    /// The arguments
+    pub args: Vec<Value>,
+}
+
+impl BlockCall {
+    pub fn new(block: Block, args: Vec<Value>) -> Self {
+        Self { block, args }
+    }
+}
+
+/// Data of the block
+pub struct BlockData {
+    /// Params of the block
+    pub params: Vec<Value>,
+}
+
+impl BlockData {
+    pub fn new(params: Vec<Value>) -> Self {
+        Self { params }
+    }
+}
+
+/// Kind of constants
+pub enum ConstantKind {
+    /// Zero (initializer)
+    Zero,
+    /// Undefined
+    Undef,
+    /// Bytes of non-aggregated
+    Bytes(Vec<u8>),
+    /// An array
+    Array(Vec<Constant>),
+    /// A struct
+    Struct(Vec<Constant>),
+}
+
+/// Data of the constant
+pub struct ConstantData {
+    /// Type of the constant
+    pub ty: Type,
+    /// Kind of the constant
+    pub kind: ConstantKind,
+}
+
+impl ConstantData {
+    pub fn mk_zero(ty: Type) -> ConstantData {
+        Self {
+            ty,
+            kind: ConstantKind::Zero,
+        }
+    }
+
+    pub fn mk_undef(ty: Type) -> ConstantData {
+        Self {
+            ty,
+            kind: ConstantKind::Undef,
+        }
+    }
+
+    pub fn mk_bytes(ty: Type, bytes: Vec<u8>) -> ConstantData {
+        Self {
+            ty,
+            kind: ConstantKind::Bytes(bytes),
+        }
+    }
+
+    pub fn mk_array(ty: Type, elems: Vec<Constant>) -> ConstantData {
+        Self {
+            ty,
+            kind: ConstantKind::Array(elems),
+        }
+    }
+
+    pub fn mk_struct(ty: Type, fields: Vec<Constant>) -> ConstantData {
+        Self {
+            ty,
+            kind: ConstantKind::Struct(fields),
+        }
+    }
+}
+
+/// Data of function
+pub struct FunctionData {
+    /// Name of the function
+    pub name: String,
+    /// Type of the function
+    pub ty: Type,
+}
+
+/// Data of a global value
+#[derive(Debug, Clone)]
+pub struct GlobalData {
+    /// Name of the value
+    pub name: String,
+    /// Type of the value
+    pub ty: Type,
+    /// Initializer of the value
+    pub init: Constant,
+    /// If the value is a constant
+    pub mutable: bool,
+}
+
+impl GlobalData {
+    pub fn new(name: String, ty: Type, init: Constant, mutable: bool) -> GlobalData {
+        GlobalData {
+            name,
+            ty,
+            init,
+            mutable,
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum BinaryOp {

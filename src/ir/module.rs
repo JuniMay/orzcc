@@ -1,8 +1,4 @@
-use super::block::BlockData;
-use super::constant::ConstantData;
-use super::function::FunctionData;
-use super::global::GlobalData;
-use super::instructions::InstData;
+use super::entities::{BlockData, ConstantData, FunctionData, GlobalData, InstData};
 use super::layout::Layout;
 use super::types::Type;
 use super::value::{Block, Constant, Function, Global, Inst, Value, ValueData};

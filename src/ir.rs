@@ -1,9 +1,5 @@
-pub mod block;
 pub mod builder;
-pub mod constant;
-pub mod function;
-pub mod global;
-pub mod instructions;
+pub mod entities;
 pub mod layout;
 pub mod module;
 pub mod printer;

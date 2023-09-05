@@ -1,9 +1,7 @@
 use super::{
-    block::{BlockCall, BlockData},
-    constant::ConstantData,
-    function::FunctionData,
-    global::GlobalData,
-    instructions::{BinaryOp, InstData, UnaryOp},
+    entities::{
+        BinaryOp, BlockCall, BlockData, ConstantData, FunctionData, GlobalData, InstData, UnaryOp,
+    },
     layout::{Layout, LayoutOpErr},
     module::Module,
     types::{TyKind, Type},
