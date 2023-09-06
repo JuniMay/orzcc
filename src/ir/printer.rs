@@ -35,12 +35,15 @@ impl<'a> Printer<'a> {
         match constant_data.kind {
             ConstantKind::Zero => String::from("zero"),
             ConstantKind::Undef => String::from("undef"),
-            ConstantKind::Bytes(ref bytes) => bytes
-                .iter()
-                .rev()
-                .map(|b| format!("{:02x}", b))
-                .collect::<Vec<_>>()
-                .join(""),
+            ConstantKind::Bytes(ref bytes) => format!(
+                "0x{}",
+                bytes
+                    .iter()
+                    .rev()
+                    .map(|b| format!("{:02x}", b))
+                    .collect::<Vec<_>>()
+                    .join("")
+            ),
             ConstantKind::Array(ref elems) => {
                 format!(
                     "[{}]",
@@ -151,7 +154,7 @@ impl<'a> Printer<'a> {
     }
 
     pub fn emit_block_call(&self, block_call: &BlockCall) -> String {
-        let mut res = self.emit_operand(block_call.block.into(), true);
+        let mut res = self.emit_operand(block_call.block.into(), false);
         if !block_call.args.is_empty() {
             res.push_str(
                 format!(

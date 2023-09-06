@@ -1,6 +1,7 @@
 use super::{
     entities::{
-        BinaryOp, BlockCall, BlockData, ConstantData, FunctionData, GlobalData, InstData, UnaryOp,
+        BinaryOp, BlockCall, BlockData, ConstantData, FCmpCond, FunctionData, GlobalData, ICmpCond,
+        InstData, UnaryOp,
     },
     layout::{Layout, LayoutOpErr},
     module::Module,
@@ -213,6 +214,18 @@ impl<'a> Builder<'a> {
     pub fn mk_binary(&mut self, op: BinaryOp, lhs: Value, rhs: Value) -> Value {
         let value = self.add_value(self.get_value_type(&lhs), ValueKind::Inst);
         self.add_inst(value.into(), InstData::Binary { op, lhs, rhs });
+        value
+    }
+
+    pub fn mk_icmp(&mut self, cond: ICmpCond, lhs: Value, rhs: Value) -> Value {
+        let value = self.add_value(Type::mk_int(8), ValueKind::Inst);
+        self.add_inst(value.into(), InstData::ICmp { cond, lhs, rhs });
+        value
+    }
+
+    pub fn mk_fcmp(&mut self, cond: FCmpCond, lhs: Value, rhs: Value) -> Value {
+        let value = self.add_value(Type::mk_int(8), ValueKind::Inst);
+        self.add_inst(value.into(), InstData::FCmp { cond, lhs, rhs });
         value
     }
 

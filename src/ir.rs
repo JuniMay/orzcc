@@ -16,4 +16,4 @@ const BLOCK_PREFIX: &'static str = "^";
 const GLOBAL_PREFIX: &'static str = "@";
 
 #[allow(dead_code)]
-const INDENT: &'static str = "  ";
+const INDENT: &'static str = "\t";
