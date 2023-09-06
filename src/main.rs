@@ -17,7 +17,13 @@ fn main() -> Result<(), LayoutOpErr> {
     let mut layout = Layout::new();
     let mut builder = Builder::new(&mut module, &mut layout);
 
-    let func = builder.create_fn(String::from("test_func"), vec![], Type::mk_int(32));
+    let putchar = builder.create_fn(
+        "putchar".to_string(),
+        vec![Type::mk_int(32)],
+        Type::mk_void(),
+        true,
+    );
+    let func = builder.create_fn(String::from("test_func"), vec![], Type::mk_int(32), false);
 
     let entry_bb = builder.create_block(vec![]);
 
@@ -37,6 +43,7 @@ fn main() -> Result<(), LayoutOpErr> {
     let exit_bb = builder.create_block(vec![param_5]);
 
     builder
+        .append_function(putchar.into())?
         .append_function(func.into())?
         .set_curr_fn(func)
         .append_block(entry_bb.into())?

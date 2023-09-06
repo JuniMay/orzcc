@@ -91,12 +91,14 @@ impl ConstantData {
     }
 }
 
-/// Data of function
+/// Data of function.
 pub struct FunctionData {
-    /// Name of the function
+    /// Name of the function.
     pub name: String,
-    /// Type of the function
+    /// Type of the function.
     pub ty: Type,
+    /// If the function is just a declaration.
+    pub is_declare: bool,
 }
 
 /// Data of a global value

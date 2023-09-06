@@ -121,7 +121,13 @@ impl<'a> Builder<'a> {
     /// Create a new function from name, param types and return type and return the value.
     ///
     /// This does not change the layout.
-    pub fn create_fn(&mut self, name: String, params: Vec<Type>, ret: Type) -> Value {
+    pub fn create_fn(
+        &mut self,
+        name: String,
+        params: Vec<Type>,
+        ret: Type,
+        is_declare: bool,
+    ) -> Value {
         let ty = Type::mk_fn(params, ret);
         let value = self.add_value(ty.clone(), ValueKind::Function);
         self.add_fn(
@@ -129,6 +135,7 @@ impl<'a> Builder<'a> {
             FunctionData {
                 name: name.clone(),
                 ty,
+                is_declare,
             },
         );
         value
