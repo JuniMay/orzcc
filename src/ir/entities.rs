@@ -91,14 +91,23 @@ impl ConstantData {
     }
 }
 
+pub enum FunctionKind {
+    /// Function with definition
+    Definition,
+    /// Declaration
+    Declaration,
+    /// Intrinsic
+    Intrinsic,
+}
+
 /// Data of function.
 pub struct FunctionData {
     /// Name of the function.
     pub name: String,
     /// Type of the function.
     pub ty: Type,
-    /// If the function is just a declaration.
-    pub is_declare: bool,
+    /// The kind of the function
+    pub kind: FunctionKind,
 }
 
 /// Data of a global value
@@ -241,6 +250,7 @@ pub enum InstData {
         lhs: Value,
         rhs: Value,
     },
+    /// Floating-point compare
     FCmp {
         cond: FCmpCond,
         lhs: Value,

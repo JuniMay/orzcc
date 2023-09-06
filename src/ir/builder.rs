@@ -1,7 +1,7 @@
 use super::{
     entities::{
-        BinaryOp, BlockCall, BlockData, ConstantData, FCmpCond, FunctionData, GlobalData, ICmpCond,
-        InstData, UnaryOp,
+        BinaryOp, BlockCall, BlockData, ConstantData, FCmpCond, FunctionData, FunctionKind,
+        GlobalData, ICmpCond, InstData, UnaryOp,
     },
     layout::{Layout, LayoutOpErr},
     module::Module,
@@ -126,7 +126,7 @@ impl<'a> Builder<'a> {
         name: String,
         params: Vec<Type>,
         ret: Type,
-        is_declare: bool,
+        kind: FunctionKind,
     ) -> Value {
         let ty = Type::mk_fn(params, ret);
         let value = self.add_value(ty.clone(), ValueKind::Function);
@@ -135,7 +135,7 @@ impl<'a> Builder<'a> {
             FunctionData {
                 name: name.clone(),
                 ty,
-                is_declare,
+                kind,
             },
         );
         value

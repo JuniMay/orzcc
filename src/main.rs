@@ -3,7 +3,7 @@ use std::vec;
 use ir::{builder::Builder, layout::LayoutOpErr, module::Module, types::Type};
 
 use crate::ir::{
-    entities::{BinaryOp, ConstantData},
+    entities::{BinaryOp, ConstantData, FunctionKind},
     layout::Layout,
     printer::Printer,
 };
@@ -21,9 +21,15 @@ fn main() -> Result<(), LayoutOpErr> {
         "putchar".to_string(),
         vec![Type::mk_int(32)],
         Type::mk_void(),
-        true,
+        FunctionKind::Declaration,
     );
-    let func = builder.create_fn(String::from("test_func"), vec![], Type::mk_int(32), false);
+
+    let func = builder.create_fn(
+        String::from("test_func"),
+        vec![],
+        Type::mk_int(32),
+        FunctionKind::Definition,
+    );
 
     let entry_bb = builder.create_block(vec![]);
 

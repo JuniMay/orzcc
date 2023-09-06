@@ -1,7 +1,7 @@
 use crate::ir::{types::TyKind, value::ValueKind, GLOBAL_PREFIX, IDENTIFIER_PREFIX};
 
 use super::{
-    entities::{BlockCall, ConstantKind, InstData},
+    entities::{BlockCall, ConstantKind, FunctionKind, InstData},
     layout::Layout,
     module::Module,
     value::{Block, Constant, Function, Global, Inst, Value},
@@ -289,6 +289,11 @@ impl<'a> Printer<'a> {
 
     pub fn emit_function(&self, function: Function) -> String {
         let function_data = self.module.functions.get(&function).unwrap();
+
+        if let FunctionKind::Intrinsic = function_data.kind {
+            return "".into();
+        }
+
         let mut res = format!(
             "fn {}{} {} ",
             GLOBAL_PREFIX,
@@ -296,9 +301,9 @@ impl<'a> Printer<'a> {
             function_data.ty.to_string()
         );
 
-        if function_data.is_declare {
+        if let FunctionKind::Declaration = function_data.kind {
             res.push_str("declare");
-        } else {
+        } else if let FunctionKind::Definition = function_data.kind {
             res.push_str("{");
             for (block, _block_node) in self.layout.local_layouts.get(&function).unwrap().iter() {
                 res.push_str(&self.emit_block(block).as_str());
