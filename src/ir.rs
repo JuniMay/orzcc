@@ -10,6 +10,9 @@ pub mod value;
 const IDENTIFIER_PREFIX: &'static str = "%";
 
 #[allow(dead_code)]
+const BLOCK_PREFIX: &'static str = "^";
+
+#[allow(dead_code)]
 const GLOBAL_PREFIX: &'static str = "@";
 
 #[allow(dead_code)]

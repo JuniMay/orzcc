@@ -5,7 +5,7 @@ use super::{
     layout::Layout,
     module::Module,
     value::{Block, Constant, Function, Global, Inst, Value},
-    INDENT,
+    BLOCK_PREFIX, INDENT,
 };
 
 /// Printer to emit the IR.
@@ -81,7 +81,7 @@ impl<'a> Printer<'a> {
         let operand_str = match value_data.kind {
             ValueKind::Block => format!(
                 "{}{}",
-                IDENTIFIER_PREFIX,
+                BLOCK_PREFIX,
                 self.module
                     .block_name_allocator
                     .get_name(value.into())
@@ -120,7 +120,8 @@ impl<'a> Printer<'a> {
         let block_data = self.module.blocks.get(&block).unwrap();
 
         let mut res = format!(
-            "\n{}",
+            "\n{}{}",
+            BLOCK_PREFIX,
             self.module.block_name_allocator.get_name(block).unwrap()
         );
 
@@ -194,6 +195,20 @@ impl<'a> Printer<'a> {
                 self.emit_operand(*lhs, true),
                 self.emit_operand(*rhs, true),
             ),
+            InstData::ICmp { cond, lhs, rhs } => format!(
+                "{} = icmp.{} {}, {}",
+                self.emit_operand(inst.into(), false),
+                cond,
+                self.emit_operand(*lhs, true),
+                self.emit_operand(*rhs, true),
+            ),
+            InstData::FCmp { cond, lhs, rhs } => format!(
+                "{} = fcmp.{} {}, {}",
+                self.emit_operand(inst.into(), false),
+                cond,
+                self.emit_operand(*lhs, true),
+                self.emit_operand(*rhs, true),
+            ),
             InstData::Unary { op, val } => format!(
                 "{} = {} {}",
                 self.emit_operand(inst.into(), false),
@@ -226,8 +241,8 @@ impl<'a> Printer<'a> {
                 if let TyKind::Fn(_, ret) = fn_ty.kind() {
                     if let TyKind::Void = ret.kind() {
                         format!(
-                            "call {} {}, ({})",
-                            fn_ty.to_string(),
+                            "call {} {}({})",
+                            ret.to_string(),
                             self.emit_operand(*fn_val, false),
                             args.iter()
                                 .map(|v| self.emit_operand(*v, false))
@@ -236,9 +251,9 @@ impl<'a> Printer<'a> {
                         )
                     } else {
                         format!(
-                            "{} = call {} {}, ({})",
+                            "{} = call {} {}({})",
                             self.emit_operand(inst.into(), false),
-                            fn_ty.to_string(),
+                            ret.to_string(),
                             self.emit_operand(*fn_val, false),
                             args.iter()
                                 .map(|v| self.emit_operand(*v, false))

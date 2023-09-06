@@ -1,7 +1,7 @@
 use super::entities::{BlockData, ConstantData, FunctionData, GlobalData, InstData};
 use super::layout::Layout;
 use super::types::Type;
-use super::value::{Block, Constant, Function, Global, Inst, Value, ValueData};
+use super::value::{Block, Constant, Function, Global, Inst, Value, ValueData, ValueKind};
 use crate::ir::types::TyKind;
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
@@ -213,26 +213,37 @@ impl Module {
     /// Assign a custom name to value.
     ///
     /// This can be used in optimization passes.
-    pub fn assign_value_name(&mut self, value: Value, name: String) -> Result<(), NameAllocErr> {
-        self.value_name_allocator.assign(value, name)
+    pub fn assign_value_name(
+        &mut self,
+        value: Value,
+        name: String,
+    ) -> Result<&mut Self, NameAllocErr> {
+        self.value_name_allocator.assign(value, name)?;
+        Ok(self)
     }
 
     /// Assign a custom name to block.
     ///
     /// This can be used in some control-flow-related optimizations.
-    pub fn assign_block_name(&mut self, block: Block, name: String) -> Result<(), NameAllocErr> {
-        self.block_name_allocator.assign(block, name)
+    pub fn assign_block_name(
+        &mut self,
+        block: Block,
+        name: String,
+    ) -> Result<&mut Self, NameAllocErr> {
+        self.block_name_allocator.assign(block, name)?;
+        Ok(self)
     }
 
     /// Comment at instruction.
     ///
     /// This can be used to put some debug/necessary information to IR when dumping.
-    pub fn comment_at_inst(&mut self, inst: Inst, comment: String) {
-        self.inst_commenter.comment(inst, comment)
+    pub fn comment_at_inst(&mut self, inst: Inst, comment: String) -> &mut Self {
+        self.inst_commenter.comment(inst, comment);
+        self
     }
 
     /// Allocate names for block, params and instruction results.
-    pub fn allocate_name(&mut self, layout: &Layout) {
+    pub fn allocate_name(&mut self, layout: &Layout) -> &mut Self {
         for (_function, blocks) in &layout.local_layouts {
             for (block, block_node) in blocks.iter() {
                 self.block_name_allocator.allocate(block);
@@ -251,5 +262,41 @@ impl Module {
                 }
             }
         }
+        self
+    }
+
+    pub fn clear_name(&mut self) -> &mut Self {
+        self.value_name_allocator.clear();
+        self.block_name_allocator.clear();
+        self
+    }
+
+    /// Remove a value from the module
+    ///
+    /// This will also free the value id. If the value is not in the module, nothing will be done.
+    pub fn remove(&mut self, value: Value) -> &mut Self {
+        let value_data = self.values.remove(&value);
+        if let Some(value_data) = value_data {
+            self.id_allocator.free(value.index());
+            match value_data.kind {
+                ValueKind::Block => {
+                    self.blocks.remove(&value.into());
+                }
+                ValueKind::Inst => {
+                    self.insts.remove(&value.into());
+                }
+                ValueKind::Constant => {
+                    self.constants.remove(&value.into());
+                }
+                ValueKind::Function => {
+                    self.functions.remove(&value.into());
+                }
+                ValueKind::Global => {
+                    self.globals.remove(&value.into());
+                }
+                _ => {}
+            }
+        }
+        self
     }
 }

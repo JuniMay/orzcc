@@ -183,9 +183,45 @@ impl fmt::Display for UnaryOp {
     }
 }
 
+pub enum ICmpCond {
+    Eq,
+    Ne,
+    Slt,
+    Sle,
+}
+
+impl fmt::Display for ICmpCond {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ICmpCond::Eq => write!(f, "eq"),
+            ICmpCond::Ne => write!(f, "ne"),
+            ICmpCond::Slt => write!(f, "slt"),
+            ICmpCond::Sle => write!(f, "sle"),
+        }
+    }
+}
+
+pub enum FCmpCond {
+    OEq,
+    ONe,
+    OLt,
+    OLe,
+}
+
+impl fmt::Display for FCmpCond {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FCmpCond::OEq => write!(f, "oeq"),
+            FCmpCond::ONe => write!(f, "one"),
+            FCmpCond::OLt => write!(f, "olt"),
+            FCmpCond::OLe => write!(f, "ole"),
+        }
+    }
+}
+
 /// Instruction data
 pub enum InstData {
-    /// Alloca
+    /// Allocation of stack slot.
     Alloc { ty: Type },
     /// Load
     Load { ty: Type, addr: Value },
@@ -194,6 +230,17 @@ pub enum InstData {
     /// Binary
     Binary {
         op: BinaryOp,
+        lhs: Value,
+        rhs: Value,
+    },
+    /// Integer compare
+    ICmp {
+        cond: ICmpCond,
+        lhs: Value,
+        rhs: Value,
+    },
+    FCmp {
+        cond: FCmpCond,
         lhs: Value,
         rhs: Value,
     },
@@ -210,6 +257,8 @@ pub enum InstData {
     /// Return
     Ret { val: Option<Value> },
     /// Call
+    ///
+    /// Format: %v0 = call <ret_type> <fn_val> (args...)
     Call {
         /// Function type
         /// Call can also be applied to function pointer, so type is required.
