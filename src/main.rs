@@ -10,6 +10,7 @@ use crate::ir::{
 
 pub mod backend;
 pub mod collections;
+pub mod frontend;
 pub mod ir;
 
 fn main() -> Result<(), LayoutOpErr> {
@@ -69,7 +70,7 @@ fn main() -> Result<(), LayoutOpErr> {
         vec![0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff],
     ));
 
-    let entry_conbr = builder.mk_condbr(
+    let entry_conbr = builder.mk_br(
         constant_0,
         then_bb.into(),
         else_bb.into(),
@@ -78,10 +79,10 @@ fn main() -> Result<(), LayoutOpErr> {
     );
 
     let then_add = builder.mk_binary(BinaryOp::Add, param_0, param_0);
-    let then_br = builder.mk_br(exit_bb.into(), vec![then_add.into()]);
+    let then_br = builder.mk_jmp(exit_bb.into(), vec![then_add.into()]);
 
     let else_mul = builder.mk_binary(BinaryOp::Mul, param_2, param_2);
-    let else_br = builder.mk_br(exit_bb.into(), vec![else_mul.into()]);
+    let else_br = builder.mk_jmp(exit_bb.into(), vec![else_mul.into()]);
 
     let ret = builder.mk_ret(param_5.into());
 

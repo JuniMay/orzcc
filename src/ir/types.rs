@@ -43,7 +43,7 @@ impl fmt::Display for TyKind {
             TyKind::Float => write!(f, "float"),
             TyKind::Double => write!(f, "double"),
             TyKind::Ptr => write!(f, "*"),
-            TyKind::Array(size, ty) => write!(f, "[{}x{}]", size, ty),
+            TyKind::Array(size, ty) => write!(f, "[{}; {}]", ty, size),
             TyKind::Fn(params, ret) => {
                 write!(
                     f,

@@ -194,6 +194,7 @@ impl fmt::Display for UnaryOp {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ICmpCond {
     Eq,
     Ne,
@@ -212,6 +213,7 @@ impl fmt::Display for ICmpCond {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum FCmpCond {
     OEq,
     ONe,
@@ -258,10 +260,10 @@ pub enum InstData {
     },
     /// Unary
     Unary { op: UnaryOp, val: Value },
-    /// Branch
-    Br { dst: BlockCall },
+    /// Jump
+    Jmp { dst: BlockCall },
     /// Conditional branch
-    CondBr {
+    Br {
         cond: Value,
         dst_then: BlockCall,
         dst_else: BlockCall,
@@ -286,7 +288,7 @@ impl InstData {
     /// If the instruction is a terminator.
     pub fn is_terminator(&self) -> bool {
         match self {
-            InstData::Ret { .. } | InstData::CondBr { .. } | InstData::Br { .. } => true,
+            InstData::Ret { .. } | InstData::Br { .. } | InstData::Jmp { .. } => true,
             _ => false,
         }
     }

@@ -218,13 +218,13 @@ impl<'a> Printer<'a> {
                 op,
                 self.emit_operand(*val, true)
             ),
-            InstData::Br { dst } => format!("br {}", self.emit_block_call(dst)),
-            InstData::CondBr {
+            InstData::Jmp { dst } => format!("j {}", self.emit_block_call(dst)),
+            InstData::Br {
                 cond,
                 dst_then,
                 dst_else,
             } => format!(
-                "condbr {}, {}, {}",
+                "br {}, {}, {}",
                 self.emit_operand(*cond, true),
                 self.emit_block_call(dst_then),
                 self.emit_block_call(dst_else)

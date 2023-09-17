@@ -242,18 +242,18 @@ impl<'a> Builder<'a> {
         value
     }
 
-    pub fn mk_br(&mut self, block: Block, args: Vec<Value>) -> Value {
+    pub fn mk_jmp(&mut self, block: Block, args: Vec<Value>) -> Value {
         let value = self.add_value(Type::mk_void(), ValueKind::Inst);
         self.add_inst(
             value.into(),
-            InstData::Br {
+            InstData::Jmp {
                 dst: BlockCall::new(block, args),
             },
         );
         value
     }
 
-    pub fn mk_condbr(
+    pub fn mk_br(
         &mut self,
         cond: Value,
         block_then: Block,
@@ -264,7 +264,7 @@ impl<'a> Builder<'a> {
         let value = self.add_value(Type::mk_void(), ValueKind::Inst);
         self.add_inst(
             value.into(),
-            InstData::CondBr {
+            InstData::Br {
                 cond,
                 dst_then: BlockCall::new(block_then, args_then),
                 dst_else: BlockCall::new(block_else, args_else),
