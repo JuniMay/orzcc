@@ -312,6 +312,12 @@ impl LocalValueBuilder<'_> {
         callee: Value,
         args: Vec<Value>,
     ) -> Result<Value, LocalValueBuilderErr> {
+        let callee_data = self.value_data(callee)?;
+
+        if !callee_data.ty().is_fn() && !callee_data.ty().is_ptr() {
+            return Err(LocalValueBuilderErr::InvalidType);
+        }
+
         self.add_value(Call::new_value_data(ret_ty, callee, args))
     }
 
@@ -321,6 +327,12 @@ impl LocalValueBuilder<'_> {
         ty: Type,
         indices: Vec<Value>,
     ) -> Result<Value, LocalValueBuilderErr> {
+        let ptr_data = self.value_data(ptr)?;
+
+        if !ptr_data.ty().is_ptr() {
+            return Err(LocalValueBuilderErr::InvalidType);
+        }
+
         self.add_value(GetElemPtr::new_value_data(ptr, ty, indices))
     }
 }

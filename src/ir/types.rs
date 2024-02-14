@@ -197,6 +197,10 @@ impl Type {
         matches!(self.kind(), TypeKind::Ptr)
     }
 
+    pub fn is_fn(&self) -> bool {
+        matches!(self.kind(), TypeKind::Fn(_, _))
+    }
+
     pub fn is_zero_initializable(&self) -> bool {
         match self.kind() {
             TypeKind::Void | TypeKind::Fn(_, _) | TypeKind::Label | TypeKind::Type => false,
