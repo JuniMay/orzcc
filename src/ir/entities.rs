@@ -3,8 +3,7 @@ use super::{
     module::DataFlowGraph,
     types::Type,
     values::{
-        Alloc, Binary, Block, Branch, Call, GetElemPtr, Global, Jump, Load, Return, Store, Unary,
-        Value,
+        Alloc, Binary, Branch, Call, GetElemPtr, Global, Jump, Load, Return, Store, Unary, Value,
     },
 };
 
@@ -109,36 +108,85 @@ impl FunctionData {
 pub enum ValueKind {
     /// Zero initializer
     Zero,
+
     /// Undef
     Undef,
+
     /// Bytes for non-aggregate types
     Bytes(Vec<u8>),
+
     /// Array constant
     Array(Vec<Value>),
+
     /// Struct constant
     Struct(Vec<Value>),
+
     /// A Global
+    ///
+    /// A global value is actually a memory location(pointer) to the global variable.
     Global(Global),
+
     /// Alloc
+    ///
+    /// A stack/local allocation.
     Alloc(Alloc),
+
     /// Load
     Load(Load),
     /// Store
     Store(Store),
+
     /// Binary instruction
+    ///
+    /// Binary instructions include arithmetic, logical, bitwise and comparison operations.
     Binary(Binary),
+
     /// Unary instruction
+    ///
+    /// Unary instructions only include fneg for now.
     Unary(Unary),
+
     /// Jump
     Jump(Jump),
+
     /// Branch
     Branch(Branch),
+
     /// Return
     Return(Return),
+
     /// Call
     Call(Call),
+
     /// Get element pointer
     GetElemPtr(GetElemPtr),
+
+    /// Block arguments
+    BlockArg,
+}
+
+impl ValueKind {
+    pub fn is_const(&self) -> bool {
+        match self {
+            ValueKind::Zero
+            | ValueKind::Undef
+            | ValueKind::Bytes(_)
+            | ValueKind::Array(_)
+            | ValueKind::Struct(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_global(&self) -> bool {
+        matches!(self, ValueKind::Global(_))
+    }
+
+    pub fn is_terminator(&self) -> bool {
+        matches!(
+            self,
+            ValueKind::Jump(_) | ValueKind::Branch(_) | ValueKind::Return(_)
+        )
+    }
 }
 
 /// Data of a value

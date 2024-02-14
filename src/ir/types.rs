@@ -177,6 +177,46 @@ impl Type {
             TypeKind::Type => 0,
         }
     }
+
+    pub fn is_int(&self) -> bool {
+        matches!(self.kind(), TypeKind::Int(_))
+    }
+
+    pub fn is_float(&self) -> bool {
+        matches!(
+            self.kind(),
+            TypeKind::Half | TypeKind::Float | TypeKind::Double
+        )
+    }
+
+    pub fn is_numeric(&self) -> bool {
+        self.is_int() || self.is_float()
+    }
+
+    pub fn is_ptr(&self) -> bool {
+        matches!(self.kind(), TypeKind::Ptr)
+    }
+
+    pub fn is_zero_initializable(&self) -> bool {
+        match self.kind() {
+            TypeKind::Void | TypeKind::Fn(_, _) | TypeKind::Label | TypeKind::Type => false,
+            _ => true,
+        }
+    }
+
+    pub fn as_array(&self) -> Option<(usize, &Type)> {
+        match self.kind() {
+            TypeKind::Array(size, ty) => Some((*size, ty)),
+            _ => None,
+        }
+    }
+
+    pub fn as_struct(&self) -> Option<&[Type]> {
+        match self.kind() {
+            TypeKind::Struct(fields) => Some(fields),
+            _ => None,
+        }
+    }
 }
 
 impl hash::Hash for Type {

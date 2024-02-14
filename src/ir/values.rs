@@ -1,4 +1,7 @@
-use super::types::Type;
+use super::{
+    entities::{ValueData, ValueKind},
+    types::Type,
+};
 use std::fmt;
 
 /// Value reference
@@ -152,6 +155,47 @@ pub enum BinaryOp {
     FCmp(FCmpCond),
 }
 
+impl BinaryOp {
+    pub(super) fn require_int(&self) -> bool {
+        match self {
+            BinaryOp::Add
+            | BinaryOp::Sub
+            | BinaryOp::Mul
+            | BinaryOp::UDiv
+            | BinaryOp::SDiv
+            | BinaryOp::URem
+            | BinaryOp::SRem
+            | BinaryOp::And
+            | BinaryOp::Or
+            | BinaryOp::Xor
+            | BinaryOp::Shl
+            | BinaryOp::LShr
+            | BinaryOp::AShr
+            | BinaryOp::ICmp(_) => true,
+            _ => false,
+        }
+    }
+
+    pub(super) fn require_float(&self) -> bool {
+        match self {
+            BinaryOp::FAdd
+            | BinaryOp::FSub
+            | BinaryOp::FMul
+            | BinaryOp::FDiv
+            | BinaryOp::FRem
+            | BinaryOp::FCmp(_) => true,
+            _ => false,
+        }
+    }
+
+    pub(super) fn require_same_type(&self) -> bool {
+        match self {
+            BinaryOp::Shl | BinaryOp::LShr | BinaryOp::AShr => false,
+            _ => true
+        }
+    }
+}
+
 impl fmt::Display for BinaryOp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -184,6 +228,18 @@ pub enum UnaryOp {
     FNeg,
 }
 
+impl UnaryOp {
+    pub(super) fn require_int(&self) -> bool {
+        false
+    }
+
+    pub(super) fn require_float(&self) -> bool {
+        match self {
+            UnaryOp::FNeg => true,
+        }
+    }
+}
+
 impl fmt::Display for UnaryOp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -198,9 +254,21 @@ pub struct Binary {
     rhs: Value,
 }
 
+impl Binary {
+    pub(super) fn new_value_data(ty: Type, op: BinaryOp, lhs: Value, rhs: Value) -> ValueData {
+        ValueData::new(ty, ValueKind::Binary(Binary { op, lhs, rhs }))
+    }
+}
+
 pub struct Unary {
     op: UnaryOp,
     val: Value,
+}
+
+impl Unary {
+    pub(super) fn new_value_data(ty: Type, op: UnaryOp, val: Value) -> ValueData {
+        ValueData::new(ty, ValueKind::Unary(Unary { op, val }))
+    }
 }
 
 pub struct Store {
@@ -208,8 +276,23 @@ pub struct Store {
     ptr: Value,
 }
 
+impl Store {
+    pub(super) fn new_value_data(val: Value, ptr: Value) -> ValueData {
+        ValueData::new(Type::mk_void(), ValueKind::Store(Store { val, ptr }))
+    }
+}
+
+/// Load instruction internals.
+///
+/// The type of the loaded value is available in value data.
 pub struct Load {
     ptr: Value,
+}
+
+impl Load {
+    pub(super) fn new_value_data(ty: Type, ptr: Value) -> ValueData {
+        ValueData::new(ty, ValueKind::Load(Load { ptr }))
+    }
 }
 
 /// Allocation instruction internals.
@@ -221,7 +304,16 @@ pub struct Alloc {
     ty: Type,
 }
 
+impl Alloc {
+    pub(super) fn new_value_data(ty: Type) -> ValueData {
+        ValueData::new(Type::mk_ptr(), ValueKind::Alloc(Alloc { ty }))
+    }
+}
+
 /// A global value
+///
+/// The initial value of the global should be a constant.
+/// The type of the global is available in value data.
 pub struct Global {
     /// The initial value of the global
     ///
@@ -231,9 +323,21 @@ pub struct Global {
     mutable: bool,
 }
 
+impl Global {
+    pub(super) fn new_value_data(ty: Type, init: Value, mutable: bool) -> ValueData {
+        ValueData::new(ty, ValueKind::Global(Global { init, mutable }))
+    }
+}
+
 pub struct Jump {
     dst: Block,
     args: Vec<Value>,
+}
+
+impl Jump {
+    pub(super) fn new_value_data(dst: Block, args: Vec<Value>) -> ValueData {
+        ValueData::new(Type::mk_void(), ValueKind::Jump(Jump { dst, args }))
+    }
 }
 
 pub struct Branch {
@@ -244,8 +348,35 @@ pub struct Branch {
     else_args: Vec<Value>,
 }
 
+impl Branch {
+    pub(super) fn new_value_data(
+        cond: Value,
+        then_dst: Block,
+        else_dst: Block,
+        then_args: Vec<Value>,
+        else_args: Vec<Value>,
+    ) -> ValueData {
+        ValueData::new(
+            Type::mk_void(),
+            ValueKind::Branch(Branch {
+                cond,
+                then_dst,
+                else_dst,
+                then_args,
+                else_args,
+            }),
+        )
+    }
+}
+
 pub struct Return {
     val: Option<Value>,
+}
+
+impl Return {
+    pub(super) fn new_value_data(val: Option<Value>) -> ValueData {
+        ValueData::new(Type::mk_void(), ValueKind::Return(Return { val }))
+    }
 }
 
 /// A function call.
@@ -258,6 +389,12 @@ pub struct Call {
     args: Vec<Value>,
 }
 
+impl Call {
+    pub(super) fn new_value_data(ret_ty: Type, callee: Value, args: Vec<Value>) -> ValueData {
+        ValueData::new(ret_ty, ValueKind::Call(Call { callee, args }))
+    }
+}
+
 pub struct GetElemPtr {
     /// The pointer
     ptr: Value,
@@ -265,4 +402,13 @@ pub struct GetElemPtr {
     ty: Type,
     /// Indices
     indices: Vec<Value>,
+}
+
+impl GetElemPtr {
+    pub(super) fn new_value_data(ptr: Value, ty: Type, indices: Vec<Value>) -> ValueData {
+        ValueData::new(
+            Type::mk_ptr(),
+            ValueKind::GetElemPtr(GetElemPtr { ptr, ty, indices }),
+        )
+    }
 }
