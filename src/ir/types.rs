@@ -34,7 +34,7 @@ pub enum TypeKind {
     /// Function
     ///
     /// Function is a type that takes a list of types and returns a type.
-    Fn(Vec<Type>, Type),
+    Function(Vec<Type>, Type),
     /// Struct
     ///
     /// Struct is basically a collection of types.
@@ -57,7 +57,7 @@ impl fmt::Display for TypeKind {
             TypeKind::Double => write!(f, "double"),
             TypeKind::Ptr => write!(f, "ptr"),
             TypeKind::Array(size, ty) => write!(f, "[{}; {}]", ty, size),
-            TypeKind::Fn(params, ret) => {
+            TypeKind::Function(params, ret) => {
                 write!(
                     f,
                     "({}) -> {}",
@@ -142,8 +142,8 @@ impl Type {
         Type::make(TypeKind::Array(size, ty))
     }
 
-    pub fn mk_fn(params: Vec<Type>, ret: Type) -> Type {
-        Type::make(TypeKind::Fn(params, ret))
+    pub fn mk_function(params: Vec<Type>, ret: Type) -> Type {
+        Type::make(TypeKind::Function(params, ret))
     }
 
     pub fn mk_struct(fields: Vec<Type>) -> Type {
@@ -171,7 +171,7 @@ impl Type {
             TypeKind::Double => 8,
             TypeKind::Ptr => data_layout.map_or(8, |dl| dl.pointer_size),
             TypeKind::Array(size, ty) => size * ty.size(data_layout),
-            TypeKind::Fn(_, _) => data_layout.map_or(0, |dl| dl.pointer_size),
+            TypeKind::Function(_, _) => data_layout.map_or(0, |dl| dl.pointer_size),
             TypeKind::Struct(fields) => fields.iter().map(|ty| ty.size(data_layout)).sum(),
             TypeKind::Label => 0,
             TypeKind::Type => 0,
@@ -197,13 +197,13 @@ impl Type {
         matches!(self.kind(), TypeKind::Ptr)
     }
 
-    pub fn is_fn(&self) -> bool {
-        matches!(self.kind(), TypeKind::Fn(_, _))
+    pub fn is_function(&self) -> bool {
+        matches!(self.kind(), TypeKind::Function(_, _))
     }
 
     pub fn is_zero_initializable(&self) -> bool {
         match self.kind() {
-            TypeKind::Void | TypeKind::Fn(_, _) | TypeKind::Label | TypeKind::Type => false,
+            TypeKind::Void | TypeKind::Function(_, _) | TypeKind::Label | TypeKind::Type => false,
             _ => true,
         }
     }
@@ -263,12 +263,12 @@ mod test {
         assert_eq!(Type::mk_double(), Type::mk_double());
         assert_eq!(Type::mk_ptr(), Type::mk_ptr());
         assert_eq!(
-            Type::mk_fn(vec![], Type::mk_void()),
-            Type::mk_fn(vec![], Type::mk_void())
+            Type::mk_function(vec![], Type::mk_void()),
+            Type::mk_function(vec![], Type::mk_void())
         );
         assert_ne!(
-            Type::mk_fn(vec![Type::mk_int(16)], Type::mk_void()),
-            Type::mk_fn(vec![], Type::mk_int(32))
+            Type::mk_function(vec![Type::mk_int(16)], Type::mk_void()),
+            Type::mk_function(vec![], Type::mk_int(32))
         );
     }
 }

@@ -1,12 +1,12 @@
 use std::{
-    cell::RefCell,
+    cell::{Ref, RefCell},
     collections::{HashMap, HashSet},
     hash::Hash,
     rc::{Rc, Weak},
 };
 
 use super::{
-    builder::{BlockBuilder, CustomTypeBuilder, GlobalValueBuilder, LocalValueBuilder},
+    builder::{GlobalBuilder, LocalBuilder},
     entities::{BlockData, FunctionData, ValueData},
     types::Type,
     values::{Block, Function, Value},
@@ -19,14 +19,11 @@ pub struct DataFlowGraph {
     /// Blocks in the dfg
     blocks: HashMap<Block, BlockData>,
 
-    /// Pointer to global values
+    /// Pointer to global values (including functions)
     pub(super) globals: Weak<RefCell<GlobalValueMap>>,
 
-    /// Pointer to functions
-    pub(super) functions: Weak<RefCell<FunctionMap>>,
-
     /// Pointer to custom types
-    pub(super) custom_tys: Weak<RefCell<CustomTypeMap>>,
+    pub(super) custom_types: Weak<RefCell<CustomTypeMap>>,
 
     /// Pointer to id allocator
     pub(super) id_allocator: Weak<RefCell<IdAllocator>>,
@@ -38,8 +35,7 @@ impl DataFlowGraph {
             values: HashMap::new(),
             blocks: HashMap::new(),
             globals: Weak::new(),
-            functions: Weak::new(),
-            custom_tys: Weak::new(),
+            custom_types: Weak::new(),
             id_allocator: Weak::new(),
         }
     }
@@ -59,18 +55,13 @@ impl DataFlowGraph {
     }
 
     pub(super) fn add_block(&mut self, data: BlockData) -> Block {
-        let block = Value::new(self.allocate_id());
-        let block = Block::from(block);
+        let block = Value::new(self.allocate_id()).into();
         self.blocks.insert(block, data);
         block
     }
 
-    pub fn value_builder(&mut self) -> LocalValueBuilder {
-        LocalValueBuilder::new(self)
-    }
-
-    pub fn block_builder(&mut self) -> BlockBuilder {
-        BlockBuilder::new(self)
+    pub fn builder(&mut self) -> LocalBuilder {
+        LocalBuilder::new(self)
     }
 
     pub(super) fn value_data(&self, value: Value) -> Option<&ValueData> {
@@ -82,35 +73,37 @@ impl DataFlowGraph {
     }
 }
 
+/// A map of global values.
+///
+/// This includes global memory slots and functions, and also necessary constants for initialization.
 pub type GlobalValueMap = HashMap<Value, ValueData>;
-pub type FunctionMap = HashMap<Function, FunctionData>;
+
 pub type CustomTypeMap = HashMap<String, Type>;
 
 /// A module.
 ///
-/// Module is the top-level container of the IR. It contains all the global values, 
+/// Module is the top-level container of the IR. It contains all the global values,
 /// functions, and user defined types.
 pub struct Module {
     /// Module name
     name: String,
 
     /// Globals
+    ///
+    /// This includes global memory slots and functions.
     globals: Rc<RefCell<GlobalValueMap>>,
 
-    /// Layout of globals
+    /// Layout of global slots and functions
     global_layout: Vec<Value>,
 
     /// Functions
-    functions: Rc<RefCell<FunctionMap>>,
-
-    /// Layout of functions
-    function_layout: Vec<Function>,
+    functions: HashMap<Function, FunctionData>,
 
     /// User defined types
-    custom_tys: Rc<RefCell<CustomTypeMap>>,
+    custom_types: Rc<RefCell<CustomTypeMap>>,
 
     /// Layout of user defined types
-    custom_ty_layout: Vec<String>,
+    custom_type_layout: Vec<String>,
 
     /// Id allocator
     id_allocator: Rc<RefCell<IdAllocator>>,
@@ -119,8 +112,8 @@ pub struct Module {
 impl Module {
     pub fn new(name: String) -> Self {
         let globals = Rc::new(RefCell::new(HashMap::new()));
-        let functions = Rc::new(RefCell::new(HashMap::new()));
-        let custom_tys = Rc::new(RefCell::new(HashMap::new()));
+        let functions = HashMap::new();
+        let custom_types = Rc::new(RefCell::new(HashMap::new()));
         let id_allocator = Rc::new(RefCell::new(IdAllocator::new()));
 
         Self {
@@ -128,11 +121,17 @@ impl Module {
             globals,
             global_layout: Vec::new(),
             functions,
-            function_layout: Vec::new(),
-            custom_tys,
-            custom_ty_layout: Vec::new(),
+            custom_types,
+            custom_type_layout: Vec::new(),
             id_allocator,
         }
+    }
+
+    pub fn with_value_data<F, R>(&self, value: Value, f: F) -> Option<R>
+    where
+        F: FnOnce(&ValueData) -> R,
+    {
+        self.globals.borrow().get(&value).map(f)
     }
 
     pub fn global_layout(&self) -> &[Value] {
@@ -143,32 +142,45 @@ impl Module {
         &mut self.global_layout
     }
 
-    pub fn function_layout(&self) -> &[Function] {
-        &self.function_layout
+    pub fn custom_type_layout(&self) -> &[String] {
+        &self.custom_type_layout
     }
 
-    pub fn function_layout_mut(&mut self) -> &mut Vec<Function> {
-        &mut self.function_layout
-    }
-
-    pub fn custom_ty_layout(&self) -> &[String] {
-        &self.custom_ty_layout
-    }
-
-    pub fn custom_ty_layout_mut(&mut self) -> &mut Vec<String> {
-        &mut self.custom_ty_layout
+    pub fn custom_type_layout_mut(&mut self) -> &mut Vec<String> {
+        &mut self.custom_type_layout
     }
 
     fn allocate_id(&self) -> usize {
         self.id_allocator.borrow_mut().allocate()
     }
 
-    pub fn value_builder(&mut self) -> GlobalValueBuilder {
-        GlobalValueBuilder::new(self)
+    pub fn value_builder(&mut self) -> GlobalBuilder {
+        GlobalBuilder::new(self)
     }
 
-    pub fn custom_ty_builder(&mut self) -> CustomTypeBuilder {
-        CustomTypeBuilder::new(self)
+    pub fn function_data(&self, function: Function) -> Option<&FunctionData> {
+        self.functions.get(&function)
+    }
+
+    pub fn function_data_mut(&mut self, function: Function) -> Option<&mut FunctionData> {
+        self.functions.get_mut(&function)
+    }
+
+    pub fn add_global_slot(&mut self, data: ValueData) -> Value {
+        let value = Value::new(self.allocate_id());
+        self.globals.borrow_mut().insert(value, data);
+        value
+    }
+
+    pub fn add_function(&mut self, value_data: ValueData, function_data: FunctionData) -> Function {
+        let function = Value::new(self.allocate_id());
+        self.globals.borrow_mut().insert(function, value_data);
+        self.functions.insert(function.into(), function_data);
+        function.into()
+    }
+
+    pub fn add_custom_type(&mut self, name: String, ty: Type) {
+        self.custom_types.borrow_mut().insert(name.clone(), ty);
     }
 }
 

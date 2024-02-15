@@ -3,7 +3,8 @@ use super::{
     module::DataFlowGraph,
     types::Type,
     values::{
-        Alloc, Binary, Branch, Call, GetElemPtr, Global, Jump, Load, Return, Store, Unary, Value,
+        Alloc, Binary, Branch, Call, GetElemPtr, GlobalSlot, Jump, Load, Return, Store, Unary,
+        Value,
     },
 };
 
@@ -51,13 +52,10 @@ pub struct FunctionData {
 }
 
 impl FunctionData {
-    pub fn new(
-        name: String,
-        ty: Type,
-        kind: FunctionKind,
-        dfg: DataFlowGraph,
-        layout: Layout,
-    ) -> Self {
+    pub fn new(name: String, ty: Type, kind: FunctionKind) -> Self {
+        let dfg = DataFlowGraph::new();
+        let layout = Layout::new();
+
         Self {
             name,
             ty,
@@ -65,6 +63,11 @@ impl FunctionData {
             dfg,
             layout,
         }
+    }
+
+    /// Create a new `ValueData` struct for the function
+    pub fn value_data(&self, ty: Type) -> ValueData {
+        ValueData::new(ty, ValueKind::Function)
     }
 
     pub fn name(&self) -> &str {
@@ -121,10 +124,10 @@ pub enum ValueKind {
     /// Struct constant
     Struct(Vec<Value>),
 
-    /// A Global
+    /// A global memory slot
     ///
     /// A global value is actually a memory location(pointer) to the global variable.
-    Global(Global),
+    GlobalSlot(GlobalSlot),
 
     /// Alloc
     ///
@@ -133,6 +136,7 @@ pub enum ValueKind {
 
     /// Load
     Load(Load),
+
     /// Store
     Store(Store),
 
@@ -161,8 +165,13 @@ pub enum ValueKind {
     /// Get element pointer
     GetElemPtr(GetElemPtr),
 
-    /// Block arguments
-    BlockArg,
+    /// Block parameter
+    BlockParam,
+
+    /// Function
+    ///
+    /// Functions are also global values. The data and instructions are stored in `FunctionData`
+    Function,
 }
 
 impl ValueKind {
@@ -178,7 +187,7 @@ impl ValueKind {
     }
 
     pub fn is_global(&self) -> bool {
-        matches!(self, ValueKind::Global(_))
+        matches!(self, ValueKind::GlobalSlot(_) | ValueKind::Function)
     }
 
     pub fn is_terminator(&self) -> bool {
@@ -186,6 +195,10 @@ impl ValueKind {
             self,
             ValueKind::Jump(_) | ValueKind::Branch(_) | ValueKind::Return(_)
         )
+    }
+
+    pub fn is_block_param(&self) -> bool {
+        matches!(self, ValueKind::BlockParam)
     }
 }
 

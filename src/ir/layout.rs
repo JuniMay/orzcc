@@ -112,3 +112,28 @@ pub enum LayoutOpErr {
     /// Instruction cannot be found in a local layout (in the linked list).
     InstNodeNotFound(Inst),
 }
+
+impl Layout {
+    pub fn new() -> Self {
+        Self {
+            blocks: BlockList::new(),
+            inst_blocks: HashMap::new(),
+        }
+    }
+
+    pub fn blocks(&self) -> &BlockList {
+        &self.blocks
+    }
+
+    pub fn blocks_mut(&mut self) -> &mut BlockList {
+        &mut self.blocks
+    }
+
+    pub fn inst_blocks(&self) -> &HashMap<Inst, Block> {
+        &self.inst_blocks
+    }
+
+    pub fn inst_blocks_mut(&mut self) -> &mut HashMap<Inst, Block> {
+        &mut self.inst_blocks
+    }
+}

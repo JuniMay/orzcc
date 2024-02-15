@@ -191,7 +191,7 @@ impl BinaryOp {
     pub(super) fn require_same_type(&self) -> bool {
         match self {
             BinaryOp::Shl | BinaryOp::LShr | BinaryOp::AShr => false,
-            _ => true
+            _ => true,
         }
     }
 }
@@ -310,11 +310,11 @@ impl Alloc {
     }
 }
 
-/// A global value
+/// A global memory slot.
 ///
 /// The initial value of the global should be a constant.
 /// The type of the global is available in value data.
-pub struct Global {
+pub struct GlobalSlot {
     /// The initial value of the global
     ///
     /// The initial value should be a constant.
@@ -323,9 +323,9 @@ pub struct Global {
     mutable: bool,
 }
 
-impl Global {
+impl GlobalSlot {
     pub(super) fn new_value_data(ty: Type, init: Value, mutable: bool) -> ValueData {
-        ValueData::new(ty, ValueKind::Global(Global { init, mutable }))
+        ValueData::new(ty, ValueKind::GlobalSlot(GlobalSlot { init, mutable }))
     }
 }
 
