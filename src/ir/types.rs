@@ -44,7 +44,7 @@ pub enum TypeKind {
     /// Block in the IR can have the same name as operands and can be distinguished by `label` type.
     Label,
     /// A custom defined type
-    Type,
+    Type(String),
 }
 
 impl fmt::Display for TypeKind {
@@ -81,7 +81,7 @@ impl fmt::Display for TypeKind {
                 )
             }
             TypeKind::Label => write!(f, "label"),
-            TypeKind::Type => write!(f, "type"),
+            TypeKind::Type(name) => write!(f, "#{}", name),
         }
     }
 }
@@ -154,8 +154,8 @@ impl Type {
         Type::make(TypeKind::Label)
     }
 
-    pub fn mk_type() -> Type {
-        Type::make(TypeKind::Type)
+    pub fn mk_type(name: String) -> Type {
+        Type::make(TypeKind::Type(name))
     }
 
     pub fn kind(&self) -> &TypeKind {
@@ -174,7 +174,7 @@ impl Type {
             TypeKind::Function(_, _) => data_layout.map_or(0, |dl| dl.pointer_size),
             TypeKind::Struct(fields) => fields.iter().map(|ty| ty.size(data_layout)).sum(),
             TypeKind::Label => 0,
-            TypeKind::Type => 0,
+            TypeKind::Type(_) => 0,
         }
     }
 
@@ -203,7 +203,7 @@ impl Type {
 
     pub fn is_zero_initializable(&self) -> bool {
         match self.kind() {
-            TypeKind::Void | TypeKind::Function(_, _) | TypeKind::Label | TypeKind::Type => false,
+            TypeKind::Void | TypeKind::Function(_, _) | TypeKind::Label | TypeKind::Type(_) => false,
             _ => true,
         }
     }

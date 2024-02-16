@@ -4,6 +4,7 @@ pub(crate) mod layout;
 pub(crate) mod module;
 pub(crate) mod types;
 pub(crate) mod values;
+pub(crate) mod pass;
 
 #[allow(dead_code)]
 const IDENTIFIER_PREFIX: &'static str = "%";

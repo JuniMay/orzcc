@@ -27,6 +27,9 @@ pub struct DataFlowGraph {
 
     /// Pointer to id allocator
     pub(super) id_allocator: Weak<RefCell<IdAllocator>>,
+
+    /// Pointer to name allocator
+    pub(super) name_allocator: Weak<RefCell<NameAllocator<Value>>>,
 }
 
 impl DataFlowGraph {
@@ -37,6 +40,7 @@ impl DataFlowGraph {
             globals: Weak::new(),
             custom_types: Weak::new(),
             id_allocator: Weak::new(),
+            name_allocator: Weak::new(),
         }
     }
 
@@ -110,6 +114,9 @@ pub struct Module {
 
     /// Id allocator
     id_allocator: Rc<RefCell<IdAllocator>>,
+
+    /// Name allocator
+    name_allocator: Rc<RefCell<NameAllocator<Value>>>,
 }
 
 impl Module {
@@ -118,6 +125,7 @@ impl Module {
         let functions = HashMap::new();
         let custom_types = Rc::new(RefCell::new(HashMap::new()));
         let id_allocator = Rc::new(RefCell::new(IdAllocator::new()));
+        let name_allocator = Rc::new(RefCell::new(NameAllocator::new()));
 
         Self {
             name,
@@ -128,6 +136,7 @@ impl Module {
             custom_types,
             custom_type_layout: Vec::new(),
             id_allocator,
+            name_allocator,
         }
     }
 
@@ -136,6 +145,10 @@ impl Module {
         F: FnOnce(&ValueData) -> R,
     {
         self.globals.borrow().get(&value).map(f)
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
     pub fn global_slot_layout(&self) -> &[Value] {
@@ -202,6 +215,10 @@ impl Module {
             .unwrap()
             .dfg_mut()
             .id_allocator = Rc::downgrade(&self.id_allocator);
+        self.function_data_mut(function.into())
+            .unwrap()
+            .dfg_mut()
+            .name_allocator = Rc::downgrade(&self.name_allocator);
 
         self.function_layout.push(function.into());
         function.into()
