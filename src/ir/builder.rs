@@ -8,6 +8,7 @@ use super::{
     },
 };
 
+#[derive(Debug)]
 pub enum BuilderErr {
     /// Value not found.
     ///
@@ -111,7 +112,7 @@ pub trait ConstantBuilder: QueryValueData + AddValue {
                 return Err(BuilderErr::IncompatibleArrayElemType);
             }
             if !self.value_const(*value)? {
-                return Err(BuilderErr::InvalidKind);
+                return Err(BuilderErr::InvalidMutability);
             }
         }
 
@@ -130,7 +131,7 @@ pub trait ConstantBuilder: QueryValueData + AddValue {
                 return Err(BuilderErr::IncompatibleStructFieldType);
             }
             if !self.value_const(*value)? {
-                return Err(BuilderErr::InvalidKind);
+                return Err(BuilderErr::InvalidMutability);
             }
         }
 

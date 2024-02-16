@@ -83,6 +83,10 @@ where
         self.nodes.get(&key)
     }
 
+    pub fn node_mut(&mut self, key: K) -> Option<&mut N> {
+        self.nodes.get_mut(&key)
+    }
+
     /// Append the key to the end.
     ///
     /// If `key` has been inserted, return `BiLinkedListErr::KeyDuplicated`.

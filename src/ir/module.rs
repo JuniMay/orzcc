@@ -93,11 +93,14 @@ pub struct Module {
     /// This includes global memory slots and functions.
     globals: Rc<RefCell<GlobalValueMap>>,
 
-    /// Layout of global slots and functions
-    global_layout: Vec<Value>,
+    /// Layout of global slots
+    global_slot_layout: Vec<Value>,
 
     /// Functions
     functions: HashMap<Function, FunctionData>,
+
+    /// Layout of functions
+    function_layout: Vec<Function>,
 
     /// User defined types
     custom_types: Rc<RefCell<CustomTypeMap>>,
@@ -119,8 +122,9 @@ impl Module {
         Self {
             name,
             globals,
-            global_layout: Vec::new(),
+            global_slot_layout: Vec::new(),
             functions,
+            function_layout: Vec::new(),
             custom_types,
             custom_type_layout: Vec::new(),
             id_allocator,
@@ -134,12 +138,20 @@ impl Module {
         self.globals.borrow().get(&value).map(f)
     }
 
-    pub fn global_layout(&self) -> &[Value] {
-        &self.global_layout
+    pub fn global_slot_layout(&self) -> &[Value] {
+        &self.global_slot_layout
     }
 
-    pub fn global_layout_mut(&mut self) -> &mut Vec<Value> {
-        &mut self.global_layout
+    pub fn global_slot_layout_mut(&mut self) -> &mut Vec<Value> {
+        &mut self.global_slot_layout
+    }
+
+    pub fn function_layout(&self) -> &[Function] {
+        &self.function_layout
+    }
+
+    pub fn function_layout_mut(&mut self) -> &mut Vec<Function> {
+        &mut self.function_layout
     }
 
     pub fn custom_type_layout(&self) -> &[String] {
@@ -154,7 +166,7 @@ impl Module {
         self.id_allocator.borrow_mut().allocate()
     }
 
-    pub fn value_builder(&mut self) -> GlobalBuilder {
+    pub fn builder(&mut self) -> GlobalBuilder {
         GlobalBuilder::new(self)
     }
 
@@ -169,6 +181,7 @@ impl Module {
     pub fn add_global_slot(&mut self, data: ValueData) -> Value {
         let value = Value::new(self.allocate_id());
         self.globals.borrow_mut().insert(value, data);
+        self.global_slot_layout.push(value);
         value
     }
 
@@ -176,11 +189,27 @@ impl Module {
         let function = Value::new(self.allocate_id());
         self.globals.borrow_mut().insert(function, value_data);
         self.functions.insert(function.into(), function_data);
+
+        self.function_data_mut(function.into())
+            .unwrap()
+            .dfg_mut()
+            .globals = Rc::downgrade(&self.globals);
+        self.function_data_mut(function.into())
+            .unwrap()
+            .dfg_mut()
+            .custom_types = Rc::downgrade(&self.custom_types);
+        self.function_data_mut(function.into())
+            .unwrap()
+            .dfg_mut()
+            .id_allocator = Rc::downgrade(&self.id_allocator);
+
+        self.function_layout.push(function.into());
         function.into()
     }
 
     pub fn add_custom_type(&mut self, name: String, ty: Type) {
         self.custom_types.borrow_mut().insert(name.clone(), ty);
+        self.custom_type_layout.push(name);
     }
 }
 
