@@ -44,35 +44,19 @@ mod tests {
         let function_data = module.function_data_mut(function).unwrap();
 
         let block = function_data.dfg_mut().builder().block(vec![]).unwrap();
-        // let block_data = function_data.dfg_mut().block_data(block).unwrap();
 
-        let alloc0 = function_data
-            .dfg_mut()
-            .builder()
-            .alloc(Type::mk_int(32))
-            .unwrap();
-        let alloc1 = function_data
-            .dfg_mut()
-            .builder()
-            .alloc(Type::mk_float())
-            .unwrap();
-        let alloc2 = function_data
-            .dfg_mut()
-            .builder()
-            .alloc(Type::mk_double())
-            .unwrap();
+        let dfg = function_data.dfg_mut();
 
-        let _ = function_data.layout_mut().blocks_mut().append(block);
+        let alloc0 = dfg.builder().alloc(Type::mk_int(32)).unwrap();
+        let alloc1 = dfg.builder().alloc(Type::mk_float()).unwrap();
+        let alloc2 = dfg.builder().alloc(Type::mk_double()).unwrap();
 
-        let block_node = function_data
-            .layout_mut()
-            .blocks_mut()
-            .node_mut(block)
-            .unwrap();
+        let layout = function_data.layout_mut();
 
-        let _ = block_node.insts_mut().append(alloc0.into());
-        let _ = block_node.insts_mut().append(alloc1.into());
-        let _ = block_node.insts_mut().append(alloc2.into());
+        layout.append_block(block).ok();
+        layout.append_inst(alloc0.into(), block).ok();
+        layout.append_inst(alloc1.into(), block).ok();
+        layout.append_inst(alloc2.into(), block).ok();
 
         assert_ne!(alloc0, alloc1);
         assert_ne!(alloc0, alloc2);

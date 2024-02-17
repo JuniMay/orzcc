@@ -75,7 +75,7 @@ where
         }
     }
 
-    fn is_inserted(&self, key: K) -> bool {
+    fn contains_key(&self, key: K) -> bool {
         self.nodes.contains_key(&key)
     }
 
@@ -91,7 +91,7 @@ where
     ///
     /// If `key` has been inserted, return `BiLinkedListErr::KeyDuplicated`.
     pub fn append(&mut self, key: K) -> Result<(), BiLinkedListErr<K>> {
-        if self.is_inserted(key) {
+        if self.contains_key(key) {
             return Err(BiLinkedListErr::KeyDuplicated(key));
         }
         // new node
@@ -126,7 +126,7 @@ where
     /// If `key` has been inserted, return `BiLinkedListErr::KeyDuplicated(key)`.
     /// If `before` is not inserted, return `BiLinkedListErr::NodeNotFound(before)`.
     pub fn insert_before(&mut self, key: K, before: K) -> Result<(), BiLinkedListErr<K>> {
-        if self.is_inserted(key) {
+        if self.contains_key(key) {
             return Err(BiLinkedListErr::KeyDuplicated(key));
         }
 

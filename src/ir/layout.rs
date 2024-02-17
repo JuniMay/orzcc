@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::collections::{BiLinkedList, BiLinkedNode};
+use crate::collections::{BiLinkedList, BiLinkedListErr, BiLinkedNode};
 
 use super::values::{Block, Inst};
 
@@ -96,10 +96,10 @@ pub struct Layout {
 #[derive(Debug)]
 pub enum LayoutOpErr {
     /// Duplicated instruction in inertion.
-    InstDuplicate(Inst),
+    InstDuplicated(Inst),
 
     /// Duplicated block in insertion.
-    BlockDuplicate(Block),
+    BlockDuplicated(Block),
 
     /// Parent block cannot be indexed in the layout mapping
     ///
@@ -125,15 +125,89 @@ impl Layout {
         &self.blocks
     }
 
-    pub fn blocks_mut(&mut self) -> &mut BlockList {
-        &mut self.blocks
-    }
-
     pub fn inst_blocks(&self) -> &HashMap<Inst, Block> {
         &self.inst_blocks
     }
 
-    pub fn inst_blocks_mut(&mut self) -> &mut HashMap<Inst, Block> {
-        &mut self.inst_blocks
+    pub fn append_block(&mut self, block: Block) -> Result<(), LayoutOpErr> {
+        self.blocks
+            .append(block)
+            .map_err(|_| LayoutOpErr::BlockDuplicated(block))
+    }
+
+    pub fn append_inst(&mut self, inst: Inst, block: Block) -> Result<(), LayoutOpErr> {
+        if self.inst_blocks.contains_key(&inst) {
+            return Err(LayoutOpErr::InstDuplicated(inst));
+        }
+        self.blocks
+            .node_mut(block)
+            .ok_or(LayoutOpErr::BlockNodeNotFound(block))?
+            .insts_mut()
+            .append(inst)
+            .map_err(|_| LayoutOpErr::InstDuplicated(inst))
+    }
+
+    pub fn remove_block(&mut self, block: Block) -> Result<(), LayoutOpErr> {
+        for (inst, _) in self
+            .blocks
+            .node(block)
+            .ok_or(LayoutOpErr::BlockNodeNotFound(block))?
+            .insts()
+            .iter()
+        {
+            self.inst_blocks.remove(&inst);
+        }
+
+        self.blocks
+            .remove(block)
+            .map_err(|_| LayoutOpErr::BlockNodeNotFound(block))
+    }
+
+    pub fn remove_inst(&mut self, inst: Inst) -> Result<(), LayoutOpErr> {
+        let block = self
+            .inst_blocks
+            .remove(&inst)
+            .ok_or(LayoutOpErr::ParentBlockNotFound(inst))?;
+
+        self.blocks
+            .node_mut(block)
+            .ok_or(LayoutOpErr::BlockNodeNotFound(block))?
+            .insts_mut()
+            .remove(inst)
+            .map_err(|_| LayoutOpErr::InstNodeNotFound(inst))
+    }
+
+    pub fn insert_block_before(&mut self, block: Block, before: Block) -> Result<(), LayoutOpErr> {
+        self.blocks
+            .insert_before(block, before)
+            .map_err(|err| match err {
+                BiLinkedListErr::KeyDuplicated(block) => LayoutOpErr::BlockDuplicated(block),
+                BiLinkedListErr::NodeNotFound(before) => LayoutOpErr::BlockNodeNotFound(before),
+            })
+    }
+
+    pub fn insert_inst_before(&mut self, inst: Inst, before: Inst) -> Result<(), LayoutOpErr> {
+        if self.inst_blocks.contains_key(&inst) {
+            return Err(LayoutOpErr::InstDuplicated(inst));
+        }
+
+        let block = self
+            .inst_blocks
+            .get(&before)
+            .ok_or(LayoutOpErr::ParentBlockNotFound(before))?;
+
+        self.blocks
+            .node_mut(*block)
+            .ok_or(LayoutOpErr::BlockNodeNotFound(*block))?
+            .insts_mut()
+            .insert_before(inst, before)
+            .map_err(|err| match err {
+                BiLinkedListErr::KeyDuplicated(inst) => LayoutOpErr::InstDuplicated(inst),
+                BiLinkedListErr::NodeNotFound(before) => LayoutOpErr::InstNodeNotFound(before),
+            })?;
+
+        self.inst_blocks.insert(inst, *block);
+
+        Ok(())
     }
 }
