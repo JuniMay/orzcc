@@ -115,7 +115,7 @@ pub enum ValueKind {
     /// Undef
     Undef,
 
-    /// Bytes for non-aggregate types
+    /// Bytes for non-aggregate types, little-endian
     Bytes(Vec<u8>),
 
     /// Array constant

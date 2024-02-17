@@ -203,7 +203,9 @@ impl Type {
 
     pub fn is_zero_initializable(&self) -> bool {
         match self.kind() {
-            TypeKind::Void | TypeKind::Function(_, _) | TypeKind::Label | TypeKind::Type(_) => false,
+            TypeKind::Void | TypeKind::Function(_, _) | TypeKind::Label | TypeKind::Type(_) => {
+                false
+            }
             _ => true,
         }
     }

@@ -1,3 +1,12 @@
+//! # Value Reference and Internals
+//!
+//! There are four references in the IR: [`Value`], [`Inst`], [`Function`] and [`Block`].
+//!
+//! The [`Value`], [`Inst`], [`Function`] can be converted from one to another, but [`Block`] cannot.
+//!
+//! In the current implementation, all the references share the same [`IdAllocator`](super::module::IdAllocator).
+//!
+
 use super::{
     entities::{ValueData, ValueKind},
     types::Type,
@@ -20,6 +29,8 @@ impl Value {
 }
 
 /// Value indexer indicates an indexer for a value and can be converted from/into a Value.
+///
+/// Indexer is actually a wrapper of usize, representing a reference to the data.
 trait ValueIndexer: From<Value> {
     fn new(index: usize) -> Self;
     fn index(&self) -> usize;
@@ -33,7 +44,9 @@ pub struct Inst(usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Function(usize);
 
-/// Reference to the block
+/// Reference to a block
+///
+/// Blocks are independent from values.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Block(usize);
 
@@ -62,7 +75,15 @@ impl_value_indexer!(Inst);
 
 impl_value_indexer!(Function);
 
-impl_value_indexer!(Block);
+impl Block {
+    pub fn new(index: usize) -> Self {
+        Self(index)
+    }
+
+    pub fn index(&self) -> usize {
+        self.0
+    }
+}
 
 impl<T> From<T> for Value
 where
@@ -73,6 +94,7 @@ where
     }
 }
 
+/// Condition for integer comparison
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ICmpCond {
     Eq,
@@ -92,6 +114,7 @@ impl fmt::Display for ICmpCond {
     }
 }
 
+/// Condition for floating-point comparison
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum FCmpCond {
     OEq,
@@ -111,6 +134,7 @@ impl fmt::Display for FCmpCond {
     }
 }
 
+/// Binary operations.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum BinaryOp {
     /// Integer addition
@@ -156,6 +180,7 @@ pub enum BinaryOp {
 }
 
 impl BinaryOp {
+    /// If the operation requires integer operands
     pub(super) fn require_int(&self) -> bool {
         match self {
             BinaryOp::Add
@@ -176,6 +201,7 @@ impl BinaryOp {
         }
     }
 
+    /// If the operation requires floating-point operands
     pub(super) fn require_float(&self) -> bool {
         match self {
             BinaryOp::FAdd
@@ -188,6 +214,7 @@ impl BinaryOp {
         }
     }
 
+    /// If the operation requires the same type of operands
     pub(super) fn require_same_type(&self) -> bool {
         match self {
             BinaryOp::Shl | BinaryOp::LShr | BinaryOp::AShr => false,
@@ -223,16 +250,20 @@ impl fmt::Display for BinaryOp {
     }
 }
 
+/// Unary operations.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum UnaryOp {
+    /// Floating point negation
     FNeg,
 }
 
 impl UnaryOp {
+    /// If the operation requires integer operands
     pub(super) fn require_int(&self) -> bool {
         false
     }
 
+    /// If the operation requires floating-point operands
     pub(super) fn require_float(&self) -> bool {
         match self {
             UnaryOp::FNeg => true,
@@ -248,6 +279,7 @@ impl fmt::Display for UnaryOp {
     }
 }
 
+/// Binary instruction internals.
 pub struct Binary {
     op: BinaryOp,
     lhs: Value,
@@ -258,8 +290,21 @@ impl Binary {
     pub(super) fn new_value_data(ty: Type, op: BinaryOp, lhs: Value, rhs: Value) -> ValueData {
         ValueData::new(ty, ValueKind::Binary(Binary { op, lhs, rhs }))
     }
+
+    pub fn op(&self) -> BinaryOp {
+        self.op.clone()
+    }
+
+    pub fn lhs(&self) -> Value {
+        self.lhs
+    }
+
+    pub fn rhs(&self) -> Value {
+        self.rhs
+    }
 }
 
+/// Unary instruction internals.
 pub struct Unary {
     op: UnaryOp,
     val: Value,
@@ -269,8 +314,17 @@ impl Unary {
     pub(super) fn new_value_data(ty: Type, op: UnaryOp, val: Value) -> ValueData {
         ValueData::new(ty, ValueKind::Unary(Unary { op, val }))
     }
+
+    pub fn op(&self) -> UnaryOp {
+        self.op.clone()
+    }
+
+    pub fn val(&self) -> Value {
+        self.val
+    }
 }
 
+/// Store instruction internals.
 pub struct Store {
     val: Value,
     ptr: Value,
@@ -280,11 +334,19 @@ impl Store {
     pub(super) fn new_value_data(val: Value, ptr: Value) -> ValueData {
         ValueData::new(Type::mk_void(), ValueKind::Store(Store { val, ptr }))
     }
+
+    pub fn val(&self) -> Value {
+        self.val
+    }
+
+    pub fn ptr(&self) -> Value {
+        self.ptr
+    }
 }
 
 /// Load instruction internals.
 ///
-/// The type of the loaded value is available in value data.
+/// The type of the loaded value is available in [`ValueData`](super::entities::ValueData).
 pub struct Load {
     ptr: Value,
 }
@@ -292,6 +354,10 @@ pub struct Load {
 impl Load {
     pub(super) fn new_value_data(ty: Type, ptr: Value) -> ValueData {
         ValueData::new(ty, ValueKind::Load(Load { ptr }))
+    }
+
+    pub fn ptr(&self) -> Value {
+        self.ptr
     }
 }
 
@@ -308,12 +374,16 @@ impl Alloc {
     pub(super) fn new_value_data(ty: Type) -> ValueData {
         ValueData::new(Type::mk_ptr(), ValueKind::Alloc(Alloc { ty }))
     }
+
+    pub fn ty(&self) -> Type {
+        self.ty.clone()
+    }
 }
 
 /// A global memory slot.
 ///
 /// The initial value of the global should be a constant.
-/// The type of the global is available in value data.
+/// The type of the global is available in [`ValueData`](super::entities::ValueData).
 pub struct GlobalSlot {
     /// The initial value of the global
     ///
@@ -327,8 +397,17 @@ impl GlobalSlot {
     pub(super) fn new_value_data(ty: Type, init: Value, mutable: bool) -> ValueData {
         ValueData::new(ty, ValueKind::GlobalSlot(GlobalSlot { init, mutable }))
     }
+
+    pub fn init(&self) -> Value {
+        self.init
+    }
+
+    pub fn mutable(&self) -> bool {
+        self.mutable
+    }
 }
 
+/// Jump instruction internals.
 pub struct Jump {
     dst: Block,
     args: Vec<Value>,
@@ -338,8 +417,17 @@ impl Jump {
     pub(super) fn new_value_data(dst: Block, args: Vec<Value>) -> ValueData {
         ValueData::new(Type::mk_void(), ValueKind::Jump(Jump { dst, args }))
     }
+
+    pub fn dst(&self) -> Block {
+        self.dst
+    }
+
+    pub fn args(&self) -> &[Value] {
+        &self.args
+    }
 }
 
+/// Branch instruction internals.
 pub struct Branch {
     cond: Value,
     then_dst: Block,
@@ -367,8 +455,29 @@ impl Branch {
             }),
         )
     }
+
+    pub fn cond(&self) -> Value {
+        self.cond
+    }
+
+    pub fn then_dst(&self) -> Block {
+        self.then_dst
+    }
+
+    pub fn else_dst(&self) -> Block {
+        self.else_dst
+    }
+
+    pub fn then_args(&self) -> &[Value] {
+        &self.then_args
+    }
+
+    pub fn else_args(&self) -> &[Value] {
+        &self.else_args
+    }
 }
 
+/// Return instruction internals.
 pub struct Return {
     val: Option<Value>,
 }
@@ -377,11 +486,15 @@ impl Return {
     pub(super) fn new_value_data(val: Option<Value>) -> ValueData {
         ValueData::new(Type::mk_void(), ValueKind::Return(Return { val }))
     }
+
+    pub fn val(&self) -> Option<Value> {
+        self.val
+    }
 }
 
 /// A function call.
 ///
-/// The function type can be inferred from the args and the value type.
+/// The function type can be inferred from the args and the [`ValueData`](super::entities::ValueData).
 pub struct Call {
     /// The callee can be a function or a function pointer.
     callee: Value,
@@ -393,8 +506,17 @@ impl Call {
     pub(super) fn new_value_data(ret_ty: Type, callee: Value, args: Vec<Value>) -> ValueData {
         ValueData::new(ret_ty, ValueKind::Call(Call { callee, args }))
     }
+
+    pub fn callee(&self) -> Value {
+        self.callee
+    }
+
+    pub fn args(&self) -> &[Value] {
+        &self.args
+    }
 }
 
+/// Get element pointer instruction internals.
 pub struct GetElemPtr {
     /// The pointer
     ptr: Value,
@@ -410,5 +532,20 @@ impl GetElemPtr {
             Type::mk_ptr(),
             ValueKind::GetElemPtr(GetElemPtr { ptr, ty, indices }),
         )
+    }
+
+    /// Get the pointer
+    pub fn ptr(&self) -> Value {
+        self.ptr
+    }
+
+    /// Get the bound type
+    pub fn ty(&self) -> Type {
+        self.ty.clone()
+    }
+
+    /// Get the indices
+    pub fn indices(&self) -> &[Value] {
+        &self.indices
     }
 }

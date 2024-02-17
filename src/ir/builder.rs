@@ -62,9 +62,14 @@ pub enum BuilderErr {
 }
 
 pub trait QueryValueData {
+    /// Get the type of a value.
     fn value_type(&self, value: Value) -> Result<Type, BuilderErr>;
-    fn value_const(&self, value: Value) -> Result<bool, BuilderErr>;
-    fn value_block_param(&self, value: Value) -> Result<bool, BuilderErr>;
+
+    /// Check if a value is a constant.
+    fn is_value_const(&self, value: Value) -> Result<bool, BuilderErr>;
+
+    /// Check if a value is a block parameter.
+    fn is_value_block_param(&self, value: Value) -> Result<bool, BuilderErr>;
 }
 
 pub trait QueryBlockData {
@@ -111,7 +116,7 @@ pub trait ConstantBuilder: QueryValueData + AddValue {
             if self.value_type(*value)? != elem_type.clone() {
                 return Err(BuilderErr::IncompatibleArrayElemType);
             }
-            if !self.value_const(*value)? {
+            if !self.is_value_const(*value)? {
                 return Err(BuilderErr::InvalidMutability);
             }
         }
@@ -130,7 +135,7 @@ pub trait ConstantBuilder: QueryValueData + AddValue {
             if self.value_type(*value)? != field_type.clone() {
                 return Err(BuilderErr::IncompatibleStructFieldType);
             }
-            if !self.value_const(*value)? {
+            if !self.is_value_const(*value)? {
                 return Err(BuilderErr::InvalidMutability);
             }
         }
@@ -303,7 +308,7 @@ pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
 pub trait LocalBlockBuilder: QueryDfgData + AddBlock {
     fn block(&mut self, params: Vec<Value>) -> Result<Block, BuilderErr> {
         for param in params.iter() {
-            if !self.value_block_param(*param)? {
+            if !self.is_value_block_param(*param)? {
                 return Err(BuilderErr::InvalidKind);
             }
         }
@@ -320,7 +325,7 @@ pub trait GlobalValueBuilder: QueryValueData + AddValue + ConstantBuilder {
     ) -> Result<Function, BuilderErr>;
 
     fn global_slot(&mut self, init: Value, mutable: bool) -> Result<Value, BuilderErr> {
-        if !self.value_const(init)? {
+        if !self.is_value_const(init)? {
             return Err(BuilderErr::InvalidMutability);
         }
 
@@ -354,28 +359,19 @@ impl LocalBuilder<'_> {
 
 impl QueryValueData for LocalBuilder<'_> {
     fn value_type(&self, value: Value) -> Result<Type, BuilderErr> {
-        Ok(self
-            .dfg
-            .value_data(value)
-            .ok_or(BuilderErr::ValueNotFound)?
-            .ty()
-            .clone())
+        self.dfg
+            .with_value_data(value, |data| data.ty().clone())
+            .ok_or(BuilderErr::ValueNotFound)
     }
-    fn value_const(&self, value: Value) -> Result<bool, BuilderErr> {
-        Ok(self
-            .dfg
-            .value_data(value)
-            .ok_or(BuilderErr::ValueNotFound)?
-            .kind()
-            .is_const())
+    fn is_value_const(&self, value: Value) -> Result<bool, BuilderErr> {
+        self.dfg
+            .with_value_data(value, |data| data.kind().is_const())
+            .ok_or(BuilderErr::ValueNotFound)
     }
-    fn value_block_param(&self, value: Value) -> Result<bool, BuilderErr> {
-        Ok(self
-            .dfg
-            .value_data(value)
-            .ok_or(BuilderErr::ValueNotFound)?
-            .kind()
-            .is_block_param())
+    fn is_value_block_param(&self, value: Value) -> Result<bool, BuilderErr> {
+        self.dfg
+            .with_value_data(value, |data| data.kind().is_block_param())
+            .ok_or(BuilderErr::ValueNotFound)
     }
 }
 
@@ -425,13 +421,13 @@ impl QueryValueData for GlobalBuilder<'_> {
             .ok_or(BuilderErr::ValueNotFound)
     }
 
-    fn value_const(&self, value: Value) -> Result<bool, BuilderErr> {
+    fn is_value_const(&self, value: Value) -> Result<bool, BuilderErr> {
         self.module
             .with_value_data(value, |data| data.kind().is_const())
             .ok_or(BuilderErr::ValueNotFound)
     }
 
-    fn value_block_param(&self, value: Value) -> Result<bool, BuilderErr> {
+    fn is_value_block_param(&self, value: Value) -> Result<bool, BuilderErr> {
         self.module
             .with_value_data(value, |data| data.kind().is_block_param())
             .ok_or(BuilderErr::ValueNotFound)

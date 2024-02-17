@@ -1,10 +1,10 @@
-pub(crate) mod builder;
-pub(crate) mod entities;
-pub(crate) mod layout;
-pub(crate) mod module;
-pub(crate) mod types;
-pub(crate) mod values;
-pub(crate) mod pass;
+pub mod builder;
+pub mod entities;
+pub mod layout;
+pub mod module;
+pub mod pass;
+pub mod types;
+pub mod values;
 
 #[allow(dead_code)]
 const IDENTIFIER_PREFIX: &'static str = "%";

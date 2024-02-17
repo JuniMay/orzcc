@@ -1,6 +1,6 @@
-mod collections;
-mod ir;
-mod passes;
+pub mod collections;
+pub mod ir;
+pub mod passes;
 
 fn main() {
     println!("Hello, world!");

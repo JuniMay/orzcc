@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::collections::{BiLinkedList, BiLinkedNode};
 
-use super::values::{Block, Function, Inst, Value};
+use super::values::{Block, Inst};
 
 /// Instruction node
 pub struct InstNode {
@@ -83,7 +83,7 @@ impl BlockNode {
 
 pub type BlockList = BiLinkedList<Block, BlockNode>;
 
-/// A layout of a function.
+/// A layout inside a function.
 pub struct Layout {
     /// The basic blocks
     blocks: BlockList,
