@@ -116,6 +116,14 @@ impl DataFlowGraph {
         self.block_name_allocator.borrow_mut().get(block)
     }
 
+    pub fn assign_local_value_name(&self, value: Value, name: String) -> Result<(), NameAllocErr> {
+        self.value_name_allocator.borrow_mut().assign(value, name)
+    }
+
+    pub fn assign_block_name(&self, block: Block, name: String) -> Result<(), NameAllocErr> {
+        self.block_name_allocator.borrow_mut().assign(block, name)
+    }
+
     pub fn block_data(&self, block: Block) -> Option<&BlockData> {
         self.blocks.get(&block)
     }
@@ -260,6 +268,10 @@ impl Module {
 
     pub fn value_name(&self, value: Value) -> String {
         self.name_allocator.borrow_mut().get(value)
+    }
+
+    pub fn assign_name(&mut self, value: Value, name: String) -> Result<(), NameAllocErr> {
+        self.name_allocator.borrow_mut().assign(value, name)
     }
 
     pub fn add_custom_type(&mut self, name: String, ty: Type) {

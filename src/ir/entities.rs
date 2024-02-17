@@ -66,24 +66,16 @@ impl FunctionData {
     }
 
     /// Create a new `ValueData` struct for the function
-    pub fn value_data(&self, ty: Type) -> ValueData {
-        ValueData::new(ty, ValueKind::Function)
+    pub fn new_value_data(&self) -> ValueData {
+        ValueData::new(self.ty.clone(), ValueKind::Function)
     }
 
     pub fn name(&self) -> &str {
         &self.name
     }
 
-    pub fn name_mut(&mut self) -> &mut String {
-        &mut self.name
-    }
-
     pub fn ty(&self) -> &Type {
         &self.ty
-    }
-
-    pub fn ty_mut(&mut self) -> &mut Type {
-        &mut self.ty
     }
 
     pub fn kind(&self) -> &FunctionKind {
@@ -225,15 +217,7 @@ impl ValueData {
         &self.ty
     }
 
-    pub fn ty_mut(&mut self) -> &mut Type {
-        &mut self.ty
-    }
-
     pub fn kind(&self) -> &ValueKind {
         &self.kind
-    }
-
-    pub fn kind_mut(&mut self) -> &mut ValueKind {
-        &mut self.kind
     }
 }
