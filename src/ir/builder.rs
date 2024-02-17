@@ -365,6 +365,27 @@ pub trait GlobalValueBuilder: QueryValueData + AddValue + ConstantBuilder {
         let data = FunctionData::new(name, ty.clone(), kind);
         self.add_function(data.new_value_data(), data)
     }
+
+    /// Build a function definition.
+    fn function_def(&mut self, name: String, ty: Type) -> Result<Function, BuilderErr> {
+        let data = FunctionData::new(name, ty.clone(), FunctionKind::Definition);
+        let function = self.add_function(data.new_value_data(), data)?;
+        Ok(function)
+    }
+
+    /// Build a function declaration.
+    fn function_decl(&mut self, name: String, ty: Type) -> Result<Function, BuilderErr> {
+        let data = FunctionData::new(name, ty.clone(), FunctionKind::Declaration);
+        let function = self.add_function(data.new_value_data(), data)?;
+        Ok(function)
+    }
+
+    /// Build a intrinsic function.
+    fn function_intrinsic(&mut self, name: String, ty: Type) -> Result<Function, BuilderErr> {
+        let data = FunctionData::new(name, ty.clone(), FunctionKind::Intrinsic);
+        let function = self.add_function(data.new_value_data(), data)?;
+        Ok(function)
+    }
 }
 
 pub struct LocalBuilder<'a> {

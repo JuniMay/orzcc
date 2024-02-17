@@ -2,7 +2,6 @@ use std::io;
 
 use ir::{
     builder::{GlobalValueBuilder, LocalBlockBuilder, LocalValueBuilder},
-    entities::FunctionKind,
     module::Module,
     pass::GlobalPass,
     types::Type,
@@ -17,10 +16,9 @@ fn main() -> io::Result<()> {
     let mut module = Module::new("test".to_string());
     let function = module
         .builder()
-        .function(
+        .function_def(
             "test_func".to_string(),
             Type::mk_function(vec![], Type::mk_void()),
-            FunctionKind::Definition,
         )
         .unwrap();
 
