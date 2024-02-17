@@ -205,6 +205,10 @@ impl Module {
         &self.function_layout
     }
 
+    pub fn custom_type(&self, name: &str) -> Option<Type> {
+        self.custom_types.borrow().get(name).cloned()
+    }
+
     pub fn custom_type_layout(&self) -> &[String] {
         &self.custom_type_layout
     }
@@ -252,6 +256,10 @@ impl Module {
         self.function_layout.push(function.into());
 
         function.into()
+    }
+
+    pub fn value_name(&self, value: Value) -> String {
+        self.name_allocator.borrow_mut().get(value)
     }
 
     pub fn add_custom_type(&mut self, name: String, ty: Type) {

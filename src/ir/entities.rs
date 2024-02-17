@@ -190,6 +190,10 @@ impl ValueKind {
         matches!(self, ValueKind::GlobalSlot(_) | ValueKind::Function)
     }
 
+    pub fn is_global_slot(&self) -> bool {
+        matches!(self, ValueKind::GlobalSlot(_))
+    }
+
     pub fn is_terminator(&self) -> bool {
         matches!(
             self,
