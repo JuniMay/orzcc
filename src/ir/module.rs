@@ -237,14 +237,14 @@ impl Module {
         self.functions.get_mut(&function)
     }
 
-    pub fn add_global_slot(&mut self, data: ValueData) -> Value {
+    pub(super) fn add_global_slot(&mut self, data: ValueData) -> Value {
         let value = Value::new(self.allocate_id());
         self.globals.borrow_mut().insert(value, data);
         self.global_slot_layout.push(value);
         value
     }
 
-    pub fn add_function(&mut self, value_data: ValueData, function_data: FunctionData) -> Function {
+    pub(super) fn add_function(&mut self, value_data: ValueData, function_data: FunctionData) -> Function {
         let function = Value::new(self.allocate_id());
         self.globals.borrow_mut().insert(function, value_data);
         self.functions.insert(function.into(), function_data);
