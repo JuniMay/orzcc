@@ -31,14 +31,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
+      - uses: dtolnay/rust-toolchain@nightly
       - name: Generate Rust Docs
-        uses: actions-rs/cargo@v1
-        with:
-          command: doc
-          args: --target-dir ./target --no-deps
+        run: RUSTDOCFLAGS="--enable-index-page -Zunstable-options" cargo +nightly doc --target-dir ./target --no-deps
       - name: Setup Pages
         uses: actions/configure-pages@v4
       - name: Fix permissions
