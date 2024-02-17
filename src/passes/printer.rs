@@ -54,7 +54,7 @@ where
 
         write!(self.buf, "\n")?;
 
-        write!(self.buf, "fn {} {}\n", data.name(), data.ty())?;
+        write!(self.buf, "fn {}{} {{\n", data.name(), data.ty())?;
 
         if let FunctionKind::Declaration = data.kind() {
             return Ok(());
@@ -74,7 +74,12 @@ where
                     if i != 0 {
                         write!(self.buf, ", ")?;
                     }
-                    write!(self.buf, "{}", dfg.value_name(*param))?;
+                    write!(
+                        self.buf,
+                        "{} {}",
+                        dfg.local_value_data(*param).unwrap().ty(),
+                        dfg.value_name(*param)
+                    )?;
                 }
                 write!(self.buf, "):\n")?;
             } else {
@@ -82,7 +87,7 @@ where
             }
 
             for (inst, _) in node.insts().iter() {
-                write!(self.buf, "  ")?;
+                write!(self.buf, "    ")?;
                 self.print_local_value(inst.into(), dfg)?;
                 write!(self.buf, "\n")?;
             }
@@ -209,8 +214,10 @@ where
             }
             ValueKind::Jump(jump) => {
                 write!(self.buf, "jump {}(", dfg.block_name(jump.dst().into()))?;
-                for arg in jump.args() {
-                    write!(self.buf, ", ")?;
+                for (i, arg) in jump.args().iter().enumerate() {
+                    if i != 0 {
+                        write!(self.buf, ", ")?;
+                    }
                     self.print_operand(*arg, dfg)?;
                 }
                 write!(self.buf, ")")
@@ -219,13 +226,17 @@ where
                 write!(self.buf, "br ")?;
                 self.print_operand(branch.cond(), dfg)?;
                 write!(self.buf, ", {}(", dfg.block_name(branch.then_dst()))?;
-                for arg in branch.then_args() {
-                    write!(self.buf, ", ")?;
+                for (i, arg) in branch.then_args().iter().enumerate() {
+                    if i != 0 {
+                        write!(self.buf, ", ")?;
+                    }
                     self.print_operand(*arg, dfg)?;
                 }
                 write!(self.buf, "), {}(", dfg.block_name(branch.else_dst()))?;
-                for arg in branch.else_args() {
-                    write!(self.buf, ", ")?;
+                for (i, arg) in branch.else_args().iter().enumerate() {
+                    if i != 0 {
+                        write!(self.buf, ", ")?;
+                    }
                     self.print_operand(*arg, dfg)?;
                 }
                 write!(self.buf, ")")
