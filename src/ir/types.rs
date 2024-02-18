@@ -173,7 +173,7 @@ impl Type {
     pub fn size(&self, data_layout: Option<&DataLayout>) -> usize {
         match self.kind() {
             TypeKind::Void => 0,
-            TypeKind::Int(bits) => bits / 8,
+            TypeKind::Int(bits) => cmp::max(1, bits / 8),
             TypeKind::Half => 2,
             TypeKind::Float => 4,
             TypeKind::Double => 8,
@@ -257,7 +257,15 @@ mod test {
 
     #[test]
     fn test_equality() {
-        assert_eq!(Type::mk_int(32), Type::mk_int(32));
+        assert_eq!(Type::mk_i32(), Type::mk_int(32));
+        assert_eq!(Type::mk_i1(), Type::mk_int(1));
+        assert_ne!(Type::mk_i32(), Type::mk_int(64));
+
+        assert!(Type::mk_i32().is_int());
+        assert!(Type::mk_float().is_float());
+        assert!(!Type::mk_i32().is_float());
+        assert!(Type::mk_ptr().is_ptr());
+
         assert_eq!(
             Type::mk_array(10, Type::mk_int(32)),
             Type::mk_array(10, Type::mk_int(32))
@@ -272,6 +280,15 @@ mod test {
         assert_eq!(Type::mk_float(), Type::mk_float());
         assert_eq!(Type::mk_double(), Type::mk_double());
         assert_eq!(Type::mk_ptr(), Type::mk_ptr());
+        assert_eq!(Type::mk_label(), Type::mk_label());
+        assert_eq!(
+            Type::mk_type("name".to_string()),
+            Type::mk_type("name".to_string())
+        );
+        assert_ne!(
+            Type::mk_type("name".to_string()),
+            Type::mk_type("name2".to_string())
+        );
         assert_eq!(
             Type::mk_function(vec![], Type::mk_void()),
             Type::mk_function(vec![], Type::mk_void())
@@ -280,5 +297,55 @@ mod test {
             Type::mk_function(vec![Type::mk_int(16)], Type::mk_void()),
             Type::mk_function(vec![], Type::mk_int(32))
         );
+        let ty1 = Type::mk_struct(vec![Type::mk_int(32), Type::mk_int(64)]);
+        let ty2 = Type::mk_struct(vec![Type::mk_int(32), Type::mk_int(64)]);
+        assert!(matches!(ty1.as_struct(), Some(_)));
+        assert_eq!(ty1, ty2);
+    }
+
+    #[test]
+    fn test_display() {
+        assert_eq!(format!("{}", Type::mk_int(32)), "i32");
+        let ty = Type::mk_array(10, Type::mk_int(32));
+        assert_eq!(format!("{}", ty), "[i32; 10]");
+        assert_eq!(format!("{}", Type::mk_void()), "void");
+        assert_eq!(format!("{}", Type::mk_half()), "half");
+        assert_eq!(format!("{}", Type::mk_float()), "float");
+        assert_eq!(format!("{}", Type::mk_double()), "double");
+        assert_eq!(format!("{}", Type::mk_ptr()), "ptr");
+        assert_eq!(format!("{}", Type::mk_label()), "label");
+        assert_eq!(format!("{}", Type::mk_type("name".to_string())), "#name");
+        let ty = Type::mk_function(vec![], Type::mk_void());
+        assert_eq!(format!("{}", ty), "() -> void");
+        let ty = Type::mk_function(vec![Type::mk_int(16)], Type::mk_void());
+        assert_eq!(format!("{}", ty), "(i16) -> void");
+        let ty = Type::mk_function(vec![Type::mk_int(16), Type::mk_int(32)], Type::mk_void());
+        assert_eq!(format!("{}", ty), "(i16, i32) -> void");
+        let ty = Type::mk_struct(vec![Type::mk_int(32), Type::mk_int(64)]);
+        assert_eq!(format!("{}", ty), "{ i32, i64 }");
+    }
+
+    #[test]
+    fn test_size() {
+        let dl = DataLayout { pointer_size: 8 };
+        assert_eq!(Type::mk_void().size(Some(&dl)), 0);
+        assert_eq!(Type::mk_label().size(Some(&dl)), 0);
+        assert_eq!(Type::mk_type("name".to_string()).size(Some(&dl)), 0);
+        assert_eq!(Type::mk_int(1).size(Some(&dl)), 1);
+        assert_eq!(Type::mk_int(32).size(Some(&dl)), 4);
+        assert_eq!(Type::mk_int(64).size(Some(&dl)), 8);
+        assert_eq!(Type::mk_half().size(Some(&dl)), 2);
+        assert_eq!(Type::mk_float().size(Some(&dl)), 4);
+        assert_eq!(Type::mk_double().size(Some(&dl)), 8);
+        assert_eq!(Type::mk_ptr().size(Some(&dl)), 8);
+        assert_eq!(Type::mk_array(10, Type::mk_int(32)).size(Some(&dl)), 40);
+        let ty = Type::mk_function(vec![], Type::mk_void());
+        assert_eq!(ty.size(Some(&dl)), 8);
+        let ty = Type::mk_function(vec![Type::mk_int(32)], Type::mk_void());
+        assert_eq!(ty.size(Some(&dl)), 8);
+        let ty = Type::mk_function(vec![Type::mk_int(32), Type::mk_int(64)], Type::mk_void());
+        assert_eq!(ty.size(Some(&dl)), 8);
+        let ty = Type::mk_struct(vec![Type::mk_int(32), Type::mk_int(64)]);
+        assert_eq!(ty.size(Some(&dl)), 12);
     }
 }

@@ -226,3 +226,156 @@ where
         }
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[derive(Debug, Clone)]
+    struct Node {
+        next: Option<usize>,
+        prev: Option<usize>,
+    }
+
+    impl BiLinkedNode<usize> for Node {
+        fn new() -> Self {
+            Self {
+                next: None,
+                prev: None,
+            }
+        }
+
+        fn next(&self) -> Option<usize> {
+            self.next
+        }
+
+        fn prev(&self) -> Option<usize> {
+            self.prev
+        }
+
+        fn set_next(&mut self, next: Option<usize>) {
+            self.next = next;
+        }
+
+        fn set_prev(&mut self, prev: Option<usize>) {
+            self.prev = prev;
+        }
+    }
+
+    #[test]
+    fn test_list_ops() {
+        let mut list = BiLinkedList::<usize, Node>::new();
+        assert_eq!(list.front(), None);
+
+        // 1
+        list.append(1).unwrap();
+        assert_eq!(list.front(), Some(1));
+        assert_eq!(list.node(1).unwrap().next(), None);
+        assert_eq!(list.node(1).unwrap().prev(), None);
+        assert!(list.contains_key(1));
+
+        // 1 -- 2
+        list.append(2).unwrap();
+        assert_eq!(list.front(), Some(1));
+        assert_eq!(list.node(1).unwrap().next(), Some(2));
+        assert_eq!(list.node(2).unwrap().prev(), Some(1));
+        assert!(list.contains_key(2));
+
+        // 1 -- 2 -- 3
+        list.append(3).unwrap();
+        assert_eq!(list.front(), Some(1));
+        assert_eq!(list.node(2).unwrap().next(), Some(3));
+        assert_eq!(list.node(3).unwrap().prev(), Some(2));
+        assert!(list.contains_key(3));
+
+        // 4 -- 1 -- 2 -- 3
+        list.insert_before(4, 1).unwrap();
+        assert_eq!(list.front(), Some(4));
+        assert_eq!(list.node(4).unwrap().next(), Some(1));
+        assert_eq!(list.node(1).unwrap().prev(), Some(4));
+        assert!(list.contains_key(4));
+
+        // 4 -- 1 -- 5 -- 2 -- 3
+        list.insert_before(5, 2).unwrap();
+        assert_eq!(list.front(), Some(4));
+        assert_eq!(list.node(1).unwrap().next(), Some(5));
+        assert_eq!(list.node(5).unwrap().prev(), Some(1));
+        assert!(list.contains_key(5));
+
+        // 4 -- 5 -- 2 -- 3
+        list.remove(1).unwrap();
+        assert_eq!(list.front(), Some(4));
+        assert_eq!(list.node(4).unwrap().next(), Some(5));
+        assert_eq!(list.node(5).unwrap().prev(), Some(4));
+        assert!(!list.contains_key(1));
+
+        // 5 -- 2 -- 3
+        list.remove(4).unwrap();
+        assert_eq!(list.front(), Some(5));
+        assert_eq!(list.node(2).unwrap().next(), Some(3));
+        assert_eq!(list.node(3).unwrap().prev(), Some(2));
+        assert_eq!(list.node(5).unwrap().prev(), None);
+        assert_eq!(list.node(2).unwrap().prev(), Some(5));
+        assert!(!list.contains_key(4));
+
+        // 5 -- 3
+        list.remove(2).unwrap();
+        assert_eq!(list.front(), Some(5));
+        assert_eq!(list.node(3).unwrap().next(), None);
+        assert_eq!(list.node(3).unwrap().prev(), Some(5));
+        assert!(!list.contains_key(2));
+
+        list.remove(5).unwrap();
+        assert_eq!(list.front(), Some(3));
+
+        list.remove(3).unwrap();
+        assert_eq!(list.front(), None);
+        assert!(!list.contains_key(3));
+    }
+
+    #[test]
+    fn test_list_iter() {
+        let mut list = BiLinkedList::<usize, Node>::new();
+        list.append(1).unwrap();
+        list.append(2).unwrap();
+        list.append(3).unwrap();
+        list.append(4).unwrap();
+        list.append(5).unwrap();
+
+        let mut iter = list.iter();
+        for i in 1..=5 {
+            let (key, _) = iter.next().unwrap();
+            assert_eq!(key, i);
+            if i == 5 {
+                assert!(iter.next().is_none());
+            }
+        }
+    }
+
+    #[test]
+    fn test_list_err() {
+        let mut list = BiLinkedList::<usize, Node>::new();
+        list.append(1).unwrap();
+        list.append(2).unwrap();
+        list.append(3).unwrap();
+        list.append(4).unwrap();
+        list.append(5).unwrap();
+
+        assert!(matches!(
+            list.append(1),
+            Err(BiLinkedListErr::KeyDuplicated(1))
+        ));
+        assert!(matches!(
+            list.insert_before(1, 6),
+            Err(BiLinkedListErr::KeyDuplicated(1))
+        ));
+        assert!(matches!(
+            list.insert_before(6, 7),
+            Err(BiLinkedListErr::NodeNotFound(7))
+        ));
+        assert!(matches!(
+            list.remove(6),
+            Err(BiLinkedListErr::NodeNotFound(6))
+        ));
+    }
+}

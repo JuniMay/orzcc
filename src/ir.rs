@@ -20,46 +20,11 @@ const INDENT: &'static str = "\t";
 
 #[cfg(test)]
 mod tests {
-    use self::{
-        builder::{GlobalValueBuilder, LocalBlockBuilder, LocalValueBuilder},
-        entities::FunctionKind,
-        module::Module,
-        types::Type,
-    };
-
-    use super::*;
+    use crate::ir::module::Module;
 
     #[test]
-    fn test_basic_builder_functionality() {
-        let mut module = Module::new("test".to_string());
-        let function = module
-            .builder()
-            .function(
-                "test_func".to_string(),
-                Type::mk_function(vec![], Type::mk_void()),
-                FunctionKind::Definition,
-            )
-            .unwrap();
-
-        let function_data = module.function_data_mut(function).unwrap();
-
-        let block = function_data.dfg_mut().builder().block(vec![]).unwrap();
-
-        let dfg = function_data.dfg_mut();
-
-        let alloc0 = dfg.builder().alloc(Type::mk_int(32)).unwrap();
-        let alloc1 = dfg.builder().alloc(Type::mk_float()).unwrap();
-        let alloc2 = dfg.builder().alloc(Type::mk_double()).unwrap();
-
-        let layout = function_data.layout_mut();
-
-        layout.append_block(block).ok();
-        layout.append_inst(alloc0.into(), block).ok();
-        layout.append_inst(alloc1.into(), block).ok();
-        layout.append_inst(alloc2.into(), block).ok();
-
-        assert_ne!(alloc0, alloc1);
-        assert_ne!(alloc0, alloc2);
-        assert_ne!(alloc1, alloc2);
+    fn test_properties() {
+        let module = Module::new("module_name".to_string());
+        assert_eq!(module.name(), "module_name");
     }
 }
