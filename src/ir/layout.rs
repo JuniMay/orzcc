@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, error::Error, fmt};
 
 use crate::collections::{BiLinkedList, BiLinkedListErr, BiLinkedNode};
 
@@ -113,12 +113,34 @@ pub enum LayoutOpErr {
     InstNodeNotFound(Inst),
 }
 
+impl fmt::Display for LayoutOpErr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            LayoutOpErr::InstDuplicated(inst) => write!(f, "duplicated instruction: {:?}", inst),
+            LayoutOpErr::BlockDuplicated(block) => write!(f, "duplicated block: {:?}", block),
+            LayoutOpErr::ParentBlockNotFound(inst) => {
+                write!(f, "parent block not found for instruction: {:?}", inst)
+            }
+            LayoutOpErr::BlockNodeNotFound(block) => write!(f, "block node not found: {:?}", block),
+            LayoutOpErr::InstNodeNotFound(inst) => {
+                write!(f, "instruction node not found: {:?}", inst)
+            }
+        }
+    }
+}
+
+impl Error for LayoutOpErr {}
+
 impl Layout {
     pub fn new() -> Self {
         Self {
             blocks: BlockList::new(),
             inst_blocks: HashMap::new(),
         }
+    }
+
+    pub fn entry_block(&self) -> Option<Block> {
+        self.blocks.front()
     }
 
     pub fn blocks(&self) -> &BlockList {

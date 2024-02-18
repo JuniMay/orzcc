@@ -79,6 +79,10 @@ where
         self.nodes.contains_key(&key)
     }
 
+    pub fn front(&self) -> Option<K> {
+        self.head
+    }
+
     pub fn node(&self, key: K) -> Option<&N> {
         self.nodes.get(&key)
     }

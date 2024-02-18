@@ -1,6 +1,8 @@
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
+    error::Error,
+    fmt,
     hash::Hash,
     rc::{Rc, Weak},
 };
@@ -103,12 +105,15 @@ impl DataFlowGraph {
 
     /// Get the name of a local or global value
     pub fn value_name(&self, value: Value) -> String {
-        self.global_name_allocator
-            .upgrade()
-            .expect("global name allocator should be alive.")
-            .borrow_mut()
-            .try_get(value)
-            .unwrap_or_else(|| self.value_name_allocator.borrow_mut().get(value))
+        if let Some(_) = self.local_value_data(value) {
+            self.value_name_allocator.borrow_mut().get(value)
+        } else {
+            self.global_name_allocator
+                .upgrade()
+                .expect("global name allocator should be alive.")
+                .borrow_mut()
+                .get(value)
+        }
     }
 
     /// Get the name of a block
@@ -244,8 +249,27 @@ impl Module {
         value
     }
 
-    pub(super) fn add_function(&mut self, value_data: ValueData, function_data: FunctionData) -> Function {
+    pub(super) fn add_function(
+        &mut self,
+        value_data: ValueData,
+        function_data: FunctionData,
+    ) -> Function {
         let function = Value::new(self.allocate_id());
+        let function_name = function_data.name().to_string();
+
+        if function_name.starts_with(GLOBAL_PREFIX) {
+            self.name_allocator
+                .borrow_mut()
+                .assign(function, function_name)
+                .unwrap();
+        } else {
+            let name = format!("{}{}", GLOBAL_PREFIX, function_name);
+            self.name_allocator
+                .borrow_mut()
+                .assign(function, name)
+                .unwrap();
+        }
+
         self.globals.borrow_mut().insert(function, value_data);
         self.functions.insert(function.into(), function_data);
 
@@ -320,6 +344,17 @@ pub enum NameAllocErr {
     /// The name is already assigned or allocated.
     NameDuplicated,
 }
+
+impl fmt::Display for NameAllocErr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::KeyDuplicated => write!(f, "key is already assigned or allocated"),
+            Self::NameDuplicated => write!(f, "name is already assigned or allocated"),
+        }
+    }
+}
+
+impl Error for NameAllocErr {}
 
 impl<T> NameAllocator<T>
 where

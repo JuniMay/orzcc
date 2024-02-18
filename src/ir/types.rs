@@ -118,6 +118,14 @@ impl Type {
         Type::make(TypeKind::Int(bits))
     }
 
+    pub fn mk_i32() -> Type {
+        Type::mk_int(32)
+    }
+
+    pub fn mk_i1() -> Type {
+        Type::mk_int(1)
+    }
+
     pub fn mk_void() -> Type {
         Type::make(TypeKind::Void)
     }

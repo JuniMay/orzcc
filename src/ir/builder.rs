@@ -1,3 +1,5 @@
+use std::{error::Error, fmt};
+
 use super::{
     entities::{BlockData, FunctionData, FunctionKind, ValueData, ValueKind},
     module::{DataFlowGraph, Module},
@@ -61,6 +63,34 @@ pub enum BuilderErr {
     IncompatibleBlockArgType,
 }
 
+impl fmt::Display for BuilderErr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use BuilderErr::*;
+        match self {
+            ValueNotFound => write!(f, "value not found"),
+            BlockNotFound => write!(f, "block not found"),
+            InvalidType => write!(f, "invalid value type"),
+            InvalidKind => write!(f, "invalid value kind"),
+            InvalidMutability => write!(f, "invalid mutability"),
+            InvalidGlobalValue => write!(f, "invalid global value"),
+            InvalidLocalValue => write!(f, "invalid local value"),
+            IncompatibleType => write!(f, "incompatible value type"),
+            IncompatibleArraySize => write!(f, "incompatible array size"),
+            IncompatibleArrayElemType => write!(f, "incompatible array element type"),
+            IncompatibleStructFieldNumber => {
+                write!(f, "incompatible struct field number")
+            }
+            IncompatibleStructFieldType => write!(f, "incompatible struct field type"),
+            IncompatibleBlockArgNumber => {
+                write!(f, "incompatible block argument number")
+            }
+            IncompatibleBlockArgType => write!(f, "incompatible block argument type"),
+        }
+    }
+}
+
+impl Error for BuilderErr {}
+
 pub trait QueryValueData {
     /// Get the type of a value.
     fn value_type(&self, value: Value) -> Result<Type, BuilderErr>;
@@ -106,6 +136,28 @@ pub trait ConstantBuilder: QueryValueData + AddValue {
             return Err(BuilderErr::InvalidType);
         }
         self.add_value(ValueData::new(ty, ValueKind::Bytes(bytes)))
+    }
+
+    /// Build an integer constant of i32 type.
+    fn integer(&mut self, value: i32) -> Result<Value, BuilderErr> {
+        let bytes = value.to_le_bytes().to_vec();
+
+        // remove leading zeros
+        let bytes = bytes
+            .into_iter()
+            .rev()
+            .skip_while(|&b| b == 0)
+            .collect::<Vec<u8>>();
+
+        self.bytes(Type::mk_int(32), bytes)
+    }
+
+    /// Build a float constant.
+    ///
+    /// This is a shorthand for `bytes` with the bytes of the float.
+    fn float(&mut self, value: f32) -> Result<Value, BuilderErr> {
+        let bytes = value.to_le_bytes().to_vec();
+        self.bytes(Type::mk_float(), bytes)
     }
 
     /// Build an array constant.
@@ -200,7 +252,12 @@ pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
             }
         }
 
-        self.add_value(Binary::new_value_data(lhs_type, op, lhs, rhs))
+        let res_type = match op {
+            BinaryOp::ICmp(_) | BinaryOp::FCmp(_) => Type::mk_int(1),
+            _ => lhs_type,
+        };
+
+        self.add_value(Binary::new_value_data(res_type, op, lhs, rhs))
     }
 
     /// Build a unary instruction.

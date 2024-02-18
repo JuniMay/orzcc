@@ -286,7 +286,11 @@ impl<T> GlobalPass for Printer<'_, T>
 where
     T: io::Write,
 {
-    fn run(&mut self, module: &mut Module) {
-        self.print_module(module).unwrap();
+    type Ok = ();
+    type Err = io::Error;
+
+    fn run(&mut self, module: &mut Module) -> Result<Self::Ok, Self::Err> {
+        self.print_module(module)?;
+        Ok(())
     }
 }
