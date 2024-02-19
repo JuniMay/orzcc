@@ -83,6 +83,10 @@ where
         self.head
     }
 
+    pub fn back(&self) -> Option<K> {
+        self.tail
+    }
+
     pub fn node(&self, key: K) -> Option<&N> {
         self.nodes.get(&key)
     }
@@ -270,6 +274,7 @@ mod test {
         // 1
         list.append(1).unwrap();
         assert_eq!(list.front(), Some(1));
+        assert_eq!(list.back(), Some(1));
         assert_eq!(list.node(1).unwrap().next(), None);
         assert_eq!(list.node(1).unwrap().prev(), None);
         assert!(list.contains_key(1));
@@ -277,6 +282,7 @@ mod test {
         // 1 -- 2
         list.append(2).unwrap();
         assert_eq!(list.front(), Some(1));
+        assert_eq!(list.back(), Some(2));
         assert_eq!(list.node(1).unwrap().next(), Some(2));
         assert_eq!(list.node(2).unwrap().prev(), Some(1));
         assert!(list.contains_key(2));
@@ -284,6 +290,7 @@ mod test {
         // 1 -- 2 -- 3
         list.append(3).unwrap();
         assert_eq!(list.front(), Some(1));
+        assert_eq!(list.back(), Some(3));
         assert_eq!(list.node(2).unwrap().next(), Some(3));
         assert_eq!(list.node(3).unwrap().prev(), Some(2));
         assert!(list.contains_key(3));
@@ -291,6 +298,7 @@ mod test {
         // 4 -- 1 -- 2 -- 3
         list.insert_before(4, 1).unwrap();
         assert_eq!(list.front(), Some(4));
+        assert_eq!(list.back(), Some(3));
         assert_eq!(list.node(4).unwrap().next(), Some(1));
         assert_eq!(list.node(1).unwrap().prev(), Some(4));
         assert!(list.contains_key(4));
@@ -298,6 +306,7 @@ mod test {
         // 4 -- 1 -- 5 -- 2 -- 3
         list.insert_before(5, 2).unwrap();
         assert_eq!(list.front(), Some(4));
+        assert_eq!(list.back(), Some(3));
         assert_eq!(list.node(1).unwrap().next(), Some(5));
         assert_eq!(list.node(5).unwrap().prev(), Some(1));
         assert!(list.contains_key(5));
@@ -305,6 +314,7 @@ mod test {
         // 4 -- 5 -- 2 -- 3
         list.remove(1).unwrap();
         assert_eq!(list.front(), Some(4));
+        assert_eq!(list.back(), Some(3));
         assert_eq!(list.node(4).unwrap().next(), Some(5));
         assert_eq!(list.node(5).unwrap().prev(), Some(4));
         assert!(!list.contains_key(1));
@@ -312,6 +322,7 @@ mod test {
         // 5 -- 2 -- 3
         list.remove(4).unwrap();
         assert_eq!(list.front(), Some(5));
+        assert_eq!(list.back(), Some(3));
         assert_eq!(list.node(2).unwrap().next(), Some(3));
         assert_eq!(list.node(3).unwrap().prev(), Some(2));
         assert_eq!(list.node(5).unwrap().prev(), None);
@@ -321,15 +332,18 @@ mod test {
         // 5 -- 3
         list.remove(2).unwrap();
         assert_eq!(list.front(), Some(5));
+        assert_eq!(list.back(), Some(3));
         assert_eq!(list.node(3).unwrap().next(), None);
         assert_eq!(list.node(3).unwrap().prev(), Some(5));
         assert!(!list.contains_key(2));
 
         list.remove(5).unwrap();
         assert_eq!(list.front(), Some(3));
+        assert_eq!(list.back(), Some(3));
 
         list.remove(3).unwrap();
         assert_eq!(list.front(), None);
+        assert_eq!(list.back(), None);
         assert!(!list.contains_key(3));
     }
 
