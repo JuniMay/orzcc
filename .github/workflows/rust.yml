@@ -20,3 +20,18 @@ jobs:
       run: cargo build --verbose
     - name: Run tests
       run: cargo test --verbose
+    - name: Install Tarpaulin
+      run: cargo install cargo-tarpaulin
+    - name: Run coverage
+      run: cargo tarpaulin --out Xml
+    - name: Upload coverage
+      uses: codecov/codecov-action@v4
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        files: ./coverage.xml
+    - name: Archive coverage
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage
+        path: ./coverage.xml
+    
