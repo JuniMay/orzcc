@@ -1,5 +1,7 @@
 # OrzCC
 
+[![codecov](https://codecov.io/github/JuniMay/orzcc/graph/badge.svg?token=D7ZMIHWY5O)](https://codecov.io/github/JuniMay/orzcc)
+
 Yet another compiler infrastructure.
 
 ## Getting Started

@@ -21,17 +21,20 @@ jobs:
     - name: Run tests
       run: cargo test --verbose
     - name: Install Tarpaulin
-      run: cargo install cargo-tarpaulin
+      # run: cargo install cargo-tarpaulin
+      run: |
+        wget https://github.com/xd009642/tarpaulin/releases/download/0.27.3/cargo-tarpaulin-x86_64-unknown-linux-gnu.tar.gz -O tarpaulin.tar.gz
+        tar -xvf tarpaulin.tar.gz
     - name: Run coverage
-      run: cargo tarpaulin --out Xml
+      run: ./cargo-tarpaulin --out Xml
     - name: Upload coverage
       uses: codecov/codecov-action@v4
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
-        files: ./coverage.xml
+        slug: JuniMay/orzcc
     - name: Archive coverage
       uses: actions/upload-artifact@v4
       with:
         name: coverage
-        path: ./coverage.xml
+        path: ./cobertura.xml
     
