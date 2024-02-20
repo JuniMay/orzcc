@@ -4,6 +4,8 @@ use super::values::{BinaryOp, UnaryOp};
 
 pub(self) mod lexer;
 
+pub mod parser;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(self) struct Pos {
     row: usize,
@@ -110,8 +112,17 @@ pub(self) enum TokenKind {
     /// An instruction operator
     Inst(Inst),
 
-    /// Other characters
-    Other(String),
+    LeftParen,
+    RightParen,
+    LeftBrace,
+    RightBrace,
+    LeftBracket,
+    RightBracket,
+    Comma,
+    Colon,
+    Semicolon,
+    Arrow,
+    Equal,
 
     /// End of file
     Eof,

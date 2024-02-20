@@ -147,6 +147,9 @@ pub trait ConstantBuilder: QueryValueData + AddValue {
             .into_iter()
             .rev()
             .skip_while(|&b| b == 0)
+            .collect::<Vec<u8>>()
+            .into_iter()
+            .rev()
             .collect::<Vec<u8>>();
 
         self.bytes(Type::mk_int(32), bytes)
