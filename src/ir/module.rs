@@ -23,23 +23,23 @@ pub struct DataFlowGraph {
     /// Blocks in the dfg
     blocks: HashMap<Block, BlockData>,
 
-    /// Pointer to global values (including functions)
-    pub(super) globals: Weak<RefCell<GlobalValueMap>>,
-
-    /// Pointer to custom types
-    pub(super) custom_types: Weak<RefCell<CustomTypeMap>>,
-
-    /// Pointer to id allocator
-    pub(super) id_allocator: Weak<RefCell<IdAllocator>>,
-
     /// Local name allocator of values
     value_name_allocator: RefCell<ValueNameAllocator>,
 
     /// Name allocator of blocks
     block_name_allocator: RefCell<BlockNameAllocator>,
 
+    /// Pointer to global values (including functions)
+    globals: Weak<RefCell<GlobalValueMap>>,
+
+    /// Pointer to custom types
+    custom_types: Weak<RefCell<CustomTypeMap>>,
+
+    /// Pointer to id allocator
+    id_allocator: Weak<RefCell<IdAllocator>>,
+
     /// Global name allocator
-    pub(super) global_name_allocator: Weak<RefCell<ValueNameAllocator>>,
+    global_name_allocator: Weak<RefCell<ValueNameAllocator>>,
 }
 
 impl DataFlowGraph {
@@ -47,11 +47,11 @@ impl DataFlowGraph {
         Self {
             values: HashMap::new(),
             blocks: HashMap::new(),
+            value_name_allocator: RefCell::new(NameAllocator::new(IDENTIFIER_PREFIX)),
+            block_name_allocator: RefCell::new(NameAllocator::new(BLOCK_PREFIX)),
             globals: Weak::new(),
             custom_types: Weak::new(),
             id_allocator: Weak::new(),
-            value_name_allocator: RefCell::new(NameAllocator::new(IDENTIFIER_PREFIX)),
-            block_name_allocator: RefCell::new(NameAllocator::new(BLOCK_PREFIX)),
             global_name_allocator: Weak::new(),
         }
     }
