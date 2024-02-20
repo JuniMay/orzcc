@@ -179,7 +179,7 @@ impl Layout {
             .node(block)
             .ok_or(LayoutOpErr::BlockNodeNotFound(block))?
             .insts()
-            .iter()
+            .into_iter()
         {
             self.inst_blocks.remove(&inst);
         }

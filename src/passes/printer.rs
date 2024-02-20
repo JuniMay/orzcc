@@ -63,7 +63,7 @@ where
         let dfg = data.dfg();
         let layout = data.layout();
 
-        for (block, node) in layout.blocks().iter() {
+        for (block, node) in layout.blocks().into_iter() {
             let block_data = dfg.block_data(block).unwrap();
 
             write!(self.buf, "{}", dfg.block_name(block))?;
@@ -86,7 +86,7 @@ where
                 write!(self.buf, ":\n")?;
             }
 
-            for (inst, _) in node.insts().iter() {
+            for (inst, _) in node.insts().into_iter() {
                 write!(self.buf, "    ")?;
                 self.print_local_value(inst.into(), dfg)?;
                 write!(self.buf, "\n")?;

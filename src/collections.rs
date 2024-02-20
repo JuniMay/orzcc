@@ -17,18 +17,18 @@ where
 /// A bi-directional linked list.
 pub struct BiLinkedList<K, N>
 where
-    K: Copy + Eq + Hash + Debug,
+    K: Copy + Eq + Hash,
     N: BiLinkedNode<K>,
 {
     head: Option<K>,
     tail: Option<K>,
-    pub nodes: HashMap<K, N>,
+    nodes: HashMap<K, N>,
 }
 
 /// Iterator in the bi-directional lined list.
 pub struct BiLinkedIter<'a, K, N>
 where
-    K: Copy + Eq + Hash + Debug,
+    K: Copy + Eq + Hash,
     N: BiLinkedNode<K>,
 {
     list: &'a BiLinkedList<K, N>,
@@ -37,7 +37,7 @@ where
 
 impl<'a, K, N> Iterator for BiLinkedIter<'a, K, N>
 where
-    K: Copy + Eq + Hash + Debug,
+    K: Copy + Eq + Hash,
     N: BiLinkedNode<K>,
 {
     type Item = (K, &'a N);
@@ -53,7 +53,7 @@ where
 #[derive(Debug)]
 pub enum BiLinkedListErr<K>
 where
-    K: Copy + Debug,
+    K: Copy,
 {
     /// The node can not be found in `nodes`.
     NodeNotFound(K),
@@ -64,7 +64,7 @@ where
 
 impl<K, N> BiLinkedList<K, N>
 where
-    K: Copy + Eq + Hash + Debug,
+    K: Copy + Eq + Hash,
     N: BiLinkedNode<K>,
 {
     pub fn new() -> Self {
@@ -221,12 +221,32 @@ where
 
         Ok(())
     }
+}
 
-    /// Get the iter for the linked list.
-    pub fn iter(&self) -> BiLinkedIter<'_, K, N> {
+impl<'a, K, N> IntoIterator for &'a BiLinkedList<K, N>
+where
+    K: Copy + Eq + Hash,
+    N: BiLinkedNode<K>,
+{
+    type Item = (K, &'a N);
+    type IntoIter = BiLinkedIter<'a, K, N>;
+
+    fn into_iter(self) -> Self::IntoIter {
         BiLinkedIter {
-            list: self,
+            list: &self,
             curr: self.head,
+        }
+    }
+}
+
+impl<'a, K, N> Extend<K> for BiLinkedList<K, N>
+where
+    K: Copy + Eq + Hash,
+    N: BiLinkedNode<K>,
+{
+    fn extend<T: IntoIterator<Item = K>>(&mut self, iter: T) {
+        for key in iter {
+            self.append(key).ok();
         }
     }
 }
@@ -356,7 +376,7 @@ mod test {
         list.append(4).unwrap();
         list.append(5).unwrap();
 
-        let mut iter = list.iter();
+        let mut iter = list.into_iter();
         for i in 1..=5 {
             let (key, _) = iter.next().unwrap();
             assert_eq!(key, i);
@@ -391,5 +411,13 @@ mod test {
             list.remove(6),
             Err(BiLinkedListErr::NodeNotFound(6))
         ));
+    }
+
+    #[test]
+    fn test_list_extend() {
+        let mut list = BiLinkedList::<usize, Node>::new();
+        list.extend(1..=5);
+        assert_eq!(list.front(), Some(1));
+        assert_eq!(list.back(), Some(5));
     }
 }
