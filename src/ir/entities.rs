@@ -6,6 +6,7 @@ use super::{
         Alloc, Binary, Branch, Call, GetElemPtr, GlobalSlot, Jump, Load, Return, Store, Unary,
         Value,
     },
+    GLOBAL_PREFIX,
 };
 
 /// Data of the block
@@ -56,6 +57,12 @@ impl FunctionData {
         let dfg = DataFlowGraph::new();
         let layout = Layout::new();
 
+        let mut name = name;
+
+        if !name.starts_with(GLOBAL_PREFIX) {
+            name = format!("{}{}", GLOBAL_PREFIX, name);
+        }
+
         Self {
             name,
             ty,
@@ -72,6 +79,10 @@ impl FunctionData {
 
     pub fn name(&self) -> &str {
         &self.name
+    }
+
+    pub fn set_name(&mut self, name: String) {
+        self.name = name;
     }
 
     pub fn ty(&self) -> &Type {

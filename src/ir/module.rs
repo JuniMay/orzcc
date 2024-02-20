@@ -257,18 +257,11 @@ impl Module {
         let function = Value::new(self.allocate_id());
         let function_name = function_data.name().to_string();
 
-        if function_name.starts_with(GLOBAL_PREFIX) {
-            self.name_allocator
-                .borrow_mut()
-                .assign(function, function_name)
-                .unwrap();
-        } else {
-            let name = format!("{}{}", GLOBAL_PREFIX, function_name);
-            self.name_allocator
-                .borrow_mut()
-                .assign(function, name)
-                .unwrap();
-        }
+        assert!(function_name.starts_with(GLOBAL_PREFIX));
+        self.name_allocator
+            .borrow_mut()
+            .assign(function, function_name)
+            .expect("function name should be unique.");
 
         self.globals.borrow_mut().insert(function, value_data);
         self.functions.insert(function.into(), function_data);

@@ -81,7 +81,7 @@ impl fmt::Display for TypeKind {
                 )
             }
             TypeKind::Label => write!(f, "label"),
-            TypeKind::Type(name) => write!(f, "#{}", name),
+            TypeKind::Type(name) => write!(f, "${}", name),
         }
     }
 }
@@ -314,7 +314,7 @@ mod test {
         assert_eq!(format!("{}", Type::mk_double()), "double");
         assert_eq!(format!("{}", Type::mk_ptr()), "ptr");
         assert_eq!(format!("{}", Type::mk_label()), "label");
-        assert_eq!(format!("{}", Type::mk_type("name".to_string())), "#name");
+        assert_eq!(format!("{}", Type::mk_type("name".to_string())), "$name");
         let ty = Type::mk_function(vec![], Type::mk_void());
         assert_eq!(format!("{}", ty), "() -> void");
         let ty = Type::mk_function(vec![Type::mk_int(16)], Type::mk_void());

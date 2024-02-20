@@ -1,5 +1,6 @@
 pub mod builder;
 pub mod entities;
+pub mod frontend;
 pub mod layout;
 pub mod module;
 pub mod pass;
@@ -14,6 +15,9 @@ const BLOCK_PREFIX: &'static str = "^";
 
 #[allow(dead_code)]
 const GLOBAL_PREFIX: &'static str = "@";
+
+#[allow(dead_code)]
+const TYPE_PREFIX: &'static str = "$";
 
 #[allow(dead_code)]
 const INDENT: &'static str = "\t";

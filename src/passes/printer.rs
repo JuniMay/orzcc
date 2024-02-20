@@ -23,7 +23,7 @@ where
     }
 
     fn print_module(&mut self, module: &Module) -> io::Result<()> {
-        write!(self.buf, "; orzir module: {} \n", module.name())?;
+        write!(self.buf, "# orzir module: {} \n", module.name())?;
 
         for name in module.custom_type_layout() {
             let ty = module.custom_type(name).unwrap();
