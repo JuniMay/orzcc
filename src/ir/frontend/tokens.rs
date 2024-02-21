@@ -1,9 +1,9 @@
 use std::fmt;
 
-use crate::ir::values::{BinaryOp, UnaryOp};
+use super::{InstKind, KeywordKind};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Pos {
+pub(in crate::ir) struct Pos {
     row: usize,
     col: usize,
 }
@@ -36,7 +36,7 @@ impl fmt::Display for Pos {
 }
 
 #[derive(Clone, PartialEq, Eq)]
-pub struct Span {
+pub(in crate::ir) struct Span {
     start: Pos,
     end: Pos,
 }
@@ -103,98 +103,44 @@ pub(super) enum TokenKind {
     Bytes(Vec<u8>),
 
     /// A keyword
-    Keyword(Keyword),
+    Keyword(KeywordKind),
 
     /// An instruction operator
-    Inst(Inst),
+    Inst(InstKind),
 
+    /// `(`
     LeftParen,
+
+    /// `)`
     RightParen,
+
+    /// `{`
     LeftBrace,
+
+    /// `}`
     RightBrace,
+
+    /// `[`
     LeftBracket,
+
+    /// `]`
     RightBracket,
+
+    /// `,`
     Comma,
+
+    /// `:`
     Colon,
+
+    /// `;`
     Semicolon,
+
+    /// `->`
     Arrow,
+
+    /// `=`
     Equal,
 
     /// End of file
     Eof,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) enum Keyword {
-    /// `fn`
-    Fn,
-
-    /// `decl`
-    Decl,
-
-    /// `iX`
-    Int(usize),
-
-    /// `half`
-    Half,
-
-    /// `float`
-    Float,
-
-    /// `double`
-    Double,
-
-    /// `ptr`
-    Ptr,
-
-    /// `void`
-    Void,
-
-    /// `undef`
-    Undef,
-
-    /// `zero`
-    Zero,
-
-    /// `global`
-    Global,
-
-    /// `const`
-    Const,
-
-    /// `Type`
-    Type,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(super) enum Inst {
-    /// A binary operator
-    Binary(BinaryOp),
-
-    /// A unary operator
-    Unary(UnaryOp),
-
-    /// `store`
-    Store,
-
-    /// `load`
-    Load,
-
-    /// `alloc`
-    Alloc,
-
-    /// `jump`
-    Jump,
-
-    /// `br`
-    Branch,
-
-    /// `ret`
-    Return,
-
-    /// `call`
-    Call,
-
-    /// `getelemptr`
-    GetElemPtr,
 }
