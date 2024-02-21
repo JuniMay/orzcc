@@ -249,6 +249,7 @@ where
                 Ok(())
             }
             ValueKind::Call(call) => {
+                // FIXME: do not allocate name for void type
                 write!(
                     self.buf,
                     "{} = call {} {}(",
@@ -265,7 +266,12 @@ where
                 write!(self.buf, ")")
             }
             ValueKind::GetElemPtr(gep) => {
-                write!(self.buf, "{} = getelemptr ", dfg.value_name(value))?;
+                write!(
+                    self.buf,
+                    "{} = getelemptr {}, ",
+                    dfg.value_name(value),
+                    gep.ty()
+                )?;
                 self.print_operand(gep.ptr(), dfg)?;
                 for idx in gep.indices() {
                     write!(self.buf, ", ")?;

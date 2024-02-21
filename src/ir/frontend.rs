@@ -2,8 +2,8 @@ use std::fmt;
 
 use super::values::{BinaryOp, UnaryOp};
 
+pub(self) mod ast;
 pub(self) mod lexer;
-
 pub mod parser;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
