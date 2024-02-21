@@ -38,15 +38,12 @@ use std::{
     io::{self},
 };
 
-use crate::ir::{
-    frontend::ast::{self, InstKind},
-    types::Type,
-};
+use crate::ir::types::Type;
 
 use super::{
-    ast::{Array, Ast, AstNode, AstNodeBox, Global, Operand, Struct, TypeDef},
+    ast::{self, Array, Ast, AstNode, AstNodeBox, Global, InstKind, Operand, Struct, TypeDef},
     lexer::Lexer,
-    Inst, Keyword, Pos, Span, Token, TokenKind,
+    tokens::{Inst, Keyword, Pos, Span, Token, TokenKind},
 };
 
 pub struct Parser<'a, T>

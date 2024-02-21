@@ -1,11 +1,11 @@
 use std::io;
 
 use crate::ir::{
-    frontend::{Span, TokenKind},
+    frontend::tokens::{Span, TokenKind},
     values::{BinaryOp, FCmpCond, ICmpCond, UnaryOp},
 };
 
-use super::{Inst, Keyword, Pos, Token};
+use super::tokens::{Inst, Keyword, Pos, Token};
 
 pub struct Lexer<'a, T>
 where
