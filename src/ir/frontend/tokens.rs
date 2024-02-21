@@ -3,7 +3,7 @@ use std::fmt;
 use crate::ir::values::{BinaryOp, UnaryOp};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) struct Pos {
+pub struct Pos {
     row: usize,
     col: usize,
 }
@@ -36,7 +36,7 @@ impl fmt::Display for Pos {
 }
 
 #[derive(Clone, PartialEq, Eq)]
-pub(super) struct Span {
+pub struct Span {
     start: Pos,
     end: Pos,
 }

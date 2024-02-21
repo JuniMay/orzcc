@@ -32,16 +32,19 @@
 //! PARAM_LIST -> TYPE LOCAL_IDENT , PARAM_LIST | TYPE LOCAL_IDENT
 //! LABEL -> LABEL_IDENT ( PARAM_LIST ) :
 //! ```
+//!
+//! TODO: consistent behavior of each sub-parser.
+//! TODO: prettify the code.
 
-use std::{
-    borrow::BorrowMut,
-    io::{self},
-};
+use std::io::{self};
 
 use crate::ir::types::Type;
 
 use super::{
-    ast::{self, Array, Ast, AstNode, AstNodeBox, Global, InstKind, Operand, Struct, TypeDef},
+    ast::{
+        self, Array, Ast, AstNode, AstNodeBox, Block, FunctionDecl, FunctionDef, Global, InstKind,
+        Operand, Struct, TypeDef,
+    },
     lexer::Lexer,
     tokens::{Inst, Keyword, Pos, Span, Token, TokenKind},
 };
@@ -57,9 +60,10 @@ where
     peeked: bool,
 }
 
+#[derive(Debug)]
 pub enum ParseError {
     LexerError,
-    UnexpectedToken,
+    UnexpectedToken(Span),
 }
 
 impl<'a, T> Parser<'a, T>
@@ -98,14 +102,17 @@ where
         self.peeked = false;
     }
 
-    pub fn parse(&mut self) -> Result<Ast, ParseError> {
-        let _ = self.next_token()?;
+    fn back(&mut self) {
+        self.peeked = true;
+    }
 
+    pub fn parse(&mut self) -> Result<Ast, ParseError> {
         let mut ast = Ast::new();
 
         loop {
             let item = self.parse_item()?;
             ast.push(item);
+            self.peek_token()?;
             if self.curr_token.kind == TokenKind::Eof {
                 break;
             }
@@ -123,18 +130,18 @@ where
                 Keyword::Const => self.parse_global(false),
                 Keyword::Fn => self.parse_function_def(),
                 Keyword::Decl => self.parse_function_decl(),
-                _ => Err(ParseError::UnexpectedToken),
+                _ => Err(ParseError::UnexpectedToken(token.span.clone())),
             },
-            _ => Err(ParseError::UnexpectedToken),
+            _ => Err(ParseError::UnexpectedToken(token.span.clone())),
         }
     }
 
     fn expect(&mut self, kind: TokenKind) -> Result<(), ParseError> {
+        self.next_token()?;
         if self.curr_token.kind == kind {
-            let _ = self.next_token()?;
             Ok(())
         } else {
-            Err(ParseError::UnexpectedToken)
+            Err(ParseError::UnexpectedToken(self.curr_token.span.clone()))
         }
     }
 
@@ -143,7 +150,7 @@ where
         let token = self.next_token()?;
         let name = match token.kind {
             TokenKind::TypeIdent(ref name) => name.clone(),
-            _ => return Err(ParseError::UnexpectedToken),
+            _ => return Err(ParseError::UnexpectedToken(token.span.clone())),
         };
         self.expect(TokenKind::Equal)?;
         let ty = self.parse_type()?;
@@ -151,11 +158,15 @@ where
     }
 
     fn parse_global(&mut self, mutable: bool) -> Result<AstNodeBox, ParseError> {
-        self.expect(TokenKind::Keyword(Keyword::Global))?;
+        if mutable {
+            self.expect(TokenKind::Keyword(Keyword::Global))?;
+        } else {
+            self.expect(TokenKind::Keyword(Keyword::Const))?;
+        }
         let token = self.next_token()?;
         let name = match token.kind {
             TokenKind::GlobalIdent(ref name) => name.clone(),
-            _ => return Err(ParseError::UnexpectedToken),
+            _ => return Err(ParseError::UnexpectedToken(token.span.clone())),
         };
         self.expect(TokenKind::Equal)?;
         let ty = self.parse_type()?;
@@ -169,7 +180,7 @@ where
             TokenKind::LeftBracket => self.parse_array(),
             TokenKind::LeftBrace => self.parse_struct(),
             TokenKind::Bytes(_) => self.parse_bytes(),
-            _ => Err(ParseError::UnexpectedToken),
+            _ => Err(ParseError::UnexpectedToken(token.span.clone())),
         }
     }
 
@@ -177,7 +188,7 @@ where
         if let TokenKind::Bytes(ref bytes) = self.next_token()?.kind {
             Ok(AstNode::new_boxed_bytes(bytes.clone()))
         } else {
-            Err(ParseError::UnexpectedToken)
+            Err(ParseError::UnexpectedToken(self.curr_token.span.clone()))
         }
     }
 
@@ -192,7 +203,7 @@ where
                 Err(_) => match self.next_token()?.kind {
                     TokenKind::RightBracket => break,
                     TokenKind::Comma => continue,
-                    _ => return Err(ParseError::UnexpectedToken),
+                    _ => return Err(ParseError::UnexpectedToken(self.curr_token.span.clone())),
                 },
             }
         }
@@ -211,7 +222,7 @@ where
                 Err(_) => match self.next_token()?.kind {
                     TokenKind::RightBrace => break,
                     TokenKind::Comma => continue,
-                    _ => return Err(ParseError::UnexpectedToken),
+                    _ => return Err(ParseError::UnexpectedToken(self.curr_token.span.clone())),
                 },
             }
         }
@@ -227,7 +238,7 @@ where
             TokenKind::LeftBracket => self.parse_array_type(),
             TokenKind::TypeIdent(_) => self.parse_type_ident(),
             TokenKind::Keyword(_) => self.parse_primitive_type(),
-            _ => Err(ParseError::UnexpectedToken),
+            _ => Err(ParseError::UnexpectedToken(token.span.clone())),
         }
     }
 
@@ -241,16 +252,16 @@ where
                 Keyword::Double => Ok(Type::mk_double()),
                 Keyword::Ptr => Ok(Type::mk_ptr()),
                 Keyword::Void => Ok(Type::mk_void()),
-                _ => Err(ParseError::UnexpectedToken),
+                _ => Err(ParseError::UnexpectedToken(token.span.clone())),
             },
-            _ => Err(ParseError::UnexpectedToken),
+            _ => Err(ParseError::UnexpectedToken(token.span.clone())),
         }
     }
 
     fn parse_type_ident(&mut self) -> Result<Type, ParseError> {
         match self.next_token()?.kind {
             TokenKind::TypeIdent(ref name) => Ok(Type::mk_type(name.clone())),
-            _ => Err(ParseError::UnexpectedToken),
+            _ => Err(ParseError::UnexpectedToken(self.curr_token.span.clone())),
         }
     }
 
@@ -264,7 +275,7 @@ where
                 Err(_) => match self.next_token()?.kind {
                     TokenKind::RightBrace => break,
                     TokenKind::Comma => continue,
-                    _ => return Err(ParseError::UnexpectedToken),
+                    _ => return Err(ParseError::UnexpectedToken(self.curr_token.span.clone())),
                 },
             }
         }
@@ -284,7 +295,7 @@ where
             }
             size
         } else {
-            return Err(ParseError::UnexpectedToken);
+            return Err(ParseError::UnexpectedToken(token.span.clone()));
         };
         self.expect(TokenKind::RightBracket)?;
         Ok(Type::mk_array(size, ty))
@@ -300,7 +311,7 @@ where
                 Err(_) => match self.next_token()?.kind {
                     TokenKind::RightParen => break,
                     TokenKind::Comma => continue,
-                    _ => return Err(ParseError::UnexpectedToken),
+                    _ => return Err(ParseError::UnexpectedToken(self.curr_token.span.clone())),
                 },
             }
         }
@@ -314,19 +325,55 @@ where
         let name = if let TokenKind::LabelIdent(ref name) = token.kind {
             name.clone()
         } else {
-            return Err(ParseError::UnexpectedToken);
+            return Err(ParseError::UnexpectedToken(token.span.clone()));
         };
 
         let token = self.next_token()?;
         match token.kind {
             TokenKind::LeftParen => {
-                todo!("parse block params");
+                let mut params = Vec::new();
+                loop {
+                    let parse_result = self.parse_operand_with_type();
+                    match parse_result {
+                        Ok(node) => params.push(node),
+                        Err(_) => match self.next_token()?.kind {
+                            TokenKind::RightParen => break,
+                            TokenKind::Comma => continue,
+                            _ => {
+                                return Err(ParseError::UnexpectedToken(
+                                    self.curr_token.span.clone(),
+                                ))
+                            }
+                        },
+                    }
+                }
+
+                self.expect(TokenKind::Colon)?;
+                let insts = self.parse_block_body()?;
+                let node = Block::new_boxed(name, params, insts);
+                Ok(node)
             }
             TokenKind::Colon => {
-                todo!("parse block body");
+                let insts = self.parse_block_body()?;
+                let node = Block::new_boxed(name, Vec::new(), insts);
+                Ok(node)
             }
-            _ => return Err(ParseError::UnexpectedToken),
+            _ => Err(ParseError::UnexpectedToken(token.span.clone())),
         }
+    }
+
+    fn parse_block_body(&mut self) -> Result<Vec<AstNodeBox>, ParseError> {
+        let mut insts = Vec::new();
+        loop {
+            let parse_result = self.parse_inst();
+            if let Ok(node) = parse_result {
+                insts.push(node);
+            } else {
+                self.back();
+                break;
+            }
+        }
+        Ok(insts)
     }
 
     fn parse_inst(&mut self) -> Result<AstNodeBox, ParseError> {
@@ -341,22 +388,22 @@ where
                     TokenKind::Inst(ref inst) => match inst {
                         Inst::Binary(op) => {
                             let kind = InstKind::Binary(op.clone());
-                            let lhs = self.parse_operand()?;
+                            let lhs = self.parse_operand_with_type()?;
                             self.expect(TokenKind::Comma)?;
-                            let rhs = self.parse_operand()?;
+                            let rhs = self.parse_operand_with_type()?;
                             let node = ast::Inst::new_boxed(kind, Some(dest), vec![lhs, rhs]);
                             node
                         }
                         Inst::Unary(op) => {
                             let kind = InstKind::Unary(op.clone());
-                            let operand = self.parse_operand()?;
+                            let operand = self.parse_operand_with_type()?;
                             let node = ast::Inst::new_boxed(kind, Some(dest), vec![operand]);
                             node
                         }
                         Inst::Load => {
                             let ty = self.parse_type()?;
                             self.expect(TokenKind::Comma)?;
-                            let ptr = self.parse_operand()?;
+                            let ptr = self.parse_operand_with_type()?;
                             let node = ast::Inst::new_boxed_load(dest, ty, ptr);
                             node
                         }
@@ -367,19 +414,19 @@ where
                         }
                         Inst::Call => {
                             let ty = self.parse_type()?;
-                            let callee = self.parse_operand()?;
+                            let callee = self.parse_operand_with_param()?;
                             let node = ast::Inst::new_boxed_call(Some(dest), ty, callee);
                             node
                         }
                         Inst::GetElemPtr => {
                             let ty = self.parse_type()?;
                             self.expect(TokenKind::Comma)?;
-                            let ptr = self.parse_operand()?;
+                            let ptr = self.parse_operand_with_type()?;
                             let mut operands = vec![ptr];
 
                             // parse indices
                             loop {
-                                let parse_result = self.parse_operand();
+                                let parse_result = self.parse_operand_with_type();
                                 match parse_result {
                                     Ok(node) => operands.push(node),
                                     Err(_) => match self.curr_token.kind {
@@ -394,100 +441,180 @@ where
                             let node = ast::Inst::new_boxed_gep(dest, ty, operands);
                             node
                         }
-                        _ => return Err(ParseError::UnexpectedToken),
+                        _ => return Err(ParseError::UnexpectedToken(token.span.clone())),
                     },
-                    _ => return Err(ParseError::UnexpectedToken),
+                    _ => return Err(ParseError::UnexpectedToken(token.span.clone())),
                 };
-
-                todo!()
+                Ok(node)
             }
             TokenKind::Inst(ref inst) => match inst {
                 Inst::Store => {
-                    let val = self.parse_operand()?;
+                    let val = self.parse_operand_with_type()?;
                     self.expect(TokenKind::Comma)?;
-                    let ptr = self.parse_operand()?;
+                    let ptr = self.parse_operand_with_type()?;
                     Ok(ast::Inst::new_boxed(InstKind::Store, None, vec![val, ptr]))
                 }
                 Inst::Jump => {
-                    let dst = self.parse_operand()?;
+                    let dst = self.parse_operand_with_param()?;
                     Ok(ast::Inst::new_boxed(InstKind::Jump, None, vec![dst]))
                 }
                 Inst::Branch => {
-                    let then = self.parse_operand()?;
+                    let cond = self.parse_operand_with_type()?;
                     self.expect(TokenKind::Comma)?;
-                    let else_ = self.parse_operand()?;
+                    let then = self.parse_operand_with_param()?;
+                    self.expect(TokenKind::Comma)?;
+                    let else_ = self.parse_operand_with_param()?;
                     Ok(ast::Inst::new_boxed(
                         InstKind::Branch,
                         None,
-                        vec![then, else_],
+                        vec![cond, then, else_],
                     ))
                 }
                 Inst::Call => {
                     let ty = self.parse_type()?;
-                    let callee = self.parse_operand()?;
+                    let callee = self.parse_operand_with_param()?;
                     Ok(ast::Inst::new_boxed_call(None, ty, callee))
                 }
                 Inst::Return => {
-                    let val = self.parse_operand()?;
+                    let val = self.parse_operand_with_type()?;
                     Ok(ast::Inst::new_boxed(InstKind::Return, None, vec![val]))
                 }
-                _ => Err(ParseError::UnexpectedToken),
+                _ => Err(ParseError::UnexpectedToken(token.span.clone())),
             },
-            _ => Err(ParseError::UnexpectedToken),
+            _ => Err(ParseError::UnexpectedToken(token.span.clone())),
         }
     }
 
     /// Parse operand w/o parameters
-    fn parse_raw_operand(&mut self) -> Result<AstNodeBox, ParseError> {
+    fn parse_operand_with_type(&mut self) -> Result<AstNodeBox, ParseError> {
         let ty = self.parse_type()?;
         let token = self.peek_token()?;
         let ident: Box<AstNode> = match token.kind {
             TokenKind::GlobalIdent(ref name) => AstNode::new_boxed_global_ident(name.clone()),
             TokenKind::LocalIdent(ref name) => AstNode::new_boxed_local_ident(name.clone()),
             TokenKind::Bytes(ref bytes) => AstNode::new_boxed_bytes(bytes.clone()),
-            _ => return Err(ParseError::UnexpectedToken),
+            _ => return Err(ParseError::UnexpectedToken(token.span.clone())),
         };
         self.eat();
-        Ok(Operand::new_boxed_raw(ty, ident))
+        Ok(Operand::new_boxed_with_type(ty, ident))
     }
 
     fn parse_function_decl(&mut self) -> Result<AstNodeBox, ParseError> {
-        todo!()
+        self.expect(TokenKind::Keyword(Keyword::Decl))?;
+        let token = self.next_token()?;
+        let name = match token.kind {
+            TokenKind::GlobalIdent(ref name) => name.clone(),
+            _ => return Err(ParseError::UnexpectedToken(token.span.clone())),
+        };
+        let ty = self.parse_type()?;
+        Ok(FunctionDecl::new_boxed(name, ty))
     }
 
     fn parse_function_def(&mut self) -> Result<AstNodeBox, ParseError> {
-        todo!()
+        self.expect(TokenKind::Keyword(Keyword::Fn))?;
+        let token = self.next_token()?;
+        let name = match token.kind {
+            TokenKind::GlobalIdent(ref name) => name.clone(),
+            _ => return Err(ParseError::UnexpectedToken(token.span.clone())),
+        };
+        let ty = self.parse_type()?;
+        self.expect(TokenKind::LeftBrace)?;
+        let mut blocks = Vec::new();
+
+        loop {
+            let parse_result = self.parse_block();
+            match parse_result {
+                Ok(node) => blocks.push(node),
+                Err(_) => match self.curr_token.kind {
+                    TokenKind::RightBrace => break,
+                    _ => return Err(ParseError::UnexpectedToken(self.curr_token.span.clone())),
+                },
+            }
+        }
+
+        Ok(FunctionDef::new_boxed(name, ty, blocks))
     }
 
-    fn parse_operand(&mut self) -> Result<AstNodeBox, ParseError> {
-        let mut operand = self.parse_raw_operand()?;
+    fn parse_operand_with_param(&mut self) -> Result<AstNodeBox, ParseError> {
+        let token = self.peek_token()?;
+        let ident: Box<AstNode> = match token.kind {
+            TokenKind::GlobalIdent(ref name) => AstNode::new_boxed_global_ident(name.clone()),
+            TokenKind::LabelIdent(ref name) => AstNode::new_boxed_label_ident(name.clone()),
+            _ => return Err(ParseError::UnexpectedToken(token.span.clone())),
+        };
+        self.eat();
 
         let token = self.peek_token()?;
         match token.kind {
             TokenKind::LeftParen => {
                 let mut params = Vec::new();
+                self.eat();
                 loop {
-                    let parse_result = self.parse_raw_operand();
+                    let parse_result = self.parse_operand_with_type();
                     match parse_result {
                         Ok(node) => params.push(node),
-                        Err(_) => match self.curr_token.kind {
+                        Err(_) => match self.next_token()?.kind {
                             TokenKind::RightParen => break,
                             TokenKind::Comma => continue,
-                            _ => return Err(ParseError::UnexpectedToken),
+                            _ => {
+                                return Err(ParseError::UnexpectedToken(
+                                    self.curr_token.span.clone(),
+                                ))
+                            }
                         },
                     }
                 }
-                self.expect(TokenKind::RightParen)?;
-                let operand: &mut AstNode = operand.borrow_mut();
-                if let AstNode::Operand(ref mut operand) = operand {
-                    operand.params_mut().extend(params);
-                } else {
-                    unreachable!();
-                }
+                let operand = Operand::new_boxed_with_params(ident, params);
+                Ok(operand)
             }
-            _ => {}
+            _ => Err(ParseError::UnexpectedToken(token.span.clone())),
         }
+    }
+}
 
-        Ok(operand)
+#[cfg(test)]
+mod test {
+    use std::io::Cursor;
+
+    use super::Parser;
+
+    #[test]
+    fn test_parser0() {
+        let mut buf = Cursor::new("#123\n fn @fib (i32) -> i32 { ^bb: ret i32 %n }     #123");
+        let mut parser = Parser::new(&mut buf);
+        let ast = parser.parse();
+        println!("{:?}", ast)
+    }
+
+    #[test]
+    fn test_parser1() {
+        let mut buf = Cursor::new(
+            r#"global @x = i32 0x10101010
+const @y = i32 0x20202020
+type $z = { i32, float }
+global @array = [ i32; 3 ] [ 0x01, 0x02, 0x03 ]
+
+fn @fib(i32) -> i32 {
+
+^entry(i32 %0):
+    %cond = icmp.sle i32 %0, i32 1234
+    br i1 %cond, ^ret(i32 0x01), ^else(i32 %0)
+
+^else(i32 %1):
+    %2 = sub i32 %1, i32 0x01
+    %3 = sub i32 %1, i32 0x02
+    %4 = call i32 @fib(i32 %2)
+    %5 = call i32 @fib(i32 %3)
+    %6 = add i32 %4, i32 %5
+    jump ^ret(i32 %6)
+
+^ret(i32 %result):
+    ret i32 %result
+}
+"#,
+        );
+        let mut parser = Parser::new(&mut buf);
+        let ast = parser.parse();
+        println!("{:#?}", ast)
     }
 }

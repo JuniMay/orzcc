@@ -3,6 +3,7 @@ use crate::ir::{
     values::{BinaryOp, UnaryOp},
 };
 
+#[derive(Debug)]
 pub struct Ast {
     items: Vec<AstNodeBox>,
 }
@@ -19,6 +20,7 @@ impl Ast {
 
 pub type AstNodeBox = Box<AstNode>;
 
+#[derive(Debug)]
 pub enum AstNode {
     TypeDef(TypeDef),
     Global(Global),
@@ -36,20 +38,25 @@ pub enum AstNode {
     Operand(Operand),
 }
 
+#[derive(Debug)]
 pub struct Operand {
-    ty: Type,
+    ty: Option<Type>,
     value: AstNodeBox,
     params: Vec<AstNodeBox>,
 }
 
 impl Operand {
-    pub fn new_boxed(ty: Type, value: AstNodeBox, params: Vec<AstNodeBox>) -> AstNodeBox {
-        Box::new(AstNode::Operand(Operand { ty, value, params }))
+    pub fn new_boxed_with_params(value: AstNodeBox, params: Vec<AstNodeBox>) -> AstNodeBox {
+        Box::new(AstNode::Operand(Operand {
+            ty: None,
+            value,
+            params,
+        }))
     }
 
-    pub fn new_boxed_raw(ty: Type, value: AstNodeBox) -> AstNodeBox {
+    pub fn new_boxed_with_type(ty: Type, value: AstNodeBox) -> AstNodeBox {
         Box::new(AstNode::Operand(Operand {
-            ty,
+            ty: Some(ty),
             value,
             params: Vec::new(),
         }))
@@ -57,10 +64,6 @@ impl Operand {
 
     pub fn params_mut(&mut self) -> &mut Vec<AstNodeBox> {
         &mut self.params
-    }
-
-    pub fn ty(&self) -> &Type {
-        &self.ty
     }
 
     pub fn value(&self) -> &AstNodeBox {
@@ -90,6 +93,7 @@ impl AstNode {
     }
 }
 
+#[derive(Debug)]
 pub struct TypeDef {
     name: String,
     ty: Type,
@@ -101,6 +105,7 @@ impl TypeDef {
     }
 }
 
+#[derive(Debug)]
 pub struct Global {
     mutable: bool,
     name: String,
@@ -119,23 +124,49 @@ impl Global {
     }
 }
 
+#[derive(Debug)]
 pub struct FunctionDecl {
     name: String,
     ty: Type,
 }
 
+impl FunctionDecl {
+    pub fn new_boxed(name: String, ty: Type) -> AstNodeBox {
+        Box::new(AstNode::FunctionDecl(FunctionDecl { name, ty }))
+    }
+}
+
+#[derive(Debug)]
 pub struct FunctionDef {
     name: String,
     ty: Type,
     blocks: Vec<AstNodeBox>,
 }
 
+impl FunctionDef {
+    pub fn new_boxed(name: String, ty: Type, blocks: Vec<AstNodeBox>) -> AstNodeBox {
+        Box::new(AstNode::FunctionDef(FunctionDef { name, ty, blocks }))
+    }
+}
+
+#[derive(Debug)]
 pub struct Block {
     name: String,
-    params: Vec<(Type, AstNodeBox)>,
+    params: Vec<AstNodeBox>,
     insts: Vec<AstNodeBox>,
 }
 
+impl Block {
+    pub fn new_boxed(name: String, params: Vec<AstNodeBox>, insts: Vec<AstNodeBox>) -> AstNodeBox {
+        Box::new(AstNode::Block(Block {
+            name,
+            params,
+            insts,
+        }))
+    }
+}
+
+#[derive(Debug)]
 pub enum InstKind {
     Binary(BinaryOp),
     Unary(UnaryOp),
@@ -149,6 +180,7 @@ pub enum InstKind {
     GetElemPtr,
 }
 
+#[derive(Debug)]
 pub struct Inst {
     /// Kind of the instruction.
     kind: InstKind,
@@ -214,6 +246,7 @@ impl Inst {
     }
 }
 
+#[derive(Debug)]
 pub struct Array {
     elems: Vec<AstNodeBox>,
 }
@@ -224,6 +257,7 @@ impl Array {
     }
 }
 
+#[derive(Debug)]
 pub struct Struct {
     fields: Vec<AstNodeBox>,
 }
