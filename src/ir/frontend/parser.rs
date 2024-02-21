@@ -368,7 +368,7 @@ where
                         Inst::Call => {
                             let ty = self.parse_type()?;
                             let callee = self.parse_operand()?;
-                            let node = ast::Inst::new_boxed_call(dest, ty, callee);
+                            let node = ast::Inst::new_boxed_call(Some(dest), ty, callee);
                             node
                         }
                         Inst::GetElemPtr => {
@@ -402,11 +402,35 @@ where
                 todo!()
             }
             TokenKind::Inst(ref inst) => match inst {
-                Inst::Store => todo!(),
-                Inst::Jump => todo!(),
-                Inst::Branch => todo!(),
-                Inst::Call => todo!(),
-                Inst::Return => todo!(),
+                Inst::Store => {
+                    let val = self.parse_operand()?;
+                    self.expect(TokenKind::Comma)?;
+                    let ptr = self.parse_operand()?;
+                    Ok(ast::Inst::new_boxed(InstKind::Store, None, vec![val, ptr]))
+                }
+                Inst::Jump => {
+                    let dst = self.parse_operand()?;
+                    Ok(ast::Inst::new_boxed(InstKind::Jump, None, vec![dst]))
+                }
+                Inst::Branch => {
+                    let then = self.parse_operand()?;
+                    self.expect(TokenKind::Comma)?;
+                    let else_ = self.parse_operand()?;
+                    Ok(ast::Inst::new_boxed(
+                        InstKind::Branch,
+                        None,
+                        vec![then, else_],
+                    ))
+                }
+                Inst::Call => {
+                    let ty = self.parse_type()?;
+                    let callee = self.parse_operand()?;
+                    Ok(ast::Inst::new_boxed_call(None, ty, callee))
+                }
+                Inst::Return => {
+                    let val = self.parse_operand()?;
+                    Ok(ast::Inst::new_boxed(InstKind::Return, None, vec![val]))
+                }
                 _ => Err(ParseError::UnexpectedToken),
             },
             _ => Err(ParseError::UnexpectedToken),

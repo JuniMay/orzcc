@@ -195,10 +195,10 @@ impl Inst {
         }))
     }
 
-    pub fn new_boxed_call(dest: AstNodeBox, ty: Type, callee: AstNodeBox) -> AstNodeBox {
+    pub fn new_boxed_call(dest: Option<AstNodeBox>, ty: Type, callee: AstNodeBox) -> AstNodeBox {
         Box::new(AstNode::Inst(Inst {
             kind: InstKind::Call,
-            dest: None,
+            dest,
             operands: vec![callee],
             ty: Some(ty),
         }))
