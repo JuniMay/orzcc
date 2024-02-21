@@ -1,16 +1,12 @@
-use ir::{
+use orzcc::ir::{
     builder::{ConstantBuilder, GlobalValueBuilder, LocalBlockBuilder, LocalValueBuilder},
     module::Module,
     pass::GlobalPass,
     types::Type,
     values::{BinaryOp, ICmpCond},
 };
-use passes::printer::Printer;
+use orzcc::passes::printer::Printer;
 use std::io;
-
-pub mod collections;
-pub mod ir;
-pub mod passes;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut module = Module::new("fibonacci".to_string());

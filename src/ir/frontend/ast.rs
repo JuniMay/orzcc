@@ -1,14 +1,11 @@
-use crate::ir::{
-    types::Type,
-    values::{BinaryOp, UnaryOp},
-};
+use crate::ir::types::Type;
 
 use super::InstKind;
 
 /// An abstract syntax tree.
 #[derive(Debug)]
 pub struct Ast {
-    items: Vec<AstNodeBox>,
+    pub(super) items: Vec<AstNodeBox>,
 }
 
 impl Ast {
@@ -77,10 +74,10 @@ pub enum AstNode {
 #[derive(Debug)]
 pub struct Callee {
     /// Name of the callee.
-    name: String,
+    pub name: String,
 
     /// Arguments of the callee.
-    args: Vec<AstNodeBox>,
+    pub args: Vec<AstNodeBox>,
 }
 
 impl Callee {
@@ -93,10 +90,10 @@ impl Callee {
 #[derive(Debug)]
 pub struct Operand {
     /// The type of the operand.
-    ty: Type,
+    pub ty: Type,
 
     /// The value of the operand.
-    value: AstNodeBox,
+    pub value: AstNodeBox,
 }
 
 impl Operand {
@@ -122,10 +119,10 @@ impl AstNode {
 #[derive(Debug)]
 pub struct TypeDef {
     /// The name of the custom type.
-    name: String,
+    pub name: String,
 
     /// The actual type.
-    ty: Type,
+    pub ty: Type,
 }
 
 impl TypeDef {
@@ -137,16 +134,16 @@ impl TypeDef {
 #[derive(Debug)]
 pub struct GlobalDef {
     /// Whether this is a constant or not.
-    mutable: bool,
+    pub mutable: bool,
 
     /// Name of the global variable.
-    name: String,
+    pub name: String,
 
     /// The type of the global variable.
-    ty: Type,
+    pub ty: Type,
 
     /// The initial value of the global variable.
-    init: AstNodeBox,
+    pub init: AstNodeBox,
 }
 
 impl GlobalDef {
@@ -163,10 +160,10 @@ impl GlobalDef {
 #[derive(Debug)]
 pub struct FunctionDecl {
     /// Name of the function.
-    name: String,
+    pub name: String,
 
     /// The type of the function.
-    ty: Type,
+    pub ty: Type,
 }
 
 impl FunctionDecl {
@@ -178,13 +175,13 @@ impl FunctionDecl {
 #[derive(Debug)]
 pub struct FunctionDef {
     /// Name of the function.
-    name: String,
+    pub name: String,
 
     /// The type of the function.
-    ty: Type,
+    pub ty: Type,
 
     /// The blocks of the function.
-    blocks: Vec<AstNodeBox>,
+    pub blocks: Vec<AstNodeBox>,
 }
 
 impl FunctionDef {
@@ -196,17 +193,21 @@ impl FunctionDef {
 #[derive(Debug)]
 pub struct Block {
     /// Name of the block.
-    name: String,
+    pub name: String,
 
     /// Parameters of the block.
-    params: Vec<AstNodeBox>,
+    pub params: Vec<(Type, String)>,
 
     /// Instructions of the block.
-    insts: Vec<AstNodeBox>,
+    pub insts: Vec<AstNodeBox>,
 }
 
 impl Block {
-    pub fn new_boxed(name: String, params: Vec<AstNodeBox>, insts: Vec<AstNodeBox>) -> AstNodeBox {
+    pub fn new_boxed(
+        name: String,
+        params: Vec<(Type, String)>,
+        insts: Vec<AstNodeBox>,
+    ) -> AstNodeBox {
         Box::new(AstNode::Block(Block {
             name,
             params,
@@ -218,22 +219,22 @@ impl Block {
 #[derive(Debug)]
 pub struct Inst {
     /// Kind of the instruction.
-    kind: InstKind,
+    pub kind: InstKind,
 
     /// destination of the instruction
-    dest: Option<AstNodeBox>,
+    pub dest: Option<String>,
 
     /// The operands of the instruction
-    operands: Vec<AstNodeBox>,
+    pub operands: Vec<AstNodeBox>,
 
     /// The type for alloc/load/call/gep instructions
-    ty: Option<Type>,
+    pub ty: Option<Type>,
 }
 
 impl Inst {
     pub(super) fn new_boxed(
         kind: InstKind,
-        dest: Option<AstNodeBox>,
+        dest: Option<String>,
         operands: Vec<AstNodeBox>,
     ) -> AstNodeBox {
         Box::new(AstNode::Inst(Inst {
@@ -244,7 +245,7 @@ impl Inst {
         }))
     }
 
-    pub(super) fn new_boxed_alloc(dest: AstNodeBox, ty: Type) -> AstNodeBox {
+    pub(super) fn new_boxed_alloc(dest: String, ty: Type) -> AstNodeBox {
         Box::new(AstNode::Inst(Inst {
             kind: InstKind::Alloc,
             dest: Some(dest),
@@ -253,20 +254,16 @@ impl Inst {
         }))
     }
 
-    pub(super) fn new_boxed_load(dest: AstNodeBox, ty: Type, ptr: AstNodeBox) -> AstNodeBox {
+    pub(super) fn new_boxed_load(dest: String, ty: Type, ptr: AstNodeBox) -> AstNodeBox {
         Box::new(AstNode::Inst(Inst {
             kind: InstKind::Load,
-            dest: None,
+            dest: Some(dest),
             operands: vec![ptr],
             ty: Some(ty),
         }))
     }
 
-    pub(super) fn new_boxed_call(
-        dest: Option<AstNodeBox>,
-        ty: Type,
-        callee: AstNodeBox,
-    ) -> AstNodeBox {
+    pub(super) fn new_boxed_call(dest: Option<String>, ty: Type, callee: AstNodeBox) -> AstNodeBox {
         Box::new(AstNode::Inst(Inst {
             kind: InstKind::Call,
             dest,
@@ -276,7 +273,7 @@ impl Inst {
     }
 
     pub(super) fn new_boxed_getelemptr(
-        dest: AstNodeBox,
+        dest: String,
         ty: Type,
         operands: Vec<AstNodeBox>,
     ) -> AstNodeBox {
@@ -291,7 +288,7 @@ impl Inst {
 
 #[derive(Debug)]
 pub struct Array {
-    elems: Vec<AstNodeBox>,
+    pub elems: Vec<AstNodeBox>,
 }
 
 impl Array {
@@ -302,7 +299,7 @@ impl Array {
 
 #[derive(Debug)]
 pub struct Struct {
-    fields: Vec<AstNodeBox>,
+    pub fields: Vec<AstNodeBox>,
 }
 
 impl Struct {

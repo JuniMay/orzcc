@@ -111,18 +111,18 @@ where
         module
             .with_value_data(value, |data| {
                 match data.kind() {
-                    ValueKind::Zero => write!(self.buf, "{} zero", data.ty()),
-                    ValueKind::Undef => write!(self.buf, "{} undef", data.ty()),
+                    ValueKind::Zero => write!(self.buf, "zero"),
+                    ValueKind::Undef => write!(self.buf, "undef"),
                     ValueKind::Bytes(bytes) => {
                         // hexidecimal format with little endian
-                        write!(self.buf, "{} 0x", data.ty())?;
+                        write!(self.buf, "0x")?;
                         for byte in bytes.iter().rev() {
                             write!(self.buf, "{:02x}", byte)?;
                         }
                         Ok(())
                     }
                     ValueKind::Array(elems) => {
-                        write!(self.buf, "{} [", data.ty())?;
+                        write!(self.buf, "[")?;
                         for (i, elem) in elems.iter().enumerate() {
                             if i != 0 {
                                 write!(self.buf, ", ")?;
@@ -132,7 +132,7 @@ where
                         write!(self.buf, "]")
                     }
                     ValueKind::Struct(fields) => {
-                        write!(self.buf, "{} {{", data.ty())?;
+                        write!(self.buf, "{{")?;
                         for (i, field) in fields.iter().enumerate() {
                             if i != 0 {
                                 write!(self.buf, ", ")?;
@@ -142,10 +142,13 @@ where
                         write!(self.buf, "}}")
                     }
                     ValueKind::GlobalSlot(slot) => {
+                        let ty = module
+                            .with_value_data(slot.init(), |data| data.ty().clone())
+                            .unwrap();
                         if slot.mutable() {
-                            write!(self.buf, "global {} = ", module.value_name(value))?;
+                            write!(self.buf, "global {} = {} ", module.value_name(value), ty)?;
                         } else {
-                            write!(self.buf, "const {} = ", module.value_name(value))?;
+                            write!(self.buf, "const {} = {} ", module.value_name(value), ty)?;
                         }
                         self.print_global_value(slot.init(), module)
                     }

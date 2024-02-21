@@ -32,7 +32,7 @@ where
 }
 
 #[derive(Debug)]
-pub(in crate::ir) enum ParseError {
+pub enum ParseError {
     /// Lexer error
     LexerError,
 
@@ -107,7 +107,7 @@ where
     }
 
     /// Parse the input.
-    pub(in crate::ir) fn parse(&mut self) -> Result<Ast, ParseError> {
+    pub fn parse(&mut self) -> Result<Ast, ParseError> {
         let mut ast = Ast::new();
 
         loop {
@@ -329,14 +329,18 @@ where
             TokenKind::LeftParen => {
                 let mut params = Vec::new();
                 loop {
-                    let parse_result = self.parse_operand();
-                    match parse_result {
-                        Ok(node) => params.push(node),
-                        Err(_) => match self.next_token()?.kind {
-                            TokenKind::RightParen => break,
-                            TokenKind::Comma => continue,
-                            _ => return Err(self.unexpected_token()),
-                        },
+                    let ty = self.parse_type()?;
+                    let token = self.next_token()?;
+                    let ident = match token.kind {
+                        TokenKind::LocalIdent(ref name) => name.clone(),
+                        _ => return Err(self.unexpected_token()),
+                    };
+
+                    params.push((ty, ident));
+                    match self.next_token()?.kind {
+                        TokenKind::RightParen => break,
+                        TokenKind::Comma => continue,
+                        _ => return Err(self.unexpected_token()),
                     }
                 }
 
@@ -374,7 +378,7 @@ where
         let token = self.next_token()?;
         match token.kind {
             TokenKind::LocalIdent(ref name) => {
-                let dest = AstNode::new_boxed_local_ident(name.clone());
+                let dest = name.clone();
                 self.expect(TokenKind::Equal)?;
 
                 let token = self.next_token()?;
@@ -464,8 +468,9 @@ where
                     Ok(Inst::new_boxed_call(None, ty, callee))
                 }
                 InstKind::Return => {
-                    let val = self.parse_operand()?;
-                    Ok(ast::Inst::new_boxed(InstKind::Return, None, vec![val]))
+                    let val = self.parse_operand();
+                    let operands = if val.is_ok() { vec![val?] } else { Vec::new() };
+                    Ok(ast::Inst::new_boxed(InstKind::Return, None, operands))
                 }
                 _ => Err(self.unexpected_token()),
             },
@@ -593,7 +598,7 @@ fn @fib(i32) -> i32 {
     %6 = add i32 %4, i32 %5
     jump ^ret(i32 %6)
 
-^ret(i32 %result):
+^ret(i32 %result, float %123):
     ret i32 %result
 }
 "#,

@@ -231,6 +231,13 @@ impl Type {
             _ => None,
         }
     }
+
+    pub fn is_aggregate(&self) -> bool {
+        match self.kind() {
+            TypeKind::Array(_, _) | TypeKind::Struct(_) => true,
+            _ => false,
+        }
+    }
 }
 
 impl hash::Hash for Type {

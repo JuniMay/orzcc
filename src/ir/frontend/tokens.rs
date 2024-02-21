@@ -3,7 +3,7 @@ use std::fmt;
 use super::{InstKind, KeywordKind};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(in crate::ir) struct Pos {
+pub struct Pos {
     row: usize,
     col: usize,
 }
@@ -36,7 +36,7 @@ impl fmt::Display for Pos {
 }
 
 #[derive(Clone, PartialEq, Eq)]
-pub(in crate::ir) struct Span {
+pub struct Span {
     start: Pos,
     end: Pos,
 }

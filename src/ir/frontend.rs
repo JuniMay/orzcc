@@ -1,10 +1,11 @@
 use super::values::{BinaryOp, UnaryOp};
 
-pub(self) mod ast;
 pub(self) mod lexer;
 
-pub(in crate::ir) mod parser;
-pub(in crate::ir) mod tokens;
+pub mod ast;
+pub mod convert;
+pub mod parser;
+pub mod tokens;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(self) enum KeywordKind {
@@ -49,7 +50,7 @@ pub(self) enum KeywordKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(self) enum InstKind {
+pub enum InstKind {
     /// A binary operator
     Binary(BinaryOp),
 

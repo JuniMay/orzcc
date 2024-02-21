@@ -61,6 +61,9 @@ pub enum BuilderErr {
 
     /// Incompatible block argument type.
     IncompatibleBlockArgType,
+
+    /// Duplicated name.
+    NameDuplicated,
 }
 
 impl fmt::Display for BuilderErr {
@@ -85,6 +88,7 @@ impl fmt::Display for BuilderErr {
                 write!(f, "incompatible block argument number")
             }
             IncompatibleBlockArgType => write!(f, "incompatible block argument type"),
+            NameDuplicated => write!(f, "duplicated name"),
         }
     }
 }
@@ -367,7 +371,7 @@ pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
     }
 
     /// Build a get element pointer instruction.
-    fn get_elem_ptr(
+    fn getelemptr(
         &mut self,
         ptr: Value,
         ty: Type,
