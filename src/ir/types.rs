@@ -219,12 +219,10 @@ impl Type {
     }
 
     pub fn is_zero_initializable(&self) -> bool {
-        match self.kind() {
-            TypeKind::Void | TypeKind::Function(_, _) | TypeKind::Label | TypeKind::Type(_) => {
-                false
-            }
-            _ => true,
-        }
+        !matches!(
+            self.kind(),
+            TypeKind::Void | TypeKind::Function(_, _) | TypeKind::Label | TypeKind::Type(_)
+        )
     }
 
     pub fn as_array(&self) -> Option<(usize, &Type)> {
@@ -242,10 +240,7 @@ impl Type {
     }
 
     pub fn is_aggregate(&self) -> bool {
-        match self.kind() {
-            TypeKind::Array(_, _) | TypeKind::Struct(_) => true,
-            _ => false,
-        }
+        matches!(self.kind(), TypeKind::Array(_, _) | TypeKind::Struct(_))
     }
 }
 

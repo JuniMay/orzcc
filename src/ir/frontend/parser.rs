@@ -421,20 +421,18 @@ where
                             let ty = self.parse_type()?;
                             self.expect(TokenKind::Comma)?;
                             let ptr = self.parse_operand()?;
+                            self.expect(TokenKind::Comma)?;
                             let mut operands = vec![ptr];
 
                             // parse indices
                             loop {
-                                let parse_result = self.parse_operand();
-                                match parse_result {
-                                    Ok(node) => operands.push(node),
-                                    Err(_) => match self.curr_token.kind {
-                                        TokenKind::Comma => {
-                                            self.consume();
-                                            continue;
-                                        }
-                                        _ => break,
-                                    },
+                                let node = self.parse_operand()?;
+                                operands.push(node);
+                                let token = self.peek_token()?;
+                                if let TokenKind::Comma = token.kind {
+                                    self.consume();
+                                } else {
+                                    break;
                                 }
                             }
                             Inst::new_boxed_getelemptr(dest, ty, operands)
@@ -566,4 +564,3 @@ where
         }
     }
 }
-

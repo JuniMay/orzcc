@@ -3,7 +3,8 @@ use super::{
     module::DataFlowGraph,
     types::Type,
     values::{
-        Alloc, Binary, Branch, Call, Cast, GetElemPtr, GlobalSlot, Jump, Load, Return, Store, Unary, Value
+        Alloc, Binary, Branch, Call, Cast, GetElemPtr, GlobalSlot, Jump, Load, Return, Store,
+        Unary, Value,
     },
     GLOBAL_PREFIX,
 };
@@ -181,14 +182,14 @@ pub enum ValueKind {
 
 impl ValueKind {
     pub fn is_const(&self) -> bool {
-        match self {
+        matches!(
+            self,
             ValueKind::Zero
-            | ValueKind::Undef
-            | ValueKind::Bytes(_)
-            | ValueKind::Array(_)
-            | ValueKind::Struct(_) => true,
-            _ => false,
-        }
+                | ValueKind::Undef
+                | ValueKind::Bytes(_)
+                | ValueKind::Array(_)
+                | ValueKind::Struct(_)
+        )
     }
 
     pub fn is_global(&self) -> bool {

@@ -258,8 +258,8 @@ where
                         let number = word.chars().skip(1).collect::<String>();
                         let number = number.parse::<u64>();
 
-                        if number.is_ok() {
-                            TokenKind::Keyword(KeywordKind::Int(number.unwrap() as usize))
+                        if let Ok(number) = number {
+                            TokenKind::Keyword(KeywordKind::Int(number as usize))
                         } else {
                             return None;
                         }
@@ -312,8 +312,7 @@ mod tests {
             let next_token = lexer.next_token();
 
             if next_token.is_none() {
-                assert!(
-                    false,
+                panic!(
                     "expected token {:?}, but got None, curr_char: {:?}",
                     token, lexer.curr_char
                 );
@@ -510,8 +509,7 @@ fn @fib(i32) -> i32 {
             let next_token = lexer.next_token();
 
             if next_token.is_none() {
-                assert!(
-                    false,
+                panic!(
                     "expected token {:?}, but got None, curr_char: {:?}",
                     token, lexer.curr_char
                 );

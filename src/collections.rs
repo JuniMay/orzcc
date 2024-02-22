@@ -249,7 +249,7 @@ where
     }
 }
 
-impl<'a, K, N> Extend<K> for BiLinkedList<K, N>
+impl<K, N> Extend<K> for BiLinkedList<K, N>
 where
     K: Copy + Eq + Hash,
     N: BiLinkedNode<K>,

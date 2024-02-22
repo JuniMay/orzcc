@@ -182,8 +182,7 @@ pub enum BinaryOp {
 impl BinaryOp {
     /// If the operation requires integer operands
     pub(super) fn require_int(&self) -> bool {
-        match self {
-            BinaryOp::Add
+        matches!(self, BinaryOp::Add
             | BinaryOp::Sub
             | BinaryOp::Mul
             | BinaryOp::UDiv
@@ -196,30 +195,22 @@ impl BinaryOp {
             | BinaryOp::Shl
             | BinaryOp::LShr
             | BinaryOp::AShr
-            | BinaryOp::ICmp(_) => true,
-            _ => false,
-        }
+            | BinaryOp::ICmp(_))
     }
 
     /// If the operation requires floating-point operands
     pub(super) fn require_float(&self) -> bool {
-        match self {
-            BinaryOp::FAdd
+        matches!(self, BinaryOp::FAdd
             | BinaryOp::FSub
             | BinaryOp::FMul
             | BinaryOp::FDiv
             | BinaryOp::FRem
-            | BinaryOp::FCmp(_) => true,
-            _ => false,
-        }
+            | BinaryOp::FCmp(_))
     }
 
     /// If the operation requires the same type of operands
     pub(super) fn require_same_type(&self) -> bool {
-        match self {
-            BinaryOp::Shl | BinaryOp::LShr | BinaryOp::AShr => false,
-            _ => true,
-        }
+        !matches!(self, BinaryOp::Shl | BinaryOp::LShr | BinaryOp::AShr)
     }
 }
 

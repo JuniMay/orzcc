@@ -355,7 +355,7 @@ impl Ast {
                 let (_size, elem_type) =
                     ty.as_array().ok_or(BuilderErr::InvalidType(ty.clone()))?;
                 let mut values = Vec::new();
-                for (_i, elem) in array.elems.iter().enumerate() {
+                for elem in array.elems.iter() {
                     let value = self.global_init_to_value(elem_type.clone(), elem, module)?;
                     values.push(value);
                 }
