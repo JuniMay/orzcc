@@ -1,0 +1,15 @@
+fn @countdown(i32) -> i32 {
+^entry(i32 %0):
+    jump ^loop(i32 %0)
+
+^loop(i32 %1):
+    %cond = icmp.sle i32 %1, i32 0x0
+    br i1 %cond, ^continue(i32 %1), ^end
+
+^continue(i32 %2):
+    %next = sub i32 %2, i32 0x01
+    jump ^loop(i32 %next)
+
+^end:
+    ret i32 0x0
+}

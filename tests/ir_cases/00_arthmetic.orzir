@@ -1,0 +1,8 @@
+global @a = i32 0x00000001
+global @b = i32 0x00000002
+
+fn @add(i32, i32) -> i32 {
+^entry(i32 %0, i32 %1):
+    %result = add i32 %0, i32 %1
+    ret i32 %result
+}
