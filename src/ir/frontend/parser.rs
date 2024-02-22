@@ -254,7 +254,7 @@ where
     fn parse_type_ident(&mut self) -> Result<Type, ParseError> {
         // consume the token
         match self.next_token()?.kind {
-            TokenKind::TypeIdent(ref name) => Ok(Type::mk_type(name.clone())),
+            TokenKind::TypeIdent(ref name) => Ok(Type::mk_identified(name.clone())),
             _ => Err(self.unexpected_token()),
         }
     }

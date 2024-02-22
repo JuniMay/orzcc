@@ -124,7 +124,7 @@ impl AstNode {
 
 #[derive(Debug)]
 pub struct TypeDef {
-    /// The name of the custom type.
+    /// The name of the identified type.
     pub name: String,
 
     /// The actual type.

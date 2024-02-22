@@ -66,7 +66,7 @@ impl<K, N> Default for BiLinkedList<K, N>
 where
     K: Copy + Eq + Hash,
     N: BiLinkedNode<K>,
- {
+{
     fn default() -> Self {
         Self::new()
     }

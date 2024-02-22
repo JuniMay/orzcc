@@ -5,6 +5,8 @@ use std::fmt;
 use std::hash;
 use std::rc::Rc;
 
+use super::TYPE_PREFIX;
+
 /// Target dependent data layout
 #[derive(Clone, Copy, Debug)]
 pub struct DataLayout {
@@ -43,8 +45,8 @@ pub enum TypeKind {
     ///
     /// Block in the IR can have the same name as operands and can be distinguished by `label` type.
     Label,
-    /// A custom defined type
-    Type(String),
+    /// An identified type
+    Identified(String),
 }
 
 impl fmt::Display for TypeKind {
@@ -81,7 +83,7 @@ impl fmt::Display for TypeKind {
                 )
             }
             TypeKind::Label => write!(f, "label"),
-            TypeKind::Type(name) => write!(f, "{}", name),
+            TypeKind::Identified(name) => write!(f, "{}", name),
         }
     }
 }
@@ -99,6 +101,7 @@ impl Type {
     thread_local! {
         /// Pool of all types.
         static POOL: RefCell<HashMap<TypeKind, Type>> = RefCell::new(HashMap::new());
+        static IDENTIFIED_POOL: RefCell<HashMap<String, Type>> = RefCell::new(HashMap::new());
     }
 
     pub fn make(kind: TypeKind) -> Type {
@@ -162,13 +165,27 @@ impl Type {
         Type::make(TypeKind::Label)
     }
 
-    pub fn mk_type(name: String) -> Type {
-        let name = if !name.starts_with('$') {
-            format!("${}", name)
+    pub fn mk_identified(name: String) -> Type {
+        let name = if !name.starts_with(TYPE_PREFIX) {
+            format!("{}{}", TYPE_PREFIX, name)
         } else {
             name
         };
-        Type::make(TypeKind::Type(name))
+        Type::make(TypeKind::Identified(name))
+    }
+
+    pub fn set_identified(name: String, ty: Type) {
+        Self::IDENTIFIED_POOL.with(|pool| {
+            let mut pool = pool.borrow_mut();
+            pool.insert(name, ty);
+        });
+    }
+
+    pub fn get_identified(name: &str) -> Option<Type> {
+        Self::IDENTIFIED_POOL.with(|pool| {
+            let pool = pool.borrow();
+            pool.get(name).cloned()
+        })
     }
 
     pub fn kind(&self) -> &TypeKind {
@@ -187,7 +204,7 @@ impl Type {
             TypeKind::Function(_, _) => data_layout.map_or(0, |dl| dl.pointer_size),
             TypeKind::Struct(fields) => fields.iter().map(|ty| ty.size(data_layout)).sum(),
             TypeKind::Label => 0,
-            TypeKind::Type(_) => 0,
+            TypeKind::Identified(_) => 0,
         }
     }
 
@@ -221,7 +238,7 @@ impl Type {
     pub fn is_zero_initializable(&self) -> bool {
         !matches!(
             self.kind(),
-            TypeKind::Void | TypeKind::Function(_, _) | TypeKind::Label | TypeKind::Type(_)
+            TypeKind::Void | TypeKind::Function(_, _) | TypeKind::Label | TypeKind::Identified(_)
         )
     }
 
@@ -232,6 +249,10 @@ impl Type {
         }
     }
 
+    /// Convert the type to a struct type.
+    ///
+    /// If the type is not a struct type, return `None`.
+    /// Note that for identified types, this function returns `None` for now.
     pub fn as_struct(&self) -> Option<&[Type]> {
         match self.kind() {
             TypeKind::Struct(fields) => Some(fields),
@@ -293,12 +314,12 @@ mod test {
         assert_eq!(Type::mk_ptr(), Type::mk_ptr());
         assert_eq!(Type::mk_label(), Type::mk_label());
         assert_eq!(
-            Type::mk_type("name".to_string()),
-            Type::mk_type("name".to_string())
+            Type::mk_identified("name".to_string()),
+            Type::mk_identified("name".to_string())
         );
         assert_ne!(
-            Type::mk_type("name".to_string()),
-            Type::mk_type("name2".to_string())
+            Type::mk_identified("name".to_string()),
+            Type::mk_identified("name2".to_string())
         );
         assert_eq!(
             Type::mk_function(vec![], Type::mk_void()),
@@ -325,8 +346,14 @@ mod test {
         assert_eq!(format!("{}", Type::mk_double()), "double");
         assert_eq!(format!("{}", Type::mk_ptr()), "ptr");
         assert_eq!(format!("{}", Type::mk_label()), "label");
-        assert_eq!(format!("{}", Type::mk_type("$name".to_string())), "$name");
-        assert_eq!(format!("{}", Type::mk_type("name".to_string())), "$name");
+        assert_eq!(
+            format!("{}", Type::mk_identified("$name".to_string())),
+            "$name"
+        );
+        assert_eq!(
+            format!("{}", Type::mk_identified("name".to_string())),
+            "$name"
+        );
         let ty = Type::mk_function(vec![], Type::mk_void());
         assert_eq!(format!("{}", ty), "() -> void");
         let ty = Type::mk_function(vec![Type::mk_int(16)], Type::mk_void());
@@ -342,7 +369,7 @@ mod test {
         let dl = DataLayout { pointer_size: 8 };
         assert_eq!(Type::mk_void().size(Some(&dl)), 0);
         assert_eq!(Type::mk_label().size(Some(&dl)), 0);
-        assert_eq!(Type::mk_type("name".to_string()).size(Some(&dl)), 0);
+        assert_eq!(Type::mk_identified("name".to_string()).size(Some(&dl)), 0);
         assert_eq!(Type::mk_int(1).size(Some(&dl)), 1);
         assert_eq!(Type::mk_int(32).size(Some(&dl)), 4);
         assert_eq!(Type::mk_int(64).size(Some(&dl)), 8);

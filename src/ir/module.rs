@@ -32,9 +32,6 @@ pub struct DataFlowGraph {
     /// Pointer to global values (including functions)
     globals: Weak<RefCell<GlobalValueMap>>,
 
-    /// Pointer to custom types
-    custom_types: Weak<RefCell<CustomTypeMap>>,
-
     /// Pointer to id allocator
     id_allocator: Weak<RefCell<IdAllocator>>,
 
@@ -56,7 +53,6 @@ impl DataFlowGraph {
             value_name_allocator: RefCell::new(NameAllocator::new(IDENTIFIER_PREFIX)),
             block_name_allocator: RefCell::new(NameAllocator::new(BLOCK_PREFIX)),
             globals: Weak::new(),
-            custom_types: Weak::new(),
             id_allocator: Weak::new(),
             global_name_allocator: Weak::new(),
         }
@@ -138,20 +134,11 @@ impl DataFlowGraph {
     pub fn block_data(&self, block: Block) -> Option<&BlockData> {
         self.blocks.get(&block)
     }
-
-    pub fn custom_type(&self, name: &str) -> Option<Type> {
-        self.custom_types
-            .upgrade()
-            .expect("custom type map should be alive.")
-            .borrow()
-            .get(name)
-            .cloned()
-    }
 }
 
 pub type GlobalValueMap = HashMap<Value, ValueData>;
 
-pub type CustomTypeMap = HashMap<String, Type>;
+pub type IdentifiedTypeMap = HashMap<String, Type>;
 
 pub type ValueNameAllocator = NameAllocator<Value>;
 
@@ -180,11 +167,8 @@ pub struct Module {
     /// Layout of functions
     function_layout: Vec<Function>,
 
-    /// User defined types
-    custom_types: Rc<RefCell<CustomTypeMap>>,
-
-    /// Layout of user defined types
-    custom_type_layout: Vec<String>,
+    /// Layout of identified types
+    identified_type_layout: Vec<String>,
 
     /// Id allocator
     id_allocator: Rc<RefCell<IdAllocator>>,
@@ -197,7 +181,6 @@ impl Module {
     pub fn new(name: String) -> Self {
         let globals = Rc::new(RefCell::new(HashMap::new()));
         let functions = HashMap::new();
-        let custom_types = Rc::new(RefCell::new(HashMap::new()));
         let id_allocator = Rc::new(RefCell::new(IdAllocator::new()));
         let name_allocator = Rc::new(RefCell::new(NameAllocator::new(GLOBAL_PREFIX)));
 
@@ -207,8 +190,7 @@ impl Module {
             global_slot_layout: Vec::new(),
             functions,
             function_layout: Vec::new(),
-            custom_types,
-            custom_type_layout: Vec::new(),
+            identified_type_layout: Vec::new(),
             id_allocator,
             name_allocator,
         }
@@ -233,12 +215,8 @@ impl Module {
         &self.function_layout
     }
 
-    pub fn custom_type(&self, name: &str) -> Option<Type> {
-        self.custom_types.borrow().get(name).cloned()
-    }
-
-    pub fn custom_type_layout(&self) -> &[String] {
-        &self.custom_type_layout
+    pub fn identified_type_layout(&self) -> &[String] {
+        &self.identified_type_layout
     }
 
     fn allocate_id(&self) -> usize {
@@ -282,14 +260,12 @@ impl Module {
         self.functions.insert(function.into(), function_data);
 
         let weak_globals = Rc::downgrade(&self.globals);
-        let weak_custom_types = Rc::downgrade(&self.custom_types);
         let weak_id_allocator = Rc::downgrade(&self.id_allocator);
         let weak_name_allocator = Rc::downgrade(&self.name_allocator);
 
         let dfg = self.function_data_mut(function.into()).unwrap().dfg_mut();
 
         dfg.globals = weak_globals;
-        dfg.custom_types = weak_custom_types;
         dfg.id_allocator = weak_id_allocator;
         dfg.global_name_allocator = weak_name_allocator;
 
@@ -306,9 +282,8 @@ impl Module {
         self.name_allocator.borrow_mut().assign(value, name)
     }
 
-    pub fn add_custom_type(&mut self, name: String, ty: Type) {
-        self.custom_types.borrow_mut().insert(name.clone(), ty);
-        self.custom_type_layout.push(name);
+    pub fn add_identified_type(&mut self, name: String) {
+        self.identified_type_layout.push(name);
     }
 }
 

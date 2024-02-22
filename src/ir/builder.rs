@@ -1,106 +1,85 @@
-use std::{error::Error, fmt};
-
 use super::{
     entities::{BlockData, FunctionData, FunctionKind, ValueData, ValueKind},
     module::{DataFlowGraph, Module},
     types::{Type, TypeKind},
     values::{
-        Alloc, Binary, BinaryOp, Block, Branch, Call, Cast, Function, GetElemPtr, GlobalSlot, Jump, Load, Return, Store, Unary, UnaryOp, Value
+        Alloc, Binary, BinaryOp, Block, Branch, Call, Cast, Function, GetElemPtr, GlobalSlot, Jump,
+        Load, Return, Store, Unary, UnaryOp, Value,
     },
 };
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Error, Debug)]
 pub enum BuilderErr {
     /// Value not found.
     ///
     /// The value is not found in the data flow graph.
+    #[error("value not found")]
     ValueNotFound,
 
     /// Block not found.
     ///
     /// The block is not found in the data flow graph.
+    #[error("block not found")]
     BlockNotFound,
 
     /// Type not found.
-    TypeNotFound,
+    #[error("identified type not found: {0}")]
+    IdentifiedTypeNotFound(String),
 
     /// Invalid value type.
     ///
     /// This can be used when the value type is not valid for the operation/construction,
     /// e.g. a function type provided for zero/bytes/...
+    #[error("invalid value type: {0}")]
     InvalidType(Type),
 
+    /// Invalid value kind.
+    #[error("invalid value kind")]
     InvalidKind,
 
     /// Trying to build aggregated constant with non-constant value.
+    #[error("invalid mutability")]
     InvalidMutability,
 
     /// Global value in local data flow graph.
+    #[error("invalid global value")]
     InvalidGlobalValue,
 
     /// Local value in global data flow graph.
+    #[error("invalid local value")]
     InvalidLocalValue,
 
     /// Incompatible value type.
     ///
     /// This can be used when two values are not compatible, e.g. in binary operations.
-    IncompatibleType,
+    #[error("incompatible value type of {0} and {1}")]
+    IncompatibleType(Type, Type),
 
     /// Incompatible array size.
-    IncompatibleArraySize,
+    #[error("incompatible array size: expected {0}, got {1}")]
+    IncompatibleArraySize(usize, usize),
 
     /// Incompatible array element type.
+    #[error("incompatible array element type: expected {0}, got {1}")]
     IncompatibleArrayElemType(Type, Type),
 
     /// Incompatible struct field number.
-    IncompatibleStructFieldNumber,
+    #[error("incompatible struct field number: expected {0}, got {1}")]
+    IncompatibleStructFieldNumber(usize, usize),
 
     /// Incompatible struct field type.
-    IncompatibleStructFieldType,
+    #[error("incompatible struct field type: expected {0}, got {1}")]
+    IncompatibleStructFieldType(Type, Type),
 
     /// Incompatible block argument number.
-    IncompatibleBlockArgNumber,
+    #[error("incompatible block argument number: expected {0}, got {1}")]
+    IncompatibleBlockArgNumber(usize, usize),
 
     /// Incompatible block argument type.
-    IncompatibleBlockArgType,
-
-    /// Duplicated name.
-    NameDuplicated,
+    #[error("incompatible block argument type: expected {0}, got {1}")]
+    IncompatibleBlockArgType(Type, Type),
 }
-
-impl fmt::Display for BuilderErr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use BuilderErr::*;
-        match self {
-            ValueNotFound => write!(f, "value not found"),
-            BlockNotFound => write!(f, "block not found"),
-            TypeNotFound => write!(f, "type not found"),
-            InvalidType(ty) => write!(f, "invalid value type {}", ty),
-            InvalidKind => write!(f, "invalid value kind"),
-            InvalidMutability => write!(f, "invalid mutability"),
-            InvalidGlobalValue => write!(f, "invalid global value"),
-            InvalidLocalValue => write!(f, "invalid local value"),
-            IncompatibleType => write!(f, "incompatible value type"),
-            IncompatibleArraySize => write!(f, "incompatible array size"),
-            IncompatibleArrayElemType(elem_type, value_type) => write!(
-                f,
-                "incompatible array element type: {} and {}",
-                elem_type, value_type
-            ),
-            IncompatibleStructFieldNumber => {
-                write!(f, "incompatible struct field number")
-            }
-            IncompatibleStructFieldType => write!(f, "incompatible struct field type"),
-            IncompatibleBlockArgNumber => {
-                write!(f, "incompatible block argument number")
-            }
-            IncompatibleBlockArgType => write!(f, "incompatible block argument type"),
-            NameDuplicated => write!(f, "duplicated name"),
-        }
-    }
-}
-
-impl Error for BuilderErr {}
 
 pub trait QueryValueData {
     /// Get the type of a value.
@@ -127,11 +106,7 @@ pub trait AddBlock {
     fn add_block(&mut self, data: BlockData) -> Result<Block, BuilderErr>;
 }
 
-pub trait QueryCustomType {
-    fn custom_type(&self, name: String) -> Result<Type, BuilderErr>;
-}
-
-pub trait ConstantBuilder: QueryValueData + AddValue + QueryCustomType {
+pub trait ConstantBuilder: QueryValueData + AddValue {
     /// Build a zero constant.
     fn zero(&mut self, ty: Type) -> Result<Value, BuilderErr> {
         if !ty.is_zero_initializable() {
@@ -183,7 +158,7 @@ pub trait ConstantBuilder: QueryValueData + AddValue + QueryCustomType {
         let (size, elem_type) = ty.as_array().ok_or(BuilderErr::InvalidType(ty.clone()))?;
 
         if values.len() != size {
-            return Err(BuilderErr::IncompatibleArraySize);
+            return Err(BuilderErr::IncompatibleArraySize(size, values.len()));
         }
 
         for value in &values {
@@ -205,7 +180,8 @@ pub trait ConstantBuilder: QueryValueData + AddValue + QueryCustomType {
     fn struct_(&mut self, ty: Type, values: Vec<Value>) -> Result<Value, BuilderErr> {
         let actual_ty = match ty.kind() {
             TypeKind::Struct(_) => ty.clone(),
-            TypeKind::Type(name) => self.custom_type(name.clone())?,
+            TypeKind::Identified(name) => Type::get_identified(name)
+                .ok_or(BuilderErr::IdentifiedTypeNotFound(name.clone()))?,
             _ => return Err(BuilderErr::InvalidType(ty.clone())),
         };
 
@@ -214,12 +190,18 @@ pub trait ConstantBuilder: QueryValueData + AddValue + QueryCustomType {
             .ok_or(BuilderErr::InvalidType(ty.clone()))?;
 
         if fields.len() != values.len() {
-            return Err(BuilderErr::IncompatibleStructFieldNumber);
+            return Err(BuilderErr::IncompatibleStructFieldNumber(
+                fields.len(),
+                values.len(),
+            ));
         }
 
         for (field_type, value) in fields.iter().zip(&values) {
             if self.value_type(*value)? != field_type.clone() {
-                return Err(BuilderErr::IncompatibleStructFieldType);
+                return Err(BuilderErr::IncompatibleStructFieldType(
+                    field_type.clone(),
+                    self.value_type(*value)?,
+                ));
             }
             if !self.is_value_const(*value)? {
                 return Err(BuilderErr::InvalidMutability);
@@ -277,7 +259,10 @@ pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
         }
 
         if op.require_same_type() && lhs_type != rhs_type {
-            return Err(BuilderErr::IncompatibleType);
+            return Err(BuilderErr::IncompatibleType(
+                lhs_type.clone(),
+                rhs_type.clone(),
+            ));
         }
 
         let res_type = match op {
@@ -308,7 +293,10 @@ pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
         let block_data = self.block_data(dst)?;
 
         if block_data.params().len() != args.len() {
-            return Err(BuilderErr::IncompatibleBlockArgNumber);
+            return Err(BuilderErr::IncompatibleBlockArgNumber(
+                block_data.params().len(),
+                args.len(),
+            ));
         }
 
         for (param, arg) in block_data.params().iter().zip(&args) {
@@ -316,7 +304,10 @@ pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
             let arg_type = self.value_type(*arg)?;
 
             if param_type != arg_type {
-                return Err(BuilderErr::IncompatibleBlockArgType);
+                return Err(BuilderErr::IncompatibleBlockArgType(
+                    param_type.clone(),
+                    arg_type.clone(),
+                ));
             }
         }
 
@@ -340,11 +331,17 @@ pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
         let else_block_data = self.block_data(else_dst)?;
 
         if then_block_data.params().len() != then_args.len() {
-            return Err(BuilderErr::IncompatibleBlockArgNumber);
+            return Err(BuilderErr::IncompatibleBlockArgNumber(
+                then_block_data.params().len(),
+                then_args.len(),
+            ));
         }
 
         if else_block_data.params().len() != else_args.len() {
-            return Err(BuilderErr::IncompatibleBlockArgNumber);
+            return Err(BuilderErr::IncompatibleBlockArgNumber(
+                else_block_data.params().len(),
+                else_args.len(),
+            ));
         }
 
         for (param, arg) in then_block_data.params().iter().zip(&then_args) {
@@ -352,7 +349,10 @@ pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
             let arg_type = self.value_type(*arg)?;
 
             if param_type != arg_type {
-                return Err(BuilderErr::IncompatibleBlockArgType);
+                return Err(BuilderErr::IncompatibleBlockArgType(
+                    param_type.clone(),
+                    arg_type.clone(),
+                ));
             }
         }
 
@@ -361,7 +361,10 @@ pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
             let arg_type = self.value_type(*arg)?;
 
             if param_type != arg_type {
-                return Err(BuilderErr::IncompatibleBlockArgType);
+                return Err(BuilderErr::IncompatibleBlockArgType(
+                    param_type.clone(),
+                    arg_type.clone(),
+                ));
             }
         }
 
@@ -429,11 +432,7 @@ pub trait GlobalValueBuilder: QueryValueData + AddValue + ConstantBuilder {
             return Err(BuilderErr::InvalidMutability);
         }
 
-        self.add_value(GlobalSlot::new_value_data(
-            Type::mk_ptr(),
-            init,
-            mutable,
-        ))
+        self.add_value(GlobalSlot::new_value_data(Type::mk_ptr(), init, mutable))
     }
 
     /// Build a global function.
@@ -524,12 +523,6 @@ impl ConstantBuilder for LocalBuilder<'_> {}
 
 impl LocalValueBuilder for LocalBuilder<'_> {}
 
-impl QueryCustomType for LocalBuilder<'_> {
-    fn custom_type(&self, name: String) -> Result<Type, BuilderErr> {
-        self.dfg.custom_type(&name).ok_or(BuilderErr::TypeNotFound)
-    }
-}
-
 impl LocalBlockBuilder for LocalBuilder<'_> {}
 
 pub struct GlobalBuilder<'a> {
@@ -565,14 +558,6 @@ impl QueryValueData for GlobalBuilder<'_> {
 impl AddValue for GlobalBuilder<'_> {
     fn add_value(&mut self, data: ValueData) -> Result<Value, BuilderErr> {
         Ok(self.module.add_global_slot(data))
-    }
-}
-
-impl QueryCustomType for GlobalBuilder<'_> {
-    fn custom_type(&self, name: String) -> Result<Type, BuilderErr> {
-        self.module
-            .custom_type(&name)
-            .ok_or(BuilderErr::TypeNotFound)
     }
 }
 

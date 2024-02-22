@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use thiserror::Error;
+
 use crate::ir::{
     builder::{
         BuilderErr, ConstantBuilder, GlobalValueBuilder, LocalBlockBuilder, LocalValueBuilder,
@@ -13,6 +15,21 @@ use super::{
     ast::{Ast, AstNode, AstNodeBox},
     InstKind,
 };
+
+#[derive(Debug, Error)]
+pub enum AstSyntaxErr {
+    #[error("builder error: {0}")]
+    BuilderErr(BuilderErr),
+
+    #[error("name duplicated")]
+    NameDuplicated,
+}
+
+impl From<BuilderErr> for AstSyntaxErr {
+    fn from(err: BuilderErr) -> Self {
+        Self::BuilderErr(err)
+    }
+}
 
 struct AstLoweringContext {
     module: Module,
@@ -43,19 +60,19 @@ impl AstLoweringContext {
         self.block_map.insert(name, block);
     }
 
-    fn get_value(&self, name: &str) -> Result<Value, BuilderErr> {
+    fn get_value(&self, name: &str) -> Result<Value, AstSyntaxErr> {
         self.value_map
             .get(name)
             .cloned()
             .or_else(|| self.global_map.get(name).cloned())
-            .ok_or(BuilderErr::ValueNotFound)
+            .ok_or(BuilderErr::ValueNotFound.into())
     }
 
-    fn get_block(&self, name: &str) -> Result<Block, BuilderErr> {
+    fn get_block(&self, name: &str) -> Result<Block, AstSyntaxErr> {
         self.block_map
             .get(name)
             .cloned()
-            .ok_or(BuilderErr::BlockNotFound)
+            .ok_or(BuilderErr::BlockNotFound.into())
     }
 }
 
@@ -72,13 +89,14 @@ macro_rules! layout_mut {
 }
 
 impl Ast {
-    pub fn into_ir(&self, name: String) -> Result<Module, BuilderErr> {
+    pub fn into_ir(&self, name: String) -> Result<Module, AstSyntaxErr> {
         let mut ctx = AstLoweringContext::new(name);
 
         for item in self.items.iter() {
             match item.as_ref() {
                 AstNode::TypeDef(ref def) => {
-                    ctx.module.add_custom_type(def.name.clone(), def.ty.clone());
+                    Type::set_identified(def.name.clone(), def.ty.clone());
+                    ctx.module.add_identified_type(def.name.clone());
                 }
                 AstNode::GlobalDef(ref def) => {
                     let mutable = def.mutable;
@@ -125,14 +143,14 @@ impl Ast {
                                 ctx.map_local(param_name.clone(), value);
                                 dfg_mut!(ctx.module, function)
                                     .assign_local_value_name(value, param_name.clone())
-                                    .map_err(|_| BuilderErr::NameDuplicated)?;
+                                    .map_err(|_| AstSyntaxErr::NameDuplicated)?;
                             }
                             let block: Block =
                                 dfg_mut!(ctx.module, function).builder().block(params)?;
                             ctx.map_block(ast_block.name.clone(), block);
                             dfg_mut!(ctx.module, function)
                                 .assign_block_name(block, ast_block.name.clone())
-                                .map_err(|_| BuilderErr::NameDuplicated)?;
+                                .map_err(|_| AstSyntaxErr::NameDuplicated)?;
                             layout_mut!(ctx.module, function)
                                 .append_block(block)
                                 .unwrap();
@@ -170,7 +188,7 @@ impl Ast {
         inst: &AstNodeBox,
         ctx: &mut AstLoweringContext,
         function: Function,
-    ) -> Result<Value, BuilderErr> {
+    ) -> Result<Value, AstSyntaxErr> {
         match inst.as_ref() {
             AstNode::Inst(ast_inst) => {
                 let value = match &ast_inst.kind {
@@ -311,7 +329,7 @@ impl Ast {
                     ctx.map_local(ast_inst.dest.clone().unwrap(), value);
                     dfg_mut!(ctx.module, function)
                         .assign_local_value_name(value, ast_inst.dest.clone().unwrap())
-                        .map_err(|_| BuilderErr::NameDuplicated)?;
+                        .map_err(|_| AstSyntaxErr::NameDuplicated)?;
                 }
                 Ok(value)
             }
@@ -324,7 +342,7 @@ impl Ast {
         operand: &AstNodeBox,
         ctx: &mut AstLoweringContext,
         function: Function,
-    ) -> Result<Value, BuilderErr> {
+    ) -> Result<Value, AstSyntaxErr> {
         match operand.as_ref() {
             AstNode::Operand(operand) => match operand.value.as_ref() {
                 AstNode::GlobalIdent(ref name) => ctx.get_value(name),
@@ -334,6 +352,7 @@ impl Ast {
                         dfg_mut!(ctx.module, function)
                             .builder()
                             .bytes(ty.clone(), bytes.clone())
+                            .map_err(|e| e.into())
                     } else {
                         panic!("Type not found for local constant")
                     }
@@ -349,7 +368,7 @@ impl Ast {
         ty: Type,
         init: &AstNodeBox,
         module: &mut Module,
-    ) -> Result<Value, BuilderErr> {
+    ) -> Result<Value, AstSyntaxErr> {
         let value = match init.as_ref() {
             AstNode::Array(array) => {
                 let (_size, elem_type) =
@@ -365,10 +384,12 @@ impl Ast {
             AstNode::Struct(struct_) => {
                 let struct_ty = match ty.kind() {
                     TypeKind::Struct(_) => ty.clone(),
-                    TypeKind::Type(name) => {
-                        module.custom_type(name).ok_or(BuilderErr::TypeNotFound)?
+                    TypeKind::Identified(name) => {
+                        let struct_ty = Type::get_identified(name)
+                            .ok_or(BuilderErr::IdentifiedTypeNotFound(name.clone()))?;
+                        struct_ty.clone()
                     }
-                    _ => return Err(BuilderErr::InvalidType(ty.clone())),
+                    _ => return Err(BuilderErr::InvalidType(ty.clone()).into()),
                 };
                 let struct_ty = struct_ty
                     .as_struct()

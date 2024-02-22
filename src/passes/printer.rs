@@ -2,6 +2,7 @@ use crate::ir::{
     entities::{FunctionData, FunctionKind, ValueKind},
     module::{DataFlowGraph, Module},
     pass::GlobalPass,
+    types::Type,
     values::Value,
 };
 
@@ -25,8 +26,8 @@ where
     fn print_module(&mut self, module: &Module) -> io::Result<()> {
         writeln!(self.buf, "# orzir module: {} ", module.name())?;
         writeln!(self.buf)?;
-        for name in module.custom_type_layout() {
-            let ty = module.custom_type(name).unwrap();
+        for name in module.identified_type_layout() {
+            let ty = Type::get_identified(name).unwrap();
             writeln!(self.buf, "type {} = {}", name, ty)?;
         }
 
