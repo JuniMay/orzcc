@@ -24,7 +24,7 @@ where
 
     fn print_module(&mut self, module: &Module) -> io::Result<()> {
         writeln!(self.buf, "# orzir module: {} ", module.name())?;
-
+        writeln!(self.buf)?;
         for name in module.custom_type_layout() {
             let ty = module.custom_type(name).unwrap();
             writeln!(self.buf, "type {} = {}", name, ty)?;
@@ -91,6 +91,8 @@ where
                 self.print_local_value(inst.into(), dfg)?;
                 writeln!(self.buf)?;
             }
+
+            writeln!(self.buf)?;
         }
 
         writeln!(self.buf, "}}")

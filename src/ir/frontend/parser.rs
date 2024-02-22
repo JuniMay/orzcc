@@ -486,7 +486,7 @@ where
 
     /// Parse operand w/o parameters
     fn parse_operand(&mut self) -> Result<AstNodeBox, ParseError> {
-        let ty = self.parse_type()?;
+        let ty = self.parse_type().ok();
         let token = self.peek_token()?;
         let ident: Box<AstNode> = match token.kind {
             TokenKind::GlobalIdent(ref name) => AstNode::new_boxed_global_ident(name.clone()),
@@ -567,50 +567,3 @@ where
     }
 }
 
-#[cfg(test)]
-mod test {
-    use std::io::Cursor;
-
-    use super::Parser;
-
-    #[test]
-    fn test_parser0() {
-        let mut buf = Cursor::new("#123\n fn @fib (i32) -> i32 { ^bb: ret i32 %n }     #123");
-        let mut parser = Parser::new(&mut buf);
-        let ast = parser.parse();
-        println!("{:?}", ast)
-    }
-
-    #[test]
-    fn test_parser1() {
-        let mut buf = Cursor::new(
-            r#"global @x = i32 0x10101010
-const @y = i32 0x20202020
-type $z = { i32, float }
-global @array = [ i32; 3 ] [ 0x01, 0x02, 0x03 ]
-global @arrarr = [ [float ;3]; 4] [ [0x1, 0x2, 0x3],[0x1, 0x2, 0x3],[0x1, 0x2, 0x3]]
-
-fn @fib(i32) -> i32 {
-
-^entry(i32 %0):
-    %cond = icmp.sle i32 %0, i32 1234
-    br i1 %cond, ^ret(i32 0x01), ^else(i32 %0)
-
-^else(i32 %1):
-    %2 = sub i32 %1, i32 0x01
-    %3 = sub i32 %1, i32 0x02
-    %4 = call i32 @fib(i32 %2)
-    %5 = call i32 @fib(i32 %3)
-    %6 = add i32 %4, i32 %5
-    jump ^ret(i32 %6)
-
-^ret(i32 %result, float %123):
-    ret i32 %result
-}
-"#,
-        );
-        let mut parser = Parser::new(&mut buf);
-        let ast = parser.parse();
-        println!("{:#?}", ast)
-    }
-}

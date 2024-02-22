@@ -96,14 +96,14 @@ impl Callee {
 #[derive(Debug)]
 pub struct Operand {
     /// The type of the operand.
-    pub ty: Type,
+    pub ty: Option<Type>,
 
     /// The value of the operand.
     pub value: AstNodeBox,
 }
 
 impl Operand {
-    pub fn new_boxed(ty: Type, value: AstNodeBox) -> AstNodeBox {
+    pub fn new_boxed(ty: Option<Type>, value: AstNodeBox) -> AstNodeBox {
         Box::new(AstNode::Operand(Operand { ty, value }))
     }
 }

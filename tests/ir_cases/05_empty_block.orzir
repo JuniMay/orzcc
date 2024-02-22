@@ -1,15 +1,15 @@
 fn @square(i32) -> i32 {
 ^entry(i32 %0):
-    %result = mul i32 %0, i32 %0
-    ret i32 %result
+    %result = mul %0, %0
+    ret %result
 }
 
 fn @sum_of_squares(i32, i32) -> i32 {
 ^entry(i32 %0, i32 %1):
     %sq1 = call i32 @square(i32 %0)
     %sq2 = call i32 @square(i32 %1)
-    %sum = add i32 %sq1, i32 %sq2
-    ret i32 %sum
+    %sum = add %sq1, %sq2
+    ret %sum
 ^new:
 ^newer:
 }

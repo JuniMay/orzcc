@@ -329,9 +329,15 @@ impl Ast {
             AstNode::Operand(operand) => match operand.value.as_ref() {
                 AstNode::GlobalIdent(ref name) => ctx.get_value(name),
                 AstNode::LocalIdent(ref name) => ctx.get_value(name),
-                AstNode::Bytes(ref bytes) => dfg_mut!(ctx.module, function)
-                    .builder()
-                    .bytes(operand.ty.clone(), bytes.clone()),
+                AstNode::Bytes(ref bytes) => {
+                    if let Some(ref ty) = operand.ty {
+                        dfg_mut!(ctx.module, function)
+                            .builder()
+                            .bytes(ty.clone(), bytes.clone())
+                    } else {
+                        panic!("Type not found for local constant")
+                    }
+                }
                 _ => unreachable!(),
             },
             _ => unreachable!(),
