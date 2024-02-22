@@ -1,5 +1,6 @@
 pub mod builder;
 pub mod entities;
+pub mod exec;
 pub mod frontend;
 pub mod layout;
 pub mod module;
