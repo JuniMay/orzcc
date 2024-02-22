@@ -1,6 +1,14 @@
 global @a = i32 0x00000001
 global @b = i32 0x00000002
 
+fn @main() -> i32 {
+^entry:
+    %a = load i32, ptr @a
+    %b = load i32, ptr @b
+    %result = call i32 @add(i32 %a, i32 %b)
+    ret i32 %result
+}
+
 fn @add(i32, i32) -> i32 {
 ^entry(i32 %0, i32 %1):
     %result = add i32 %0, i32 %1

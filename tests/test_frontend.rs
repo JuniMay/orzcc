@@ -44,8 +44,8 @@ fn test_ast() {
 }
 
 
-fn test_ir(str: &str) {
-    let mut buf = Cursor::new(str);
+fn test_ir(ir: &str) {
+    let mut buf = Cursor::new(ir);
     let mut parser = Parser::new(&mut buf);
     let ast = parser.parse().unwrap();
     let mut module = ast.into_ir("test".into()).unwrap();
@@ -55,17 +55,37 @@ fn test_ir(str: &str) {
 }
 
 #[test]
-fn test_ir_cases() {
-    // get testcase str under `ir_cases` dir of the project
-    let path = std::path::Path::new("tests/ir_cases");
-    // traverse all files
-    for entry in std::fs::read_dir(path).unwrap() {
-        let entry = entry.unwrap();
-        let path = entry.path();
-        println!("path: {:?}", path);
-        if path.is_file() {
-            let str = std::fs::read_to_string(path).unwrap();
-            test_ir(&str);
-        }
-    }
+fn test_00() {
+    let ir = include_str!("ir_cases/00_arithmetic.orzir");
+    test_ir(ir);
+}
+
+#[test]
+fn test_01() {
+    let ir = include_str!("ir_cases/01_cond_branch.orzir");
+    test_ir(ir);
+}
+
+#[test]
+fn test_02() {
+    let ir = include_str!("ir_cases/02_loop.orzir");
+    test_ir(ir);
+}
+
+#[test]
+fn test_03() {
+    let ir = include_str!("ir_cases/03_call.orzir");
+    test_ir(ir);
+}
+
+#[test]
+fn test_04() {
+    let ir = include_str!("ir_cases/04_rec.orzir");
+    test_ir(ir);
+}
+
+#[test]
+fn test_05() {
+    let ir = include_str!("ir_cases/05_empty_block.orzir");
+    test_ir(ir);
 }

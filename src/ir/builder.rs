@@ -426,7 +426,7 @@ pub trait GlobalValueBuilder: QueryValueData + AddValue + ConstantBuilder {
         }
 
         self.add_value(GlobalSlot::new_value_data(
-            self.value_type(init)?.clone(),
+            Type::mk_ptr(),
             init,
             mutable,
         ))

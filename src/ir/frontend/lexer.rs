@@ -222,6 +222,9 @@ where
                 "urem" => TokenKind::Inst(InstKind::Binary(BinaryOp::URem)),
                 "srem" => TokenKind::Inst(InstKind::Binary(BinaryOp::SRem)),
                 "frem" => TokenKind::Inst(InstKind::Binary(BinaryOp::FRem)),
+                "and" => TokenKind::Inst(InstKind::Binary(BinaryOp::And)),
+                "or" => TokenKind::Inst(InstKind::Binary(BinaryOp::Or)),
+                "xor" => TokenKind::Inst(InstKind::Binary(BinaryOp::Xor)),
                 "shl" => TokenKind::Inst(InstKind::Binary(BinaryOp::Shl)),
                 "lshr" => TokenKind::Inst(InstKind::Binary(BinaryOp::LShr)),
                 "ashr" => TokenKind::Inst(InstKind::Binary(BinaryOp::AShr)),
@@ -237,6 +240,8 @@ where
                 "fcmp.ole" => TokenKind::Inst(InstKind::Binary(BinaryOp::FCmp(FCmpCond::OLe))),
 
                 "fneg" => TokenKind::Inst(InstKind::Unary(UnaryOp::FNeg)),
+                "not" => TokenKind::Inst(InstKind::Unary(UnaryOp::Not)),
+
                 "store" => TokenKind::Inst(InstKind::Store),
                 "load" => TokenKind::Inst(InstKind::Load),
                 "alloc" => TokenKind::Inst(InstKind::Alloc),

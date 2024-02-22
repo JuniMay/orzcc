@@ -16,6 +16,7 @@ use super::{
 
 struct AstLoweringContext {
     module: Module,
+    global_map: HashMap<String, Value>,
     value_map: HashMap<String, Value>,
     block_map: HashMap<String, Block>,
 }
@@ -24,13 +25,18 @@ impl AstLoweringContext {
     fn new(module_name: String) -> Self {
         Self {
             module: Module::new(module_name),
+            global_map: HashMap::new(),
             value_map: HashMap::new(),
             block_map: HashMap::new(),
         }
     }
 
-    fn map_value(&mut self, name: String, value: Value) {
+    fn map_local(&mut self, name: String, value: Value) {
         self.value_map.insert(name, value);
+    }
+
+    fn map_global(&mut self, name: String, value: Value) {
+        self.global_map.insert(name, value);
     }
 
     fn map_block(&mut self, name: String, block: Block) {
@@ -41,6 +47,7 @@ impl AstLoweringContext {
         self.value_map
             .get(name)
             .cloned()
+            .or_else(|| self.global_map.get(name).cloned())
             .ok_or(BuilderErr::ValueNotFound)
     }
 
@@ -80,7 +87,7 @@ impl Ast {
 
                     let init = self.global_init_to_value(ty.clone(), &def.init, &mut ctx.module)?;
                     let value = ctx.module.builder().global_slot(init, mutable)?;
-                    ctx.map_value(name, value);
+                    ctx.map_global(name, value);
                 }
                 AstNode::FunctionDecl(decl) => {
                     let name = decl.name.clone();
@@ -88,7 +95,7 @@ impl Ast {
 
                     let function = ctx.module.builder().function_decl(name.clone(), ty)?;
 
-                    ctx.map_value(name, function.into());
+                    ctx.map_global(name, function.into());
                 }
                 AstNode::FunctionDef(def) => {
                     let function = ctx
@@ -96,53 +103,63 @@ impl Ast {
                         .builder()
                         .function_def(def.name.clone(), def.ty.clone())?;
 
-                    ctx.map_value(def.name.clone(), function.into());
-
-                    for block_node in def.blocks.iter() {
-                        match block_node.as_ref() {
-                            AstNode::Block(ast_block) => {
-                                let mut params = Vec::new();
-                                for (param_type, param_name) in ast_block.params.iter() {
-                                    let value = dfg_mut!(ctx.module, function)
-                                        .builder()
-                                        .block_param(param_type.clone())?;
-                                    params.push(value);
-                                    ctx.map_value(param_name.clone(), value);
-                                    dfg_mut!(ctx.module, function)
-                                        .assign_local_value_name(value, param_name.clone())
-                                        .map_err(|_| BuilderErr::NameDuplicated)?;
-                                }
-                                let block: Block =
-                                    dfg_mut!(ctx.module, function).builder().block(params)?;
-                                ctx.map_block(ast_block.name.clone(), block);
-                                dfg_mut!(ctx.module, function)
-                                    .assign_block_name(block, ast_block.name.clone())
-                                    .map_err(|_| BuilderErr::NameDuplicated)?;
-                                layout_mut!(ctx.module, function)
-                                    .append_block(block)
-                                    .unwrap();
-                            }
-                            _ => unreachable!(),
-                        }
-                    }
-
-                    for block_node in def.blocks.iter() {
-                        match block_node.as_ref() {
-                            AstNode::Block(ast_block) => {
-                                let block: Block = ctx.get_block(&ast_block.name)?;
-                                for inst_node in ast_block.insts.iter() {
-                                    let inst =
-                                        self.inst_to_value(inst_node, &mut ctx, function)?.into();
-                                    layout_mut!(ctx.module, function)
-                                        .append_inst(inst, block)
-                                        .unwrap();
-                                }
-                            }
-                            _ => unreachable!(),
-                        }
-                    }
+                    ctx.map_global(def.name.clone(), function.into());
                 }
                 _ => unreachable!(),
+            }
+        }
+
+        for item in self.items.iter() {
+            if let AstNode::FunctionDef(def) = item.as_ref() {
+
+                let function = ctx.get_value(&def.name)?.into();
+
+                for block_node in def.blocks.iter() {
+                    match block_node.as_ref() {
+                        AstNode::Block(ast_block) => {
+                            let mut params = Vec::new();
+                            for (param_type, param_name) in ast_block.params.iter() {
+                                let value = dfg_mut!(ctx.module, function)
+                                    .builder()
+                                    .block_param(param_type.clone())?;
+                                params.push(value);
+                                ctx.map_local(param_name.clone(), value);
+                                dfg_mut!(ctx.module, function)
+                                    .assign_local_value_name(value, param_name.clone())
+                                    .map_err(|_| BuilderErr::NameDuplicated)?;
+                            }
+                            let block: Block =
+                                dfg_mut!(ctx.module, function).builder().block(params)?;
+                            ctx.map_block(ast_block.name.clone(), block);
+                            dfg_mut!(ctx.module, function)
+                                .assign_block_name(block, ast_block.name.clone())
+                                .map_err(|_| BuilderErr::NameDuplicated)?;
+                            layout_mut!(ctx.module, function)
+                                .append_block(block)
+                                .unwrap();
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+
+                for block_node in def.blocks.iter() {
+                    match block_node.as_ref() {
+                        AstNode::Block(ast_block) => {
+                            let block: Block = ctx.get_block(&ast_block.name)?;
+                            for inst_node in ast_block.insts.iter() {
+                                let inst =
+                                    self.inst_to_value(inst_node, &mut ctx, function)?.into();
+                                layout_mut!(ctx.module, function)
+                                    .append_inst(inst, block)
+                                    .unwrap();
+                            }
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+
+                // remove all local-scoped values
+                ctx.value_map.clear();
             }
         }
 
@@ -285,7 +302,7 @@ impl Ast {
                     }
                 };
                 if ast_inst.dest.is_some() {
-                    ctx.map_value(ast_inst.dest.clone().unwrap(), value);
+                    ctx.map_local(ast_inst.dest.clone().unwrap(), value);
                     dfg_mut!(ctx.module, function)
                         .assign_local_value_name(value, ast_inst.dest.clone().unwrap())
                         .map_err(|_| BuilderErr::NameDuplicated)?;

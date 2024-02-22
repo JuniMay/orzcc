@@ -29,10 +29,11 @@ cargo tarpaulin
 ```
 
 ## TODO
- - [ ] IR Parser
-    - [ ] binary logics
-    - [ ] unary logics
-    - [ ] type cast
-    - [ ] empty branch
-    - [ ] duplicate name
-    - [ ] global valuing local scope for printer
+
+- [ ] IR Parser
+  - [x] binary logics
+  - [x] unary logics
+  - [ ] type cast
+  - [x] emoty branch
+  - [x] duplicate name
+  - [x] global valuing local scope for printer

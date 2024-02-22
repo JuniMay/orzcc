@@ -255,6 +255,8 @@ impl fmt::Display for BinaryOp {
 pub enum UnaryOp {
     /// Floating point negation
     FNeg,
+    /// Not
+    Not,
 }
 
 impl UnaryOp {
@@ -265,9 +267,7 @@ impl UnaryOp {
 
     /// If the operation requires floating-point operands
     pub(super) fn require_float(&self) -> bool {
-        match self {
-            UnaryOp::FNeg => true,
-        }
+        matches!(self, UnaryOp::FNeg)
     }
 }
 
@@ -275,6 +275,7 @@ impl fmt::Display for UnaryOp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             UnaryOp::FNeg => write!(f, "fneg"),
+            UnaryOp::Not => write!(f, "not"),
         }
     }
 }

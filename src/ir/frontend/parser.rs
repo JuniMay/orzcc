@@ -556,7 +556,7 @@ where
                 let callee = Callee::new_boxed(name, params);
                 Ok(callee)
             }
-            _ => Err(self.unexpected_token()),
+            _ => Ok(Callee::new_boxed(name, Vec::new())),
         }
     }
 }

@@ -98,13 +98,14 @@ where
 
     /// Print the value as operand in the instruction
     fn print_operand(&mut self, value: Value, dfg: &DataFlowGraph) -> io::Result<()> {
-        let data = dfg.local_value_data(value).unwrap();
-
-        if data.kind().is_const() {
-            return self.print_local_value(value, dfg);
-        }
-
-        write!(self.buf, "{} {}", data.ty(), dfg.value_name(value))
+        dfg.with_value_data(value, |data| {
+            if data.kind().is_const() {
+                self.print_local_value(value, dfg)
+            } else {
+                write!(self.buf, "{} {}", data.ty(), dfg.value_name(value))
+            }
+        })
+        .unwrap()
     }
 
     fn print_global_value(&mut self, value: Value, module: &Module) -> io::Result<()> {
@@ -167,6 +168,9 @@ where
             ValueKind::Bytes(bytes) => {
                 // hexidecimal format with little endian
                 write!(self.buf, "{} 0x", data.ty())?;
+                if bytes.is_empty() {
+                    write!(self.buf, "00")?;
+                }
                 for byte in bytes.iter().rev() {
                     write!(self.buf, "{:02x}", byte)?;
                 }
@@ -228,21 +232,29 @@ where
             ValueKind::Branch(branch) => {
                 write!(self.buf, "br ")?;
                 self.print_operand(branch.cond(), dfg)?;
-                write!(self.buf, ", {}(", dfg.block_name(branch.then_dst()))?;
-                for (i, arg) in branch.then_args().iter().enumerate() {
-                    if i != 0 {
-                        write!(self.buf, ", ")?;
+                write!(self.buf, ", {}", dfg.block_name(branch.then_dst()))?;
+                if !branch.then_args().is_empty() {
+                    write!(self.buf, "(")?;
+                    for (i, arg) in branch.then_args().iter().enumerate() {
+                        if i != 0 {
+                            write!(self.buf, ", ")?;
+                        }
+                        self.print_operand(*arg, dfg)?;
                     }
-                    self.print_operand(*arg, dfg)?;
+                    write!(self.buf, ")")?;
                 }
-                write!(self.buf, "), {}(", dfg.block_name(branch.else_dst()))?;
-                for (i, arg) in branch.else_args().iter().enumerate() {
-                    if i != 0 {
-                        write!(self.buf, ", ")?;
+                write!(self.buf, ", {}", dfg.block_name(branch.else_dst()))?;
+                if !branch.else_args().is_empty() {
+                    write!(self.buf, "(")?;
+                    for (i, arg) in branch.else_args().iter().enumerate() {
+                        if i != 0 {
+                            write!(self.buf, ", ")?;
+                        }
+                        self.print_operand(*arg, dfg)?;
                     }
-                    self.print_operand(*arg, dfg)?;
+                    write!(self.buf, ")")?;
                 }
-                write!(self.buf, ")")
+                Ok(())
             }
             ValueKind::Return(ret) => {
                 write!(self.buf, "ret ")?;
