@@ -131,6 +131,12 @@ impl fmt::Display for LayoutOpErr {
 
 impl Error for LayoutOpErr {}
 
+impl Default for Layout {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Layout {
     pub fn new() -> Self {
         Self {

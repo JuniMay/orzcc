@@ -1,6 +1,6 @@
 use super::values::{BinaryOp, UnaryOp};
 
-pub(self) mod lexer;
+ mod lexer;
 
 pub mod ast;
 pub mod convert;
@@ -8,7 +8,7 @@ pub mod parser;
 pub mod tokens;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(self) enum KeywordKind {
+ enum KeywordKind {
     /// `fn`
     Fn,
 

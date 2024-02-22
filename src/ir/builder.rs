@@ -241,22 +241,16 @@ pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
         let lhs_type = self.value_type(lhs)?;
         let rhs_type = self.value_type(rhs)?;
 
-        if op.require_int() {
-            if !lhs_type.is_int() || !rhs_type.is_int() {
-                return Err(BuilderErr::InvalidType);
-            }
+        if op.require_int() && (!lhs_type.is_int() || !rhs_type.is_int()) {
+            return Err(BuilderErr::InvalidType);
         }
 
-        if op.require_float() {
-            if !lhs_type.is_float() || !rhs_type.is_float() {
-                return Err(BuilderErr::InvalidType);
-            }
+        if op.require_float() && (!lhs_type.is_float() || !rhs_type.is_float()) {
+            return Err(BuilderErr::InvalidType);
         }
 
-        if op.require_same_type() {
-            if lhs_type != rhs_type {
-                return Err(BuilderErr::IncompatibleType);
-            }
+        if op.require_same_type() && lhs_type != rhs_type {
+            return Err(BuilderErr::IncompatibleType);
         }
 
         let res_type = match op {
@@ -271,16 +265,12 @@ pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
     fn unary(&mut self, op: UnaryOp, val: Value) -> Result<Value, BuilderErr> {
         let val_type = self.value_type(val)?;
 
-        if op.require_int() {
-            if !val_type.is_int() {
-                return Err(BuilderErr::InvalidType);
-            }
+        if op.require_int() && !val_type.is_int() {
+            return Err(BuilderErr::InvalidType);
         }
 
-        if op.require_float() {
-            if !val_type.is_float() {
-                return Err(BuilderErr::InvalidType);
-            }
+        if op.require_float() && !val_type.is_float() {
+            return Err(BuilderErr::InvalidType);
         }
 
         self.add_value(Unary::new_value_data(val_type, op, val))

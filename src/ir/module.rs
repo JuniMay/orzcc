@@ -42,6 +42,12 @@ pub struct DataFlowGraph {
     global_name_allocator: Weak<RefCell<ValueNameAllocator>>,
 }
 
+impl Default for DataFlowGraph {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DataFlowGraph {
     pub fn new() -> Self {
         Self {
@@ -105,7 +111,7 @@ impl DataFlowGraph {
 
     /// Get the name of a local or global value
     pub fn value_name(&self, value: Value) -> String {
-        if let Some(_) = self.local_value_data(value) {
+        if self.local_value_data(value).is_some() {
             self.value_name_allocator.borrow_mut().get(value)
         } else {
             self.global_name_allocator
@@ -305,6 +311,12 @@ pub struct IdAllocator {
     counter: usize,
 }
 
+impl Default for IdAllocator {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl IdAllocator {
     pub fn new() -> Self {
         Self { counter: 0 }
@@ -415,7 +427,7 @@ where
             .or_else(|| self.allocated.get(&key))
             .cloned()
             .or_else(|| {
-                self.allocate(key.clone())
+                self.allocate(key)
                     .expect("allocation should be successful for non-existed key.");
                 self.allocated.get(&key).cloned()
             });

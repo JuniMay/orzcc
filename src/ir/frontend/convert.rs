@@ -161,40 +161,40 @@ impl Ast {
                     InstKind::Binary(op) => {
                         let lhs = self.operand_to_value(&ast_inst.operands[0], ctx, function)?;
                         let rhs = self.operand_to_value(&ast_inst.operands[1], ctx, function)?;
-                        let value = dfg_mut!(ctx.module, function).builder().binary(
+                        
+                        dfg_mut!(ctx.module, function).builder().binary(
                             op.clone(),
                             lhs,
                             rhs,
-                        )?;
-                        value
+                        )?
                     }
                     InstKind::Unary(op) => {
                         let operand =
                             self.operand_to_value(&ast_inst.operands[0], ctx, function)?;
-                        let value = dfg_mut!(ctx.module, function)
+                        
+                        dfg_mut!(ctx.module, function)
                             .builder()
-                            .unary(op.clone(), operand)?;
-                        value
+                            .unary(op.clone(), operand)?
                     }
                     InstKind::Store => {
                         let val = self.operand_to_value(&ast_inst.operands[0], ctx, function)?;
                         let ptr = self.operand_to_value(&ast_inst.operands[1], ctx, function)?;
-                        let value = dfg_mut!(ctx.module, function).builder().store(val, ptr)?;
-                        value
+                        
+                        dfg_mut!(ctx.module, function).builder().store(val, ptr)?
                     }
                     InstKind::Load => {
                         let ptr = self.operand_to_value(&ast_inst.operands[0], ctx, function)?;
-                        let value = dfg_mut!(ctx.module, function)
-                            .builder()
-                            .load(ast_inst.ty.clone().unwrap(), ptr)?;
+                        
 
-                        value
+                        dfg_mut!(ctx.module, function)
+                            .builder()
+                            .load(ast_inst.ty.clone().unwrap(), ptr)?
                     }
                     InstKind::Alloc => {
-                        let value = dfg_mut!(ctx.module, function)
+                        
+                        dfg_mut!(ctx.module, function)
                             .builder()
-                            .alloc(ast_inst.ty.clone().unwrap())?;
-                        value
+                            .alloc(ast_inst.ty.clone().unwrap())?
                     }
                     InstKind::Jump => {
                         let (name, args) = match ast_inst.operands[0].as_ref() {
@@ -210,8 +210,8 @@ impl Ast {
                         };
 
                         let block = ctx.get_block(&name)?;
-                        let value = dfg_mut!(ctx.module, function).builder().jump(block, args)?;
-                        value
+                        
+                        dfg_mut!(ctx.module, function).builder().jump(block, args)?
                     }
                     InstKind::Branch => {
                         let cond = self.operand_to_value(&ast_inst.operands[0], ctx, function)?;
@@ -239,10 +239,10 @@ impl Ast {
                         };
                         let then_block = ctx.get_block(&then_name)?;
                         let else_block = ctx.get_block(&else_name)?;
-                        let value = dfg_mut!(ctx.module, function)
+                        
+                        dfg_mut!(ctx.module, function)
                             .builder()
-                            .branch(cond, then_block, else_block, then_args, else_args)?;
-                        value
+                            .branch(cond, then_block, else_block, then_args, else_args)?
                     }
                     InstKind::Return => {
                         let value = if ast_inst.operands.is_empty() {
@@ -252,8 +252,8 @@ impl Ast {
                                 self.operand_to_value(&ast_inst.operands[0], ctx, function)?;
                             Some(value)
                         };
-                        let value = dfg_mut!(ctx.module, function).builder().return_(value)?;
-                        value
+                        
+                        dfg_mut!(ctx.module, function).builder().return_(value)?
                     }
                     InstKind::Call => {
                         let (name, args) = match ast_inst.operands[0].as_ref() {
@@ -268,12 +268,12 @@ impl Ast {
                             _ => unreachable!(),
                         };
                         let callee = ctx.get_value(&name)?;
-                        let value = dfg_mut!(ctx.module, function).builder().call(
+                        
+                        dfg_mut!(ctx.module, function).builder().call(
                             ast_inst.ty.clone().unwrap(),
                             callee,
                             args,
-                        )?;
-                        value
+                        )?
                     }
                     InstKind::GetElemPtr => {
                         let ptr = self.operand_to_value(&ast_inst.operands[0], ctx, function)?;
@@ -282,12 +282,12 @@ impl Ast {
                             let value = self.operand_to_value(index, ctx, function)?;
                             indices.push(value);
                         }
-                        let value = dfg_mut!(ctx.module, function).builder().getelemptr(
+                        
+                        dfg_mut!(ctx.module, function).builder().getelemptr(
                             ptr,
                             ast_inst.ty.clone().unwrap(),
                             indices,
-                        )?;
-                        value
+                        )?
                     }
                 };
                 if ast_inst.dest.is_some() {
@@ -335,8 +335,8 @@ impl Ast {
                     let value = self.global_init_to_value(elem_type.clone(), elem, module)?;
                     values.push(value);
                 }
-                let value = module.builder().array(ty, values)?;
-                value
+                
+                module.builder().array(ty, values)?
             }
             AstNode::Struct(struct_) => {
                 let struct_ty = ty.as_struct().ok_or(BuilderErr::InvalidType)?;
@@ -345,12 +345,12 @@ impl Ast {
                     let value = self.global_init_to_value(struct_ty[i].clone(), field, module)?;
                     values.push(value);
                 }
-                let value = module.builder().struct_(ty, values)?;
-                value
+                
+                module.builder().struct_(ty, values)?
             }
             AstNode::Bytes(bytes) => {
-                let value = module.builder().bytes(ty, bytes.clone())?;
-                value
+                
+                module.builder().bytes(ty, bytes.clone())?
             }
             _ => unreachable!(),
         };

@@ -23,11 +23,11 @@ where
     }
 
     fn print_module(&mut self, module: &Module) -> io::Result<()> {
-        write!(self.buf, "# orzir module: {} \n", module.name())?;
+        writeln!(self.buf, "# orzir module: {} ", module.name())?;
 
         for name in module.custom_type_layout() {
             let ty = module.custom_type(name).unwrap();
-            write!(self.buf, "type {} = {}\n", name, ty)?;
+            writeln!(self.buf, "type {} = {}", name, ty)?;
         }
 
         for value in module.global_slot_layout() {
@@ -36,7 +36,7 @@ where
                 .unwrap()
             {
                 self.print_global_value(*value, module)?;
-                write!(self.buf, "\n")?;
+                writeln!(self.buf)?;
             }
         }
 
@@ -52,9 +52,9 @@ where
             return Ok(());
         }
 
-        write!(self.buf, "\n")?;
+        writeln!(self.buf)?;
 
-        write!(self.buf, "fn {}{} {{\n", data.name(), data.ty())?;
+        writeln!(self.buf, "fn {}{} {{", data.name(), data.ty())?;
 
         if let FunctionKind::Declaration = data.kind() {
             return Ok(());
@@ -68,7 +68,7 @@ where
 
             write!(self.buf, "{}", dfg.block_name(block))?;
 
-            if block_data.params().len() > 0 {
+            if !block_data.params().is_empty() {
                 write!(self.buf, "(")?;
                 for (i, param) in block_data.params().iter().enumerate() {
                     if i != 0 {
@@ -81,19 +81,19 @@ where
                         dfg.value_name(*param)
                     )?;
                 }
-                write!(self.buf, "):\n")?;
+                writeln!(self.buf, "):")?;
             } else {
-                write!(self.buf, ":\n")?;
+                writeln!(self.buf, ":")?;
             }
 
             for (inst, _) in node.insts().into_iter() {
                 write!(self.buf, "    ")?;
                 self.print_local_value(inst.into(), dfg)?;
-                write!(self.buf, "\n")?;
+                writeln!(self.buf)?;
             }
         }
 
-        write!(self.buf, "}}\n")
+        writeln!(self.buf, "}}")
     }
 
     /// Print the value as operand in the instruction
@@ -216,7 +216,7 @@ where
                 self.print_operand(unary.val(), dfg)
             }
             ValueKind::Jump(jump) => {
-                write!(self.buf, "jump {}(", dfg.block_name(jump.dst().into()))?;
+                write!(self.buf, "jump {}(", dfg.block_name(jump.dst()))?;
                 for (i, arg) in jump.args().iter().enumerate() {
                     if i != 0 {
                         write!(self.buf, ", ")?;

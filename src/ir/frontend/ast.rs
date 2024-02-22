@@ -8,6 +8,12 @@ pub struct Ast {
     pub(super) items: Vec<AstNodeBox>,
 }
 
+impl Default for Ast {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Ast {
     pub fn new() -> Self {
         Self { items: Vec::new() }

@@ -247,7 +247,7 @@ where
                 "getelemptr" => TokenKind::Inst(InstKind::GetElemPtr),
 
                 _ => {
-                    if word.starts_with("i") {
+                    if word.starts_with('i') {
                         // parse the number
                         let number = word.chars().skip(1).collect::<String>();
                         let number = number.parse::<u64>();

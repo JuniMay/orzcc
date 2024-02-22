@@ -306,7 +306,7 @@ mod test {
         );
         let ty1 = Type::mk_struct(vec![Type::mk_int(32), Type::mk_int(64)]);
         let ty2 = Type::mk_struct(vec![Type::mk_int(32), Type::mk_int(64)]);
-        assert!(matches!(ty1.as_struct(), Some(_)));
+        assert!(ty1.as_struct().is_some());
         assert_eq!(ty1, ty2);
     }
 

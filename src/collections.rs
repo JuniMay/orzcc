@@ -62,6 +62,16 @@ where
     KeyDuplicated(K),
 }
 
+impl<K, N> Default for BiLinkedList<K, N>
+where
+    K: Copy + Eq + Hash,
+    N: BiLinkedNode<K>,
+ {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<K, N> BiLinkedList<K, N>
 where
     K: Copy + Eq + Hash,
@@ -107,7 +117,7 @@ where
         // set the node as the next of the tail
         node.set_prev(self.tail);
 
-        if let Some(_) = self.head {
+        if self.head.is_some() {
             // fix link from tail to node
             self.nodes
                 .get_mut(
@@ -233,7 +243,7 @@ where
 
     fn into_iter(self) -> Self::IntoIter {
         BiLinkedIter {
-            list: &self,
+            list: self,
             curr: self.head,
         }
     }

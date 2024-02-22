@@ -43,7 +43,7 @@ pub struct Span {
 
 impl Span {
     pub fn new(start: Pos) -> Self {
-        let end = start.clone();
+        let end = start;
         Self { start, end }
     }
 

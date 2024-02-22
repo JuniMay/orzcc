@@ -9,19 +9,19 @@ pub mod types;
 pub mod values;
 
 #[allow(dead_code)]
-const IDENTIFIER_PREFIX: &'static str = "%";
+const IDENTIFIER_PREFIX: &str = "%";
 
 #[allow(dead_code)]
-const BLOCK_PREFIX: &'static str = "^";
+const BLOCK_PREFIX: &str = "^";
 
 #[allow(dead_code)]
-const GLOBAL_PREFIX: &'static str = "@";
+const GLOBAL_PREFIX: &str = "@";
 
 #[allow(dead_code)]
-const TYPE_PREFIX: &'static str = "$";
+const TYPE_PREFIX: &str = "$";
 
 #[allow(dead_code)]
-const INDENT: &'static str = "\t";
+const INDENT: &str = "\t";
 
 #[cfg(test)]
 mod tests {
