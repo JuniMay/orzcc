@@ -138,6 +138,15 @@ impl DataFlowGraph {
     pub fn block_data(&self, block: Block) -> Option<&BlockData> {
         self.blocks.get(&block)
     }
+
+    pub fn custom_type(&self, name: &str) -> Option<Type> {
+        self.custom_types
+            .upgrade()
+            .expect("custom type map should be alive.")
+            .borrow()
+            .get(name)
+            .cloned()
+    }
 }
 
 pub type GlobalValueMap = HashMap<Value, ValueData>;

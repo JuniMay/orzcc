@@ -5,7 +5,7 @@ use crate::ir::{
         BuilderErr, ConstantBuilder, GlobalValueBuilder, LocalBlockBuilder, LocalValueBuilder,
     },
     module::Module,
-    types::Type,
+    types::{Type, TypeKind},
     values::{Block, Function, Value},
 };
 
@@ -161,17 +161,15 @@ impl Ast {
                     InstKind::Binary(op) => {
                         let lhs = self.operand_to_value(&ast_inst.operands[0], ctx, function)?;
                         let rhs = self.operand_to_value(&ast_inst.operands[1], ctx, function)?;
-                        
-                        dfg_mut!(ctx.module, function).builder().binary(
-                            op.clone(),
-                            lhs,
-                            rhs,
-                        )?
+
+                        dfg_mut!(ctx.module, function)
+                            .builder()
+                            .binary(op.clone(), lhs, rhs)?
                     }
                     InstKind::Unary(op) => {
                         let operand =
                             self.operand_to_value(&ast_inst.operands[0], ctx, function)?;
-                        
+
                         dfg_mut!(ctx.module, function)
                             .builder()
                             .unary(op.clone(), operand)?
@@ -179,23 +177,19 @@ impl Ast {
                     InstKind::Store => {
                         let val = self.operand_to_value(&ast_inst.operands[0], ctx, function)?;
                         let ptr = self.operand_to_value(&ast_inst.operands[1], ctx, function)?;
-                        
+
                         dfg_mut!(ctx.module, function).builder().store(val, ptr)?
                     }
                     InstKind::Load => {
                         let ptr = self.operand_to_value(&ast_inst.operands[0], ctx, function)?;
-                        
 
                         dfg_mut!(ctx.module, function)
                             .builder()
                             .load(ast_inst.ty.clone().unwrap(), ptr)?
                     }
-                    InstKind::Alloc => {
-                        
-                        dfg_mut!(ctx.module, function)
-                            .builder()
-                            .alloc(ast_inst.ty.clone().unwrap())?
-                    }
+                    InstKind::Alloc => dfg_mut!(ctx.module, function)
+                        .builder()
+                        .alloc(ast_inst.ty.clone().unwrap())?,
                     InstKind::Jump => {
                         let (name, args) = match ast_inst.operands[0].as_ref() {
                             AstNode::Callee(callee) => {
@@ -210,7 +204,7 @@ impl Ast {
                         };
 
                         let block = ctx.get_block(&name)?;
-                        
+
                         dfg_mut!(ctx.module, function).builder().jump(block, args)?
                     }
                     InstKind::Branch => {
@@ -239,7 +233,7 @@ impl Ast {
                         };
                         let then_block = ctx.get_block(&then_name)?;
                         let else_block = ctx.get_block(&else_name)?;
-                        
+
                         dfg_mut!(ctx.module, function)
                             .builder()
                             .branch(cond, then_block, else_block, then_args, else_args)?
@@ -252,7 +246,7 @@ impl Ast {
                                 self.operand_to_value(&ast_inst.operands[0], ctx, function)?;
                             Some(value)
                         };
-                        
+
                         dfg_mut!(ctx.module, function).builder().return_(value)?
                     }
                     InstKind::Call => {
@@ -268,7 +262,7 @@ impl Ast {
                             _ => unreachable!(),
                         };
                         let callee = ctx.get_value(&name)?;
-                        
+
                         dfg_mut!(ctx.module, function).builder().call(
                             ast_inst.ty.clone().unwrap(),
                             callee,
@@ -282,7 +276,7 @@ impl Ast {
                             let value = self.operand_to_value(index, ctx, function)?;
                             indices.push(value);
                         }
-                        
+
                         dfg_mut!(ctx.module, function).builder().getelemptr(
                             ptr,
                             ast_inst.ty.clone().unwrap(),
@@ -329,29 +323,35 @@ impl Ast {
     ) -> Result<Value, BuilderErr> {
         let value = match init.as_ref() {
             AstNode::Array(array) => {
-                let (_size, elem_type) = ty.as_array().ok_or(BuilderErr::InvalidType)?;
+                let (_size, elem_type) =
+                    ty.as_array().ok_or(BuilderErr::InvalidType(ty.clone()))?;
                 let mut values = Vec::new();
                 for (_i, elem) in array.elems.iter().enumerate() {
                     let value = self.global_init_to_value(elem_type.clone(), elem, module)?;
                     values.push(value);
                 }
-                
+
                 module.builder().array(ty, values)?
             }
             AstNode::Struct(struct_) => {
-                let struct_ty = ty.as_struct().ok_or(BuilderErr::InvalidType)?;
+                let struct_ty = match ty.kind() {
+                    TypeKind::Struct(_) => ty.clone(),
+                    TypeKind::Type(name) => {
+                        module.custom_type(name).ok_or(BuilderErr::TypeNotFound)?
+                    }
+                    _ => return Err(BuilderErr::InvalidType(ty.clone())),
+                };
+                let struct_ty = struct_ty
+                    .as_struct()
+                    .ok_or(BuilderErr::InvalidType(struct_ty.clone()))?;
                 let mut values = Vec::new();
                 for (i, field) in struct_.fields.iter().enumerate() {
                     let value = self.global_init_to_value(struct_ty[i].clone(), field, module)?;
                     values.push(value);
                 }
-                
                 module.builder().struct_(ty, values)?
             }
-            AstNode::Bytes(bytes) => {
-                
-                module.builder().bytes(ty, bytes.clone())?
-            }
+            AstNode::Bytes(bytes) => module.builder().bytes(ty, bytes.clone())?,
             _ => unreachable!(),
         };
         Ok(value)

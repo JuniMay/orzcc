@@ -81,7 +81,7 @@ impl fmt::Display for TypeKind {
                 )
             }
             TypeKind::Label => write!(f, "label"),
-            TypeKind::Type(name) => write!(f, "${}", name),
+            TypeKind::Type(name) => write!(f, "{}", name),
         }
     }
 }
