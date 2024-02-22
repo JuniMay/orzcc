@@ -203,6 +203,10 @@ where
                 write!(self.buf, "{} = load {}, ", dfg.value_name(value), data.ty())?;
                 self.print_operand(load.ptr(), dfg)
             }
+            ValueKind::Cast(cast) => {
+                write!(self.buf, "{} = cast {}, ", dfg.value_name(value), data.ty())?;
+                self.print_operand(cast.val(), dfg)
+            }
             ValueKind::Store(store) => {
                 write!(self.buf, "store ")?;
                 self.print_operand(store.val(), dfg)?;
@@ -264,11 +268,12 @@ where
                 Ok(())
             }
             ValueKind::Call(call) => {
-                // FIXME: do not allocate name for void type
+                if !data.ty().is_void() {
+                    write!(self.buf, "{} = ", dfg.value_name(value))?;
+                }
                 write!(
                     self.buf,
-                    "{} = call {} {}(",
-                    dfg.value_name(value),
+                    "call {} {}(",
                     data.ty(),
                     dfg.value_name(call.callee())
                 )?;

@@ -250,6 +250,7 @@ where
                 "ret" => TokenKind::Inst(InstKind::Return),
                 "call" => TokenKind::Inst(InstKind::Call),
                 "getelemptr" => TokenKind::Inst(InstKind::GetElemPtr),
+                "cast" => TokenKind::Inst(InstKind::Cast),
 
                 _ => {
                     if word.starts_with('i') {

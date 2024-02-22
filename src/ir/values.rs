@@ -362,6 +362,23 @@ impl Load {
     }
 }
 
+/// Type cast
+///
+/// Perform bitcast operation, the type is available in [`ValueData`](super::entities::ValueData).
+pub struct Cast {
+    val: Value,
+}
+
+impl Cast {
+    pub(super) fn new_value_data(ty: Type, val: Value) -> ValueData {
+        ValueData::new(ty, ValueKind::Cast(Cast { val }))
+    }
+
+    pub fn val(&self) -> Value {
+        self.val
+    }
+}
+
 /// Allocation instruction internals.
 ///
 /// Allocation instruction always return a pointer to the allocated value.

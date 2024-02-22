@@ -5,8 +5,7 @@ use super::{
     module::{DataFlowGraph, Module},
     types::{Type, TypeKind},
     values::{
-        Alloc, Binary, BinaryOp, Block, Branch, Call, Function, GetElemPtr, GlobalSlot, Jump, Load,
-        Return, Store, Unary, UnaryOp, Value,
+        Alloc, Binary, BinaryOp, Block, Branch, Call, Cast, Function, GetElemPtr, GlobalSlot, Jump, Load, Return, Store, Unary, UnaryOp, Value
     },
 };
 
@@ -248,6 +247,11 @@ pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
             return Err(BuilderErr::InvalidType(ty.clone()));
         }
         self.add_value(Load::new_value_data(ty, ptr))
+    }
+
+    /// Build a cast instruction
+    fn cast(&mut self, ty: Type, val: Value) -> Result<Value, BuilderErr> {
+        self.add_value(Cast::new_value_data(ty, val))
     }
 
     /// Build a store instruction.

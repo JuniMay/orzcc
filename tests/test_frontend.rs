@@ -89,3 +89,9 @@ fn test_05() {
     let ir = include_str!("ir_cases/05_empty_block.orzir");
     test_ir(ir);
 }
+
+#[test]
+fn test_06() {
+    let ir = include_str!("ir_cases/06_cast.orzir");
+    test_ir(ir);
+}

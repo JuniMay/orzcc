@@ -269,6 +269,15 @@ impl Inst {
         }))
     }
 
+    pub(super) fn new_boxed_cast(dest: String, ty: Type, val: AstNodeBox) -> AstNodeBox {
+        Box::new(AstNode::Inst(Inst {
+            kind: InstKind::Cast,
+            dest: Some(dest),
+            operands: vec![val],
+            ty: Some(ty),
+        }))
+    }
+
     pub(super) fn new_boxed_call(dest: Option<String>, ty: Type, callee: AstNodeBox) -> AstNodeBox {
         Box::new(AstNode::Inst(Inst {
             kind: InstKind::Call,

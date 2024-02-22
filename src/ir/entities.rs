@@ -3,8 +3,7 @@ use super::{
     module::DataFlowGraph,
     types::Type,
     values::{
-        Alloc, Binary, Branch, Call, GetElemPtr, GlobalSlot, Jump, Load, Return, Store, Unary,
-        Value,
+        Alloc, Binary, Branch, Call, Cast, GetElemPtr, GlobalSlot, Jump, Load, Return, Store, Unary, Value
     },
     GLOBAL_PREFIX,
 };
@@ -167,6 +166,9 @@ pub enum ValueKind {
 
     /// Get element pointer
     GetElemPtr(GetElemPtr),
+
+    /// Cast
+    Cast(Cast),
 
     /// Block parameter
     BlockParam,

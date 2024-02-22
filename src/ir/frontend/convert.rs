@@ -111,7 +111,6 @@ impl Ast {
 
         for item in self.items.iter() {
             if let AstNode::FunctionDef(def) = item.as_ref() {
-
                 let function = ctx.get_value(&def.name)?.into();
 
                 for block_node in def.blocks.iter() {
@@ -203,6 +202,13 @@ impl Ast {
                         dfg_mut!(ctx.module, function)
                             .builder()
                             .load(ast_inst.ty.clone().unwrap(), ptr)?
+                    }
+                    InstKind::Cast => {
+                        let val = self.operand_to_value(&ast_inst.operands[0], ctx, function)?;
+
+                        dfg_mut!(ctx.module, function)
+                            .builder()
+                            .cast(ast_inst.ty.clone().unwrap(), val)?
                     }
                     InstKind::Alloc => dfg_mut!(ctx.module, function)
                         .builder()

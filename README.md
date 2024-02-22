@@ -27,13 +27,3 @@ Then run the following command to get test coverage.
 ```shell
 cargo tarpaulin
 ```
-
-## TODO
-
-- [ ] IR Parser
-  - [x] binary logics
-  - [x] unary logics
-  - [ ] type cast
-  - [x] emoty branch
-  - [x] duplicate name
-  - [x] global valuing local scope for printer

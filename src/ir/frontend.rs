@@ -78,6 +78,9 @@ pub enum InstKind {
     /// `call`
     Call,
 
+    /// `cast`
+    Cast,
+
     /// `getelemptr`
     GetElemPtr,
 }
