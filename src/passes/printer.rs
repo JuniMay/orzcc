@@ -55,7 +55,7 @@ where
 
         writeln!(self.buf)?;
 
-        writeln!(self.buf, "fn {}{} {{", data.name(), data.ty())?;
+        writeln!(self.buf, "func {}{} {{", data.name(), data.ty())?;
 
         if let FunctionKind::Declaration = data.kind() {
             return Ok(());

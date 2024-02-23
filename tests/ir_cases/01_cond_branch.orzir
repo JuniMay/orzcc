@@ -1,6 +1,6 @@
 global @x = i32 0x00000005
 
-fn @check_positive(i32) -> i32 {
+func @check_positive(i32) -> i32 {
 ^entry(i32 %0):
     %cond = icmp.sle i32 %0, i32 0x0 # here the result is wrong
     br i1 %cond, ^positive, ^negative

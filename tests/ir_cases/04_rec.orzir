@@ -1,7 +1,7 @@
 global @global_counter = i32 0x00000010
 const @max_depth = i32 0x00000005
 
-fn @deep_recursive(i32, i32) -> i32 {
+func @deep_recursive(i32, i32) -> i32 {
 ^entry(i32 %depth, i32 %value):
     %max_depth = load i32, @max_depth
     %cond_depth = icmp.sle %depth, %max_depth
@@ -33,7 +33,7 @@ fn @deep_recursive(i32, i32) -> i32 {
     ret %result
 }
 
-fn @main() -> i32 {
+func @main() -> i32 {
 ^entry:
     %start_value = add i32 0, i32 0x64
     %result = call i32 @deep_recursive(i32 0x0, %start_value)

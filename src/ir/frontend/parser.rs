@@ -139,7 +139,7 @@ where
                 KeywordKind::Type => self.parse_type_def(),
                 KeywordKind::Global => self.parse_global(true),
                 KeywordKind::Const => self.parse_global(false),
-                KeywordKind::Fn => self.parse_function_def(),
+                KeywordKind::Func => self.parse_function_def(),
                 KeywordKind::Decl => self.parse_function_decl(),
                 _ => Err(self.unexpected_token()),
             },
@@ -532,7 +532,7 @@ where
     }
 
     fn parse_function_def(&mut self) -> Result<AstNodeBox, ParseError> {
-        self.expect(TokenKind::Keyword(KeywordKind::Fn))?;
+        self.expect(TokenKind::Keyword(KeywordKind::Func))?;
         let token = self.next_token()?;
         let name = match token.kind {
             TokenKind::GlobalIdent(ref name) => name.clone(),

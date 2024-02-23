@@ -347,12 +347,12 @@ mod test {
         assert_eq!(format!("{}", Type::mk_ptr()), "ptr");
         assert_eq!(format!("{}", Type::mk_label()), "label");
         assert_eq!(
-            format!("{}", Type::mk_identified("$name".to_string())),
-            "$name"
+            format!("{}", Type::mk_identified("!name".to_string())),
+            "!name"
         );
         assert_eq!(
             format!("{}", Type::mk_identified("name".to_string())),
-            "$name"
+            "!name"
         );
         let ty = Type::mk_function(vec![], Type::mk_void());
         assert_eq!(format!("{}", ty), "() -> void");

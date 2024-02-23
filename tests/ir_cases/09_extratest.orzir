@@ -1,4 +1,4 @@
-fn @main() -> void {
+func @main() -> void {
 ^entry:
     %ptr = alloc i32
     store i32 42, %ptr

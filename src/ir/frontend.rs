@@ -9,8 +9,8 @@ pub mod tokens;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum KeywordKind {
-    /// `fn`
-    Fn,
+    /// `func`
+    Func,
 
     /// `decl`
     Decl,

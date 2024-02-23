@@ -29,7 +29,7 @@
 //!
 //! The format to define a function is:
 //! ```orzir
-//! fn @function_name(<arg0_type>, <arg1_type>, ...) -> <return_type> {
+//! func @function_name(<arg0_type>, <arg1_type>, ...) -> <return_type> {
 //!     # body (blocks)
 //! }
 //! ```
@@ -92,19 +92,20 @@ pub mod types;
 pub mod values;
 
 #[allow(dead_code)]
-const IDENTIFIER_PREFIX: &str = "%";
+const LOCAL_PREFIX: &str = "%";
+const LOCAL_PREFIX_CHAR: char = '%';
 
 #[allow(dead_code)]
-const BLOCK_PREFIX: &str = "^";
+const LABEL_PREFIX: &str = "^";
+const LABEL_PREFIX_CHAR: char = '^';
 
 #[allow(dead_code)]
 const GLOBAL_PREFIX: &str = "@";
+const GLOBAL_PREFIX_CHAR: char = '@';
 
 #[allow(dead_code)]
-const TYPE_PREFIX: &str = "$";
-
-#[allow(dead_code)]
-const INDENT: &str = "\t";
+const TYPE_PREFIX: &str = "!";
+const TYPE_PREFIX_CHAR: char = '!';
 
 #[cfg(test)]
 mod tests {

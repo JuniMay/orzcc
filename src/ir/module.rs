@@ -12,7 +12,7 @@ use super::{
     entities::{BlockData, FunctionData, ValueData},
     types::Type,
     values::{Block, Function, Value},
-    BLOCK_PREFIX, GLOBAL_PREFIX, IDENTIFIER_PREFIX,
+    LABEL_PREFIX, GLOBAL_PREFIX, LOCAL_PREFIX,
 };
 
 /// The data flow graph.
@@ -50,8 +50,8 @@ impl DataFlowGraph {
         Self {
             values: HashMap::new(),
             blocks: HashMap::new(),
-            value_name_allocator: RefCell::new(NameAllocator::new(IDENTIFIER_PREFIX)),
-            block_name_allocator: RefCell::new(NameAllocator::new(BLOCK_PREFIX)),
+            value_name_allocator: RefCell::new(NameAllocator::new(LOCAL_PREFIX)),
+            block_name_allocator: RefCell::new(NameAllocator::new(LABEL_PREFIX)),
             globals: Weak::new(),
             id_allocator: Weak::new(),
             global_name_allocator: Weak::new(),

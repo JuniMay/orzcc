@@ -1,16 +1,16 @@
 
 global @x = i32 zero
 const @y = i32 0x20202020
-type $z = { i32, float }
+type !z = { i32, float }
 global @array = [ i32; 3 ] zero
 global @arrarr = [ [float ;3]; 4] zero
-type $struct = { i32, [float; 3] }
-global @s = [$struct ; 2] zero
+type !struct = { i32, [float; 3] }
+global @s = [!struct ; 2] zero
 
-fn @function(i32) -> i32 {
+func @function(i32) -> i32 {
 
 ^entry(i32 %0):
-    %ptr0 = getelemptr [$struct;2], @s, i32 zero, i32 0x00
+    %ptr0 = getelemptr [!struct;2], @s, i32 zero, i32 0x00
     %val0 = load i32, %ptr0 
     %cond = icmp.sle i32 %0, i32 1234
     br i1 %cond, ^ret(i32 0x01, float 0x123), ^else(i32 %0)

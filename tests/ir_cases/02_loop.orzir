@@ -1,4 +1,4 @@
-fn @countdown(i32) -> i32 {
+func @countdown(i32) -> i32 {
 ^entry(i32 %0):
     jump ^loop(i32 %0)
 

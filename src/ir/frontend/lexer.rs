@@ -3,6 +3,7 @@ use std::io;
 use crate::ir::{
     frontend::tokens::{Span, TokenKind},
     values::{BinaryOp, FCmpCond, ICmpCond, UnaryOp},
+    GLOBAL_PREFIX_CHAR, LABEL_PREFIX_CHAR, LOCAL_PREFIX_CHAR, TYPE_PREFIX_CHAR,
 };
 
 use super::{
@@ -70,7 +71,9 @@ where
 
         if let Some(c) = self.curr_char {
             match c {
-                '^' | '@' | '%' | '$' => self.handle_ident(),
+                LABEL_PREFIX_CHAR | GLOBAL_PREFIX_CHAR | LOCAL_PREFIX_CHAR | TYPE_PREFIX_CHAR => {
+                    self.handle_ident()
+                }
                 '0'..='9' => self.handle_number(),
                 _ => {
                     if c.is_alphabetic() {
@@ -90,7 +93,15 @@ where
         let mut ident = String::new();
 
         while let Some(c) = self.curr_char {
-            if c.is_alphanumeric() || matches!(c, '_' | '^' | '@' | '%' | '$') {
+            if c.is_alphanumeric()
+                || matches!(
+                    c,
+                    '_' | LABEL_PREFIX_CHAR
+                        | GLOBAL_PREFIX_CHAR
+                        | LOCAL_PREFIX_CHAR
+                        | TYPE_PREFIX_CHAR
+                )
+            {
                 ident.push(c);
                 span.update(self.curr_pos);
             } else {
@@ -100,10 +111,10 @@ where
         }
 
         match ident.chars().next().unwrap() {
-            '^' => Some(Token::new(span, TokenKind::LabelIdent(ident))),
-            '@' => Some(Token::new(span, TokenKind::GlobalIdent(ident))),
-            '%' => Some(Token::new(span, TokenKind::LocalIdent(ident))),
-            '$' => Some(Token::new(span, TokenKind::TypeIdent(ident))),
+            LABEL_PREFIX_CHAR => Some(Token::new(span, TokenKind::LabelIdent(ident))),
+            GLOBAL_PREFIX_CHAR => Some(Token::new(span, TokenKind::GlobalIdent(ident))),
+            LOCAL_PREFIX_CHAR => Some(Token::new(span, TokenKind::LocalIdent(ident))),
+            TYPE_PREFIX_CHAR => Some(Token::new(span, TokenKind::TypeIdent(ident))),
             _ => unreachable!(),
         }
     }
@@ -201,7 +212,7 @@ where
         let token = Some(Token::new(
             span,
             match word.as_str() {
-                "fn" => TokenKind::Keyword(KeywordKind::Fn),
+                "func" => TokenKind::Keyword(KeywordKind::Func),
                 "decl" => TokenKind::Keyword(KeywordKind::Decl),
                 "half" => TokenKind::Keyword(KeywordKind::Half),
                 "float" => TokenKind::Keyword(KeywordKind::Float),
@@ -294,11 +305,11 @@ mod tests {
 
     #[test]
     fn test_lexer0() {
-        let mut buf = Cursor::new("#123\n fn @fib (i32) -> i32 { ret %n }     #123");
+        let mut buf = Cursor::new("#123\n func @fib (i32) -> i32 { ret %n }     #123");
         let mut lexer = Lexer::new(&mut buf);
 
         let tokens = vec![
-            TokenKind::Keyword(KeywordKind::Fn),
+            TokenKind::Keyword(KeywordKind::Func),
             TokenKind::GlobalIdent("@fib".to_string()),
             TokenKind::LeftParen,
             TokenKind::Keyword(KeywordKind::Int(32)),
@@ -340,10 +351,10 @@ mod tests {
 
     global @x = i32 0x10101010
     const @y = i32 0x20202020
-    type $z = { i32, float }
+    type !z = { i32, float }
     global @array = [ i32; 3 ] [ 0x01, 0x02, 0x03 ]
 
-fn @fib(i32) -> i32 {
+func @fib(i32) -> i32 {
 
 ^entry(i32 %0):
     %cond = icmp.sle i32 %0, i32 1234
@@ -383,7 +394,7 @@ fn @fib(i32) -> i32 {
             TokenKind::Keyword(KeywordKind::Int(32)),
             TokenKind::Bytes(vec![32, 32, 32, 32]),
             TokenKind::Keyword(KeywordKind::Type),
-            TokenKind::TypeIdent("$z".to_string()),
+            TokenKind::TypeIdent("!z".to_string()),
             TokenKind::Equal,
             TokenKind::LeftBrace,
             TokenKind::Keyword(KeywordKind::Int(32)),
@@ -405,7 +416,7 @@ fn @fib(i32) -> i32 {
             TokenKind::Comma,
             TokenKind::Bytes(vec![3]),
             TokenKind::RightBracket,
-            TokenKind::Keyword(KeywordKind::Fn),
+            TokenKind::Keyword(KeywordKind::Func),
             TokenKind::GlobalIdent("@fib".to_string()),
             TokenKind::LeftParen,
             TokenKind::Keyword(KeywordKind::Int(32)),
