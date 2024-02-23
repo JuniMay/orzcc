@@ -6,11 +6,12 @@ use super::{InstKind, KeywordKind};
 pub struct Pos {
     row: usize,
     col: usize,
+    idx: usize,
 }
 
 impl Default for Pos {
     fn default() -> Self {
-        Self { row: 1, col: 0 }
+        Self { row: 1, col: 0, idx: 0 }
     }
 }
 
@@ -26,6 +27,7 @@ impl Pos {
         } else {
             self.col += 1;
         }
+        self.idx += 1;
     }
 }
 
@@ -35,7 +37,7 @@ impl fmt::Display for Pos {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Span {
     start: Pos,
     end: Pos,
