@@ -1,6 +1,9 @@
 use std::hash::Hash;
 
-use super::values::{Block, Function, Inst, Value};
+use super::{
+    module::Module,
+    values::{Block, Function, Inst, Value},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Addr(u64);
@@ -8,10 +11,14 @@ pub struct Addr(u64);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct VReg(u64);
 
-pub enum ExecutionError {}
+pub trait ExecutionError {
+    fn message(&self) -> String;
+}
+
+pub type ExecutionResult<T> = Result<T, Box<dyn ExecutionError>>;
 
 pub trait Prepare {
-    fn prepare(&mut self) -> Result<(), ExecutionError>;
+    fn prepare(&mut self) -> ExecutionResult<()>;
 }
 
 pub trait QueryExecutionState {
@@ -19,10 +26,12 @@ pub trait QueryExecutionState {
     fn curr_function(&self) -> Function;
     fn curr_block(&self) -> Block;
 
-    fn vreg(&self, value: Value) -> Result<VReg, ExecutionError>;
-    fn slot(&self, value: Value) -> Result<Addr, ExecutionError>;
+    fn module(&self) -> &Module;
 
-    fn memory(&self, addr: Addr) -> Result<&[u8], ExecutionError>;
+    fn vreg(&self, value: Value) -> ExecutionResult<VReg>;
+    fn slot(&self, value: Value) -> ExecutionResult<Addr>;
+
+    fn memory(&self, addr: Addr) -> ExecutionResult<&[u8]>;
 }
 
 pub trait ModifyExecutionState {
@@ -30,10 +39,10 @@ pub trait ModifyExecutionState {
     fn set_curr_function(&mut self, function: Function);
     fn set_curr_block(&mut self, block: Block);
 
-    fn set_vreg(&mut self, value: Value, vreg: VReg) -> Result<(), ExecutionError>;
-    fn set_slot(&mut self, value: Value, addr: Addr) -> Result<(), ExecutionError>;
+    fn set_vreg(&mut self, value: Value, vreg: VReg) -> ExecutionResult<()>;
+    fn set_slot(&mut self, value: Value, addr: Addr) -> ExecutionResult<()>;
 }
 
 pub trait ExecuteOnInst: QueryExecutionState + ModifyExecutionState {
-    fn exec_inst(&mut self) -> Result<(), ExecutionError>;
+    fn exec_inst(&mut self) -> ExecutionResult<()>;
 }
