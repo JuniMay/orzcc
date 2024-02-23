@@ -182,8 +182,20 @@ where
             TokenKind::LeftBracket => self.parse_array(),
             TokenKind::LeftBrace => self.parse_struct(),
             TokenKind::Bytes(_) => self.parse_bytes(),
+            TokenKind::Keyword(KeywordKind::Zero) => self.parse_zero(),
+            TokenKind::Keyword(KeywordKind::Undef) => self.parse_undef(),
             _ => Err(self.unexpected_token()),
         }
+    }
+
+    fn parse_zero(&mut self) -> Result<AstNodeBox, ParseError> {
+        self.expect(TokenKind::Keyword(KeywordKind::Zero))?;
+        Ok(AstNode::new_boxed_zero())
+    }
+
+    fn parse_undef(&mut self) -> Result<AstNodeBox, ParseError> {
+        self.expect(TokenKind::Keyword(KeywordKind::Undef))?;
+        Ok(AstNode::new_boxed_undef())
     }
 
     fn parse_bytes(&mut self) -> Result<AstNodeBox, ParseError> {
@@ -500,6 +512,8 @@ where
             TokenKind::GlobalIdent(ref name) => AstNode::new_boxed_global_ident(name.clone()),
             TokenKind::LocalIdent(ref name) => AstNode::new_boxed_local_ident(name.clone()),
             TokenKind::Bytes(ref bytes) => AstNode::new_boxed_bytes(bytes.clone()),
+            TokenKind::Keyword(KeywordKind::Zero) => AstNode::new_boxed_zero(),
+            TokenKind::Keyword(KeywordKind::Undef) => AstNode::new_boxed_undef(),
             _ => return Err(self.unexpected_token()),
         };
         self.consume();
