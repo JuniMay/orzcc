@@ -1,6 +1,6 @@
 func @check(i32) -> i32 {
 ^entry(i32 %0):
-    %cond = cast i1, i32 %0
+    %cond = bitcast i1, i32 %0
     br i1 %cond, ^true, ^false
 
 ^true:

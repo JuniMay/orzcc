@@ -1,4 +1,4 @@
-use crate::ir::types::Type;
+use crate::ir::{types::Type, values::CastOp};
 
 use super::InstKind;
 
@@ -283,9 +283,14 @@ impl Inst {
         }))
     }
 
-    pub(super) fn new_boxed_cast(dest: String, ty: Type, val: AstNodeBox) -> AstNodeBox {
+    pub(super) fn new_boxed_cast(
+        dest: String,
+        op: CastOp,
+        ty: Type,
+        val: AstNodeBox,
+    ) -> AstNodeBox {
         Box::new(AstNode::Inst(Inst {
-            kind: InstKind::Cast,
+            kind: InstKind::Cast(op),
             dest: Some(dest),
             operands: vec![val],
             ty: Some(ty),

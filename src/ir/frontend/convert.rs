@@ -221,12 +221,12 @@ impl Ast {
                             .builder()
                             .load(ast_inst.ty.clone().unwrap(), ptr)?
                     }
-                    InstKind::Cast => {
+                    InstKind::Cast(op) => {
                         let val = self.operand_to_value(&ast_inst.operands[0], ctx, function)?;
 
                         dfg_mut!(ctx.module, function)
                             .builder()
-                            .cast(ast_inst.ty.clone().unwrap(), val)?
+                            .cast(op.clone(), ast_inst.ty.clone().unwrap(), val)?
                     }
                     InstKind::Alloc => dfg_mut!(ctx.module, function)
                         .builder()

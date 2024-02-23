@@ -3,8 +3,7 @@ use super::{
     module::{DataFlowGraph, Module},
     types::{Type, TypeKind},
     values::{
-        Alloc, Binary, BinaryOp, Block, Branch, Call, Cast, Function, GetElemPtr, GlobalSlot, Jump,
-        Load, Return, Store, Unary, UnaryOp, Value,
+        Alloc, Binary, BinaryOp, Block, Branch, Call, Cast, CastOp, Function, GetElemPtr, GlobalSlot, Jump, Load, Return, Store, Unary, UnaryOp, Value
     },
 };
 use thiserror::Error;
@@ -232,8 +231,8 @@ pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
     }
 
     /// Build a cast instruction
-    fn cast(&mut self, ty: Type, val: Value) -> Result<Value, BuilderErr> {
-        self.add_value(Cast::new_value_data(ty, val))
+    fn cast(&mut self, op: CastOp, ty: Type, val: Value) -> Result<Value, BuilderErr> {
+        self.add_value(Cast::new_value_data(op, ty, val))
     }
 
     /// Build a store instruction.

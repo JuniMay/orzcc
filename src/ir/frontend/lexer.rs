@@ -2,7 +2,7 @@ use std::io;
 
 use crate::ir::{
     frontend::tokens::{Span, TokenKind},
-    values::{BinaryOp, FCmpCond, ICmpCond, UnaryOp},
+    values::{BinaryOp, CastOp, FCmpCond, ICmpCond, UnaryOp},
     GLOBAL_PREFIX_CHAR, LABEL_PREFIX_CHAR, LOCAL_PREFIX_CHAR, TYPE_PREFIX_CHAR,
 };
 
@@ -265,7 +265,17 @@ where
                 "ret" => TokenKind::Inst(InstKind::Return),
                 "call" => TokenKind::Inst(InstKind::Call),
                 "getelemptr" => TokenKind::Inst(InstKind::GetElemPtr),
-                "cast" => TokenKind::Inst(InstKind::Cast),
+
+                "trunc" => TokenKind::Inst(InstKind::Cast(CastOp::Trunc)),
+                "zext" => TokenKind::Inst(InstKind::Cast(CastOp::ZExt)),
+                "sext" => TokenKind::Inst(InstKind::Cast(CastOp::SExt)),
+                "fptrunc" => TokenKind::Inst(InstKind::Cast(CastOp::FpTrunc)),
+                "fpext" => TokenKind::Inst(InstKind::Cast(CastOp::FpExt)),
+                "fptoui" => TokenKind::Inst(InstKind::Cast(CastOp::FpToUI)),
+                "fptosi" => TokenKind::Inst(InstKind::Cast(CastOp::FpToSI)),
+                "uitofp" => TokenKind::Inst(InstKind::Cast(CastOp::UIToFp)),
+                "sitofp" => TokenKind::Inst(InstKind::Cast(CastOp::SIToFp)),
+                "bitcast" => TokenKind::Inst(InstKind::Cast(CastOp::Bitcast)),
 
                 _ => {
                     if word.starts_with('i') {

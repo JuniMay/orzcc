@@ -1,4 +1,4 @@
-use super::values::{BinaryOp, UnaryOp};
+use super::values::{BinaryOp, CastOp, UnaryOp};
 
 mod lexer;
 
@@ -79,7 +79,7 @@ pub enum InstKind {
     Call,
 
     /// `cast`
-    Cast,
+    Cast(CastOp),
 
     /// `getelemptr`
     GetElemPtr,

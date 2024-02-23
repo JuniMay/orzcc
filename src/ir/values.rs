@@ -359,20 +359,75 @@ impl Load {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum CastOp {
+    /// Truncate
+    Trunc,
+
+    /// Zero extend
+    ZExt,
+
+    /// Sign extend
+    SExt,
+
+    /// Float to unsigned int
+    FpToUI,
+
+    /// Float to signed int
+    FpToSI,
+
+    /// Unsigned int to float
+    UIToFp,
+
+    /// Signed int to float
+    SIToFp,
+
+    /// Float truncation
+    FpTrunc,
+
+    /// Float extension
+    FpExt,
+
+    /// Bitcast
+    Bitcast,
+}
+
+impl fmt::Display for CastOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CastOp::Trunc => write!(f, "trunc"),
+            CastOp::ZExt => write!(f, "zext"),
+            CastOp::SExt => write!(f, "sext"),
+            CastOp::FpToUI => write!(f, "fptoui"),
+            CastOp::FpToSI => write!(f, "fptosi"),
+            CastOp::UIToFp => write!(f, "uitofp"),
+            CastOp::SIToFp => write!(f, "sitofp"),
+            CastOp::FpTrunc => write!(f, "fptrunc"),
+            CastOp::FpExt => write!(f, "fpext"),
+            CastOp::Bitcast => write!(f, "bitcast"),
+        }
+    }
+}
+
 /// Type cast
 ///
 /// Perform bitcast operation, the type is available in [`ValueData`].
 pub struct Cast {
+    op: CastOp,
     val: Value,
 }
 
 impl Cast {
-    pub(super) fn new_value_data(ty: Type, val: Value) -> ValueData {
-        ValueData::new(ty, ValueKind::Cast(Cast { val }))
+    pub(super) fn new_value_data(op: CastOp, ty: Type, val: Value) -> ValueData {
+        ValueData::new(ty, ValueKind::Cast(Cast { op, val }))
     }
 
     pub fn val(&self) -> Value {
         self.val
+    }
+
+    pub fn op(&self) -> CastOp {
+        self.op.clone()
     }
 }
 

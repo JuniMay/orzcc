@@ -424,11 +424,12 @@ where
                             let ptr = self.parse_operand()?;
                             Inst::new_boxed_load(dest, ty, ptr)
                         }
-                        InstKind::Cast => {
+                        InstKind::Cast(op) => {
+                            let op = op.clone();
                             let ty = self.parse_type()?;
                             self.expect(TokenKind::Comma)?;
                             let val = self.parse_operand()?;
-                            Inst::new_boxed_cast(dest, ty, val)
+                            Inst::new_boxed_cast(dest, op, ty, val)
                         }
                         InstKind::Alloc => {
                             let ty = self.parse_type()?;
