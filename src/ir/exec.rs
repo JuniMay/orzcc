@@ -1,21 +1,9 @@
 use std::hash::Hash;
 
-use super::{
-    module::Module,
-    values::{Block, Function, Inst, Value},
-};
+use super::values::{Block, Function, Inst, Value};
 
-pub struct MemorySlot {
-    pub(self) bytes: Vec<u8>,
-}
-
-impl MemorySlot {
-    pub fn new(size: usize) -> Self {
-        MemorySlot {
-            bytes: vec![0; size],
-        }
-    }
-}
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Addr(u64);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct VReg(u64);
@@ -31,10 +19,10 @@ pub trait QueryExecutionState {
     fn curr_function(&self) -> Function;
     fn curr_block(&self) -> Block;
 
-    fn module(&self) -> &Module;
-
     fn vreg(&self, value: Value) -> Result<VReg, ExecutionError>;
-    fn slot(&self, value: Value) -> Result<&MemorySlot, ExecutionError>;
+    fn slot(&self, value: Value) -> Result<Addr, ExecutionError>;
+
+    fn memory(&self, addr: Addr) -> Result<&[u8], ExecutionError>;
 }
 
 pub trait ModifyExecutionState {
@@ -43,17 +31,9 @@ pub trait ModifyExecutionState {
     fn set_curr_block(&mut self, block: Block);
 
     fn set_vreg(&mut self, value: Value, vreg: VReg) -> Result<(), ExecutionError>;
-    fn set_slot(&mut self, value: Value, idx: usize, byte: u8) -> Result<(), ExecutionError>;
+    fn set_slot(&mut self, value: Value, addr: Addr) -> Result<(), ExecutionError>;
 }
 
 pub trait ExecuteOnInst: QueryExecutionState + ModifyExecutionState {
     fn exec_inst(&mut self) -> Result<(), ExecutionError>;
-}
-
-pub trait ExecuteOnBlock: ExecuteOnInst {
-    fn exec_block(&mut self) -> Result<(), ExecutionError>;
-}
-
-pub trait ExecuteOnModule: ExecuteOnBlock {
-    fn exec_module(&mut self) -> Result<(), ExecutionError>;
 }
