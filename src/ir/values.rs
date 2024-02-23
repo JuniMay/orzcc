@@ -344,7 +344,7 @@ impl Store {
 
 /// Load instruction internals.
 ///
-/// The type of the loaded value is available in [`ValueData`](super::entities::ValueData).
+/// The type of the loaded value is available in [`ValueData`].
 pub struct Load {
     ptr: Value,
 }
@@ -361,7 +361,7 @@ impl Load {
 
 /// Type cast
 ///
-/// Perform bitcast operation, the type is available in [`ValueData`](super::entities::ValueData).
+/// Perform bitcast operation, the type is available in [`ValueData`].
 pub struct Cast {
     val: Value,
 }
@@ -398,7 +398,7 @@ impl Alloc {
 /// A global memory slot.
 ///
 /// The initial value of the global should be a constant.
-/// The type of the global is available in [`ValueData`](super::entities::ValueData).
+/// The type of the global is available in [`ValueData`].
 pub struct GlobalSlot {
     /// The initial value of the global
     ///
@@ -509,7 +509,7 @@ impl Return {
 
 /// A function call.
 ///
-/// The function type can be inferred from the args and the [`ValueData`](super::entities::ValueData).
+/// The function type can be inferred from the args and the [`ValueData`].
 pub struct Call {
     /// The callee can be a function or a function pointer.
     callee: Value,
