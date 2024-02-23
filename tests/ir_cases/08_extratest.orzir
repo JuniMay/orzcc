@@ -1,0 +1,7 @@
+fn @main() -> i32 {
+^entry:
+    %ptr = alloc i32
+    store i32 42, %ptr
+    %val = load i32, %ptr
+    ret i32 %val
+}

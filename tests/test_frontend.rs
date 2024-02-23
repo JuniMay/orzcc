@@ -63,3 +63,9 @@ fn test_07() {
     let ir = include_str!("ir_cases/07_types.orzir");
     test_ir(ir);
 }
+
+#[test]
+fn test_08() {
+    let ir = include_str!("ir_cases/08_extratest.orzir");
+    test_ir(ir);
+}
