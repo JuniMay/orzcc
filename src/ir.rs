@@ -36,7 +36,7 @@
 //!
 //! Also, for functions with external linkage, the format is:
 //! ```orzir
-//! decl fn @function_name(<arg0_type>, <arg1_type>, ...) -> <return_type>
+//! decl @function_name(<arg0_type>, <arg1_type>, ...) -> <return_type>
 //! ```
 //! 
 //! ## Blocks
