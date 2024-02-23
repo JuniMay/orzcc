@@ -1,5 +1,7 @@
 use std::io::{self};
 
+use thiserror::Error;
+
 use crate::ir::types::Type;
 
 use super::{
@@ -31,12 +33,14 @@ where
     peeked: bool,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ParseError {
     /// Lexer error
-    LexerError,
+    #[error("lexer error at {0}")]
+    LexerError(Pos),
 
     /// Unexpected token
+    #[error("unexpected token at {0}")]
     UnexpectedToken(Span),
 }
 
@@ -58,7 +62,10 @@ where
             self.peeked = false;
             return Ok(&self.curr_token);
         }
-        let token = self.lexer.next_token().ok_or(ParseError::LexerError)?;
+        let token = self
+            .lexer
+            .next_token()
+            .ok_or(ParseError::LexerError(self.lexer.curr_pos()))?;
         self.curr_token = token;
         Ok(&self.curr_token)
     }
@@ -70,7 +77,10 @@ where
         if self.peeked {
             return Ok(&self.curr_token);
         }
-        let token = self.lexer.next_token().ok_or(ParseError::LexerError)?;
+        let token = self
+            .lexer
+            .next_token()
+            .ok_or(ParseError::LexerError(self.lexer.curr_pos()))?;
         self.curr_token = token;
         self.peeked = true;
         Ok(&self.curr_token)

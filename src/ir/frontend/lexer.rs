@@ -31,6 +31,10 @@ where
         }
     }
 
+    pub(super) fn curr_pos(&self) -> Pos {
+        self.curr_pos
+    }
+
     fn next_char(&mut self) -> Option<char> {
         let mut buf = [0; 1];
         match self.buf.read(&mut buf) {
