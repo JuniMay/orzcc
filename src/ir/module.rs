@@ -289,7 +289,7 @@ impl Module {
 
 /// Allocator of ids.
 ///
-/// This is the allocator of [`Value`](super::values::Value), [`Block`](super::values::Block), and
+/// This is the allocator of [`Value`], [`Block`], and
 /// other entities that need an id to identify them uniquely in the IR.
 pub struct IdAllocator {
     counter: usize,

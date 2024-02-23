@@ -69,6 +69,12 @@ pub enum AstNode {
     /// Local identifier
     LocalIdent(String),
 
+    /// Zero
+    Zero,
+
+    /// Undef
+    Undef,
+
     /// A typed operand
     Operand(Operand),
 
@@ -119,6 +125,14 @@ impl AstNode {
 
     pub fn new_boxed_bytes(bytes: Vec<u8>) -> AstNodeBox {
         Box::new(AstNode::Bytes(bytes))
+    }
+
+    pub fn new_boxed_zero() -> AstNodeBox {
+        Box::new(AstNode::Zero)
+    }
+
+    pub fn new_boxed_undef() -> AstNodeBox {
+        Box::new(AstNode::Undef)
     }
 }
 

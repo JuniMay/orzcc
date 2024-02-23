@@ -354,7 +354,27 @@ impl Ast {
                             .bytes(ty.clone(), bytes.clone())
                             .map_err(|e| e.into())
                     } else {
-                        panic!("Type not found for local constant")
+                        panic!("type not found for local constant")
+                    }
+                }
+                AstNode::Zero => {
+                    if let Some(ref ty) = operand.ty {
+                        dfg_mut!(ctx.module, function)
+                            .builder()
+                            .zero(ty.clone())
+                            .map_err(|e| e.into())
+                    } else {
+                        panic!("type not found for local zero value")
+                    }
+                }
+                AstNode::Undef => {
+                    if let Some(ref ty) = operand.ty {
+                        dfg_mut!(ctx.module, function)
+                            .builder()
+                            .undef(ty.clone())
+                            .map_err(|e| e.into())
+                    } else {
+                        panic!("type not found for local undef value")
                     }
                 }
                 _ => unreachable!(),
@@ -402,6 +422,8 @@ impl Ast {
                 module.builder().struct_(ty, values)?
             }
             AstNode::Bytes(bytes) => module.builder().bytes(ty, bytes.clone())?,
+            AstNode::Zero => module.builder().zero(ty)?,
+            AstNode::Undef => module.builder().undef(ty)?,
             _ => unreachable!(),
         };
         Ok(value)
