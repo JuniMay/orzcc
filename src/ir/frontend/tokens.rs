@@ -1,8 +1,8 @@
-use std::fmt;
+use std::{cmp, fmt};
 
 use super::{InstKind, KeywordKind};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Pos {
     row: usize,
     col: usize,
@@ -41,6 +41,12 @@ pub struct Span {
     end: Pos,
 }
 
+impl Default for Span {
+    fn default() -> Self {
+        Self::new(Pos::new())
+    }
+}
+
 impl Span {
     pub fn new(start: Pos) -> Self {
         let end = start;
@@ -49,6 +55,10 @@ impl Span {
 
     pub fn update(&mut self, end: Pos) {
         self.end = end;
+    }
+
+    pub fn extend(&mut self, other: &Self) {
+        self.end = cmp::max(self.end, other.end);
     }
 }
 

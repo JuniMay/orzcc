@@ -1,6 +1,6 @@
 use crate::ir::{types::Type, values::CastOp};
 
-use super::InstKind;
+use super::{tokens::Span, InstKind};
 
 /// An abstract syntax tree.
 #[derive(Debug)]
@@ -29,7 +29,51 @@ pub type AstNodeBox = Box<AstNode>;
 
 /// An abstract syntax tree node.
 #[derive(Debug)]
-pub enum AstNode {
+pub struct AstNode {
+    pub(super) span: Option<Span>,
+    pub(super) kind: AstNodeKind,
+}
+
+impl AstNode {
+    pub fn new_boxed(kind: AstNodeKind) -> AstNodeBox {
+        Box::new(AstNode { span: None, kind })
+    }
+}
+
+impl AstNode {
+    pub fn new_boxed_global_ident(name: String, span: Span) -> AstNodeBox {
+        let mut node = AstNode::new_boxed(AstNodeKind::GlobalIdent(name));
+        node.span = Some(span);
+        node
+    }
+
+    pub fn new_boxed_local_ident(name: String, span: Span) -> AstNodeBox {
+        let mut node = AstNode::new_boxed(AstNodeKind::LocalIdent(name));
+        node.span = Some(span);
+        node
+    }
+
+    pub fn new_boxed_bytes(bytes: Vec<u8>, span: Span) -> AstNodeBox {
+        let mut node = AstNode::new_boxed(AstNodeKind::Bytes(bytes));
+        node.span = Some(span);
+        node
+    }
+
+    pub fn new_boxed_zero(span: Span) -> AstNodeBox {
+        let mut node = AstNode::new_boxed(AstNodeKind::Zero);
+        node.span = Some(span);
+        node
+    }
+
+    pub fn new_boxed_undef(span: Span) -> AstNodeBox {
+        let mut node = AstNode::new_boxed(AstNodeKind::Undef);
+        node.span = Some(span);
+        node
+    }
+}
+
+#[derive(Debug)]
+pub enum AstNodeKind {
     /// Type definition
     TypeDef(TypeDef),
 
@@ -93,8 +137,10 @@ pub struct Callee {
 }
 
 impl Callee {
-    pub fn new_boxed(name: String, args: Vec<AstNodeBox>) -> AstNodeBox {
-        Box::new(AstNode::Callee(Callee { name, args }))
+    pub fn new_boxed(name: String, args: Vec<AstNodeBox>, span: Span) -> AstNodeBox {
+        let mut node = AstNode::new_boxed(AstNodeKind::Callee(Callee { name, args }));
+        node.span = Some(span);
+        node
     }
 }
 
@@ -109,33 +155,12 @@ pub struct Operand {
 }
 
 impl Operand {
-    pub fn new_boxed(ty: Option<Type>, value: AstNodeBox) -> AstNodeBox {
-        Box::new(AstNode::Operand(Operand { ty, value }))
+    pub fn new_boxed(ty: Option<Type>, value: AstNodeBox, span: Span) -> AstNodeBox {
+        let mut node =  AstNode::new_boxed(AstNodeKind::Operand(Operand { ty, value }));
+        node.span = Some(span);
+        node
     }
 }
-
-impl AstNode {
-    pub fn new_boxed_global_ident(name: String) -> AstNodeBox {
-        Box::new(AstNode::GlobalIdent(name))
-    }
-
-    pub fn new_boxed_local_ident(name: String) -> AstNodeBox {
-        Box::new(AstNode::LocalIdent(name))
-    }
-
-    pub fn new_boxed_bytes(bytes: Vec<u8>) -> AstNodeBox {
-        Box::new(AstNode::Bytes(bytes))
-    }
-
-    pub fn new_boxed_zero() -> AstNodeBox {
-        Box::new(AstNode::Zero)
-    }
-
-    pub fn new_boxed_undef() -> AstNodeBox {
-        Box::new(AstNode::Undef)
-    }
-}
-
 #[derive(Debug)]
 pub struct TypeDef {
     /// The name of the identified type.
@@ -147,7 +172,7 @@ pub struct TypeDef {
 
 impl TypeDef {
     pub fn new_boxed(name: String, ty: Type) -> AstNodeBox {
-        Box::new(AstNode::TypeDef(TypeDef { name, ty }))
+        AstNode::new_boxed(AstNodeKind::TypeDef(TypeDef { name, ty }))
     }
 }
 
@@ -168,7 +193,7 @@ pub struct GlobalDef {
 
 impl GlobalDef {
     pub fn new_boxed(mutable: bool, name: String, ty: Type, init: AstNodeBox) -> AstNodeBox {
-        Box::new(AstNode::GlobalDef(GlobalDef {
+        AstNode::new_boxed(AstNodeKind::GlobalDef(GlobalDef {
             mutable,
             name,
             ty,
@@ -187,8 +212,10 @@ pub struct FunctionDecl {
 }
 
 impl FunctionDecl {
-    pub fn new_boxed(name: String, ty: Type) -> AstNodeBox {
-        Box::new(AstNode::FunctionDecl(FunctionDecl { name, ty }))
+    pub fn new_boxed(name: String, ty: Type, span: Span) -> AstNodeBox {
+        let mut node = AstNode::new_boxed(AstNodeKind::FunctionDecl(FunctionDecl { name, ty }));
+        node.span = Some(span);
+        node
     }
 }
 
@@ -205,8 +232,11 @@ pub struct FunctionDef {
 }
 
 impl FunctionDef {
-    pub fn new_boxed(name: String, ty: Type, blocks: Vec<AstNodeBox>) -> AstNodeBox {
-        Box::new(AstNode::FunctionDef(FunctionDef { name, ty, blocks }))
+    pub fn new_boxed(name: String, ty: Type, blocks: Vec<AstNodeBox>, span: Span) -> AstNodeBox {
+        let mut node =
+            AstNode::new_boxed(AstNodeKind::FunctionDef(FunctionDef { name, ty, blocks }));
+        node.span = Some(span);
+        node
     }
 }
 
@@ -228,7 +258,7 @@ impl Block {
         params: Vec<(Type, String)>,
         insts: Vec<AstNodeBox>,
     ) -> AstNodeBox {
-        Box::new(AstNode::Block(Block {
+        AstNode::new_boxed(AstNodeKind::Block(Block {
             name,
             params,
             insts,
@@ -256,31 +286,38 @@ impl Inst {
         kind: InstKind,
         dest: Option<String>,
         operands: Vec<AstNodeBox>,
+        span: Span,
     ) -> AstNodeBox {
-        Box::new(AstNode::Inst(Inst {
+        let mut node = AstNode::new_boxed(AstNodeKind::Inst(Inst {
             kind,
             dest,
             operands,
             ty: None,
-        }))
+        }));
+        node.span = Some(span);
+        node
     }
 
-    pub(super) fn new_boxed_alloc(dest: String, ty: Type) -> AstNodeBox {
-        Box::new(AstNode::Inst(Inst {
+    pub(super) fn new_boxed_alloc(dest: String, ty: Type, span: Span) -> AstNodeBox {
+        let mut node = AstNode::new_boxed(AstNodeKind::Inst(Inst {
             kind: InstKind::Alloc,
             dest: Some(dest),
             operands: Vec::new(),
             ty: Some(ty),
-        }))
+        }));
+        node.span = Some(span);
+        node
     }
 
-    pub(super) fn new_boxed_load(dest: String, ty: Type, ptr: AstNodeBox) -> AstNodeBox {
-        Box::new(AstNode::Inst(Inst {
+    pub(super) fn new_boxed_load(dest: String, ty: Type, ptr: AstNodeBox, span: Span) -> AstNodeBox {
+        let mut node = AstNode::new_boxed(AstNodeKind::Inst(Inst {
             kind: InstKind::Load,
             dest: Some(dest),
             operands: vec![ptr],
             ty: Some(ty),
-        }))
+        }));
+        node.span = Some(span);
+        node
     }
 
     pub(super) fn new_boxed_cast(
@@ -288,35 +325,43 @@ impl Inst {
         op: CastOp,
         ty: Type,
         val: AstNodeBox,
+        span: Span,
     ) -> AstNodeBox {
-        Box::new(AstNode::Inst(Inst {
+        let mut node = AstNode::new_boxed(AstNodeKind::Inst(Inst {
             kind: InstKind::Cast(op),
             dest: Some(dest),
             operands: vec![val],
             ty: Some(ty),
-        }))
+        }));
+        node.span = Some(span);
+        node
     }
 
-    pub(super) fn new_boxed_call(dest: Option<String>, ty: Type, callee: AstNodeBox) -> AstNodeBox {
-        Box::new(AstNode::Inst(Inst {
+    pub(super) fn new_boxed_call(dest: Option<String>, ty: Type, callee: AstNodeBox, span: Span) -> AstNodeBox {
+        let mut node = AstNode::new_boxed(AstNodeKind::Inst(Inst {
             kind: InstKind::Call,
             dest,
             operands: vec![callee],
             ty: Some(ty),
-        }))
+        }));
+        node.span = Some(span);
+        node
     }
 
     pub(super) fn new_boxed_getelemptr(
         dest: String,
         ty: Type,
         operands: Vec<AstNodeBox>,
+        span: Span,
     ) -> AstNodeBox {
-        Box::new(AstNode::Inst(Inst {
+        let mut node = AstNode::new_boxed(AstNodeKind::Inst(Inst {
             kind: InstKind::GetElemPtr,
             dest: Some(dest),
             operands,
             ty: Some(ty),
-        }))
+        }));
+        node.span = Some(span);
+        node
     }
 }
 
@@ -327,7 +372,7 @@ pub struct Array {
 
 impl Array {
     pub fn new_boxed(elems: Vec<AstNodeBox>) -> AstNodeBox {
-        Box::new(AstNode::Array(Array { elems }))
+        AstNode::new_boxed(AstNodeKind::Array(Array { elems }))
     }
 }
 
@@ -338,6 +383,6 @@ pub struct Struct {
 
 impl Struct {
     pub fn new_boxed(fields: Vec<AstNodeBox>) -> AstNodeBox {
-        Box::new(AstNode::Struct(Struct { fields }))
+        AstNode::new_boxed(AstNodeKind::Struct(Struct { fields }))
     }
 }
