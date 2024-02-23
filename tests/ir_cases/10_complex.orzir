@@ -1,0 +1,99 @@
+decl @swap(ptr, ptr) -> void
+decl @add(i16, i16) -> i16
+decl @llvm_memcpy_p0_p0_i16(ptr, i16, i1) -> void
+
+func @main() -> i16 {
+^entry:
+	%retval = alloc i16
+	%a = alloc i16
+	%b = alloc i16
+	%f = alloc float
+	%c = alloc i8
+	%i = alloc i16
+	%count = alloc i16
+	%numbers = alloc [i16 ; 3]
+	%i4 = alloc i16
+	%p = alloc ptr
+	%sum = alloc i16
+	 
+	store i16 0, %retval
+	store i16 5, %a
+	store i16 10, %b
+	store float 0x02 , %f
+	store i8 65, %c
+	
+	%0 = load i16, %a
+	%1 = load i16, %b
+	%cmp = icmp.sle i16 %0, i16 %1
+	br i1 %cmp, ^if_then, ^if_else
+	 
+^if_then:
+	jump ^if_end
+	 
+^if_else:
+	jump ^if_end
+	 
+^if_end:
+	store i16 0, %i
+	jump ^for_cond
+	 
+^for_cond:
+	%2 = load i16, %i
+	%cmp1 = icmp.slt i16 %2, i16 5
+	br i1 %cmp1, ^for_body, ^for_end
+	 
+^for_body:
+	jump ^for_inc
+	 
+^for_inc:
+	%3 = load i16, %i
+	%inc = add i16 %3, i16 1
+	store i16 %inc, %i
+	jump ^for_cond
+	 
+^for_end:
+	store i16 0, %count
+	jump ^while_cond
+	 
+^while_cond:
+	%4 = load i16, %count
+	%cmp2 = icmp.slt i16 %4, i16 3
+	br i1 %cmp2, ^while_body, ^while_end
+	 
+^while_body:
+	%5 = load i16, %count
+	%inc3 = add i16 %5, i16 1
+	store i16 %inc3, %count
+	jump ^while_cond
+	 
+^while_end:
+	call void @llvm_memcpy_p0_p0_i16(ptr %numbers, i16 6, i1 0)
+	store i16 0, %i4
+	jump ^for_cond5
+	 
+^for_cond5:
+	%6 = load i16, %i4
+	%cmp6 = icmp.slt i16 %6, i16 3
+	br i1 %cmp6, ^for_body7, ^for_end10
+	 
+^for_body7:
+	jump ^for_inc8
+	 
+^for_inc8:
+	%7 = load i16, %i4
+	%inc9 = add i16 %7, i16 1
+	store i16 %inc9, %i4
+	jump ^for_cond5
+	 
+^for_end10:
+	store ptr %a, ptr %p
+	%8 = load ptr, ptr %p
+	%incdec_ptr = getelemptr i16, ptr %8, i32 1
+	store ptr %incdec_ptr, ptr %p
+	%9 = load i16, ptr %a
+	%10 = load i16, ptr %b
+    %call = call i16 @add(i16 %9, i16 %10)
+    store i16 %call, %sum
+    call void @swap(ptr %a, ptr %b)
+    ret i16 0
+}

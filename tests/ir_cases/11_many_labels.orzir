@@ -1,0 +1,47 @@
+func @nestedBlocks() -> void {
+^aa:
+^ab:
+^ac:
+^ad:
+^ae:
+^af:
+^ba:
+^bb:
+^bc:
+^bd:
+^be:
+^bf:
+^ca:
+^cb:
+^cc:
+^cd:
+^ce:
+^cf:
+^entry:
+    jump ^outer
+^outer:
+    jump ^inner
+    jump ^end
+^inner:
+^abaaa:
+^abaab:
+^abaac:
+^abaad:
+^abaae:
+^abaaf:
+^ababa:
+^ababb:
+^ababc:
+^ababd:
+^ababe:
+^ababf:
+^abaca:
+^abacb:
+^abacc:
+^abacd:
+^abace:
+^abacf:
+    jump ^end
+^end:
+    ret void
+}

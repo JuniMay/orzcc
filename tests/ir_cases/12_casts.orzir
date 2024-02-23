@@ -1,0 +1,60 @@
+func @castOperations() -> void {
+^entry:
+    %i32_val = alloc i32
+    %i64_val = alloc i64
+    %f32_val = alloc float
+    %f64_val = alloc double
+    %ui32_val = alloc i32
+    %si32_val = alloc i32
+    %to_f32_val = alloc float
+    %to_f64_val = alloc double
+    %bitcast_f32_to_i32 = alloc i32
+
+    # Initialize variables
+    store i32 65535, %i32_val
+    store float 0xabcd, %f32_val
+
+    # Truncate i64, i32
+    %i64 = sext i64, %i32_val
+    %trunc_i64_to_i32 = trunc i32, %i64
+    store i32 %trunc_i64_to_i32, %i32_val
+
+    # Zero extend i32, i64
+    %zext_i32_to_i64 = zext i64, %i32_val
+    store i64 %zext_i32_to_i64, %i64_val
+
+    # Sign extend i32, i64
+    %sext_i32_to_i64 = sext i64, %i32_val
+    store i64 %sext_i32_to_i64, %i64_val
+
+    # Float, unsigned int
+    %fptoui_f32_to_ui32 = fptoui i32, %f32_val
+    store i32 %fptoui_f32_to_ui32, %ui32_val
+
+    # Float, signed int
+    %fptosi_f32_to_si32 = fptosi i32, %f32_val
+    store i32 %fptosi_f32_to_si32, %si32_val
+
+    # Unsigned int, float
+    %uitofp_ui32_to_f32 = uitofp float, %ui32_val
+    store float %uitofp_ui32_to_f32, %to_f32_val
+
+    # Signed int, float
+    %sitofp_si32_to_f32 = sitofp float, %si32_val
+    store float %sitofp_si32_to_f32, %to_f32_val
+
+    # Float truncation (double, float)
+    store double 0xabcdef, %f64_val
+    %fptrunc_f64_to_f32 = fptrunc float, %f64_val
+    store float %fptrunc_f64_to_f32, %f32_val
+
+    # Float extension (float, double)
+    %fpext_f32_to_f64 = fpext double, %f32_val
+    store double %fpext_f32_to_f64, %f64_val
+
+    # Bitcast float, i32
+    %bitcast_f32_to_i32_val = bitcast i32, %f32_val
+    store i32 %bitcast_f32_to_i32_val, %bitcast_f32_to_i32
+
+    ret void
+}

@@ -75,3 +75,21 @@ fn test_09() {
     let ir = include_str!("ir_cases/09_extratest.orzir");
     test_ir(ir);
 }
+
+#[test]
+fn test_10() {
+    let ir = include_str!("ir_cases/10_complex.orzir");
+    test_ir(ir);
+}
+
+#[test]
+fn test_11() {
+    let ir = include_str!("ir_cases/11_many_labels.orzir");
+    test_ir(ir);
+}
+
+#[test]
+fn test_12() {
+    let ir = include_str!("ir_cases/12_casts.orzir");
+    test_ir(ir);
+}
