@@ -1,7 +1,15 @@
-fn @main() -> i32 {
+fn @main() -> void {
 ^entry:
     %ptr = alloc i32
     store i32 42, %ptr
     %val = load i32, %ptr
-    ret i32 %val
+
+    %ptr_half = alloc half
+    store half 0x123, %ptr_half
+    %val_half = load half, %ptr_half
+
+    %ptr_double = alloc double
+    store double 0x1234, %ptr_double
+    %val_double = load double, %ptr_double
+    ret void
 }
