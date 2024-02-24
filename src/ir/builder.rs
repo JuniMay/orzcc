@@ -1,9 +1,10 @@
 use super::{
     entities::{BlockData, FunctionData, FunctionKind, ValueData, ValueKind},
     module::{DataFlowGraph, Module},
-    types::{Type, TypeKind},
+    types::Type,
     values::{
-        Alloc, Binary, BinaryOp, Block, Branch, Call, Cast, CastOp, Function, GetElemPtr, GlobalSlot, Jump, Load, Return, Store, Unary, UnaryOp, Value
+        Alloc, Binary, BinaryOp, Block, Branch, Call, Cast, CastOp, Function, GetElemPtr,
+        GlobalSlot, Jump, Load, Return, Store, Unary, UnaryOp, Value,
     },
 };
 use thiserror::Error;
@@ -182,16 +183,7 @@ pub trait ConstantBuilder: QueryValueData + AddValue {
 
     /// Build a struct constant.
     fn struct_(&mut self, ty: Type, values: Vec<Value>) -> Result<Value, BuilderErr> {
-        let actual_ty = match ty.kind() {
-            TypeKind::Struct(_) => ty.clone(),
-            TypeKind::Identified(name) => Type::get_identified(name)
-                .ok_or(BuilderErr::IdentifiedTypeNotFound(name.clone()))?,
-            _ => return Err(BuilderErr::InvalidType(ty.clone())),
-        };
-
-        let fields = actual_ty
-            .as_struct()
-            .ok_or(BuilderErr::InvalidType(ty.clone()))?;
+        let fields = ty.as_struct().ok_or(BuilderErr::InvalidType(ty.clone()))?;
 
         if fields.len() != values.len() {
             return Err(BuilderErr::IncompatibleStructFieldNumber(

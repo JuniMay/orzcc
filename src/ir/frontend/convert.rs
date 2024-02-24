@@ -434,18 +434,7 @@ impl Ast {
                 module.builder().array(ty, values)?
             }
             AstNodeKind::Struct(ref struct_) => {
-                let struct_ty = match ty.kind() {
-                    TypeKind::Struct(_) => ty.clone(),
-                    TypeKind::Identified(name) => {
-                        let struct_ty = Type::get_identified(name)
-                            .ok_or(BuilderErr::IdentifiedTypeNotFound(name.clone()))?;
-                        struct_ty.clone()
-                    }
-                    _ => return Err(BuilderErr::InvalidType(ty.clone()).into()),
-                };
-                let struct_ty = struct_ty
-                    .as_struct()
-                    .ok_or(BuilderErr::InvalidType(struct_ty.clone()))?;
+                let struct_ty = ty.as_struct().ok_or(BuilderErr::InvalidType(ty.clone()))?;
                 let mut values = Vec::new();
                 for (i, field) in struct_.fields.iter().enumerate() {
                     let value = self.global_init_to_value(struct_ty[i].clone(), field, module)?;

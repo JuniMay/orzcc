@@ -209,14 +209,31 @@ impl Type {
     }
 
     pub fn is_int(&self) -> bool {
-        matches!(self.kind(), TypeKind::Int(_))
+        match self.kind() {
+            TypeKind::Int(_) => true,
+            TypeKind::Identified(name) => {
+                if let Some(ty) = Self::get_identified(name) {
+                    ty.is_int()
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        }
     }
 
     pub fn is_float(&self) -> bool {
-        matches!(
-            self.kind(),
-            TypeKind::Half | TypeKind::Float | TypeKind::Double
-        )
+        match self.kind() {
+            TypeKind::Half | TypeKind::Float | TypeKind::Double => true,
+            TypeKind::Identified(name) => {
+                if let Some(ty) = Self::get_identified(name) {
+                    ty.is_float()
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        }
     }
 
     pub fn is_numeric(&self) -> bool {
@@ -224,27 +241,61 @@ impl Type {
     }
 
     pub fn is_ptr(&self) -> bool {
-        matches!(self.kind(), TypeKind::Ptr)
+        match self.kind() {
+            TypeKind::Ptr => true,
+            TypeKind::Identified(name) => {
+                if let Some(ty) = Self::get_identified(name) {
+                    ty.is_ptr()
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        }
     }
 
     pub fn is_void(&self) -> bool {
-        matches!(self.kind(), TypeKind::Void)
+        match self.kind() {
+            TypeKind::Void => true,
+            TypeKind::Identified(name) => {
+                if let Some(ty) = Self::get_identified(name) {
+                    ty.is_void()
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        }
     }
 
     pub fn is_function(&self) -> bool {
-        matches!(self.kind(), TypeKind::Function(_, _))
+        match self.kind() {
+            TypeKind::Function(_, _) => true,
+            TypeKind::Identified(name) => {
+                if let Some(ty) = Self::get_identified(name) {
+                    ty.is_function()
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        }
     }
 
     pub fn is_zero_initializable(&self) -> bool {
-        !matches!(
-            self.kind(),
-            TypeKind::Void | TypeKind::Function(_, _) | TypeKind::Label | TypeKind::Identified(_)
-        )
+        self.is_numeric() || self.is_ptr() || self.is_aggregate()
     }
 
-    pub fn as_array(&self) -> Option<(usize, &Type)> {
+    pub fn as_array(&self) -> Option<(usize, Type)> {
         match self.kind() {
-            TypeKind::Array(size, ty) => Some((*size, ty)),
+            TypeKind::Array(size, ty) => Some((*size, ty.clone())),
+            TypeKind::Identified(name) => {
+                if let Some(ty) = Self::get_identified(name) {
+                    ty.as_array()
+                } else {
+                    None
+                }
+            }
             _ => None,
         }
     }
@@ -253,15 +304,22 @@ impl Type {
     ///
     /// If the type is not a struct type, return `None`.
     /// Note that for identified types, this function returns `None` for now.
-    pub fn as_struct(&self) -> Option<&[Type]> {
+    pub fn as_struct(&self) -> Option<Vec<Type>> {
         match self.kind() {
-            TypeKind::Struct(fields) => Some(fields),
+            TypeKind::Struct(fields) => Some(fields.clone()),
+            TypeKind::Identified(name) => {
+                if let Some(ty) = Self::get_identified(name) {
+                    ty.as_struct()
+                } else {
+                    None
+                }
+            }
             _ => None,
         }
     }
 
     pub fn is_aggregate(&self) -> bool {
-        matches!(self.kind(), TypeKind::Array(_, _) | TypeKind::Struct(_))
+        self.as_array().is_some() || self.as_struct().is_some()
     }
 }
 
