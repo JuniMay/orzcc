@@ -1,11 +1,10 @@
-use std::{collections::HashMap, result};
+use std::collections::HashMap;
 
 use crate::collections::{BiLinkedNode, BiMap};
 
 use super::{
     entities::ValueKind,
-    layout,
-    module::{self, Module},
+    module::Module,
     types::DataLayout,
     values::{BinaryOp, Block, FCmpCond, Function, ICmpCond, Inst, UnaryOp, Value},
 };
@@ -558,7 +557,7 @@ impl<'a> VirtualMachine<'a> {
                 let else_block = branch.else_dst();
                 let cond_vreg = self.vregs[&cond];
                 let cond_val = cond_vreg.0;
-                
+
                 let next_block = if cond_val != 0 {
                     then_block
                 } else {
@@ -590,8 +589,70 @@ impl<'a> VirtualMachine<'a> {
                     .expect("inst should exist")
                     .into();
             }
-            
-            _ => unimplemented!(),
+            ValueKind::Call(call) => {
+                let callee = call.callee();
+                let args = call.args();
+
+                let callee_data = dfg
+                    .with_value_data(callee, |data| {
+                        assert!(data.ty().is_ptr(), "callee's type should be a pointer");
+                        match data.kind() {
+                            ValueKind::Function => self
+                                .module
+                                .function_data(callee.into())
+                                .expect("function should exist"),
+                            _ => {
+                                let addr = self.vregs[&callee].into();
+                                let function =
+                                    self.addrs.get_rev(addr).expect("function should exist");
+                                self.module
+                                    .function_data((*function).into())
+                                    .expect("function should exist")
+                            }
+                        }
+                    })
+                    .expect("callee should exist");
+
+                let entry_block = callee_data
+                    .layout()
+                    .entry_block()
+                    .expect("entry block should exist in the layout");
+                let entry_block_data = callee_data
+                    .dfg()
+                    .block_data(entry_block)
+                    .expect("entry block should exist in the dfg");
+                let params = entry_block_data.params();
+
+                assert!(
+                    args.len() == params.len(),
+                    "args and params should have the same length"
+                );
+
+                for (arg, param) in args.iter().zip(params) {
+                    let arg_vreg = self.vregs[arg];
+                    self.write_vreg(*param, arg_vreg);
+                }
+
+                self.curr_function = callee.into();
+                self.curr_block = entry_block;
+
+                next_inst = callee_data
+                    .layout()
+                    .blocks()
+                    .node(self.curr_block)
+                    .expect("block should exist")
+                    .insts()
+                    .front()
+                    .expect("inst should exist")
+                    .into();
+            }
+            ValueKind::GetElemPtr(gep) => {
+                todo!()
+            }
+            ValueKind::Cast(cast) => {
+                todo!()
+            }
+            _ => unreachable!("invalid local instruction"),
         }
 
         self.curr_inst = next_inst;
