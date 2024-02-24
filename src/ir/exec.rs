@@ -183,6 +183,43 @@ impl<'a> VirtualMachine<'a> {
         self.function_names.insert(name, function);
     }
 
+    fn write_global_init(&mut self, addr: Addr, init: Value) {
+        self.module.with_value_data(init, |data| match data.kind() {
+            ValueKind::Zero => {
+                let size = data.ty().size(Some(&self.data_layout()));
+                self.write_memory(addr, &vec![0; size]);
+            }
+            ValueKind::Bytes(bytes) => {
+                self.write_memory(addr, bytes.as_slice());
+            }
+            ValueKind::Undef => {
+                let size = data.ty().size(Some(&self.data_layout()));
+                self.write_memory(addr, &vec![0; size]);
+            }
+            ValueKind::Array(elems) => {
+                let (_len, ty) = data.ty().as_array().expect("array type should exist");
+                let elem_size = ty.size(Some(&self.data_layout()));
+
+                let mut offset = 0;
+                for elem in elems {
+                    let elem_addr = Addr(addr.0 + offset);
+                    self.write_global_init(elem_addr, *elem);
+                    offset += elem_size as u64;
+                }
+            }
+            ValueKind::Struct(fields) => {
+                let field_types = data.ty().as_struct().expect("struct type should exist");
+                let mut offset = 0;
+                for (field, ty) in fields.iter().zip(field_types) {
+                    let field_addr = Addr(addr.0 + offset);
+                    self.write_global_init(field_addr, *field);
+                    offset += ty.size(Some(&self.data_layout())) as u64;
+                }
+            }
+            _ => unreachable!("unexpected item"),
+        });
+    }
+
     pub fn prepare(&mut self, entry_function_name: &str, vregs: &HashMap<Value, VReg>) {
         for value in self.module.global_slot_layout() {
             self.module
@@ -196,6 +233,7 @@ impl<'a> VirtualMachine<'a> {
                         let data_layout = self.data_layout();
                         let addr = self.alloc_memory(segment, data.ty().size(Some(&data_layout)));
                         self.addrs.insert(*value, addr);
+                        self.write_global_init(addr, slot.init());
                     }
                     _ => unreachable!("unexpected item"),
                 });
@@ -227,10 +265,23 @@ impl<'a> VirtualMachine<'a> {
                 .expect("function should exist")
                 .dfg();
 
-            for (value, _data) in dfg.values() {
+            for (value, data) in dfg.values() {
                 self.alloc_vreg(*value);
                 if vregs.contains_key(value) {
                     self.vregs.insert(*value, vregs[value]);
+                }
+                match data.kind() {
+                    ValueKind::Zero => {
+                        self.write_vreg(*value, VReg(0));
+                    }
+                    ValueKind::Bytes(bytes) => {
+                        let mut vreg_val = 0;
+                        for i in 0..bytes.len() {
+                            vreg_val |= (bytes[i] as u64) << (i * 8);
+                        }
+                        self.write_vreg(*value, VReg(vreg_val));
+                    }
+                    _ => {}
                 }
             }
         }
