@@ -73,8 +73,11 @@ impl FunctionData {
     }
 
     /// Create a new `ValueData` struct for the function
+    ///
+    /// The type is a pointer type, and the kind is `Function`. The function type can be found 
+    /// in the `ty` field of the [`FunctionData`] struct.
     pub fn new_value_data(&self) -> ValueData {
-        ValueData::new(self.ty.clone(), ValueKind::Function)
+        ValueData::new(Type::mk_ptr(), ValueKind::Function)
     }
 
     pub fn name(&self) -> &str {
