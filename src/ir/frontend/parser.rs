@@ -594,6 +594,7 @@ where
         let token = self.peek_token()?;
         let name = match token.kind {
             TokenKind::GlobalIdent(ref name) => name.clone(),
+            TokenKind::LocalIdent(ref name) => name.clone(),
             TokenKind::LabelIdent(ref name) => name.clone(),
             _ => return Err(self.unexpected_token()),
         };

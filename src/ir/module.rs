@@ -58,6 +58,10 @@ impl DataFlowGraph {
         }
     }
 
+    pub fn values(&self) -> &HashMap<Value, ValueData> {
+        &self.values
+    }
+
     /// Allocate an id using [`IdAllocator`].
     fn allocate_id(&self) -> usize {
         self.id_allocator

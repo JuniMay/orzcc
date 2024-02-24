@@ -89,6 +89,11 @@ pub trait QueryValueData {
 
     /// Check if a value is a block parameter.
     fn is_value_block_param(&self, value: Value) -> Result<bool, BuilderErr>;
+
+    /// Check if a value exists in the data flow graph.
+    fn value_exists(&self, value: Value) -> bool {
+        self.value_type(value).is_ok()
+    }
 }
 
 pub trait QueryBlockData {
@@ -239,6 +244,10 @@ pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
     fn store(&mut self, val: Value, ptr: Value) -> Result<Value, BuilderErr> {
         if !self.value_type(ptr)?.is_ptr() {
             return Err(BuilderErr::InvalidType(self.value_type(ptr)?));
+        }
+
+        if !self.value_exists(val) {
+            return Err(BuilderErr::ValueNotFound);
         }
 
         self.add_value(Store::new_value_data(val, ptr))
