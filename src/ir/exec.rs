@@ -5,8 +5,8 @@ use crate::collections::{BiLinkedNode, BiMap};
 use super::{
     entities::ValueKind,
     module::Module,
-    types::DataLayout,
-    values::{BinaryOp, Block, FCmpCond, Function, ICmpCond, Inst, UnaryOp, Value},
+    types::{DataLayout, TypeKind},
+    values::{BinaryOp, Block, CastOp, FCmpCond, Function, ICmpCond, Inst, UnaryOp, Value},
 };
 
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
@@ -698,10 +698,201 @@ impl<'a> VirtualMachine<'a> {
                     .into();
             }
             ValueKind::GetElemPtr(gep) => {
-                todo!()
+                let bound_type = gep.ty();
+                let ptr = gep.ptr();
+
+                let addr: Addr = self
+                    .module
+                    .with_value_data(ptr, |data| match data.kind() {
+                        ValueKind::GlobalSlot(_slot) => {
+                            *self.addrs.get(ptr).expect("addr should exist")
+                        }
+                        _ => {
+                            let ptr_vreg = self.vregs[&ptr];
+                            ptr_vreg.into()
+                        }
+                    })
+                    .expect("ptr should exist");
+
+                let indices = gep.indices();
+
+                let mut offset = 0u64;
+                let mut curr_type = bound_type;
+
+                for index in indices {
+                    let index_val = self.vregs[index].0;
+
+                    match curr_type.kind() {
+                        TypeKind::Array(_len, elem_type) => {
+                            let elem_size = elem_type.size(Some(&data_layout));
+                            offset += index_val * elem_size as u64;
+                            curr_type = elem_type.clone();
+                        }
+                        TypeKind::Struct(field_types) => {
+                            let field_idx = index_val as usize;
+                            let field_type = field_types[field_idx].clone();
+                            let field_size = field_type.size(Some(&data_layout));
+                            offset += field_size as u64;
+                            curr_type = field_type;
+                        }
+                        _ => {
+                            let size = curr_type.size(Some(&data_layout));
+                            offset += index_val * size as u64;
+                            break;
+                        }
+                    }
+                }
+
+                let new_addr = Addr(addr.0 + offset);
+                self.write_vreg(dest, new_addr.into());
             }
             ValueKind::Cast(cast) => {
-                todo!()
+                let op = cast.op();
+                let operand = cast.val();
+
+                let operand_vreg = self.vregs[&operand];
+
+                let ty = value_data.ty();
+                let operand_ty = dfg
+                    .with_value_data(operand, |data| data.ty().clone())
+                    .expect("operand should exist");
+
+                let dest_size = ty.size(Some(&data_layout));
+                let operand_size = operand_ty.size(Some(&data_layout));
+
+                match op {
+                    CastOp::Trunc => {
+                        match dest_size {
+                            1 => self.write_vreg(dest, VReg(operand_vreg.0 as u8 as u64)),
+                            2 => self.write_vreg(dest, VReg(operand_vreg.0 as u16 as u64)),
+                            4 => self.write_vreg(dest, VReg(operand_vreg.0 as u32 as u64)),
+                            8 => self.write_vreg(dest, VReg(operand_vreg.0)),
+                            _ => unimplemented!("unsupported int size for trunc"),
+                        }
+                    }
+                    CastOp::ZExt => {
+                        let mask = (1 << (operand_size * 8)) - 1;
+                        let result_val = operand_vreg.0 & mask;
+                        self.write_vreg(dest, VReg(result_val));
+                    }
+                    CastOp::SExt => {
+                        let mask = (1 << (operand_size * 8)) - 1;
+                        let sign_bit = 1 << (operand_size * 8 - 1);
+                        let result_val = if operand_vreg.0 & sign_bit != 0 {
+                            operand_vreg.0 | !mask
+                        } else {
+                            operand_vreg.0 & mask
+                        };
+                        self.write_vreg(dest, VReg(result_val));
+                    }
+                    CastOp::FpToUI => {
+                        match operand_size {
+                            4 => match dest_size {
+                                1 => self.write_vreg(dest, VReg(operand_vreg.to_float() as u8 as u64)),
+                                2 => self.write_vreg(dest, VReg(operand_vreg.to_float() as u16 as u64)),
+                                4 => self.write_vreg(dest, VReg(operand_vreg.to_float() as u32 as u64)),
+                                8 => self.write_vreg(dest, VReg(operand_vreg.to_float() as u64)),
+                                _ => unimplemented!("unsupported int size for fptoui"),
+                            },
+                            8 => match dest_size {
+                                1 => self.write_vreg(dest, VReg(operand_vreg.to_double() as u8 as u64)),
+                                2 => self.write_vreg(dest, VReg(operand_vreg.to_double() as u16 as u64)),
+                                4 => self.write_vreg(dest, VReg(operand_vreg.to_double() as u32 as u64)),
+                                8 => self.write_vreg(dest, VReg(operand_vreg.to_double() as u64)),
+                                _ => unimplemented!("unsupported int size for fptoui"),
+                            },
+                            _ => unimplemented!("unsupported float size for fptoui"),
+                        }
+                    }
+                    CastOp::FpToSI => {
+                        match operand_size {
+                            4 => match dest_size {
+                                1 => self.write_vreg(dest, VReg(operand_vreg.to_float() as i8 as u64)),
+                                2 => self.write_vreg(dest, VReg(operand_vreg.to_float() as i16 as u64)),
+                                4 => self.write_vreg(dest, VReg(operand_vreg.to_float() as i32 as u64)),
+                                8 => self.write_vreg(dest, VReg(operand_vreg.to_float() as i64 as u64)),
+                                _ => unimplemented!("unsupported int size for fptosi"),
+                            },
+                            8 => match dest_size {
+                                1 => self.write_vreg(dest, VReg(operand_vreg.to_double() as i8 as u64)),
+                                2 => self.write_vreg(dest, VReg(operand_vreg.to_double() as i16 as u64)),
+                                4 => self.write_vreg(dest, VReg(operand_vreg.to_double() as i32 as u64)),
+                                8 => self.write_vreg(dest, VReg(operand_vreg.to_double() as i64 as u64)),
+                                _ => unimplemented!("unsupported int size for fptosi"),
+                            },
+                            _ => unimplemented!("unsupported float size for fptosi"),
+                        }
+                    }
+                    CastOp::UIToFp => {
+                        match dest_size {
+                            4 => match operand_size {
+                                1 => self.write_vreg(dest, VReg::from_float(operand_vreg.0 as u8 as f32)),
+                                2 => self.write_vreg(dest, VReg::from_float(operand_vreg.0 as u16 as f32)),
+                                4 => self.write_vreg(dest, VReg::from_float(operand_vreg.0 as u32 as f32)),
+                                8 => self.write_vreg(dest, VReg::from_float(operand_vreg.0 as f32)),
+                                _ => unimplemented!("unsupported int size for uitofp"),
+                            },
+                            8 => match operand_size {
+                                1 => self.write_vreg(dest, VReg::from_double(operand_vreg.0 as u8 as f64)),
+                                2 => self.write_vreg(dest, VReg::from_double(operand_vreg.0 as u16 as f64)),
+                                4 => self.write_vreg(dest, VReg::from_double(operand_vreg.0 as u32 as f64)),
+                                8 => self.write_vreg(dest, VReg::from_double(operand_vreg.0 as f64)),
+                                _ => unimplemented!("unsupported int size for uitofp"),
+                            },
+                            _ => unimplemented!("unsupported float size for uitofp"),
+                        }
+                    }
+                    CastOp::SIToFp => {
+                        match dest_size {
+                            4 => match operand_size {
+                                1 => self.write_vreg(dest, VReg::from_float(operand_vreg.0 as i8 as f32)),
+                                2 => self.write_vreg(dest, VReg::from_float(operand_vreg.0 as i16 as f32)),
+                                4 => self.write_vreg(dest, VReg::from_float(operand_vreg.0 as i32 as f32)),
+                                8 => self.write_vreg(dest, VReg::from_float(operand_vreg.0 as f32)),
+                                _ => unimplemented!("unsupported int size for sitofp"),
+                            },
+                            8 => match operand_size {
+                                1 => self.write_vreg(dest, VReg::from_double(operand_vreg.0 as i8 as f64)),
+                                2 => self.write_vreg(dest, VReg::from_double(operand_vreg.0 as i16 as f64)),
+                                4 => self.write_vreg(dest, VReg::from_double(operand_vreg.0 as i32 as f64)),
+                                8 => self.write_vreg(dest, VReg::from_double(operand_vreg.0 as f64)),
+                                _ => unimplemented!("unsupported int size for sitofp"),
+                            },
+                            _ => unimplemented!("unsupported float size for sitofp"),
+                        }
+                    }
+                    CastOp::FpTrunc => {
+                        match dest_size {
+                            4 => match operand_size {
+                                4 => self.write_vreg(dest, operand_vreg),
+                                _ => unimplemented!("unsupported float size for fptrunc"),
+                            },
+                            8 => match operand_size {
+                                4 => self.write_vreg(dest, VReg::from_double(operand_vreg.to_float() as f64)),
+                                8 => self.write_vreg(dest, operand_vreg),
+                                _ => unimplemented!("unsupported float size for fptrunc"),
+                            },
+                            _ => unimplemented!("unsupported float size for fptrunc"),
+                        }
+                    }
+                    CastOp::FpExt => {
+                        match dest_size {
+                            4 => match operand_size {
+                                4 => self.write_vreg(dest, operand_vreg),
+                                8 => self.write_vreg(dest, VReg::from_double(operand_vreg.to_float() as f64)),
+                                _ => unimplemented!("unsupported float size for fpext"),
+                            },
+                            8 => match operand_size {
+                                8 => self.write_vreg(dest, operand_vreg),
+                                _ => unimplemented!("unsupported float size for fpext"),
+                            },
+                            _ => unimplemented!("unsupported float size for fpext"),
+                        }
+                    }
+                    CastOp::Bitcast => {
+                        self.write_vreg(dest, operand_vreg);
+                    }
+                }
             }
             _ => unreachable!("invalid local instruction"),
         }
