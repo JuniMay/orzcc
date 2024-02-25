@@ -5,7 +5,7 @@ use super::{
     values::{Block, Function, Value},
 };
 
-pub mod interpreter;
+pub mod debugger;
 pub mod vm;
 
 #[derive(Debug, Error)]

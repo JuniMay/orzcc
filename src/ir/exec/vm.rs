@@ -44,6 +44,10 @@ impl From<VReg> for Addr {
 }
 
 impl Addr {
+    pub fn new(addr: u64) -> Self {
+        Self(addr)
+    }
+
     pub fn segment(&self) -> ExecResult<Segment> {
         // high 8 bits
         match self.0 >> 56 {
@@ -115,6 +119,9 @@ pub struct VirtualMachine<'a> {
 
     /// Stack for return value
     stack: Vec<(Function, Value)>,
+
+    /// If the vm has stopped
+    stopped: bool,
 }
 
 impl<'a> VirtualMachine<'a> {
@@ -139,7 +146,13 @@ impl<'a> VirtualMachine<'a> {
             function_names: HashMap::new(),
 
             stack: vec![],
+
+            stopped: false,
         }
+    }
+
+    pub fn stopped(&self) -> bool {
+        self.stopped
     }
 
     fn data_layout(&self) -> DataLayout {
@@ -328,7 +341,7 @@ impl<'a> VirtualMachine<'a> {
         Ok(())
     }
 
-    pub fn step(&mut self) -> ExecResult<bool> {
+    pub fn step(&mut self) -> ExecResult<()> {
         let dfg = self
             .module
             .function_data(self.curr_function)
@@ -348,8 +361,6 @@ impl<'a> VirtualMachine<'a> {
         let mut next_inst = layout.next_inst(self.curr_inst.into());
 
         let data_layout = self.data_layout();
-
-        let mut stop = false;
 
         match value_data.kind() {
             ValueKind::Alloc(alloc) => {
@@ -542,6 +553,7 @@ impl<'a> VirtualMachine<'a> {
                             self.write_vreg(self.curr_inst.into(), VReg(result_val));
                         }
                         ICmpCond::Slt => {
+                            // FIXME: sign extension.
                             let result_val = if (lhs_val as i64) < (rhs_val as i64) {
                                 1
                             } else {
@@ -988,7 +1000,7 @@ impl<'a> VirtualMachine<'a> {
             ValueKind::Return(ret) => {
                 let val = ret.val();
                 if self.stack.is_empty() {
-                    stop = true
+                    self.stopped = true;
                 } else {
                     let (caller, prev) = if let Some(val) = val {
                         let val_vreg = self.read_vreg(val);
@@ -1007,10 +1019,11 @@ impl<'a> VirtualMachine<'a> {
             _ => unreachable!("invalid local instruction"),
         }
 
-        if !stop {
+        if !self.stopped() {
             self.curr_inst = next_inst.ok_or(ExecErr::EarlyStop(self.curr_inst.into()))?;
             self.curr_function = next_function;
-        }
-        Ok(stop)
+        } 
+
+        Ok(())
     }
 }
