@@ -91,19 +91,18 @@ impl VReg {
     }
 }
 
-
 pub struct VirtualMachine<'a> {
     /// Module
     module: &'a Module,
 
     /// Memory
-    pub(super) memory: HashMap<Segment, Memory>,
+    memory: HashMap<Segment, Memory>,
 
     /// Global address bi-directional map
     addrs: BiMap<Value, Addr>,
 
     /// Virtual registers
-    pub(super) vregs: HashMap<Value, VReg>,
+    vregs: HashMap<Value, VReg>,
 
     /// Current instruction
     curr_inst: Inst,
@@ -118,7 +117,7 @@ pub struct VirtualMachine<'a> {
     function_names: HashMap<String, Function>,
 
     /// Stack for return value
-    stack: Vec<Value>,
+    stack: Vec<(Function, Value)>,
 }
 
 impl<'a> VirtualMachine<'a> {
@@ -172,7 +171,7 @@ impl<'a> VirtualMachine<'a> {
         self.vregs.insert(value, vreg);
     }
 
-    fn read_vreg(&self, value: Value) -> VReg {
+    pub(super) fn read_vreg(&self, value: Value) -> VReg {
         *self.vregs.get(&value).unwrap()
     }
 
@@ -180,11 +179,12 @@ impl<'a> VirtualMachine<'a> {
         let segment = addr.segment()?;
         let offset = addr.offset();
         let memory = &mut self.memory.get_mut(&segment).unwrap().data;
+        memory.resize(offset + data.len(), 0);
         memory[offset..offset + data.len()].copy_from_slice(data);
         Ok(())
     }
 
-    fn read_memory(&self, addr: Addr, size: usize) -> ExecResult<&[u8]> {
+    pub(super) fn read_memory(&self, addr: Addr, size: usize) -> ExecResult<&[u8]> {
         let segment = addr.segment()?;
         let offset = addr.offset();
         Ok(&self.memory[&segment].data[offset..offset + size])
@@ -205,7 +205,14 @@ impl<'a> VirtualMachine<'a> {
                     let size = data.ty().size(Some(&self.data_layout()));
                     self.write_memory(addr, &vec![0; size])
                 }
-                ValueKind::Bytes(bytes) => self.write_memory(addr, bytes.as_slice()),
+                ValueKind::Bytes(bytes) => {
+                    let size = data.ty().size(Some(&self.data_layout()));
+                    let pad = size - bytes.len();
+                    let mut data = Vec::new();
+                    data.extend_from_slice(bytes);
+                    data.extend_from_slice(&vec![0; pad]);
+                    self.write_memory(addr, &data)
+                }
                 ValueKind::Undef => {
                     let size = data.ty().size(Some(&self.data_layout()));
                     self.write_memory(addr, &vec![0; size])
@@ -243,10 +250,7 @@ impl<'a> VirtualMachine<'a> {
             .unwrap_or(Err(ExecErr::ValueNotFound(init)))
     }
 
-    pub fn prepare(
-        &mut self,
-        entry_function_name: &str
-    ) -> ExecResult<()> {
+    pub fn prepare(&mut self, entry_function_name: &str) -> ExecResult<()> {
         for value in self.module.global_slot_layout() {
             self.module
                 .with_value_data(*value, |data| match data.kind() {
@@ -261,9 +265,11 @@ impl<'a> VirtualMachine<'a> {
                             self.alloc_memory(segment, data.ty().size(Some(&data_layout)))?;
                         self.addrs.insert(*value, addr);
                         self.write_global_init(addr, slot.init())?;
+                        self.alloc_vreg(*value);
+                        self.write_vreg(*value, addr.into());
                         Ok(())
                     }
-                    _ => Err(ExecErr::InvalidGlobalItem(*value)),
+                    _ => Ok(()),
                 })
                 .unwrap_or(Err(ExecErr::ValueNotFound(*value)))?;
         }
@@ -354,6 +360,8 @@ impl<'a> VirtualMachine<'a> {
             .local_value_data(self.curr_inst.into())
             .ok_or(ExecErr::ValueNotFound(self.curr_inst.into()))?;
 
+        let mut next_function = self.curr_function;
+        let mut next_block = self.curr_block;
         let mut next_inst = layout
             .blocks()
             .node(self.curr_block)
@@ -362,7 +370,28 @@ impl<'a> VirtualMachine<'a> {
             .node(self.curr_inst)
             .ok_or(ExecErr::EntryInstNotFound(self.curr_block))?
             .next()
-            .ok_or(ExecErr::EarlyStop(self.curr_inst.into()))?;
+            .or_else(|| {
+                // the current block has been traversed
+                let blocks = layout.blocks();
+                loop {
+                    let block = blocks.node(next_block).expect("block should exist").next();
+                    if let Some(block) = block {
+                        // there is a block after the current block
+                        let block_data = blocks.node(block).expect("block should exist");
+                        if !block_data.insts().is_empty() {
+                            // the block is empty, skip it
+                            next_block = block;
+                        } else {
+                            // the block is not empty
+                            next_block = block;
+                            return block_data.insts().front();
+                        }
+                    } else {
+                        // there is no block after the current block
+                        return None;
+                    }
+                }
+            });
 
         let dest = self.curr_inst.into();
         let data_layout = self.data_layout();
@@ -628,7 +657,7 @@ impl<'a> VirtualMachine<'a> {
                     let arg_vreg = self.read_vreg(*arg);
                     self.write_vreg(*param, arg_vreg);
                 }
-                self.curr_block = block;
+                next_block = block;
                 next_inst = layout
                     .blocks()
                     .node(self.curr_block)
@@ -645,19 +674,19 @@ impl<'a> VirtualMachine<'a> {
                 let cond_vreg = self.read_vreg(cond);
                 let cond_val = cond_vreg.0;
 
-                let next_block = if cond_val != 0 {
+                let block = if cond_val != 0 {
                     then_block
                 } else {
                     else_block
                 };
 
-                let args = if next_block == then_block {
+                let args = if block == then_block {
                     branch.then_args()
                 } else {
                     branch.else_args()
                 };
 
-                let block_data = dfg.block_data(next_block).expect("block should exist");
+                let block_data = dfg.block_data(block).expect("block should exist");
 
                 assert_eq!(args.len(), block_data.params().len());
 
@@ -666,7 +695,7 @@ impl<'a> VirtualMachine<'a> {
                     self.write_vreg(*param, arg_vreg);
                 }
 
-                self.curr_block = next_block;
+                next_block = block;
                 next_inst = layout
                     .blocks()
                     .node(self.curr_block)
@@ -677,7 +706,7 @@ impl<'a> VirtualMachine<'a> {
                     .into();
             }
             ValueKind::Call(call) => {
-                let callee = call.callee();
+                let mut callee = call.callee();
                 let args = call.args();
 
                 let callee_data = dfg
@@ -692,6 +721,7 @@ impl<'a> VirtualMachine<'a> {
                                 let addr = self.read_vreg(callee).into();
                                 let function =
                                     self.addrs.get_rev(addr).expect("function should exist");
+                                callee = (*function).into();
                                 self.module
                                     .function_data((*function).into())
                                     .expect("function should exist")
@@ -719,21 +749,17 @@ impl<'a> VirtualMachine<'a> {
                     let arg_vreg = self.read_vreg(*arg);
                     self.write_vreg(*param, arg_vreg);
                 }
+                self.stack.push((self.curr_function, dest));
 
-                self.curr_function = callee.into();
-                self.curr_block = entry_block;
-
+                next_function = callee.into();
+                next_block = entry_block;
                 next_inst = callee_data
                     .layout()
                     .blocks()
-                    .node(self.curr_block)
+                    .node(entry_block)
                     .expect("block should exist")
                     .insts()
-                    .front()
-                    .expect("inst should exist")
-                    .into();
-
-                self.stack.push(dest);
+                    .front();
             }
             ValueKind::GetElemPtr(gep) => {
                 let bound_type = gep.ty();
@@ -953,20 +979,44 @@ impl<'a> VirtualMachine<'a> {
                 if self.stack.is_empty() {
                     stop = true
                 } else {
-                    if let Some(val) = val {
+                    let (function, dest) = if let Some(val) = val {
                         let val_vreg = self.read_vreg(val);
-                        let dest = self.stack.pop().unwrap();
+                        let (function, dest) = self.stack.pop().unwrap();
                         self.write_vreg(dest, val_vreg);
+                        (function, dest)
                     } else {
-                        self.stack.pop();
-                    }
+                        self.stack.pop().unwrap()
+                    };
+
+                    let layout = self
+                        .module
+                        .function_data(function.into())
+                        .ok_or(ExecErr::FunctionNotFound(function.into()))?
+                        .layout();
+
+                    let block = layout.inst_blocks().get(&dest.into()).unwrap();
+
+                    next_block = *block;
+                    next_inst = layout
+                        .blocks()
+                        .node(*block)
+                        .expect("block should exist")
+                        .insts()
+                        .node(dest.into())
+                        .expect("inst should exist")
+                        .next();
+
+                    next_function = function;
                 }
             }
             _ => unreachable!("invalid local instruction"),
         }
 
-        self.curr_inst = next_inst;
-
+        if !stop {
+            self.curr_inst = next_inst.ok_or(ExecErr::EarlyStop(self.curr_inst.into()))?;
+            self.curr_block = next_block;
+            self.curr_function = next_function;
+        }
         Ok(stop)
     }
 }

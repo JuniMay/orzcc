@@ -12,7 +12,7 @@ use super::{
     entities::{BlockData, FunctionData, ValueData},
     types::Type,
     values::{Block, Function, Value},
-    LABEL_PREFIX, GLOBAL_PREFIX, LOCAL_PREFIX,
+    GLOBAL_PREFIX, LABEL_PREFIX, LOCAL_PREFIX,
 };
 
 /// The data flow graph.
@@ -113,18 +113,30 @@ impl DataFlowGraph {
     pub fn value_name(&self, value: Value) -> String {
         if self.local_value_data(value).is_some() {
             self.value_name_allocator.borrow_mut().get(value)
-        } else {
+        } else if self
+            .globals
+            .upgrade()
+            .expect("global value map should be alive.")
+            .borrow()
+            .contains_key(&value)
+        {
             self.global_name_allocator
                 .upgrade()
                 .expect("global name allocator should be alive.")
                 .borrow_mut()
                 .get(value)
+        } else {
+            panic!("value should be either local or global.")
         }
     }
 
     /// Get the name of a block
     pub fn block_name(&self, block: Block) -> String {
-        self.block_name_allocator.borrow_mut().get(block)
+        if self.blocks.contains_key(&block) {
+            self.block_name_allocator.borrow_mut().get(block)
+        } else {
+            panic!("block should be in the dfg.")
+        }
     }
 
     pub fn assign_local_value_name(&self, value: Value, name: String) -> Result<(), NameAllocErr> {
@@ -376,9 +388,17 @@ where
             return Err(NameAllocErr::KeyDuplicated);
         }
 
-        self.allocated
-            .insert(key, format!("{}{}", self.prefix, self.counter));
-        self.counter += 1;
+        loop {
+            let name = format!("{}{}", self.prefix, self.counter);
+            if self.assigned_set.contains(&name) {
+                self.counter += 1;
+                continue;
+            } else {
+                self.allocated.insert(key, name);
+                self.counter += 1;
+                break;
+            }
+        }
 
         Ok(())
     }

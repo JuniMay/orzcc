@@ -114,6 +114,7 @@ impl FunctionData {
 }
 
 /// Kinds of value.
+#[derive(Debug)]
 pub enum ValueKind {
     /// Zero initializer
     Zero,

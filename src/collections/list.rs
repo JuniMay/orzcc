@@ -89,6 +89,10 @@ where
         self.nodes.contains_key(&key)
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.head.is_none()
+    }
+
     pub fn front(&self) -> Option<K> {
         self.head
     }
