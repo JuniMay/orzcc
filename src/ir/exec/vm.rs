@@ -207,11 +207,13 @@ impl<'a> VirtualMachine<'a> {
         Ok(&self.memory[&segment].data[offset..offset + size])
     }
 
+    /// Get a function by name.
     fn function(&self, name: &str) -> Function {
         *self.function_names.get(name).unwrap()
     }
 
-    fn add_function(&mut self, name: String, function: Function) {
+    /// Add a function name
+    fn add_function_name(&mut self, name: String, function: Function) {
         self.function_names.insert(name, function);
     }
 
@@ -310,7 +312,7 @@ impl<'a> VirtualMachine<'a> {
                 .ok_or(ExecErr::FunctionNotFound((*function).into()))?
                 .name()
                 .to_string();
-            self.add_function(name, *function);
+            self.add_function_name(name, *function);
 
             // allocate vreg for values
             let dfg = self
@@ -346,6 +348,18 @@ impl<'a> VirtualMachine<'a> {
             .layout();
 
         self.curr_inst = layout.entry_inst().expect("entry inst should exist");
+        Ok(())
+    }
+
+    pub fn run(&mut self, steps: Option<usize>) -> ExecResult<()> {
+        let mut steps = steps.unwrap_or(usize::MAX);
+        while steps > 0 {
+            if self.stopped() {
+                break;
+            }
+            self.step()?;
+            steps -= 1;
+        }
         Ok(())
     }
 
@@ -401,6 +415,8 @@ impl<'a> VirtualMachine<'a> {
                 let op = binary.op();
                 let lhs = binary.lhs();
                 let rhs = binary.rhs();
+                let lhs_ty = dfg.with_value_data(lhs, |data| data.ty().clone()).unwrap();
+                let _rhs_ty = dfg.with_value_data(rhs, |data| data.ty().clone()).unwrap();
                 let lhs_vreg = self.read_vreg(lhs);
                 let rhs_vreg = self.read_vreg(rhs);
 
@@ -561,41 +577,52 @@ impl<'a> VirtualMachine<'a> {
                             self.write_vreg(self.curr_inst.into(), VReg(result_val));
                         }
                         ICmpCond::Slt => {
-                            // FIXME: sign extension.
-                            let result_val = if (lhs_val as i64) < (rhs_val as i64) {
-                                1
-                            } else {
-                                0
-                            };
+                            let result_val = match lhs_ty.size(Some(&data_layout)) {
+                                1 => (lhs_val as i8) < (rhs_val as i8),
+                                2 => (lhs_val as i16) < (rhs_val as i16),
+                                4 => (lhs_val as i32) < (rhs_val as i32),
+                                8 => (lhs_val as i64) < (rhs_val as i64),
+                                _ => unimplemented!("unsupported int size for slt"),
+                            } as u64;
+
                             self.write_vreg(self.curr_inst.into(), VReg(result_val));
                         }
                         ICmpCond::Sle => {
-                            let result_val = if (lhs_val as i64) <= (rhs_val as i64) {
-                                1
-                            } else {
-                                0
-                            };
+                            let result_val = match lhs_ty.size(Some(&data_layout)) {
+                                1 => (lhs_val as i8) <= (rhs_val as i8),
+                                2 => (lhs_val as i16) <= (rhs_val as i16),
+                                4 => (lhs_val as i32) <= (rhs_val as i32),
+                                8 => (lhs_val as i64) <= (rhs_val as i64),
+                                _ => unimplemented!("unsupported int size for sle"),
+                            } as u64;
                             self.write_vreg(self.curr_inst.into(), VReg(result_val));
                         }
                     },
-                    BinaryOp::FCmp(cond) => match cond {
-                        FCmpCond::OEq => {
-                            let result_val = if lhs_val == rhs_val { 1 } else { 0 };
-                            self.write_vreg(self.curr_inst.into(), VReg(result_val));
+                    BinaryOp::FCmp(cond) => {
+                        // trim leading zero
+                        let size = lhs_ty.size(Some(&data_layout));
+                        let mask = (1 << size * 8) - 1;
+                        let lhs_val = lhs_val & mask;
+                        let rhs_val = rhs_val & mask;
+                        match cond {
+                            FCmpCond::OEq => {
+                                let result_val = if lhs_val == rhs_val { 1 } else { 0 };
+                                self.write_vreg(self.curr_inst.into(), VReg(result_val));
+                            }
+                            FCmpCond::ONe => {
+                                let result_val = if lhs_val != rhs_val { 1 } else { 0 };
+                                self.write_vreg(self.curr_inst.into(), VReg(result_val));
+                            }
+                            FCmpCond::OLt => {
+                                let result_val = if lhs_val < rhs_val { 1 } else { 0 };
+                                self.write_vreg(self.curr_inst.into(), VReg(result_val));
+                            }
+                            FCmpCond::OLe => {
+                                let result_val = if lhs_val <= rhs_val { 1 } else { 0 };
+                                self.write_vreg(self.curr_inst.into(), VReg(result_val));
+                            }
                         }
-                        FCmpCond::ONe => {
-                            let result_val = if lhs_val != rhs_val { 1 } else { 0 };
-                            self.write_vreg(self.curr_inst.into(), VReg(result_val));
-                        }
-                        FCmpCond::OLt => {
-                            let result_val = if lhs_val < rhs_val { 1 } else { 0 };
-                            self.write_vreg(self.curr_inst.into(), VReg(result_val));
-                        }
-                        FCmpCond::OLe => {
-                            let result_val = if lhs_val <= rhs_val { 1 } else { 0 };
-                            self.write_vreg(self.curr_inst.into(), VReg(result_val));
-                        }
-                    },
+                    }
                 }
             }
             ValueKind::Unary(unary) => {
@@ -1030,7 +1057,7 @@ impl<'a> VirtualMachine<'a> {
         if !self.stopped() {
             self.curr_inst = next_inst.ok_or(ExecErr::EarlyStop(self.curr_inst.into()))?;
             self.curr_function = next_function;
-        } 
+        }
 
         Ok(())
     }
