@@ -159,6 +159,14 @@ impl<'a> VirtualMachine<'a> {
         DataLayout { pointer_size: 4 }
     }
 
+    pub(super) fn curr_function(&self) -> Function {
+        self.curr_function
+    }
+
+    pub(super) fn curr_inst(&self) -> Inst {
+        self.curr_inst
+    }
+
     fn alloc_memory(&mut self, segment: Segment, size: usize) -> ExecResult<Addr> {
         let addr = Addr(self.memory[&segment].data.len() as u64);
         let new_len = self.memory[&segment].data.len() + size;

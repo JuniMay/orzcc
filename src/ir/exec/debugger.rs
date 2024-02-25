@@ -1,5 +1,6 @@
 use std::io::{stdin, stdout, Write};
 
+use crate::ir::values::ValueIndexer;
 use crate::ir::{
     entities::ValueKind,
     module::Module,
@@ -20,6 +21,7 @@ pub enum Command {
     DumpMemory(Addr, Addr),
     DumpVReg(Function, Value),
     Break,
+    Print(Function),
 }
 
 impl<'a> Debugger<'a> {
@@ -58,40 +60,40 @@ impl<'a> Debugger<'a> {
                 }
             }
             ValueKind::Alloc(alloc) => {
-                print!("({}) ", value.index());
+                print!("({:^4}) ", value.index());
                 print!("{} = alloc {}", dfg.value_name(value), alloc.ty())
             }
             ValueKind::Load(load) => {
-                print!("({}) ", value.index());
+                print!("({:^4}) ", value.index());
                 print!("{} = load {}, ", dfg.value_name(value), data.ty());
                 self.print_operand(load.ptr(), function);
             }
             ValueKind::Cast(cast) => {
-                print!("({}) ", value.index());
+                print!("({:^4}) ", value.index());
                 print!("{} = {} {}, ", dfg.value_name(value), cast.op(), data.ty());
                 self.print_operand(cast.val(), function);
             }
             ValueKind::Store(store) => {
-                print!("({}) ", value.index());
+                print!("({:^4}) ", value.index());
                 print!("store ");
                 self.print_operand(store.val(), function);
                 print!(", ");
                 self.print_operand(store.ptr(), function);
             }
             ValueKind::Binary(binary) => {
-                print!("({}) ", value.index());
+                print!("({:^4}) ", value.index());
                 print!("{} = {} ", dfg.value_name(value), binary.op());
                 self.print_operand(binary.lhs(), function);
                 print!(", ");
                 self.print_operand(binary.rhs(), function);
             }
             ValueKind::Unary(unary) => {
-                print!("({}) ", value.index());
+                print!("({:^4}) ", value.index());
                 print!("{} = {} ", dfg.value_name(value), unary.op());
                 self.print_operand(unary.val(), function);
             }
             ValueKind::Jump(jump) => {
-                print!("({}) ", value.index());
+                print!("({:^4}) ", value.index());
                 print!("jump {}(", dfg.block_name(jump.dst()));
                 for (i, arg) in jump.args().iter().enumerate() {
                     if i != 0 {
@@ -102,7 +104,7 @@ impl<'a> Debugger<'a> {
                 print!(")")
             }
             ValueKind::Branch(branch) => {
-                print!("({}) ", value.index());
+                print!("({:^4}) ", value.index());
                 print!("br ");
                 self.print_operand(branch.cond(), function);
                 print!(", {}", dfg.block_name(branch.then_dst()));
@@ -129,14 +131,14 @@ impl<'a> Debugger<'a> {
                 }
             }
             ValueKind::Return(ret) => {
-                print!("({}) ", value.index());
+                print!("({:^4}) ", value.index());
                 print!("ret ");
                 if let Some(val) = ret.val() {
                     self.print_operand(val, function);
                 }
             }
             ValueKind::Call(call) => {
-                print!("({}) ", value.index());
+                print!("({:^4}) ", value.index());
                 if !data.ty().is_void() {
                     print!("{} = ", dfg.value_name(value));
                 }
@@ -150,7 +152,7 @@ impl<'a> Debugger<'a> {
                 print!(")");
             }
             ValueKind::GetElemPtr(gep) => {
-                print!("({}) ", value.index());
+                print!("({:^4}) ", value.index());
                 print!("{} = getelemptr {}, ", dfg.value_name(value), gep.ty());
                 self.print_operand(gep.ptr(), function);
                 for idx in gep.indices() {
@@ -160,6 +162,46 @@ impl<'a> Debugger<'a> {
             }
             _ => panic!(),
         }
+    }
+
+    fn print_function(&self, function: Function) {
+        let function_data = self.module.function_data(function).unwrap();
+        let dfg = function_data.dfg();
+        let layout = function_data.layout();
+
+        println!(
+            "({:^4}) func {}{} {{",
+            function.index(),
+            function_data.name(),
+            function_data.ty()
+        );
+
+        for (block, node) in layout.blocks() {
+            let block_data = dfg.block_data(block).unwrap();
+            print!("({:^4}) {}", block.index(), dfg.block_name(block));
+
+            if !block_data.params().is_empty() {
+                print!("(");
+                for (i, param) in block_data.params().iter().enumerate() {
+                    if i != 0 {
+                        print!(", ");
+                    }
+                    print!("{} {}", 
+                    dfg.local_value_data(*param).unwrap().ty(),
+                    dfg.value_name(*param));
+                }
+                print!(")");
+            }
+            println!(":");
+
+            for (inst, _node) in node.insts() {
+                print!("  ");
+                self.print_local_value(inst.into(), function);
+                println!();
+            }
+        }
+
+        println!("}}");
     }
 
     fn summary(&self) {
@@ -203,6 +245,9 @@ impl<'a> Debugger<'a> {
                 "q" | "quit" => Command::Exit,
                 "b" | "break" => Command::Break,
                 "s" | "step" => Command::Step(1),
+                "p" | "print" => {
+                    Command::Print(self.vm.curr_function())
+                }
                 _ => {
                     if s.starts_with("s") {
                         let n = s[1..].trim().parse().unwrap();
@@ -241,6 +286,8 @@ impl<'a> Debugger<'a> {
                 Command::Step(n) => {
                     if !self.vm.stopped() {
                         for _ in 0..n {
+                            self.print_local_value(self.vm.curr_inst().into(), self.vm.curr_function());
+                            println!();
                             self.vm.step().unwrap();
                         }
                     }
@@ -256,6 +303,9 @@ impl<'a> Debugger<'a> {
                 }
                 Command::Break => {
                     println!("Not implemented");
+                }
+                Command::Print(function) => {
+                    self.print_function(function);
                 }
             }
 

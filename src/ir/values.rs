@@ -31,7 +31,7 @@ impl Value {
 /// Value indexer indicates an indexer for a value and can be converted from/into a Value.
 ///
 /// Indexer is actually a wrapper of usize, representing a reference to the data.
-trait ValueIndexer: From<Value> {
+pub trait ValueIndexer: From<Value> {
     fn new(index: usize) -> Self;
     fn index(&self) -> usize;
 }
