@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 
-use crate::collections::{BiLinkedNode, BiMap};
+use crate::collections::BiMap;
 
 use crate::ir::{
     entities::ValueKind,
     module::Module,
     types::{DataLayout, TypeKind},
-    values::{BinaryOp, Block, CastOp, FCmpCond, Function, ICmpCond, Inst, UnaryOp, Value},
+    values::{BinaryOp, CastOp, FCmpCond, Function, ICmpCond, Inst, UnaryOp, Value},
 };
 
 use super::ExecErr;
@@ -110,9 +110,6 @@ pub struct VirtualMachine<'a> {
     /// Current function
     curr_function: Function,
 
-    /// Current block
-    curr_block: Block,
-
     /// Function name to value map
     function_names: HashMap<String, Function>,
 
@@ -138,7 +135,6 @@ impl<'a> VirtualMachine<'a> {
 
             curr_inst: Value::new(0).into(),
             curr_function: Value::new(0).into(),
-            curr_block: Block::new(0),
 
             function_names: HashMap::new(),
 
@@ -328,19 +324,7 @@ impl<'a> VirtualMachine<'a> {
             .ok_or(ExecErr::FunctionNotFound(self.curr_function.into()))?
             .layout();
 
-        self.curr_block = layout
-            .entry_block()
-            .ok_or(ExecErr::EntryBlockNotFound(self.curr_function.into()))?;
-
-        self.curr_inst = layout
-            .blocks()
-            .node(self.curr_block)
-            .expect("block should exist")
-            .insts()
-            .front()
-            .ok_or(ExecErr::EntryInstNotFound(self.curr_block))?
-            .into();
-
+        self.curr_inst = layout.entry_inst().expect("entry inst should exist");
         Ok(())
     }
 
@@ -361,39 +345,8 @@ impl<'a> VirtualMachine<'a> {
             .ok_or(ExecErr::ValueNotFound(self.curr_inst.into()))?;
 
         let mut next_function = self.curr_function;
-        let mut next_block = self.curr_block;
-        let mut next_inst = layout
-            .blocks()
-            .node(self.curr_block)
-            .ok_or(ExecErr::BlockNotFound(self.curr_block))?
-            .insts()
-            .node(self.curr_inst)
-            .ok_or(ExecErr::EntryInstNotFound(self.curr_block))?
-            .next()
-            .or_else(|| {
-                // the current block has been traversed
-                let blocks = layout.blocks();
-                loop {
-                    let block = blocks.node(next_block).expect("block should exist").next();
-                    if let Some(block) = block {
-                        // there is a block after the current block
-                        let block_data = blocks.node(block).expect("block should exist");
-                        if !block_data.insts().is_empty() {
-                            // the block is empty, skip it
-                            next_block = block;
-                        } else {
-                            // the block is not empty
-                            next_block = block;
-                            return block_data.insts().front();
-                        }
-                    } else {
-                        // there is no block after the current block
-                        return None;
-                    }
-                }
-            });
+        let mut next_inst = layout.next_inst(self.curr_inst.into());
 
-        let dest = self.curr_inst.into();
         let data_layout = self.data_layout();
 
         let mut stop = false;
@@ -402,7 +355,7 @@ impl<'a> VirtualMachine<'a> {
             ValueKind::Alloc(alloc) => {
                 let addr =
                     self.alloc_memory(Segment::Stack, alloc.ty().size(Some(&data_layout)))?;
-                self.write_vreg(dest, addr.into());
+                self.write_vreg(self.curr_inst.into(), addr.into());
             }
             ValueKind::Load(load) => {
                 let size = value_data.ty().size(Some(&data_layout));
@@ -412,7 +365,7 @@ impl<'a> VirtualMachine<'a> {
                 for i in 0..size {
                     vreg_val |= (bytes[i] as u64) << (i * 8);
                 }
-                self.write_vreg(dest, VReg(vreg_val));
+                self.write_vreg(self.curr_inst.into(), VReg(vreg_val));
             }
             ValueKind::Store(store) => {
                 let val = store.val();
@@ -447,7 +400,7 @@ impl<'a> VirtualMachine<'a> {
                             8 => lhs_val.wrapping_add(rhs_val),
                             _ => unimplemented!("unsupported int size for add"),
                         };
-                        self.write_vreg(dest, VReg(result_val));
+                        self.write_vreg(self.curr_inst.into(), VReg(result_val));
                     }
                     BinaryOp::Sub => {
                         let result_val = match size {
@@ -457,7 +410,7 @@ impl<'a> VirtualMachine<'a> {
                             8 => lhs_val.wrapping_sub(rhs_val),
                             _ => unimplemented!("unsupported int size for sub"),
                         };
-                        self.write_vreg(dest, VReg(result_val));
+                        self.write_vreg(self.curr_inst.into(), VReg(result_val));
                     }
                     BinaryOp::Mul => {
                         let result_val = match size {
@@ -467,7 +420,7 @@ impl<'a> VirtualMachine<'a> {
                             8 => lhs_val.wrapping_mul(rhs_val),
                             _ => unimplemented!("unsupported int size for mul"),
                         };
-                        self.write_vreg(dest, VReg(result_val));
+                        self.write_vreg(self.curr_inst.into(), VReg(result_val));
                     }
                     BinaryOp::SDiv => {
                         let result_val = match size {
@@ -477,7 +430,7 @@ impl<'a> VirtualMachine<'a> {
                             8 => lhs_val.wrapping_div(rhs_val),
                             _ => unimplemented!("unsupported int size for sdiv"),
                         };
-                        self.write_vreg(dest, VReg(result_val));
+                        self.write_vreg(self.curr_inst.into(), VReg(result_val));
                     }
                     BinaryOp::UDiv => {
                         let result_val = match size {
@@ -487,7 +440,7 @@ impl<'a> VirtualMachine<'a> {
                             8 => lhs_val.wrapping_div(rhs_val),
                             _ => unimplemented!("unsupported int size for udiv"),
                         };
-                        self.write_vreg(dest, VReg(result_val));
+                        self.write_vreg(self.curr_inst.into(), VReg(result_val));
                     }
                     BinaryOp::SRem => {
                         let result_val = match size {
@@ -497,7 +450,7 @@ impl<'a> VirtualMachine<'a> {
                             8 => lhs_val.wrapping_rem(rhs_val),
                             _ => unimplemented!("unsupported int size for srem"),
                         };
-                        self.write_vreg(dest, VReg(result_val));
+                        self.write_vreg(self.curr_inst.into(), VReg(result_val));
                     }
                     BinaryOp::URem => {
                         let result_val = match size {
@@ -507,37 +460,37 @@ impl<'a> VirtualMachine<'a> {
                             8 => lhs_val.wrapping_rem(rhs_val),
                             _ => unimplemented!("unsupported int size for urem"),
                         };
-                        self.write_vreg(dest, VReg(result_val));
+                        self.write_vreg(self.curr_inst.into(), VReg(result_val));
                     }
                     BinaryOp::And => {
                         let result_val = lhs_val & rhs_val;
                         let result_val = result_val & ((1 << size * 8) - 1);
-                        self.write_vreg(dest, VReg(result_val));
+                        self.write_vreg(self.curr_inst.into(), VReg(result_val));
                     }
                     BinaryOp::Or => {
                         let result_val = lhs_val | rhs_val;
                         let result_val = result_val & ((1 << size * 8) - 1);
-                        self.write_vreg(dest, VReg(result_val));
+                        self.write_vreg(self.curr_inst.into(), VReg(result_val));
                     }
                     BinaryOp::Xor => {
                         let result_val = lhs_val ^ rhs_val;
                         let result_val = result_val & ((1 << size * 8) - 1);
-                        self.write_vreg(dest, VReg(result_val));
+                        self.write_vreg(self.curr_inst.into(), VReg(result_val));
                     }
                     BinaryOp::Shl => {
                         let result_val = lhs_val.wrapping_shl(rhs_val as u32);
                         let result_val = result_val & ((1 << size * 8) - 1);
-                        self.write_vreg(dest, VReg(result_val));
+                        self.write_vreg(self.curr_inst.into(), VReg(result_val));
                     }
                     BinaryOp::LShr => {
                         let result_val = lhs_val.wrapping_shr(rhs_val as u32);
                         let result_val = result_val & ((1 << size * 8) - 1);
-                        self.write_vreg(dest, VReg(result_val));
+                        self.write_vreg(self.curr_inst.into(), VReg(result_val));
                     }
                     BinaryOp::AShr => {
                         let result_val = (lhs_val as i64).wrapping_shr(rhs_val as u32) as u64;
                         let result_val = result_val & ((1 << size * 8) - 1);
-                        self.write_vreg(dest, VReg(result_val));
+                        self.write_vreg(self.curr_inst.into(), VReg(result_val));
                     }
                     BinaryOp::FAdd => {
                         let vreg = match size {
@@ -545,7 +498,7 @@ impl<'a> VirtualMachine<'a> {
                             8 => VReg::from_double(lhs_vreg.to_double() + rhs_vreg.to_double()),
                             _ => unimplemented!("unsupported float size for fadd"),
                         };
-                        self.write_vreg(dest, vreg);
+                        self.write_vreg(self.curr_inst.into(), vreg);
                     }
                     BinaryOp::FSub => {
                         let vreg = match size {
@@ -553,7 +506,7 @@ impl<'a> VirtualMachine<'a> {
                             8 => VReg::from_double(lhs_vreg.to_double() - rhs_vreg.to_double()),
                             _ => unimplemented!("unsupported float size for fsub"),
                         };
-                        self.write_vreg(dest, vreg);
+                        self.write_vreg(self.curr_inst.into(), vreg);
                     }
                     BinaryOp::FMul => {
                         let vreg = match size {
@@ -561,7 +514,7 @@ impl<'a> VirtualMachine<'a> {
                             8 => VReg::from_double(lhs_vreg.to_double() * rhs_vreg.to_double()),
                             _ => unimplemented!("unsupported float size for fmul"),
                         };
-                        self.write_vreg(dest, vreg);
+                        self.write_vreg(self.curr_inst.into(), vreg);
                     }
                     BinaryOp::FDiv => {
                         let vreg = match size {
@@ -569,7 +522,7 @@ impl<'a> VirtualMachine<'a> {
                             8 => VReg::from_double(lhs_vreg.to_double() / rhs_vreg.to_double()),
                             _ => unimplemented!("unsupported float size for fdiv"),
                         };
-                        self.write_vreg(dest, vreg);
+                        self.write_vreg(self.curr_inst.into(), vreg);
                     }
                     BinaryOp::FRem => {
                         let vreg = match size {
@@ -577,16 +530,16 @@ impl<'a> VirtualMachine<'a> {
                             8 => VReg::from_double(lhs_vreg.to_double() % rhs_vreg.to_double()),
                             _ => unimplemented!("unsupported float size for frem"),
                         };
-                        self.write_vreg(dest, vreg);
+                        self.write_vreg(self.curr_inst.into(), vreg);
                     }
                     BinaryOp::ICmp(cond) => match cond {
                         ICmpCond::Eq => {
                             let result_val = if lhs_val == rhs_val { 1 } else { 0 };
-                            self.write_vreg(dest, VReg(result_val));
+                            self.write_vreg(self.curr_inst.into(), VReg(result_val));
                         }
                         ICmpCond::Ne => {
                             let result_val = if lhs_val != rhs_val { 1 } else { 0 };
-                            self.write_vreg(dest, VReg(result_val));
+                            self.write_vreg(self.curr_inst.into(), VReg(result_val));
                         }
                         ICmpCond::Slt => {
                             let result_val = if (lhs_val as i64) < (rhs_val as i64) {
@@ -594,7 +547,7 @@ impl<'a> VirtualMachine<'a> {
                             } else {
                                 0
                             };
-                            self.write_vreg(dest, VReg(result_val));
+                            self.write_vreg(self.curr_inst.into(), VReg(result_val));
                         }
                         ICmpCond::Sle => {
                             let result_val = if (lhs_val as i64) <= (rhs_val as i64) {
@@ -602,25 +555,25 @@ impl<'a> VirtualMachine<'a> {
                             } else {
                                 0
                             };
-                            self.write_vreg(dest, VReg(result_val));
+                            self.write_vreg(self.curr_inst.into(), VReg(result_val));
                         }
                     },
                     BinaryOp::FCmp(cond) => match cond {
                         FCmpCond::OEq => {
                             let result_val = if lhs_val == rhs_val { 1 } else { 0 };
-                            self.write_vreg(dest, VReg(result_val));
+                            self.write_vreg(self.curr_inst.into(), VReg(result_val));
                         }
                         FCmpCond::ONe => {
                             let result_val = if lhs_val != rhs_val { 1 } else { 0 };
-                            self.write_vreg(dest, VReg(result_val));
+                            self.write_vreg(self.curr_inst.into(), VReg(result_val));
                         }
                         FCmpCond::OLt => {
                             let result_val = if lhs_val < rhs_val { 1 } else { 0 };
-                            self.write_vreg(dest, VReg(result_val));
+                            self.write_vreg(self.curr_inst.into(), VReg(result_val));
                         }
                         FCmpCond::OLe => {
                             let result_val = if lhs_val <= rhs_val { 1 } else { 0 };
-                            self.write_vreg(dest, VReg(result_val));
+                            self.write_vreg(self.curr_inst.into(), VReg(result_val));
                         }
                     },
                 }
@@ -637,7 +590,7 @@ impl<'a> VirtualMachine<'a> {
                     UnaryOp::Not => {
                         let result_val = !operand_val;
                         let result_val = result_val & ((1 << size * 8) - 1);
-                        self.write_vreg(dest, VReg(result_val));
+                        self.write_vreg(self.curr_inst.into(), VReg(result_val));
                     }
                     UnaryOp::FNeg => {
                         let vreg = match size {
@@ -645,7 +598,7 @@ impl<'a> VirtualMachine<'a> {
                             8 => VReg::from_double(-operand_vreg.to_double()),
                             _ => unimplemented!("unsupported float size for fneg"),
                         };
-                        self.write_vreg(dest, vreg);
+                        self.write_vreg(self.curr_inst.into(), vreg);
                     }
                 }
             }
@@ -657,15 +610,7 @@ impl<'a> VirtualMachine<'a> {
                     let arg_vreg = self.read_vreg(*arg);
                     self.write_vreg(*param, arg_vreg);
                 }
-                next_block = block;
-                next_inst = layout
-                    .blocks()
-                    .node(self.curr_block)
-                    .expect("block should exist")
-                    .insts()
-                    .front()
-                    .expect("inst should exist")
-                    .into();
+                next_inst = layout.entry_inst_of_block(block);
             }
             ValueKind::Branch(branch) => {
                 let cond = branch.cond();
@@ -695,15 +640,7 @@ impl<'a> VirtualMachine<'a> {
                     self.write_vreg(*param, arg_vreg);
                 }
 
-                next_block = block;
-                next_inst = layout
-                    .blocks()
-                    .node(self.curr_block)
-                    .expect("block should exist")
-                    .insts()
-                    .front()
-                    .expect("inst should exist")
-                    .into();
+                next_inst = layout.entry_inst_of_block(block);
             }
             ValueKind::Call(call) => {
                 let mut callee = call.callee();
@@ -749,10 +686,9 @@ impl<'a> VirtualMachine<'a> {
                     let arg_vreg = self.read_vreg(*arg);
                     self.write_vreg(*param, arg_vreg);
                 }
-                self.stack.push((self.curr_function, dest));
+                self.stack.push((self.curr_function, self.curr_inst.into()));
 
                 next_function = callee.into();
-                next_block = entry_block;
                 next_inst = callee_data
                     .layout()
                     .blocks()
@@ -808,7 +744,7 @@ impl<'a> VirtualMachine<'a> {
                 }
 
                 let new_addr = Addr(addr.0 + offset);
-                self.write_vreg(dest, new_addr.into());
+                self.write_vreg(self.curr_inst.into(), new_addr.into());
             }
             ValueKind::Cast(cast) => {
                 let op = cast.op();
@@ -826,16 +762,19 @@ impl<'a> VirtualMachine<'a> {
 
                 match op {
                     CastOp::Trunc => match dest_size {
-                        1 => self.write_vreg(dest, VReg(operand_vreg.0 as u8 as u64)),
-                        2 => self.write_vreg(dest, VReg(operand_vreg.0 as u16 as u64)),
-                        4 => self.write_vreg(dest, VReg(operand_vreg.0 as u32 as u64)),
-                        8 => self.write_vreg(dest, VReg(operand_vreg.0)),
+                        1 => self
+                            .write_vreg(self.curr_inst.into(), VReg(operand_vreg.0 as u8 as u64)),
+                        2 => self
+                            .write_vreg(self.curr_inst.into(), VReg(operand_vreg.0 as u16 as u64)),
+                        4 => self
+                            .write_vreg(self.curr_inst.into(), VReg(operand_vreg.0 as u32 as u64)),
+                        8 => self.write_vreg(self.curr_inst.into(), VReg(operand_vreg.0)),
                         _ => unimplemented!("unsupported int size for trunc"),
                     },
                     CastOp::ZExt => {
                         let mask = (1 << (operand_size * 8)) - 1;
                         let result_val = operand_vreg.0 & mask;
-                        self.write_vreg(dest, VReg(result_val));
+                        self.write_vreg(self.curr_inst.into(), VReg(result_val));
                     }
                     CastOp::SExt => {
                         let mask = (1 << (operand_size * 8)) - 1;
@@ -845,132 +784,204 @@ impl<'a> VirtualMachine<'a> {
                         } else {
                             operand_vreg.0 & mask
                         };
-                        self.write_vreg(dest, VReg(result_val));
+                        self.write_vreg(self.curr_inst.into(), VReg(result_val));
                     }
                     CastOp::FpToUI => match operand_size {
                         4 => match dest_size {
-                            1 => self.write_vreg(dest, VReg(operand_vreg.to_float() as u8 as u64)),
-                            2 => self.write_vreg(dest, VReg(operand_vreg.to_float() as u16 as u64)),
-                            4 => self.write_vreg(dest, VReg(operand_vreg.to_float() as u32 as u64)),
-                            8 => self.write_vreg(dest, VReg(operand_vreg.to_float() as u64)),
+                            1 => self.write_vreg(
+                                self.curr_inst.into(),
+                                VReg(operand_vreg.to_float() as u8 as u64),
+                            ),
+                            2 => self.write_vreg(
+                                self.curr_inst.into(),
+                                VReg(operand_vreg.to_float() as u16 as u64),
+                            ),
+                            4 => self.write_vreg(
+                                self.curr_inst.into(),
+                                VReg(operand_vreg.to_float() as u32 as u64),
+                            ),
+                            8 => self.write_vreg(
+                                self.curr_inst.into(),
+                                VReg(operand_vreg.to_float() as u64),
+                            ),
                             _ => unimplemented!("unsupported int size for fptoui"),
                         },
                         8 => match dest_size {
-                            1 => self.write_vreg(dest, VReg(operand_vreg.to_double() as u8 as u64)),
-                            2 => {
-                                self.write_vreg(dest, VReg(operand_vreg.to_double() as u16 as u64))
-                            }
-                            4 => {
-                                self.write_vreg(dest, VReg(operand_vreg.to_double() as u32 as u64))
-                            }
-                            8 => self.write_vreg(dest, VReg(operand_vreg.to_double() as u64)),
+                            1 => self.write_vreg(
+                                self.curr_inst.into(),
+                                VReg(operand_vreg.to_double() as u8 as u64),
+                            ),
+                            2 => self.write_vreg(
+                                self.curr_inst.into(),
+                                VReg(operand_vreg.to_double() as u16 as u64),
+                            ),
+                            4 => self.write_vreg(
+                                self.curr_inst.into(),
+                                VReg(operand_vreg.to_double() as u32 as u64),
+                            ),
+                            8 => self.write_vreg(
+                                self.curr_inst.into(),
+                                VReg(operand_vreg.to_double() as u64),
+                            ),
                             _ => unimplemented!("unsupported int size for fptoui"),
                         },
                         _ => unimplemented!("unsupported float size for fptoui"),
                     },
                     CastOp::FpToSI => match operand_size {
                         4 => match dest_size {
-                            1 => self.write_vreg(dest, VReg(operand_vreg.to_float() as i8 as u64)),
-                            2 => self.write_vreg(dest, VReg(operand_vreg.to_float() as i16 as u64)),
-                            4 => self.write_vreg(dest, VReg(operand_vreg.to_float() as i32 as u64)),
-                            8 => self.write_vreg(dest, VReg(operand_vreg.to_float() as i64 as u64)),
+                            1 => self.write_vreg(
+                                self.curr_inst.into(),
+                                VReg(operand_vreg.to_float() as i8 as u64),
+                            ),
+                            2 => self.write_vreg(
+                                self.curr_inst.into(),
+                                VReg(operand_vreg.to_float() as i16 as u64),
+                            ),
+                            4 => self.write_vreg(
+                                self.curr_inst.into(),
+                                VReg(operand_vreg.to_float() as i32 as u64),
+                            ),
+                            8 => self.write_vreg(
+                                self.curr_inst.into(),
+                                VReg(operand_vreg.to_float() as i64 as u64),
+                            ),
                             _ => unimplemented!("unsupported int size for fptosi"),
                         },
-                        8 => {
-                            match dest_size {
-                                1 => self
-                                    .write_vreg(dest, VReg(operand_vreg.to_double() as i8 as u64)),
-                                2 => self
-                                    .write_vreg(dest, VReg(operand_vreg.to_double() as i16 as u64)),
-                                4 => self
-                                    .write_vreg(dest, VReg(operand_vreg.to_double() as i32 as u64)),
-                                8 => self
-                                    .write_vreg(dest, VReg(operand_vreg.to_double() as i64 as u64)),
-                                _ => unimplemented!("unsupported int size for fptosi"),
-                            }
-                        }
+                        8 => match dest_size {
+                            1 => self.write_vreg(
+                                self.curr_inst.into(),
+                                VReg(operand_vreg.to_double() as i8 as u64),
+                            ),
+                            2 => self.write_vreg(
+                                self.curr_inst.into(),
+                                VReg(operand_vreg.to_double() as i16 as u64),
+                            ),
+                            4 => self.write_vreg(
+                                self.curr_inst.into(),
+                                VReg(operand_vreg.to_double() as i32 as u64),
+                            ),
+                            8 => self.write_vreg(
+                                self.curr_inst.into(),
+                                VReg(operand_vreg.to_double() as i64 as u64),
+                            ),
+                            _ => unimplemented!("unsupported int size for fptosi"),
+                        },
                         _ => unimplemented!("unsupported float size for fptosi"),
                     },
                     CastOp::UIToFp => match dest_size {
                         4 => match operand_size {
-                            1 => {
-                                self.write_vreg(dest, VReg::from_float(operand_vreg.0 as u8 as f32))
-                            }
-                            2 => self
-                                .write_vreg(dest, VReg::from_float(operand_vreg.0 as u16 as f32)),
-                            4 => self
-                                .write_vreg(dest, VReg::from_float(operand_vreg.0 as u32 as f32)),
-                            8 => self.write_vreg(dest, VReg::from_float(operand_vreg.0 as f32)),
+                            1 => self.write_vreg(
+                                self.curr_inst.into(),
+                                VReg::from_float(operand_vreg.0 as u8 as f32),
+                            ),
+                            2 => self.write_vreg(
+                                self.curr_inst.into(),
+                                VReg::from_float(operand_vreg.0 as u16 as f32),
+                            ),
+                            4 => self.write_vreg(
+                                self.curr_inst.into(),
+                                VReg::from_float(operand_vreg.0 as u32 as f32),
+                            ),
+                            8 => self.write_vreg(
+                                self.curr_inst.into(),
+                                VReg::from_float(operand_vreg.0 as f32),
+                            ),
                             _ => unimplemented!("unsupported int size for uitofp"),
                         },
                         8 => match operand_size {
-                            1 => self
-                                .write_vreg(dest, VReg::from_double(operand_vreg.0 as u8 as f64)),
-                            2 => self
-                                .write_vreg(dest, VReg::from_double(operand_vreg.0 as u16 as f64)),
-                            4 => self
-                                .write_vreg(dest, VReg::from_double(operand_vreg.0 as u32 as f64)),
-                            8 => self.write_vreg(dest, VReg::from_double(operand_vreg.0 as f64)),
+                            1 => self.write_vreg(
+                                self.curr_inst.into(),
+                                VReg::from_double(operand_vreg.0 as u8 as f64),
+                            ),
+                            2 => self.write_vreg(
+                                self.curr_inst.into(),
+                                VReg::from_double(operand_vreg.0 as u16 as f64),
+                            ),
+                            4 => self.write_vreg(
+                                self.curr_inst.into(),
+                                VReg::from_double(operand_vreg.0 as u32 as f64),
+                            ),
+                            8 => self.write_vreg(
+                                self.curr_inst.into(),
+                                VReg::from_double(operand_vreg.0 as f64),
+                            ),
                             _ => unimplemented!("unsupported int size for uitofp"),
                         },
                         _ => unimplemented!("unsupported float size for uitofp"),
                     },
                     CastOp::SIToFp => match dest_size {
                         4 => match operand_size {
-                            1 => {
-                                self.write_vreg(dest, VReg::from_float(operand_vreg.0 as i8 as f32))
-                            }
-                            2 => self
-                                .write_vreg(dest, VReg::from_float(operand_vreg.0 as i16 as f32)),
-                            4 => self
-                                .write_vreg(dest, VReg::from_float(operand_vreg.0 as i32 as f32)),
-                            8 => self.write_vreg(dest, VReg::from_float(operand_vreg.0 as f32)),
+                            1 => self.write_vreg(
+                                self.curr_inst.into(),
+                                VReg::from_float(operand_vreg.0 as i8 as f32),
+                            ),
+                            2 => self.write_vreg(
+                                self.curr_inst.into(),
+                                VReg::from_float(operand_vreg.0 as i16 as f32),
+                            ),
+                            4 => self.write_vreg(
+                                self.curr_inst.into(),
+                                VReg::from_float(operand_vreg.0 as i32 as f32),
+                            ),
+                            8 => self.write_vreg(
+                                self.curr_inst.into(),
+                                VReg::from_float(operand_vreg.0 as f32),
+                            ),
                             _ => unimplemented!("unsupported int size for sitofp"),
                         },
                         8 => match operand_size {
-                            1 => self
-                                .write_vreg(dest, VReg::from_double(operand_vreg.0 as i8 as f64)),
-                            2 => self
-                                .write_vreg(dest, VReg::from_double(operand_vreg.0 as i16 as f64)),
-                            4 => self
-                                .write_vreg(dest, VReg::from_double(operand_vreg.0 as i32 as f64)),
-                            8 => self.write_vreg(dest, VReg::from_double(operand_vreg.0 as f64)),
+                            1 => self.write_vreg(
+                                self.curr_inst.into(),
+                                VReg::from_double(operand_vreg.0 as i8 as f64),
+                            ),
+                            2 => self.write_vreg(
+                                self.curr_inst.into(),
+                                VReg::from_double(operand_vreg.0 as i16 as f64),
+                            ),
+                            4 => self.write_vreg(
+                                self.curr_inst.into(),
+                                VReg::from_double(operand_vreg.0 as i32 as f64),
+                            ),
+                            8 => self.write_vreg(
+                                self.curr_inst.into(),
+                                VReg::from_double(operand_vreg.0 as f64),
+                            ),
                             _ => unimplemented!("unsupported int size for sitofp"),
                         },
                         _ => unimplemented!("unsupported float size for sitofp"),
                     },
                     CastOp::FpTrunc => match dest_size {
                         4 => match operand_size {
-                            4 => self.write_vreg(dest, operand_vreg),
+                            4 => self.write_vreg(self.curr_inst.into(), operand_vreg),
                             _ => unimplemented!("unsupported float size for fptrunc"),
                         },
                         8 => match operand_size {
                             4 => self.write_vreg(
-                                dest,
+                                self.curr_inst.into(),
                                 VReg::from_double(operand_vreg.to_float() as f64),
                             ),
-                            8 => self.write_vreg(dest, operand_vreg),
+                            8 => self.write_vreg(self.curr_inst.into(), operand_vreg),
                             _ => unimplemented!("unsupported float size for fptrunc"),
                         },
                         _ => unimplemented!("unsupported float size for fptrunc"),
                     },
                     CastOp::FpExt => match dest_size {
                         4 => match operand_size {
-                            4 => self.write_vreg(dest, operand_vreg),
+                            4 => self.write_vreg(self.curr_inst.into(), operand_vreg),
                             8 => self.write_vreg(
-                                dest,
+                                self.curr_inst.into(),
                                 VReg::from_double(operand_vreg.to_float() as f64),
                             ),
                             _ => unimplemented!("unsupported float size for fpext"),
                         },
                         8 => match operand_size {
-                            8 => self.write_vreg(dest, operand_vreg),
+                            8 => self.write_vreg(self.curr_inst.into(), operand_vreg),
                             _ => unimplemented!("unsupported float size for fpext"),
                         },
                         _ => unimplemented!("unsupported float size for fpext"),
                     },
                     CastOp::Bitcast => {
-                        self.write_vreg(dest, operand_vreg);
+                        self.write_vreg(self.curr_inst.into(), operand_vreg);
                     }
                 }
             }
@@ -979,34 +990,18 @@ impl<'a> VirtualMachine<'a> {
                 if self.stack.is_empty() {
                     stop = true
                 } else {
-                    let (function, dest) = if let Some(val) = val {
+                    let (caller, prev) = if let Some(val) = val {
                         let val_vreg = self.read_vreg(val);
-                        let (function, dest) = self.stack.pop().unwrap();
-                        self.write_vreg(dest, val_vreg);
-                        (function, dest)
+                        let (caller, prev) = self.stack.pop().unwrap();
+                        self.write_vreg(prev, val_vreg);
+                        (caller, prev)
                     } else {
                         self.stack.pop().unwrap()
                     };
 
-                    let layout = self
-                        .module
-                        .function_data(function.into())
-                        .ok_or(ExecErr::FunctionNotFound(function.into()))?
-                        .layout();
-
-                    let block = layout.inst_blocks().get(&dest.into()).unwrap();
-
-                    next_block = *block;
-                    next_inst = layout
-                        .blocks()
-                        .node(*block)
-                        .expect("block should exist")
-                        .insts()
-                        .node(dest.into())
-                        .expect("inst should exist")
-                        .next();
-
-                    next_function = function;
+                    let layout = self.module.function_data(caller.into()).unwrap().layout();
+                    next_inst = layout.next_inst(prev.into());
+                    next_function = caller;
                 }
             }
             _ => unreachable!("invalid local instruction"),
@@ -1014,7 +1009,6 @@ impl<'a> VirtualMachine<'a> {
 
         if !stop {
             self.curr_inst = next_inst.ok_or(ExecErr::EarlyStop(self.curr_inst.into()))?;
-            self.curr_block = next_block;
             self.curr_function = next_function;
         }
         Ok(stop)
