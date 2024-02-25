@@ -156,7 +156,7 @@ pub struct Operand {
 
 impl Operand {
     pub fn new_boxed(ty: Option<Type>, value: AstNodeBox, span: Span) -> AstNodeBox {
-        let mut node =  AstNode::new_boxed(AstNodeKind::Operand(Operand { ty, value }));
+        let mut node = AstNode::new_boxed(AstNodeKind::Operand(Operand { ty, value }));
         node.span = Some(span);
         node
     }
@@ -309,7 +309,12 @@ impl Inst {
         node
     }
 
-    pub(super) fn new_boxed_load(dest: String, ty: Type, ptr: AstNodeBox, span: Span) -> AstNodeBox {
+    pub(super) fn new_boxed_load(
+        dest: String,
+        ty: Type,
+        ptr: AstNodeBox,
+        span: Span,
+    ) -> AstNodeBox {
         let mut node = AstNode::new_boxed(AstNodeKind::Inst(Inst {
             kind: InstKind::Load,
             dest: Some(dest),
@@ -337,7 +342,12 @@ impl Inst {
         node
     }
 
-    pub(super) fn new_boxed_call(dest: Option<String>, ty: Type, callee: AstNodeBox, span: Span) -> AstNodeBox {
+    pub(super) fn new_boxed_call(
+        dest: Option<String>,
+        ty: Type,
+        callee: AstNodeBox,
+        span: Span,
+    ) -> AstNodeBox {
         let mut node = AstNode::new_boxed(AstNodeKind::Inst(Inst {
             kind: InstKind::Call,
             dest,

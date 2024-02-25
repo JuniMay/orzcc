@@ -1,11 +1,13 @@
 use std::{
     cell::RefCell,
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     error::Error,
     fmt,
     hash::Hash,
     rc::{Rc, Weak},
 };
+
+use crate::collections::BiMap;
 
 use super::{
     builder::{GlobalBuilder, LocalBuilder},
@@ -128,6 +130,14 @@ impl DataFlowGraph {
         } else {
             panic!("value should be either local or global.")
         }
+    }
+
+    pub fn get_local_value_by_name(&self, name: &String) -> Option<Value> {
+        self.value_name_allocator.borrow().try_get_by_name(name)
+    }
+
+    pub fn get_block_by_name(&self, name: &String) -> Option<Block> {
+        self.block_name_allocator.borrow().try_get_by_name(name)
     }
 
     /// Get the name of a block
@@ -298,6 +308,10 @@ impl Module {
         self.name_allocator.borrow_mut().assign(value, name)
     }
 
+    pub fn get_value_by_name(&self, name: &String) -> Option<Value> {
+        self.name_allocator.borrow().try_get_by_name(name)
+    }
+
     pub fn add_identified_type(&mut self, name: String) {
         self.identified_type_layout.push(name);
     }
@@ -332,12 +346,11 @@ impl IdAllocator {
 /// Manager and allocator of names.
 pub struct NameAllocator<T>
 where
-    T: Hash + Eq,
+    T: Hash + Eq + Clone,
 {
     counter: usize,
-    assigned_map: HashMap<T, String>,
-    assigned_set: HashSet<String>,
-    allocated: HashMap<T, String>,
+
+    map: BiMap<T, String>,
 
     prefix: &'static str,
 }
@@ -372,29 +385,25 @@ where
     pub fn new(prefix: &'static str) -> Self {
         Self {
             counter: 0,
-            assigned_map: HashMap::new(),
-            assigned_set: HashSet::new(),
-            allocated: HashMap::new(),
-
+            map: BiMap::new(),
             prefix,
         }
     }
 
     /// Allocate a name for the key.
     ///
-    /// If the name is already assigned/allocated, return [`NameAllocErr`].
+    /// If the key is already allocated, return [`NameAllocErr`].
     pub fn allocate(&mut self, key: T) -> Result<(), NameAllocErr> {
-        if self.assigned_map.contains_key(&key) || self.allocated.contains_key(&key) {
+        if self.map.contains(&key) {
             return Err(NameAllocErr::KeyDuplicated);
         }
 
         loop {
             let name = format!("{}{}", self.prefix, self.counter);
-            if self.assigned_set.contains(&name) {
+            if self.map.contains_rev(&name) {
                 self.counter += 1;
-                continue;
             } else {
-                self.allocated.insert(key, name);
+                self.map.insert(key, name);
                 self.counter += 1;
                 break;
             }
@@ -405,11 +414,11 @@ where
 
     /// Manually assign a name for the key.
     pub fn assign(&mut self, key: T, name: String) -> Result<(), NameAllocErr> {
-        if self.assigned_set.contains(&name) {
+        if self.map.contains_rev(&name) {
             return Err(NameAllocErr::NameDuplicated);
         }
 
-        if self.assigned_map.contains_key(&key) || self.allocated.contains_key(&key) {
+        if self.map.contains(&key) {
             return Err(NameAllocErr::KeyDuplicated);
         }
 
@@ -419,8 +428,7 @@ where
             format!("{}{}", self.prefix, name)
         };
 
-        self.assigned_set.insert(name.clone());
-        self.assigned_map.insert(key, name);
+        self.map.insert(key, name);
 
         Ok(())
     }
@@ -429,16 +437,11 @@ where
     ///
     /// If the name is not assigned, allocate a new name.
     pub fn get(&mut self, key: T) -> String {
-        let name = self
-            .assigned_map
-            .get(&key)
-            .or_else(|| self.allocated.get(&key))
-            .cloned()
-            .or_else(|| {
-                self.allocate(key)
-                    .expect("allocation should be successful for non-existed key.");
-                self.allocated.get(&key).cloned()
-            });
+        let name = self.map.get(&key).cloned().or_else(|| {
+            self.allocate(key)
+                .expect("allocation should be successful for non-existed key.");
+            self.map.get(&key).cloned()
+        });
 
         name.unwrap()
     }
@@ -447,9 +450,10 @@ where
     ///
     /// This will not allocate a new name if the name is not assigned.
     pub fn try_get(&self, key: T) -> Option<String> {
-        self.assigned_map
-            .get(&key)
-            .or_else(|| self.allocated.get(&key))
-            .cloned()
+        self.map.get(&key).cloned()
+    }
+
+    pub fn try_get_by_name(&self, name: &String) -> Option<T> {
+        self.map.get_rev(name).copied()
     }
 }

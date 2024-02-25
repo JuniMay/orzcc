@@ -200,7 +200,9 @@ impl Layout {
 
     /// Get the entry instruction of a block
     pub fn entry_inst_of_block(&self, block: Block) -> Option<Inst> {
-        self.blocks.node(block).and_then(|node| node.insts().front())
+        self.blocks
+            .node(block)
+            .and_then(|node| node.insts().front())
     }
 
     pub fn append_block(&mut self, block: Block) -> Result<(), LayoutOpErr> {

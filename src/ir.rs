@@ -1,9 +1,9 @@
 //! # Intermediate Representation for OrzCC
 //!
 //! This module contains the intermediate representation (IR) for the OrzCC.
-//! 
-//! The OrzIR is a low-level representation of programming languages. It is inspired by 
-//! the LLVM IR, Koopa and Cranelift IRs. The IR is designed to preserve the semantics and 
+//!
+//! The OrzIR is a low-level representation of programming languages. It is inspired by
+//! the LLVM IR, Koopa and Cranelift IRs. The IR is designed to preserve the semantics and
 //! structure of higher-level programming languages, while being simple and efficient to
 //! manipulate and optimize.
 //!
@@ -12,11 +12,11 @@
 //! contains the instructions and the layout contains the sequence of basic blocks and instructions.
 //!
 //! ## Global Slots
-//! 
-//! The [global slots](values::GlobalSlot) are used to store global variables and constants. 
-//! The global slots are allocated in the data segment of the program, and are used to store the 
+//!
+//! The [global slots](values::GlobalSlot) are used to store global variables and constants.
+//! The global slots are allocated in the data segment of the program, and are used to store the
 //! initial values of the global variables and constants.
-//! 
+//!
 //! The format to define a global slot is:
 //! ```orzir
 //! global @var_name = <type> <initial_value>
@@ -24,7 +24,7 @@
 //! ```
 //!
 //! ## Functions
-//! 
+//!
 //! The [functions](entities::FunctionData) are the main units of computation in the OrzIR.
 //!
 //! The format to define a function is:
@@ -38,13 +38,13 @@
 //! ```orzir
 //! decl @function_name(<arg0_type>, <arg1_type>, ...) -> <return_type>
 //! ```
-//! 
+//!
 //! ## Blocks
 //!
 //! The [blocks](entities::BlockData) are the basic units of control flow in the OrzIR.
 //! The type of a block is [`label`](types::TypeKind::Label), and the name of a block starts with
 //! a `^` followed by a sequence of alphanumeric characters.
-//! 
+//!
 //! In the OrzIR, phi nodes are not used for SSA, instead, block parameters are used to represent
 //! the incoming values from the predecessors of the block. This is the same as MLIR, Koopa, and
 //! Cranelift IRs.
@@ -55,8 +55,8 @@
 //!     # instructions
 //! ```
 //!
-//! ## Instructions 
-//! 
+//! ## Instructions
+//!
 //! The instructions in OrzIR follows several formats.
 //! ```orzir
 //! # for binary and unary operations.
@@ -64,12 +64,12 @@
 //!
 //! # for load, cast and getelementptr instructions.
 //! <result> = <op> <type>, <operand0>, <operand1>, ...
-//! 
+//!
 //! # for store and return instructions.
 //! <op> <operand0>, <operand1>, ...
 //!
 //! jump ^block_name(<arg0>, <arg1>, ...)
-//! 
+//!
 //! branch <cond>, ^then(<arg0>, ...), ^else(<arg0>, ...)
 //!
 //! # note that the result is optional

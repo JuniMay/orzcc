@@ -1,6 +1,5 @@
 use orzcc::ir::{exec::debugger::Debugger, frontend::parser::Parser};
 
-
 fn main() {
     let filepath = "tests/ir_cases/00_arithmetic.orzir";
     let mut file = std::fs::File::open(filepath).unwrap();

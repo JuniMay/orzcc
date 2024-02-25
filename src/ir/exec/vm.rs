@@ -114,9 +114,6 @@ pub struct VirtualMachine<'a> {
     /// Current function
     curr_function: Function,
 
-    /// Function name to value map
-    function_names: HashMap<String, Function>,
-
     /// Stack for return value
     stack: Vec<(Function, Value)>,
 
@@ -142,8 +139,6 @@ impl<'a> VirtualMachine<'a> {
 
             curr_inst: Value::new(0).into(),
             curr_function: Value::new(0).into(),
-
-            function_names: HashMap::new(),
 
             stack: vec![],
 
@@ -207,16 +202,6 @@ impl<'a> VirtualMachine<'a> {
         Ok(&self.memory[&segment].data[offset..offset + size])
     }
 
-    /// Get a function by name.
-    fn function(&self, name: &str) -> Function {
-        *self.function_names.get(name).unwrap()
-    }
-
-    /// Add a function name
-    fn add_function_name(&mut self, name: String, function: Function) {
-        self.function_names.insert(name, function);
-    }
-
     fn write_global_init(&mut self, addr: Addr, init: Value) -> ExecResult<()> {
         self.module
             .with_value_data(init, |data| match data.kind() {
@@ -269,7 +254,7 @@ impl<'a> VirtualMachine<'a> {
             .unwrap_or(Err(ExecErr::ValueNotFound(init)))
     }
 
-    pub fn prepare(&mut self, entry_function_name: &str) -> ExecResult<()> {
+    pub fn prepare(&mut self, entry_function: Function) -> ExecResult<()> {
         for value in self.module.global_slot_layout() {
             self.module
                 .with_value_data(*value, |data| match data.kind() {
@@ -305,15 +290,6 @@ impl<'a> VirtualMachine<'a> {
                 })
                 .unwrap_or(Err(ExecErr::ValueNotFound((*function).into())))?;
 
-            // map name of the function
-            let name = self
-                .module
-                .function_data(*function)
-                .ok_or(ExecErr::FunctionNotFound((*function).into()))?
-                .name()
-                .to_string();
-            self.add_function_name(name, *function);
-
             // allocate vreg for values
             let dfg = self
                 .module
@@ -339,7 +315,7 @@ impl<'a> VirtualMachine<'a> {
             }
         }
 
-        self.curr_function = self.function(entry_function_name);
+        self.curr_function = entry_function.into();
 
         let layout = self
             .module
@@ -704,7 +680,7 @@ impl<'a> VirtualMachine<'a> {
                             _ => {
                                 let addr = self.read_vreg(callee).into();
                                 let function =
-                                    self.addrs.get_rev(addr).expect("function should exist");
+                                    self.addrs.get_rev(&addr).expect("function should exist");
                                 callee = (*function).into();
                                 self.module
                                     .function_data((*function).into())
@@ -752,7 +728,7 @@ impl<'a> VirtualMachine<'a> {
                     .module
                     .with_value_data(ptr, |data| match data.kind() {
                         ValueKind::GlobalSlot(_slot) => {
-                            *self.addrs.get(ptr).expect("addr should exist")
+                            *self.addrs.get(&ptr).expect("addr should exist")
                         }
                         _ => {
                             let ptr_vreg = self.read_vreg(ptr);

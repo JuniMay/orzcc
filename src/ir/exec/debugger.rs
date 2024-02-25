@@ -23,10 +23,10 @@ enum DebugCommand {
     Continue,
     Step(Option<usize>),
     Break(Inst),
-    Show(Option<Function>, Option<Inst>),
+    Show(Option<String>, Option<String>),
     Quit,
     DumpMemory(Option<Addr>, Option<usize>),
-    DumpVregs(Option<Function>, Option<Value>),
+    DumpVregs(Option<String>, Option<String>),
 }
 
 impl<'a> Debugger<'a> {
@@ -75,12 +75,9 @@ impl<'a> Debugger<'a> {
                 Some(DebugCommand::Break(Value::new(inst.unwrap()).into()))
             }
             "show" => {
-                let function = args.get(1).map(|s| s.parse::<usize>().unwrap());
-                let inst = args.get(2).map(|s| s.parse::<usize>().unwrap());
-                Some(DebugCommand::Show(
-                    function.map(|i| Function::new(i)),
-                    inst.map(|i| Value::new(i).into()),
-                ))
+                let function = args.get(1).cloned().map(|s| s.to_string());
+                let inst = args.get(2).cloned().map(|s| s.to_string());
+                Some(DebugCommand::Show(function, inst))
             }
             "quit" | "q" => Some(DebugCommand::Quit),
             "dump-memory" | "dm" => {
@@ -89,12 +86,9 @@ impl<'a> Debugger<'a> {
                 Some(DebugCommand::DumpMemory(addr.map(|i| Addr::new(i)), size))
             }
             "dump-vreg" | "dv" => {
-                let function = args.get(1).map(|s| s.parse::<usize>().unwrap());
-                let value = args.get(2).map(|s| s.parse::<usize>().unwrap());
-                Some(DebugCommand::DumpVregs(
-                    function.map(|i| Function::new(i)),
-                    value.map(|i| Value::new(i)),
-                ))
+                let function = args.get(1).cloned().map(|s| s.to_string());
+                let value = args.get(2).cloned().map(|s| s.to_string());
+                Some(DebugCommand::DumpVregs(function, value))
             }
             _ => None,
         };
@@ -258,7 +252,12 @@ impl<'a> Debugger<'a> {
             // TODO: error handling
             match command {
                 DebugCommand::Entry(name) => {
-                    self.vm.prepare(&name).unwrap();
+                    let function = self.module.get_value_by_name(&name);
+                    if let Some(function) = function {
+                        self.vm.prepare(function.into()).unwrap();
+                    } else {
+                        println!("function {} is not found.", name);
+                    }
                 }
                 DebugCommand::Continue => {
                     self.run_vm(None).unwrap();
@@ -270,6 +269,23 @@ impl<'a> Debugger<'a> {
                     self.breakpoints.insert(inst);
                 }
                 DebugCommand::Show(function, inst) => {
+                    let function = function
+                        .map(|name| self.module.get_value_by_name(&name))
+                        .flatten();
+                    let inst = inst
+                        .map(|name| {
+                            self.module
+                                .function_data(
+                                    function.unwrap_or(self.vm.curr_function().into()).into(),
+                                )
+                                .map(|data| data.dfg().get_local_value_by_name(&name))
+                                .flatten()
+                        })
+                        .flatten();
+
+                    let function = function.map(|f| f.into());
+                    let inst = inst.map(|i| i.into());
+
                     self.show(function, inst).unwrap();
                 }
                 DebugCommand::Quit => {
@@ -279,6 +295,22 @@ impl<'a> Debugger<'a> {
                     todo!()
                 }
                 DebugCommand::DumpVregs(function, value) => {
+                    let function = function
+                        .map(|name| self.module.get_value_by_name(&name))
+                        .flatten();
+                    let value = value
+                        .map(|name| {
+                            self.module
+                                .function_data(
+                                    function.unwrap_or(self.vm.curr_function().into()).into(),
+                                )
+                                .map(|data| data.dfg().get_local_value_by_name(&name))
+                                .flatten()
+                        })
+                        .flatten();
+
+                    let function = function.map(|f| f.into());
+                    let value = value.map(|i| i.into());
                     self.dump_vregs(function, value).unwrap();
                 }
             }

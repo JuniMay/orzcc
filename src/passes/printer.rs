@@ -207,7 +207,13 @@ where
                 self.print_operand(load.ptr(), dfg)
             }
             ValueKind::Cast(cast) => {
-                write!(self.buf, "{} = {} {}, ", dfg.value_name(value), cast.op(), data.ty())?;
+                write!(
+                    self.buf,
+                    "{} = {} {}, ",
+                    dfg.value_name(value),
+                    cast.op(),
+                    data.ty()
+                )?;
                 self.print_operand(cast.val(), dfg)
             }
             ValueKind::Store(store) => {

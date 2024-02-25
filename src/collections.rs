@@ -1,5 +1,5 @@
-pub mod list; 
 pub mod bimap;
+pub mod list;
 
-pub use list::*;
 pub use bimap::*;
+pub use list::*;
