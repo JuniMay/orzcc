@@ -1,316 +1,286 @@
-use std::io::{stdin, stdout, Write};
+use std::collections::HashSet;
+use std::io::{stdin, stdout, BufWriter, Write};
 
-use crate::ir::values::ValueIndexer;
+use crate::ir::entities::FunctionKind;
+use crate::ir::values::{Inst, ValueIndexer};
 use crate::ir::{
-    entities::ValueKind,
     module::Module,
     values::{Function, Value},
 };
+use crate::passes::printer::Printer;
 
-use super::vm::{Addr, VirtualMachine};
+use super::vm::{Addr, ExecResult, VirtualMachine};
+use super::ExecErr;
 
 pub struct Debugger<'a> {
     vm: VirtualMachine<'a>,
     module: &'a Module,
+    breakpoints: HashSet<Inst>,
 }
 
-pub enum Command {
+enum DebugCommand {
+    Entry(String),
     Continue,
-    Exit,
-    Step(usize),
-    DumpMemory(Addr, Addr),
-    DumpVReg(Function, Value),
-    Break,
-    Print(Function),
+    Step(Option<usize>),
+    Break(Inst),
+    Show(Option<Function>, Option<Inst>),
+    Quit,
+    DumpMemory(Option<Addr>, Option<usize>),
+    DumpVregs(Option<Function>, Option<Value>),
 }
 
 impl<'a> Debugger<'a> {
     pub fn new(module: &'a Module) -> Self {
         let vm = VirtualMachine::new(module);
-        Self { vm, module }
-    }
-
-    fn print_operand(&self, value: Value, function: Function) {
-        let dfg = self.module.function_data(function).unwrap().dfg();
-        dfg.with_value_data(value, |data| {
-            if data.kind().is_const() {
-                self.print_local_value(value, function)
-            } else {
-                print!("{} {}", data.ty(), dfg.value_name(value))
-            }
-        })
-        .unwrap()
-    }
-
-    fn print_local_value(&self, value: Value, function: Function) {
-        let dfg = self.module.function_data(function).unwrap().dfg();
-        let data = dfg.local_value_data(value).unwrap();
-
-        match data.kind() {
-            &ValueKind::Zero => print!("{} zero", data.ty()),
-            ValueKind::Undef => print!("{} undef", data.ty()),
-            ValueKind::Bytes(bytes) => {
-                // hexidecimal format with little endian
-                print!("{} 0x", data.ty());
-                if bytes.is_empty() {
-                    print!("00");
-                }
-                for byte in bytes.iter().rev() {
-                    print!("{:02x}", byte);
-                }
-            }
-            ValueKind::Alloc(alloc) => {
-                print!("({:^4}) ", value.index());
-                print!("{} = alloc {}", dfg.value_name(value), alloc.ty())
-            }
-            ValueKind::Load(load) => {
-                print!("({:^4}) ", value.index());
-                print!("{} = load {}, ", dfg.value_name(value), data.ty());
-                self.print_operand(load.ptr(), function);
-            }
-            ValueKind::Cast(cast) => {
-                print!("({:^4}) ", value.index());
-                print!("{} = {} {}, ", dfg.value_name(value), cast.op(), data.ty());
-                self.print_operand(cast.val(), function);
-            }
-            ValueKind::Store(store) => {
-                print!("({:^4}) ", value.index());
-                print!("store ");
-                self.print_operand(store.val(), function);
-                print!(", ");
-                self.print_operand(store.ptr(), function);
-            }
-            ValueKind::Binary(binary) => {
-                print!("({:^4}) ", value.index());
-                print!("{} = {} ", dfg.value_name(value), binary.op());
-                self.print_operand(binary.lhs(), function);
-                print!(", ");
-                self.print_operand(binary.rhs(), function);
-            }
-            ValueKind::Unary(unary) => {
-                print!("({:^4}) ", value.index());
-                print!("{} = {} ", dfg.value_name(value), unary.op());
-                self.print_operand(unary.val(), function);
-            }
-            ValueKind::Jump(jump) => {
-                print!("({:^4}) ", value.index());
-                print!("jump {}(", dfg.block_name(jump.dst()));
-                for (i, arg) in jump.args().iter().enumerate() {
-                    if i != 0 {
-                        print!(", ");
-                    }
-                    self.print_operand(*arg, function);
-                }
-                print!(")")
-            }
-            ValueKind::Branch(branch) => {
-                print!("({:^4}) ", value.index());
-                print!("br ");
-                self.print_operand(branch.cond(), function);
-                print!(", {}", dfg.block_name(branch.then_dst()));
-                if !branch.then_args().is_empty() {
-                    print!("(");
-                    for (i, arg) in branch.then_args().iter().enumerate() {
-                        if i != 0 {
-                            print!(", ");
-                        }
-                        self.print_operand(*arg, function);
-                    }
-                    print!(")");
-                }
-                print!(", {}", dfg.block_name(branch.else_dst()));
-                if !branch.else_args().is_empty() {
-                    print!("(");
-                    for (i, arg) in branch.else_args().iter().enumerate() {
-                        if i != 0 {
-                            print!(", ");
-                        }
-                        self.print_operand(*arg, function);
-                    }
-                    print!(")");
-                }
-            }
-            ValueKind::Return(ret) => {
-                print!("({:^4}) ", value.index());
-                print!("ret ");
-                if let Some(val) = ret.val() {
-                    self.print_operand(val, function);
-                }
-            }
-            ValueKind::Call(call) => {
-                print!("({:^4}) ", value.index());
-                if !data.ty().is_void() {
-                    print!("{} = ", dfg.value_name(value));
-                }
-                print!("call {} {}(", data.ty(), dfg.value_name(call.callee()));
-                for (i, arg) in call.args().iter().enumerate() {
-                    if i != 0 {
-                        print!(", ");
-                    }
-                    self.print_operand(*arg, function);
-                }
-                print!(")");
-            }
-            ValueKind::GetElemPtr(gep) => {
-                print!("({:^4}) ", value.index());
-                print!("{} = getelemptr {}, ", dfg.value_name(value), gep.ty());
-                self.print_operand(gep.ptr(), function);
-                for idx in gep.indices() {
-                    print!(", ");
-                    self.print_operand(*idx, function);
-                }
-            }
-            _ => panic!(),
+        Self {
+            vm,
+            module,
+            breakpoints: HashSet::new(),
         }
     }
 
-    fn print_function(&self, function: Function) {
-        let function_data = self.module.function_data(function).unwrap();
-        let dfg = function_data.dfg();
-        let layout = function_data.layout();
-
-        println!(
-            "({:^4}) func {}{} {{",
-            function.index(),
-            function_data.name(),
-            function_data.ty()
-        );
-
-        for (block, node) in layout.blocks() {
-            let block_data = dfg.block_data(block).unwrap();
-            print!("({:^4}) {}", block.index(), dfg.block_name(block));
-
-            if !block_data.params().is_empty() {
-                print!("(");
-                for (i, param) in block_data.params().iter().enumerate() {
-                    if i != 0 {
-                        print!(", ");
-                    }
-                    print!("{} {}", 
-                    dfg.local_value_data(*param).unwrap().ty(),
-                    dfg.value_name(*param));
-                }
-                print!(")");
-            }
-            println!(":");
-
-            for (inst, _node) in node.insts() {
-                print!("  ");
-                self.print_local_value(inst.into(), function);
-                println!();
-            }
-        }
-
-        println!("}}");
+    fn readline(&self) -> String {
+        let mut input = String::new();
+        print!("(OrzDB) > ");
+        let _ = stdout().flush();
+        stdin().read_line(&mut input).unwrap();
+        input.trim().to_string()
     }
 
-    fn summary(&self) {
-        println!("EXECUTION SUMMARY ======================");
-        for function in self.module.function_layout() {
+    fn parse_command(&self, line: String) -> Option<DebugCommand> {
+        // split the line into args
+        let args = line.split_whitespace().collect::<Vec<&str>>();
+
+        if args.is_empty() {
+            return None;
+        }
+
+        let command = match args[0] {
+            "entry" | "e" => {
+                let function_name = args.get(1).map(|s| s.to_string());
+                if let Some(name) = function_name {
+                    Some(DebugCommand::Entry(name.clone()))
+                } else {
+                    println!("invalid function name: {:?}", function_name);
+                    None
+                }
+            }
+            "continue" | "c" => Some(DebugCommand::Continue),
+            "step" | "s" => {
+                let count = args.get(1).map(|s| s.parse::<usize>().unwrap());
+                Some(DebugCommand::Step(count))
+            }
+            "break" | "b" => {
+                let inst = args.get(1).map(|s| s.parse::<usize>().unwrap());
+                Some(DebugCommand::Break(Value::new(inst.unwrap()).into()))
+            }
+            "show" => {
+                let function = args.get(1).map(|s| s.parse::<usize>().unwrap());
+                let inst = args.get(2).map(|s| s.parse::<usize>().unwrap());
+                Some(DebugCommand::Show(
+                    function.map(|i| Function::new(i)),
+                    inst.map(|i| Value::new(i).into()),
+                ))
+            }
+            "quit" | "q" => Some(DebugCommand::Quit),
+            "dump-memory" | "dm" => {
+                let addr = args.get(1).map(|s| s.parse::<u64>().unwrap());
+                let size = args.get(2).map(|s| s.parse::<usize>().unwrap());
+                Some(DebugCommand::DumpMemory(addr.map(|i| Addr::new(i)), size))
+            }
+            "dump-vreg" | "dv" => {
+                let function = args.get(1).map(|s| s.parse::<usize>().unwrap());
+                let value = args.get(2).map(|s| s.parse::<usize>().unwrap());
+                Some(DebugCommand::DumpVregs(
+                    function.map(|i| Function::new(i)),
+                    value.map(|i| Value::new(i)),
+                ))
+            }
+            _ => None,
+        };
+
+        command
+    }
+
+    pub fn run_vm(&mut self, steps: Option<usize>) -> ExecResult<()> {
+        let mut steps = steps.unwrap_or(u64::MAX as usize);
+        while steps > 0 {
+            self.vm.step()?;
+            if self.vm.stopped() {
+                println!("execution finished.");
+                break;
+            }
+            let inst = self.vm.curr_inst();
+            if self.breakpoints.contains(&inst) {
+                println!("breakpoint hit at {:?}", inst);
+                self.show(Some(self.vm.curr_function()), Some(inst))
+                    .unwrap();
+                return Ok(());
+            }
+            steps -= 1;
+        }
+        Ok(())
+    }
+
+    pub fn show(&self, function: Option<Function>, inst: Option<Inst>) -> ExecResult<()> {
+        let function_fallback_layout = vec![self.vm.curr_function()];
+
+        let functions = if function.is_none() {
+            self.module.function_layout()
+        } else {
+            &function_fallback_layout
+        };
+
+        for function in functions {
             let function_data = self
                 .module
                 .function_data(*function)
-                .expect("function should exist");
-            println!("Function: {}", function_data.name());
+                .ok_or(ExecErr::FunctionNotFound((*function).into()))?;
+
             let dfg = function_data.dfg();
+            let layout = function_data.layout();
 
-            for (value, _data) in dfg.values() {
-                let name = dfg.value_name(*value);
-                let vreg = self.vm.read_vreg(*value);
+            if let FunctionKind::Definition = function_data.kind() {
+                println!(
+                    "[{:^4}] func {}{} {{",
+                    function.index(),
+                    function_data.name(),
+                    function_data.ty()
+                );
+            } else {
+                println!(
+                    "[{:^4}] decl {}{}",
+                    function.index(),
+                    function_data.name(),
+                    function_data.ty()
+                );
 
-                println!("\t{:10} = {:?}", name, vreg);
-            }
-        }
-        println!("========================================");
-    }
-
-    pub fn run(&mut self) {
-        self.vm.prepare("@main").ok();
-
-        println!("Welcome to OrzDB Debugger");
-
-        loop {
-            print!("(OrzDB) > ");
-            stdout().flush().unwrap();
-            let mut s = String::new();
-            stdin().read_line(&mut s).unwrap();
-            let s = s.trim();
-
-            if s.is_empty() {
                 continue;
             }
 
-            let command = match s {
-                "c" | "continue" => Command::Continue,
-                "q" | "quit" => Command::Exit,
-                "b" | "break" => Command::Break,
-                "s" | "step" => Command::Step(1),
-                "p" | "print" => {
-                    Command::Print(self.vm.curr_function())
-                }
-                _ => {
-                    if s.starts_with("s") {
-                        let n = s[1..].trim().parse().unwrap();
-                        Command::Step(n)
-                    } else if s.starts_with("d") {
-                        let args: Vec<&str> = s[1..].split_whitespace().collect();
-                        let start = Addr::new(args[0].parse().unwrap());
-                        let end = Addr::new(args[1].parse().unwrap());
-                        Command::DumpMemory(start, end)
-                    } else if s.starts_with("v") {
-                        let args: Vec<&str> = s[1..].split_whitespace().collect();
-                        let function = Value::new(args[0].parse().unwrap()).into();
-                        let value = Value::new(args[1].parse().unwrap());
-                        Command::DumpVReg(function, value)
-                    } else {
-                        println!("Unknown command: {}", s);
-                        continue;
-                    }
-                }
-            };
+            if let Some(inst) = inst {
+                println!("          ...");
+                let mut buf = BufWriter::new(Vec::new());
+                let mut printer = Printer::new(&mut buf);
+                printer.print_local_value(inst.into(), dfg).unwrap();
+                let _ = buf.flush().unwrap();
+                let output = String::from_utf8(buf.into_inner().unwrap()).unwrap();
+                println!("[{:^4}]     {}", inst.index(), output);
+                println!("          ...");
+            } else {
+                let mut buf = BufWriter::new(Vec::new());
+                for (block, node) in layout.blocks() {
+                    let block_data = dfg.block_data(block).unwrap();
 
-            match command {
-                Command::Continue => loop {
-                    let res = self.vm.step();
-                    if self.vm.stopped() {
-                        break;
-                    }
-                    if let Err(e) = res {
-                        println!("Error: {:?}", e);
-                        break;
-                    }
-                },
-                Command::Exit => {
-                    break;
-                }
-                Command::Step(n) => {
-                    if !self.vm.stopped() {
-                        for _ in 0..n {
-                            self.print_local_value(self.vm.curr_inst().into(), self.vm.curr_function());
-                            println!();
-                            self.vm.step().unwrap();
+                    write!(buf, "[{:^4}] {}", block.index(), dfg.block_name(block)).unwrap();
+
+                    if !block_data.params().is_empty() {
+                        write!(buf, "(").unwrap();
+                        for (i, param) in block_data.params().iter().enumerate() {
+                            if i != 0 {
+                                write!(buf, ", ").unwrap();
+                            }
+                            write!(
+                                buf,
+                                "{} {}",
+                                dfg.local_value_data(*param).unwrap().ty(),
+                                dfg.value_name(*param)
+                            )
+                            .unwrap();
                         }
+                        writeln!(buf, "):").unwrap();
+                    } else {
+                        writeln!(buf, ":").unwrap();
+                    }
+
+                    for (inst, _node) in node.insts() {
+                        write!(buf, "[{:^4}]    ", inst.index()).unwrap();
+                        // inefficient implementation, should be optimized
+                        let mut inner_buf = BufWriter::new(Vec::new());
+                        let mut printer = Printer::new(&mut inner_buf);
+                        printer.print_local_value(inst.into(), dfg).unwrap();
+                        let _ = inner_buf.flush().unwrap();
+                        let output = String::from_utf8(inner_buf.into_inner().unwrap()).unwrap();
+
+                        write!(buf, "{}", output).unwrap();
+                        writeln!(buf).unwrap();
                     }
                 }
-                Command::DumpMemory(_start, _end) => {
-                    todo!()
-                }
-                Command::DumpVReg(function, value) => {
-                    let vreg = self.vm.read_vreg(value);
-                    self.print_local_value(value, function);
-                    println!();
-                    println!(" ==> {:?}", vreg);
-                }
-                Command::Break => {
-                    println!("Not implemented");
-                }
-                Command::Print(function) => {
-                    self.print_function(function);
-                }
+                let _ = buf.flush().unwrap();
+                let output = String::from_utf8(buf.into_inner().unwrap()).unwrap();
+
+                println!("{}", output);
             }
 
-            if self.vm.stopped() {
-                self.summary();
+            println!("[{:^4}] }}", function.index());
+        }
+        Ok(())
+    }
+
+    fn dump_vregs(&self, function: Option<Function>, value: Option<Value>) -> ExecResult<()> {
+        let function = function.unwrap_or_else(|| self.vm.curr_function());
+        let function_data = self
+            .module
+            .function_data(function)
+            .ok_or(ExecErr::FunctionNotFound(function.into()))?;
+
+        let dfg = function_data.dfg();
+
+        if let Some(value) = value {
+            let vreg = self.vm.read_vreg(value);
+            println!("{:?}", vreg);
+        } else {
+            println!("Virtual Registers of Function {}", function_data.name());
+            for (value, _data) in dfg.values() {
+                let name = dfg.value_name(*value);
+                let vreg = self.vm.read_vreg(*value);
+                println!("[{:^4}] {:10} = {:?}", value.index(), name, vreg);
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn repl(&mut self) {
+        println!("Welcome to OrzDB!");
+        let _ = stdout().flush().unwrap();
+        loop {
+            let line = self.readline();
+            let command = self.parse_command(line);
+
+            if command.is_none() {
+                println!("invalid command");
+                continue;
+            }
+
+            let command = command.unwrap();
+
+            // TODO: error handling
+            match command {
+                DebugCommand::Entry(name) => {
+                    self.vm.prepare(&name).unwrap();
+                }
+                DebugCommand::Continue => {
+                    self.run_vm(None).unwrap();
+                }
+                DebugCommand::Step(count) => {
+                    self.run_vm(count.or(Some(1))).unwrap();
+                }
+                DebugCommand::Break(inst) => {
+                    self.breakpoints.insert(inst);
+                }
+                DebugCommand::Show(function, inst) => {
+                    self.show(function, inst).unwrap();
+                }
+                DebugCommand::Quit => {
+                    break;
+                }
+                DebugCommand::DumpMemory(addr, size) => {
+                    todo!()
+                }
+                DebugCommand::DumpVregs(function, value) => {
+                    self.dump_vregs(function, value).unwrap();
+                }
             }
         }
     }

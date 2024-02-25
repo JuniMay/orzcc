@@ -9,5 +9,5 @@ fn main() {
 
     let mut debugger = Debugger::new(&module);
 
-    debugger.run();
+    debugger.repl();
 }
