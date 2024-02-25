@@ -7,7 +7,7 @@ use crate::ir::{
         BuilderErr, ConstantBuilder, GlobalValueBuilder, LocalBlockBuilder, LocalValueBuilder,
     },
     module::Module,
-    types::{Type, TypeKind},
+    types::Type,
     values::{Block, Function, Value},
 };
 
