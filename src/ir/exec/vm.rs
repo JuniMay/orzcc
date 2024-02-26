@@ -1,6 +1,6 @@
 //! # Virtual Machine of OrzIR
 //!
-//! The virtual machine is used to execute the Orz IR. The virtual machine is represented as a 
+//! The virtual machine is used to execute the Orz IR. The virtual machine is represented as a
 //! 64-bit  little-endian machine using a segmented memory model.
 //!
 //! Note that a virtual machine is just a approximation of the real behavior of the IR. The
@@ -13,8 +13,8 @@
 //! | Segment (8) |                   Offset (56)                    |
 //! +-------------+--------------------------------------------------+
 //! ```
-//! 
-//! The program counter or instruction pointer in the VM is represented using a combination of 
+//!
+//! The program counter or instruction pointer in the VM is represented using a combination of
 //! current function and current instruction.
 //!
 
@@ -26,7 +26,7 @@ use crate::collections::BiMap;
 use crate::ir::{
     entities::ValueKind,
     module::Module,
-    types::{DataLayout, TypeKind},
+    types::TypeKind,
     values::{BinaryOp, CastOp, FCmpCond, Function, ICmpCond, Inst, UnaryOp, Value},
 };
 
@@ -183,10 +183,6 @@ impl<'a> VirtualMachine<'a> {
         self.stopped
     }
 
-    fn data_layout(&self) -> DataLayout {
-        DataLayout { pointer_size: 4 }
-    }
-
     pub(super) fn curr_function(&self) -> Function {
         self.curr_function
     }
@@ -244,11 +240,11 @@ impl<'a> VirtualMachine<'a> {
         self.module
             .with_value_data(init, |data| match data.kind() {
                 ValueKind::Zero => {
-                    let size = data.ty().size(Some(&self.data_layout()));
+                    let size = data.ty().bytewidth();
                     self.write_memory(addr, &vec![0; size])
                 }
                 ValueKind::Bytes(bytes) => {
-                    let size = data.ty().size(Some(&self.data_layout()));
+                    let size = data.ty().bytewidth();
                     let pad = size - bytes.len();
                     let mut data = Vec::new();
                     data.extend_from_slice(bytes);
@@ -256,7 +252,7 @@ impl<'a> VirtualMachine<'a> {
                     self.write_memory(addr, &data)
                 }
                 ValueKind::Undef => {
-                    let size = data.ty().size(Some(&self.data_layout()));
+                    let size = data.ty().bytewidth();
                     self.write_memory(addr, &vec![0; size])
                 }
                 ValueKind::Array(elems) => {
@@ -264,7 +260,7 @@ impl<'a> VirtualMachine<'a> {
                         .ty()
                         .as_array()
                         .ok_or(ExecErr::InvalidType(data.ty().clone()))?;
-                    let elem_size = ty.size(Some(&self.data_layout()));
+                    let elem_size = ty.bytewidth();
 
                     let mut offset = 0;
                     for elem in elems {
@@ -283,7 +279,7 @@ impl<'a> VirtualMachine<'a> {
                     for (field, ty) in fields.iter().zip(field_types) {
                         let field_addr = Addr(addr.0 + offset);
                         self.write_global_init(field_addr, *field)?;
-                        offset += ty.size(Some(&self.data_layout())) as u64;
+                        offset += ty.bytewidth() as u64;
                     }
                     Ok(())
                 }
@@ -302,9 +298,7 @@ impl<'a> VirtualMachine<'a> {
                         } else {
                             Segment::Constant
                         };
-                        let data_layout = self.data_layout();
-                        let addr =
-                            self.alloc_memory(segment, data.ty().size(Some(&data_layout)))?;
+                        let addr = self.alloc_memory(segment, data.ty().bytewidth())?;
                         self.addrs.insert(*value, addr);
                         self.write_global_init(addr, slot.init())?;
                         self.alloc_vreg(*value);
@@ -396,16 +390,13 @@ impl<'a> VirtualMachine<'a> {
         let mut next_function = self.curr_function;
         let mut next_inst = layout.next_inst(self.curr_inst.into());
 
-        let data_layout = self.data_layout();
-
         match value_data.kind() {
             ValueKind::Alloc(alloc) => {
-                let addr =
-                    self.alloc_memory(Segment::Stack, alloc.ty().size(Some(&data_layout)))?;
+                let addr = self.alloc_memory(Segment::Stack, alloc.ty().bytewidth())?;
                 self.write_vreg(self.curr_inst.into(), addr.into());
             }
             ValueKind::Load(load) => {
-                let size = value_data.ty().size(Some(&data_layout));
+                let size = value_data.ty().bytewidth();
                 let ptr_vreg = self.read_vreg(load.ptr());
                 let bytes = self.read_memory(ptr_vreg.into(), size)?;
                 let mut vreg_val = 0;
@@ -418,7 +409,7 @@ impl<'a> VirtualMachine<'a> {
                 let val = store.val();
                 let ptr = store.ptr();
                 let size = dfg
-                    .with_value_data(val, |data| data.ty().size(Some(&data_layout)))
+                    .with_value_data(val, |data| data.ty().bytewidth())
                     .expect("val to store should exist");
                 let ptr_vreg = self.read_vreg(ptr);
                 let val_vreg = self.read_vreg(val);
@@ -430,45 +421,31 @@ impl<'a> VirtualMachine<'a> {
                 let lhs = binary.lhs();
                 let rhs = binary.rhs();
                 let lhs_ty = dfg.with_value_data(lhs, |data| data.ty().clone()).unwrap();
-                let _rhs_ty = dfg.with_value_data(rhs, |data| data.ty().clone()).unwrap();
+                let rhs_ty = dfg.with_value_data(rhs, |data| data.ty().clone()).unwrap();
                 let lhs_vreg = self.read_vreg(lhs);
                 let rhs_vreg = self.read_vreg(rhs);
 
                 let ty = value_data.ty();
-                let size = ty.size(Some(&data_layout));
+                let size = ty.bytewidth();
+                let bitwidth = ty.bitwidth();
 
                 let lhs_val = lhs_vreg.0;
                 let rhs_val = rhs_vreg.0;
 
+                let lhs_val = lhs_val & ((1 << lhs_ty.bitwidth()) - 1);
+                let rhs_val = rhs_val & ((1 << rhs_ty.bitwidth()) - 1);
+
                 match op {
                     BinaryOp::Add => {
-                        let result_val = match size {
-                            1 => (lhs_val as u8).wrapping_add(rhs_val as u8) as u64,
-                            2 => (lhs_val as u16).wrapping_add(rhs_val as u16) as u64,
-                            4 => (lhs_val as u32).wrapping_add(rhs_val as u32) as u64,
-                            8 => lhs_val.wrapping_add(rhs_val),
-                            _ => unimplemented!("unsupported int size for add"),
-                        };
+                        let result_val = lhs_val.wrapping_add(rhs_val);
                         self.write_vreg(self.curr_inst.into(), VReg(result_val));
                     }
                     BinaryOp::Sub => {
-                        let result_val = match size {
-                            1 => (lhs_val as u8).wrapping_sub(rhs_val as u8) as u64,
-                            2 => (lhs_val as u16).wrapping_sub(rhs_val as u16) as u64,
-                            4 => (lhs_val as u32).wrapping_sub(rhs_val as u32) as u64,
-                            8 => lhs_val.wrapping_sub(rhs_val),
-                            _ => unimplemented!("unsupported int size for sub"),
-                        };
+                        let result_val = lhs_val.wrapping_sub(rhs_val);
                         self.write_vreg(self.curr_inst.into(), VReg(result_val));
                     }
                     BinaryOp::Mul => {
-                        let result_val = match size {
-                            1 => (lhs_val as u8).wrapping_mul(rhs_val as u8) as u64,
-                            2 => (lhs_val as u16).wrapping_mul(rhs_val as u16) as u64,
-                            4 => (lhs_val as u32).wrapping_mul(rhs_val as u32) as u64,
-                            8 => lhs_val.wrapping_mul(rhs_val),
-                            _ => unimplemented!("unsupported int size for mul"),
-                        };
+                        let result_val = lhs_val.wrapping_mul(rhs_val);
                         self.write_vreg(self.curr_inst.into(), VReg(result_val));
                     }
                     BinaryOp::SDiv => {
@@ -482,13 +459,7 @@ impl<'a> VirtualMachine<'a> {
                         self.write_vreg(self.curr_inst.into(), VReg(result_val));
                     }
                     BinaryOp::UDiv => {
-                        let result_val = match size {
-                            1 => (lhs_val as u8).wrapping_div(rhs_val as u8) as u64,
-                            2 => (lhs_val as u16).wrapping_div(rhs_val as u16) as u64,
-                            4 => (lhs_val as u32).wrapping_div(rhs_val as u32) as u64,
-                            8 => lhs_val.wrapping_div(rhs_val),
-                            _ => unimplemented!("unsupported int size for udiv"),
-                        };
+                        let result_val = lhs_val.wrapping_div(rhs_val);
                         self.write_vreg(self.curr_inst.into(), VReg(result_val));
                     }
                     BinaryOp::SRem => {
@@ -502,43 +473,37 @@ impl<'a> VirtualMachine<'a> {
                         self.write_vreg(self.curr_inst.into(), VReg(result_val));
                     }
                     BinaryOp::URem => {
-                        let result_val = match size {
-                            1 => (lhs_val as u8).wrapping_rem(rhs_val as u8) as u64,
-                            2 => (lhs_val as u16).wrapping_rem(rhs_val as u16) as u64,
-                            4 => (lhs_val as u32).wrapping_rem(rhs_val as u32) as u64,
-                            8 => lhs_val.wrapping_rem(rhs_val),
-                            _ => unimplemented!("unsupported int size for urem"),
-                        };
+                        let result_val = lhs_val.wrapping_rem(rhs_val);
                         self.write_vreg(self.curr_inst.into(), VReg(result_val));
                     }
                     BinaryOp::And => {
                         let result_val = lhs_val & rhs_val;
-                        let result_val = result_val & ((1 << size * 8) - 1);
+                        let result_val = result_val & ((1 << bitwidth) - 1);
                         self.write_vreg(self.curr_inst.into(), VReg(result_val));
                     }
                     BinaryOp::Or => {
                         let result_val = lhs_val | rhs_val;
-                        let result_val = result_val & ((1 << size * 8) - 1);
+                        let result_val = result_val & ((1 << bitwidth) - 1);
                         self.write_vreg(self.curr_inst.into(), VReg(result_val));
                     }
                     BinaryOp::Xor => {
                         let result_val = lhs_val ^ rhs_val;
-                        let result_val = result_val & ((1 << size * 8) - 1);
+                        let result_val = result_val & ((1 << bitwidth) - 1);
                         self.write_vreg(self.curr_inst.into(), VReg(result_val));
                     }
                     BinaryOp::Shl => {
                         let result_val = lhs_val.wrapping_shl(rhs_val as u32);
-                        let result_val = result_val & ((1 << size * 8) - 1);
+                        let result_val = result_val & ((1 << bitwidth) - 1);
                         self.write_vreg(self.curr_inst.into(), VReg(result_val));
                     }
                     BinaryOp::LShr => {
                         let result_val = lhs_val.wrapping_shr(rhs_val as u32);
-                        let result_val = result_val & ((1 << size * 8) - 1);
+                        let result_val = result_val & ((1 << bitwidth) - 1);
                         self.write_vreg(self.curr_inst.into(), VReg(result_val));
                     }
                     BinaryOp::AShr => {
                         let result_val = (lhs_val as i64).wrapping_shr(rhs_val as u32) as u64;
-                        let result_val = result_val & ((1 << size * 8) - 1);
+                        let result_val = result_val & ((1 << bitwidth) - 1);
                         self.write_vreg(self.curr_inst.into(), VReg(result_val));
                     }
                     BinaryOp::FAdd => {
@@ -591,7 +556,7 @@ impl<'a> VirtualMachine<'a> {
                             self.write_vreg(self.curr_inst.into(), VReg(result_val));
                         }
                         ICmpCond::Slt => {
-                            let result_val = match lhs_ty.size(Some(&data_layout)) {
+                            let result_val = match lhs_ty.bytewidth() {
                                 1 => (lhs_val as i8) < (rhs_val as i8),
                                 2 => (lhs_val as i16) < (rhs_val as i16),
                                 4 => (lhs_val as i32) < (rhs_val as i32),
@@ -602,7 +567,10 @@ impl<'a> VirtualMachine<'a> {
                             self.write_vreg(self.curr_inst.into(), VReg(result_val));
                         }
                         ICmpCond::Sle => {
-                            let result_val = match lhs_ty.size(Some(&data_layout)) {
+                            dbg!(lhs_val, rhs_val);
+                            dbg!(lhs_val as i32, rhs_val as i32);
+
+                            let result_val = match lhs_ty.bytewidth() {
                                 1 => (lhs_val as i8) <= (rhs_val as i8),
                                 2 => (lhs_val as i16) <= (rhs_val as i16),
                                 4 => (lhs_val as i32) <= (rhs_val as i32),
@@ -614,7 +582,7 @@ impl<'a> VirtualMachine<'a> {
                     },
                     BinaryOp::FCmp(cond) => {
                         // trim leading zero
-                        let size = lhs_ty.size(Some(&data_layout));
+                        let size = lhs_ty.bytewidth();
                         let mask = (1 << size * 8) - 1;
                         let lhs_val = lhs_val & mask;
                         let rhs_val = rhs_val & mask;
@@ -644,13 +612,17 @@ impl<'a> VirtualMachine<'a> {
                 let operand = unary.val();
                 let operand_vreg = self.read_vreg(operand);
                 let ty = value_data.ty();
-                let size = ty.size(Some(&data_layout));
+                let size = ty.bytewidth();
+                let bitwidth = ty.bitwidth();
                 let operand_val = operand_vreg.0;
+
+                let mask = (1 << bitwidth) - 1;
+                let operand_val = operand_val & mask;
 
                 match op {
                     UnaryOp::Not => {
                         let result_val = !operand_val;
-                        let result_val = result_val & ((1 << size * 8) - 1);
+                        let result_val = result_val & ((1 << bitwidth) - 1);
                         self.write_vreg(self.curr_inst.into(), VReg(result_val));
                     }
                     UnaryOp::FNeg => {
@@ -788,19 +760,19 @@ impl<'a> VirtualMachine<'a> {
 
                     match curr_type.kind() {
                         TypeKind::Array(_len, elem_type) => {
-                            let elem_size = elem_type.size(Some(&data_layout));
+                            let elem_size = elem_type.bytewidth();
                             offset += index_val * elem_size as u64;
                             curr_type = elem_type.clone();
                         }
                         TypeKind::Struct(field_types) => {
                             let field_idx = index_val as usize;
                             let field_type = field_types[field_idx].clone();
-                            let field_size = field_type.size(Some(&data_layout));
+                            let field_size = field_type.bytewidth();
                             offset += field_size as u64;
                             curr_type = field_type;
                         }
                         _ => {
-                            let size = curr_type.size(Some(&data_layout));
+                            let size = curr_type.bytewidth();
                             offset += index_val * size as u64;
                             break;
                         }
@@ -821,8 +793,8 @@ impl<'a> VirtualMachine<'a> {
                     .with_value_data(operand, |data| data.ty().clone())
                     .ok_or(ExecErr::ValueNotFound(operand))?;
 
-                let dest_size = ty.size(Some(&data_layout));
-                let operand_size = operand_ty.size(Some(&data_layout));
+                let dest_size = ty.bytewidth();
+                let operand_size = operand_ty.bytewidth();
 
                 match op {
                     CastOp::Trunc => match dest_size {

@@ -188,8 +188,13 @@ impl<'a> Debugger<'a> {
                 break;
             }
             let inst = self.vm.curr_inst();
+
             if self.breakpoints.contains(&inst) {
                 println!("breakpoint hit at {:?}", inst);
+                self.show(Some(self.vm.curr_function()), Some(inst))
+                    .unwrap();
+                break;
+            } else if steps == 1 {
                 self.show(Some(self.vm.curr_function()), Some(inst))
                     .unwrap();
             }
@@ -305,7 +310,7 @@ impl<'a> Debugger<'a> {
 
         if let Some(value) = value {
             let vreg = self.vm.read_vreg(value);
-            println!("{:?}", vreg);
+            println!("[{:^4}] {:10} = {}", value.index(), dfg.value_name(value), vreg);
         } else {
             println!("Virtual Registers of Function {}", function_data.name());
             for (value, _data) in dfg.values() {
