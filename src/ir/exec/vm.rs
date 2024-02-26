@@ -567,9 +567,6 @@ impl<'a> VirtualMachine<'a> {
                             self.write_vreg(self.curr_inst.into(), VReg(result_val));
                         }
                         ICmpCond::Sle => {
-                            dbg!(lhs_val, rhs_val);
-                            dbg!(lhs_val as i32, rhs_val as i32);
-
                             let result_val = match lhs_ty.bytewidth() {
                                 1 => (lhs_val as i8) <= (rhs_val as i8),
                                 2 => (lhs_val as i16) <= (rhs_val as i16),

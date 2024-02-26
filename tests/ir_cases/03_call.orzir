@@ -11,3 +11,9 @@ func @sum_of_squares(i32, i32) -> i32 {
     %result = add i32 %sq1, i32 %sq2
     ret i32 %result
 }
+
+func @main() -> i32 {
+^entry:
+    %result = call i32 @sum_of_squares(i32 3, i32 4)
+    ret i32 %result
+}
