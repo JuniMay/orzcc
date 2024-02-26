@@ -16,21 +16,21 @@ use super::{
 };
 
 #[derive(Debug, Error)]
-pub enum AstSyntaxErr {
+pub enum SemanticError {
     #[error("builder error: {0}")]
     BuilderErr(BuilderErr),
 
-    #[error("name duplicated, span provided as {0:?}")]
-    NameDuplicated(Option<Span>),
+    #[error("name duplicated at {0:?}")]
+    NameDuplicated(Span),
 
-    #[error("value name not found, span provided as {0:?}")]
-    ValueNameNotFound(Option<Span>),
+    #[error("value name not found at {0:?}")]
+    ValueNameNotFound(Span),
 
-    #[error("block name not found, span provided as {0:?}")]
-    BlockNameNotFound(Option<Span>),
+    #[error("block name not found at {0:?}")]
+    BlockNameNotFound(Span),
 }
 
-impl From<BuilderErr> for AstSyntaxErr {
+impl From<BuilderErr> for SemanticError {
     fn from(err: BuilderErr) -> Self {
         Self::BuilderErr(err)
     }
@@ -67,7 +67,7 @@ macro_rules! layout_mut {
 }
 
 impl Ast {
-    pub fn into_ir(&self, name: String) -> Result<Module, AstSyntaxErr> {
+    pub fn into_ir(&self, name: String) -> Result<Module, SemanticError> {
         let mut ctx = AstLoweringContext::new(name);
 
         for item in self.items.iter() {
@@ -80,7 +80,6 @@ impl Ast {
                     let mutable = def.mutable;
                     let ty = def.ty.clone();
                     let name = def.name.clone();
-
                     let init = self.global_init_to_value(ty.clone(), &def.init, &mut ctx.module)?;
                     let value = ctx.module.builder().global_slot(init, mutable)?;
                     ctx.module
@@ -90,7 +89,6 @@ impl Ast {
                 AstNodeKind::FunctionDecl(ref decl) => {
                     let name = decl.name.clone();
                     let ty = decl.ty.clone();
-
                     let function = ctx.module.builder().function_decl(name.clone(), ty)?;
                     ctx.module
                         .assign_name(function.into(), name)
@@ -125,20 +123,18 @@ impl Ast {
                                 let value = dfg_mut!(ctx.module, function)
                                     .builder()
                                     .block_param(param_type.clone())?;
+
                                 params.push(value);
                                 dfg!(ctx.module, function)
                                     .assign_local_value_name(value, param_name.clone())
-                                    .map_err(|_| {
-                                        AstSyntaxErr::NameDuplicated(block_node.span.clone())
-                                    })?;
+                                    .map_err(|_| SemanticError::NameDuplicated(block_node.span))?;
                             }
                             let block: Block =
                                 dfg_mut!(ctx.module, function).builder().block(params)?;
                             dfg!(ctx.module, function)
                                 .assign_block_name(block, ast_block.name.clone())
-                                .map_err(|_| {
-                                    AstSyntaxErr::NameDuplicated(block_node.span.clone())
-                                })?;
+                                .map_err(|_| SemanticError::NameDuplicated(block_node.span))?;
+
                             layout_mut!(ctx.module, function)
                                 .append_block(block)
                                 .unwrap();
@@ -176,7 +172,7 @@ impl Ast {
         inst: &AstNodeBox,
         ctx: &mut AstLoweringContext,
         function: Function,
-    ) -> Result<Value, AstSyntaxErr> {
+    ) -> Result<Value, SemanticError> {
         match inst.as_ref().kind {
             AstNodeKind::Inst(ref ast_inst) => {
                 let value = match &ast_inst.kind {
@@ -277,7 +273,6 @@ impl Ast {
                             .ok_or(AstSyntaxErr::BlockNameNotFound(
                                 ast_inst.operands[2].span.clone(),
                             ))?;
-
                         dfg_mut!(ctx.module, function)
                             .builder()
                             .branch(cond, then_block, else_block, then_args, else_args)?
@@ -310,7 +305,6 @@ impl Ast {
                             .ok_or(AstSyntaxErr::ValueNameNotFound(
                                 ast_inst.operands[0].span.clone(),
                             ))?;
-
                         dfg_mut!(ctx.module, function).builder().call(
                             ast_inst.ty.clone().unwrap(),
                             callee,
@@ -335,7 +329,7 @@ impl Ast {
                 if ast_inst.dest.is_some() {
                     dfg_mut!(ctx.module, function)
                         .assign_local_value_name(value, ast_inst.dest.clone().unwrap())
-                        .map_err(|_| AstSyntaxErr::NameDuplicated(inst.span.clone()))?;
+                        .map_err(|_| SemanticError::NameDuplicated(inst.span))?;
                 }
                 Ok(value)
             }
@@ -348,7 +342,7 @@ impl Ast {
         operand: &AstNodeBox,
         ctx: &mut AstLoweringContext,
         function: Function,
-    ) -> Result<Value, AstSyntaxErr> {
+    ) -> Result<Value, SemanticError> {
         match operand.as_ref().kind {
             AstNodeKind::Operand(ref operand) => match operand.value.as_ref().kind {
                 AstNodeKind::GlobalIdent(ref name) => ctx
@@ -399,7 +393,7 @@ impl Ast {
         ty: Type,
         init: &AstNodeBox,
         module: &mut Module,
-    ) -> Result<Value, AstSyntaxErr> {
+    ) -> Result<Value, SemanticError> {
         let value = match init.as_ref().kind {
             AstNodeKind::Array(ref array) => {
                 let (_size, elem_type) =
