@@ -5,10 +5,11 @@
 
 use std::collections::HashMap;
 
-use super::control_flow_normalization::ControlFlowNormalization;
+use thiserror::Error;
+
 use crate::ir::{
     entities::{FunctionData, ValueKind},
-    pass::LocalPassMut,
+    pass::LocalPass,
     values::{Block, Function},
 };
 
@@ -28,15 +29,17 @@ impl ControlFlowGraph {
 
 pub struct ControlFlowAnalysis {}
 
-impl LocalPassMut for ControlFlowAnalysis {
+#[derive(Debug, Error)]
+pub enum ControlFlowAnalysisError {
+    #[error("unexpected termination at block: {0:?}, please run the control flow normalization pass first.")]
+    UnexpectedBlockTermination(Block),
+}
+
+impl LocalPass for ControlFlowAnalysis {
     type Ok = ControlFlowGraph;
-    type Err = String;
+    type Err = ControlFlowAnalysisError;
 
-    fn run(&mut self, _function: Function, data: &mut FunctionData) -> Result<Self::Ok, Self::Err> {
-        // before control-flow analysis, normalize the control flow
-        let mut control_flow_normalization = ControlFlowNormalization {};
-        control_flow_normalization.run(_function, data).unwrap();
-
+    fn run(&mut self, _function: Function, data: &FunctionData) -> Result<Self::Ok, Self::Err> {
         let mut cfg = ControlFlowGraph::new();
 
         let layout = data.layout();
@@ -69,7 +72,10 @@ impl LocalPassMut for ControlFlowAnalysis {
                         cfg.pred.insert(br.else_dst(), vec![block]);
                     }
                 }
-                _ => {}
+                ValueKind::Return(_) => {}
+                _ => {
+                    return Err(ControlFlowAnalysisError::UnexpectedBlockTermination(block));
+                }
             }
             cfg.succ.insert(block, succ);
         }
@@ -86,7 +92,7 @@ mod test {
         ir::{
             frontend::parser::Parser,
             module::Module,
-            pass::{GlobalPass, LocalPassMut},
+            pass::{GlobalPass, LocalPass},
         },
         passes::printer::Printer,
     };
@@ -117,12 +123,12 @@ mod test {
 
         let mut buf = Cursor::new(ir);
         let mut parser = Parser::new(&mut buf);
-        let mut module = parser.parse().unwrap().into_ir("test".into()).unwrap();
+        let module = parser.parse().unwrap().into_ir("test".into()).unwrap();
 
         let mut cfa = ControlFlowAnalysis {};
 
         let function = module.get_value_by_name("@check_positive").unwrap();
-        let function_data = module.function_data_mut(function.into()).unwrap();
+        let function_data = module.function_data(function.into()).unwrap();
 
         let cfg = cfa.run(function.into(), function_data).unwrap();
 
