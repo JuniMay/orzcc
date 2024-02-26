@@ -1,9 +1,10 @@
 use super::{
     entities::{BlockData, FunctionData, FunctionKind, ValueData, ValueKind},
     module::{DataFlowGraph, Module},
-    types::{Type, TypeKind},
+    types::Type,
     values::{
-        Alloc, Binary, BinaryOp, Block, Branch, Call, Cast, CastOp, Function, GetElemPtr, GlobalSlot, Jump, Load, Return, Store, Unary, UnaryOp, Value
+        Alloc, Binary, BinaryOp, Block, Branch, Call, Cast, CastOp, Function, GetElemPtr,
+        GlobalSlot, Jump, Load, Return, Store, Unary, UnaryOp, Value,
     },
 };
 use thiserror::Error;
@@ -89,6 +90,11 @@ pub trait QueryValueData {
 
     /// Check if a value is a block parameter.
     fn is_value_block_param(&self, value: Value) -> Result<bool, BuilderErr>;
+
+    /// Check if a value exists in the data flow graph.
+    fn value_exists(&self, value: Value) -> bool {
+        self.value_type(value).is_ok()
+    }
 }
 
 pub trait QueryBlockData {
@@ -177,16 +183,7 @@ pub trait ConstantBuilder: QueryValueData + AddValue {
 
     /// Build a struct constant.
     fn struct_(&mut self, ty: Type, values: Vec<Value>) -> Result<Value, BuilderErr> {
-        let actual_ty = match ty.kind() {
-            TypeKind::Struct(_) => ty.clone(),
-            TypeKind::Identified(name) => Type::get_identified(name)
-                .ok_or(BuilderErr::IdentifiedTypeNotFound(name.clone()))?,
-            _ => return Err(BuilderErr::InvalidType(ty.clone())),
-        };
-
-        let fields = actual_ty
-            .as_struct()
-            .ok_or(BuilderErr::InvalidType(ty.clone()))?;
+        let fields = ty.as_struct().ok_or(BuilderErr::InvalidType(ty.clone()))?;
 
         if fields.len() != values.len() {
             return Err(BuilderErr::IncompatibleStructFieldNumber(
@@ -239,6 +236,10 @@ pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
     fn store(&mut self, val: Value, ptr: Value) -> Result<Value, BuilderErr> {
         if !self.value_type(ptr)?.is_ptr() {
             return Err(BuilderErr::InvalidType(self.value_type(ptr)?));
+        }
+
+        if !self.value_exists(val) {
+            return Err(BuilderErr::ValueNotFound);
         }
 
         self.add_value(Store::new_value_data(val, ptr))

@@ -1,8 +1,10 @@
+global @y = i32 0xffffffff
 global @x = i32 0x00000005
 
 func @check_positive(i32) -> i32 {
 ^entry(i32 %0):
-    %cond = icmp.sle i32 %0, i32 0x0 # here the result is wrong
+    %cmp = icmp.sle i32 %0, i32 0x0
+    %cond = not i1 %cmp
     br i1 %cond, ^positive, ^negative
 
 ^positive:
@@ -10,4 +12,15 @@ func @check_positive(i32) -> i32 {
 
 ^negative:
     ret i32 0xFFFFFFFF
+}
+
+func @main() -> void {
+^entry:
+    %p = getelemptr i32, @x, i32 0
+    %x = load i32, %p
+    %res = call i32 @check_positive(i32 %x)
+    %py = getelemptr i32, @y, i32 0
+    %y = load i32, %py
+    %res2 = call i32 @check_positive(i32 %y)
+    ret
 }

@@ -31,7 +31,7 @@ impl Value {
 /// Value indexer indicates an indexer for a value and can be converted from/into a Value.
 ///
 /// Indexer is actually a wrapper of usize, representing a reference to the data.
-trait ValueIndexer: From<Value> {
+pub trait ValueIndexer: From<Value> {
     fn new(index: usize) -> Self;
     fn index(&self) -> usize;
 }
@@ -278,6 +278,7 @@ impl fmt::Display for UnaryOp {
 }
 
 /// Binary instruction internals.
+#[derive(Debug)]
 pub struct Binary {
     op: BinaryOp,
     lhs: Value,
@@ -303,6 +304,7 @@ impl Binary {
 }
 
 /// Unary instruction internals.
+#[derive(Debug)]
 pub struct Unary {
     op: UnaryOp,
     val: Value,
@@ -323,6 +325,7 @@ impl Unary {
 }
 
 /// Store instruction internals.
+#[derive(Debug)]
 pub struct Store {
     val: Value,
     ptr: Value,
@@ -345,6 +348,7 @@ impl Store {
 /// Load instruction internals.
 ///
 /// The type of the loaded value is available in [`ValueData`].
+#[derive(Debug)]
 pub struct Load {
     ptr: Value,
 }
@@ -412,6 +416,7 @@ impl fmt::Display for CastOp {
 /// Type cast
 ///
 /// Perform bitcast operation, the type is available in [`ValueData`].
+#[derive(Debug)]
 pub struct Cast {
     op: CastOp,
     val: Value,
@@ -435,6 +440,7 @@ impl Cast {
 ///
 /// Allocation instruction always return a pointer to the allocated value.
 /// Therefore, the type of the allocated value is required.
+#[derive(Debug)]
 pub struct Alloc {
     /// Type of the allocated value
     ty: Type,
@@ -454,6 +460,7 @@ impl Alloc {
 ///
 /// The initial value of the global should be a constant.
 /// The type of the global is available in [`ValueData`].
+#[derive(Debug)]
 pub struct GlobalSlot {
     /// The initial value of the global
     ///
@@ -478,6 +485,7 @@ impl GlobalSlot {
 }
 
 /// Jump instruction internals.
+#[derive(Debug)]
 pub struct Jump {
     dst: Block,
     args: Vec<Value>,
@@ -498,6 +506,7 @@ impl Jump {
 }
 
 /// Branch instruction internals.
+#[derive(Debug)]
 pub struct Branch {
     cond: Value,
     then_dst: Block,
@@ -548,6 +557,7 @@ impl Branch {
 }
 
 /// Return instruction internals.
+#[derive(Debug)]
 pub struct Return {
     val: Option<Value>,
 }
@@ -565,6 +575,7 @@ impl Return {
 /// A function call.
 ///
 /// The function type can be inferred from the args and the [`ValueData`].
+#[derive(Debug)]
 pub struct Call {
     /// The callee can be a function or a function pointer.
     callee: Value,
@@ -587,6 +598,7 @@ impl Call {
 }
 
 /// Get element pointer instruction internals.
+#[derive(Debug)]
 pub struct GetElemPtr {
     /// The pointer
     ptr: Value,
