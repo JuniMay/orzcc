@@ -19,7 +19,6 @@
 //!
 
 use std::collections::HashMap;
-use std::fmt;
 
 use crate::collections::BiMap;
 
@@ -56,7 +55,7 @@ pub struct Memory {
 pub struct Addr(pub(super) u64);
 
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
-pub struct VReg(u64);
+pub struct VReg(pub(super) u64);
 
 impl From<Addr> for VReg {
     fn from(addr: Addr) -> Self {
@@ -119,12 +118,6 @@ impl VReg {
 
     pub fn from_double(f: f64) -> Self {
         Self(u64::from_le_bytes(f.to_le_bytes()))
-    }
-}
-
-impl fmt::Display for VReg {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "0x{:016x}", self.0)
     }
 }
 
@@ -316,6 +309,8 @@ impl<'a> VirtualMachine<'a> {
                     ValueKind::Function => {
                         let addr = self.alloc_memory(Segment::Code, 1)?;
                         self.addrs.insert((*function).into(), addr);
+                        self.alloc_vreg((*function).into());
+                        self.write_vreg((*function).into(), addr.into());
                         Ok(())
                     }
                     _ => Err(ExecErr::InvalidGlobalItem((*function).into())),

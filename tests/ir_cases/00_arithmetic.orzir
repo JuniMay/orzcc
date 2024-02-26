@@ -31,6 +31,11 @@ func @main() -> i32 {
     %tmp5 = getelemptr [i8; 6], ptr %p, i32 5
     store i8 0x00, ptr %tmp5
 
+    %0 = add i32 0, i32 0xffffffff
+    %1 = add %0, i32 1
+    %2 = mul i32 3, %0
+    %3 = icmp.eq %2, i32 0xfffffffd
+
     %a = load i32, ptr @a
     %b = load i32, ptr @b
     %result = call i32 @add(i32 %a, i32 %b)

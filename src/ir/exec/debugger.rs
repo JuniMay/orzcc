@@ -310,13 +310,25 @@ impl<'a> Debugger<'a> {
 
         if let Some(value) = value {
             let vreg = self.vm.read_vreg(value);
-            println!("[{:^4}] {:10} = {}", value.index(), dfg.value_name(value), vreg);
+            println!(
+                "[{:^4}] {:10} = 0x{:016x} {:20}",
+                value.index(),
+                dfg.value_name(value),
+                vreg.0,
+                vreg.0
+            );
         } else {
             println!("Virtual Registers of Function {}", function_data.name());
             for (value, _data) in dfg.values() {
                 let name = dfg.value_name(*value);
                 let vreg = self.vm.read_vreg(*value);
-                println!("[{:^4}] {:10} = {}", value.index(), name, vreg);
+                println!(
+                    "[{:^4}] {:10} = 0x{:016x} {:20}",
+                    value.index(),
+                    name,
+                    vreg.0,
+                    vreg.0
+                );
             }
         }
 
