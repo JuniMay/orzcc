@@ -14,3 +14,9 @@ func @countdown(i32) -> i32 {
 ^end:
     ret i32 0x0
 }
+
+func @main() -> i32 {
+^entry:
+    %result = call i32  @countdown(i32 0x05)
+    ret i32 %result
+}

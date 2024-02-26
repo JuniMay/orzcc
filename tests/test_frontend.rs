@@ -93,3 +93,9 @@ fn test_12() {
     let ir = include_str!("ir_cases/12_casts.orzir");
     test_ir(ir);
 }
+
+#[test]
+fn test_13() {
+    let ir = include_str!("ir_cases/13_func_ptr.orzir");
+    test_ir(ir);
+}

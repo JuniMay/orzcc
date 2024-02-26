@@ -26,3 +26,9 @@ func @function(i32) -> i32 {
 ^ret(i32 %result, float %123):
     ret i32 %result
 }
+
+func @main() -> i32 {
+^entry:
+    %0 = call i32 @function(i32 0x10)
+    ret i32 %0
+}

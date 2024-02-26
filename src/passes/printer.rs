@@ -23,7 +23,7 @@ where
         Self { buf }
     }
 
-    fn print_module(&mut self, module: &Module) -> io::Result<()> {
+    pub fn print_module(&mut self, module: &Module) -> io::Result<()> {
         writeln!(self.buf, "# orzir module: {} ", module.name())?;
         writeln!(self.buf)?;
         for name in module.identified_type_layout() {
@@ -48,7 +48,7 @@ where
         Ok(())
     }
 
-    fn print_function(&mut self, data: &FunctionData) -> io::Result<()> {
+    pub fn print_function(&mut self, data: &FunctionData) -> io::Result<()> {
         if let FunctionKind::Intrinsic = data.kind() {
             return Ok(());
         }
@@ -100,7 +100,7 @@ where
     }
 
     /// Print the value as operand in the instruction
-    fn print_operand(&mut self, value: Value, dfg: &DataFlowGraph) -> io::Result<()> {
+    pub fn print_operand(&mut self, value: Value, dfg: &DataFlowGraph) -> io::Result<()> {
         dfg.with_value_data(value, |data| {
             if data.kind().is_const() {
                 self.print_local_value(value, dfg)
@@ -111,7 +111,7 @@ where
         .unwrap()
     }
 
-    fn print_global_value(&mut self, value: Value, module: &Module) -> io::Result<()> {
+    pub fn print_global_value(&mut self, value: Value, module: &Module) -> io::Result<()> {
         module
             .with_value_data(value, |data| {
                 match data.kind() {
@@ -162,7 +162,7 @@ where
             .unwrap()
     }
 
-    fn print_local_value(&mut self, value: Value, dfg: &DataFlowGraph) -> io::Result<()> {
+    pub fn print_local_value(&mut self, value: Value, dfg: &DataFlowGraph) -> io::Result<()> {
         let data = dfg.local_value_data(value).unwrap();
 
         match data.kind() {
@@ -207,7 +207,13 @@ where
                 self.print_operand(load.ptr(), dfg)
             }
             ValueKind::Cast(cast) => {
-                write!(self.buf, "{} = {} {}, ", dfg.value_name(value), cast.op(), data.ty())?;
+                write!(
+                    self.buf,
+                    "{} = {} {}, ",
+                    dfg.value_name(value),
+                    cast.op(),
+                    data.ty()
+                )?;
                 self.print_operand(cast.val(), dfg)
             }
             ValueKind::Store(store) => {

@@ -1,48 +1,42 @@
-use std::hash::Hash;
+use thiserror::Error;
 
 use super::{
-    module::Module,
-    values::{Block, Function, Inst, Value},
+    types::Type,
+    values::{Block, Function, Value},
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct Addr(u64);
+pub mod debugger;
+pub mod vm;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct VReg(u64);
+#[derive(Debug, Error)]
+pub enum ExecErr {
+    #[error("invalid segment")]
+    InvalidSegement,
 
-pub trait ExecutionError {
-    fn message(&self) -> String;
-}
+    #[error("invalid type {0}")]
+    InvalidType(Type),
 
-pub type ExecutionResult<T> = Result<T, Box<dyn ExecutionError>>;
+    #[error("invalid global init {0:?}")]
+    InvalidGlobalInit(Value),
 
-pub trait Prepare {
-    fn prepare(&mut self) -> ExecutionResult<()>;
-}
+    #[error("invalid global item {0:?}")]
+    InvalidGlobalItem(Value),
 
-pub trait QueryExecutionState {
-    fn curr_inst(&self) -> Inst;
-    fn curr_function(&self) -> Function;
-    fn curr_block(&self) -> Block;
+    #[error("value not found {0:?}")]
+    ValueNotFound(Value),
 
-    fn module(&self) -> &Module;
+    #[error("function not found {0:?}")]
+    FunctionNotFound(Value),
 
-    fn vreg(&self, value: Value) -> ExecutionResult<VReg>;
-    fn slot(&self, value: Value) -> ExecutionResult<Addr>;
+    #[error("entry block not found {0:?}")]
+    EntryBlockNotFound(Function),
 
-    fn memory(&self, addr: Addr) -> ExecutionResult<&[u8]>;
-}
+    #[error("entry inst not found {0:?}")]
+    EntryInstNotFound(Block),
 
-pub trait ModifyExecutionState {
-    fn set_curr_inst(&mut self, inst: Inst);
-    fn set_curr_function(&mut self, function: Function);
-    fn set_curr_block(&mut self, block: Block);
+    #[error("block not found {0:?}")]
+    BlockNotFound(Block),
 
-    fn set_vreg(&mut self, value: Value, vreg: VReg) -> ExecutionResult<()>;
-    fn set_slot(&mut self, value: Value, addr: Addr) -> ExecutionResult<()>;
-}
-
-pub trait ExecuteOnInst: QueryExecutionState + ModifyExecutionState {
-    fn exec_inst(&mut self) -> ExecutionResult<()>;
+    #[error("early stop at {0:?}")]
+    EarlyStop(Value),
 }

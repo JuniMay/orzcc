@@ -153,8 +153,56 @@ impl Layout {
         &self.blocks
     }
 
-    pub fn inst_blocks(&self) -> &HashMap<Inst, Block> {
-        &self.inst_blocks
+    /// Get the parent block of an instruction
+    pub fn parent_block(&self, inst: Inst) -> Option<Block> {
+        self.inst_blocks.get(&inst).copied()
+    }
+
+    /// Get the next non-empty block
+    pub fn next_block(&self, block: Block) -> Option<Block> {
+        let mut next_block = self.blocks.node(block)?.next();
+        loop {
+            if let Some(block) = next_block {
+                let node = self.blocks.node(block).unwrap();
+                if node.insts().is_empty() {
+                    // try next one
+                    next_block = node.next();
+                } else {
+                    return Some(block);
+                }
+            } else {
+                // there is no next block
+                return None;
+            }
+        }
+    }
+
+    /// Get the next instruction in the layout
+    ///
+    /// If this is the end of the block, return the first instruction of the next block.
+    /// Note that this is not the execution order, but the layout order.
+    pub fn next_inst(&self, inst: Inst) -> Option<Inst> {
+        let parent_block = self.parent_block(inst)?;
+        let node = self.blocks.node(parent_block).unwrap();
+        let next_inst = node.insts().node(inst)?.next().or_else(|| {
+            // this is the end of the block
+            self.next_block(parent_block)
+                .and_then(|next_block| self.blocks.node(next_block).unwrap().insts().front())
+        });
+        next_inst
+    }
+
+    /// Get the entry instruction in the layout
+    pub fn entry_inst(&self) -> Option<Inst> {
+        self.entry_block()
+            .and_then(|entry_block| self.blocks.node(entry_block).unwrap().insts().front())
+    }
+
+    /// Get the entry instruction of a block
+    pub fn entry_inst_of_block(&self, block: Block) -> Option<Inst> {
+        self.blocks
+            .node(block)
+            .and_then(|node| node.insts().front())
     }
 
     pub fn append_block(&mut self, block: Block) -> Result<(), LayoutOpErr> {
@@ -351,9 +399,9 @@ mod test {
             Some(inst2)
         );
 
-        assert_eq!(layout.inst_blocks().get(&inst0), Some(&block));
-        assert_eq!(layout.inst_blocks().get(&inst1), Some(&block));
-        assert_eq!(layout.inst_blocks().get(&inst2), Some(&block));
+        assert_eq!(layout.parent_block(inst0), Some(block));
+        assert_eq!(layout.parent_block(inst1), Some(block));
+        assert_eq!(layout.parent_block(inst2), Some(block));
 
         assert_eq!(
             layout
@@ -399,9 +447,9 @@ mod test {
             Some(inst2)
         );
 
-        assert_eq!(layout.inst_blocks().get(&inst0), Some(&block));
-        assert_eq!(layout.inst_blocks().get(&inst1), None);
-        assert_eq!(layout.inst_blocks().get(&inst2), Some(&block));
+        assert_eq!(layout.parent_block(inst0), Some(block));
+        assert_eq!(layout.parent_block(inst1), None);
+        assert_eq!(layout.parent_block(inst2), Some(block));
 
         layout.remove_inst(inst0).unwrap();
         assert_eq!(
@@ -413,9 +461,9 @@ mod test {
             Some(inst2)
         );
 
-        assert_eq!(layout.inst_blocks().get(&inst0), None);
-        assert_eq!(layout.inst_blocks().get(&inst1), None);
-        assert_eq!(layout.inst_blocks().get(&inst2), Some(&block));
+        assert_eq!(layout.parent_block(inst0), None);
+        assert_eq!(layout.parent_block(inst1), None);
+        assert_eq!(layout.parent_block(inst2), Some(block));
 
         layout.remove_inst(inst2).unwrap();
         assert_eq!(layout.blocks().node(block).unwrap().insts().front(), None);
@@ -449,10 +497,10 @@ mod test {
             Some(inst2)
         );
 
-        assert_eq!(layout.inst_blocks().get(&inst0), Some(&block));
-        assert_eq!(layout.inst_blocks().get(&inst1), Some(&block));
-        assert_eq!(layout.inst_blocks().get(&inst2), Some(&block));
-        assert_eq!(layout.inst_blocks().get(&inst3), Some(&block));
+        assert_eq!(layout.parent_block(inst0), Some(block));
+        assert_eq!(layout.parent_block(inst1), Some(block));
+        assert_eq!(layout.parent_block(inst2), Some(block));
+        assert_eq!(layout.parent_block(inst3), Some(block));
 
         assert_eq!(
             layout

@@ -14,6 +14,12 @@ pub struct DataLayout {
     pub pointer_size: usize,
 }
 
+impl DataLayout {
+    pub fn new() -> Self {
+        Self { pointer_size: 8 }
+    }
+}
+
 /// Kind of types.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum TypeKind {
@@ -101,7 +107,12 @@ impl Type {
     thread_local! {
         /// Pool of all types.
         static POOL: RefCell<HashMap<TypeKind, Type>> = RefCell::new(HashMap::new());
+
+        /// Pool of identified types.
         static IDENTIFIED_POOL: RefCell<HashMap<String, Type>> = RefCell::new(HashMap::new());
+
+        /// Data layout.
+        static DATA_LAYOUT: RefCell<DataLayout> = RefCell::new(DataLayout::new());
     }
 
     pub fn make(kind: TypeKind) -> Type {
@@ -192,31 +203,92 @@ impl Type {
         &self.0
     }
 
-    pub fn size(&self, data_layout: Option<&DataLayout>) -> usize {
+    pub fn set_data_layout(data_layout: DataLayout) {
+        Self::DATA_LAYOUT.with(|dl| {
+            let mut dl = dl.borrow_mut();
+            *dl = data_layout;
+        });
+    }
+
+    pub fn bytewidth(&self) -> usize {
+        Self::DATA_LAYOUT.with(|data_layout| {
+            let data_layout = data_layout.borrow();
+            match self.kind() {
+                TypeKind::Void => 0,
+                TypeKind::Int(bits) => cmp::max(1, bits / 8),
+                TypeKind::Half => 2,
+                TypeKind::Float => 4,
+                TypeKind::Double => 8,
+                TypeKind::Ptr => data_layout.pointer_size,
+                TypeKind::Array(size, ty) => size * ty.bytewidth(),
+                TypeKind::Function(_, _) => data_layout.pointer_size,
+                TypeKind::Struct(fields) => fields.iter().map(|ty| ty.bytewidth()).sum(),
+                TypeKind::Label => 0,
+                TypeKind::Identified(_) => {
+                    if let Some(ty) = Self::get_identified(self.to_string().as_str()) {
+                        ty.bytewidth()
+                    } else {
+                        0
+                    }
+                }
+            }
+        })
+    }
+
+    pub fn bitwidth(&self) -> usize {
         match self.kind() {
             TypeKind::Void => 0,
-            TypeKind::Int(bits) => cmp::max(1, bits / 8),
-            TypeKind::Half => 2,
-            TypeKind::Float => 4,
-            TypeKind::Double => 8,
-            TypeKind::Ptr => data_layout.map_or(8, |dl| dl.pointer_size),
-            TypeKind::Array(size, ty) => size * ty.size(data_layout),
-            TypeKind::Function(_, _) => data_layout.map_or(0, |dl| dl.pointer_size),
-            TypeKind::Struct(fields) => fields.iter().map(|ty| ty.size(data_layout)).sum(),
+            TypeKind::Int(bits) => *bits,
+            TypeKind::Half => 16,
+            TypeKind::Float => 32,
+            TypeKind::Double => 64,
+            TypeKind::Ptr => Self::DATA_LAYOUT.with(|data_layout| {
+                let data_layout = data_layout.borrow();
+                data_layout.pointer_size * 8
+            }),
+            TypeKind::Array(size, ty) => size * ty.bitwidth(),
+            TypeKind::Function(_, _) => Self::DATA_LAYOUT.with(|data_layout| {
+                let data_layout = data_layout.borrow();
+                data_layout.pointer_size * 8
+            }),
+            TypeKind::Struct(fields) => fields.iter().map(|ty| ty.bitwidth()).sum(),
             TypeKind::Label => 0,
-            TypeKind::Identified(_) => 0,
+            TypeKind::Identified(_) => {
+                if let Some(ty) = Self::get_identified(self.to_string().as_str()) {
+                    ty.bitwidth()
+                } else {
+                    0
+                }
+            }
         }
     }
 
     pub fn is_int(&self) -> bool {
-        matches!(self.kind(), TypeKind::Int(_))
+        match self.kind() {
+            TypeKind::Int(_) => true,
+            TypeKind::Identified(name) => {
+                if let Some(ty) = Self::get_identified(name) {
+                    ty.is_int()
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        }
     }
 
     pub fn is_float(&self) -> bool {
-        matches!(
-            self.kind(),
-            TypeKind::Half | TypeKind::Float | TypeKind::Double
-        )
+        match self.kind() {
+            TypeKind::Half | TypeKind::Float | TypeKind::Double => true,
+            TypeKind::Identified(name) => {
+                if let Some(ty) = Self::get_identified(name) {
+                    ty.is_float()
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        }
     }
 
     pub fn is_numeric(&self) -> bool {
@@ -224,27 +296,61 @@ impl Type {
     }
 
     pub fn is_ptr(&self) -> bool {
-        matches!(self.kind(), TypeKind::Ptr)
+        match self.kind() {
+            TypeKind::Ptr => true,
+            TypeKind::Identified(name) => {
+                if let Some(ty) = Self::get_identified(name) {
+                    ty.is_ptr()
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        }
     }
 
     pub fn is_void(&self) -> bool {
-        matches!(self.kind(), TypeKind::Void)
+        match self.kind() {
+            TypeKind::Void => true,
+            TypeKind::Identified(name) => {
+                if let Some(ty) = Self::get_identified(name) {
+                    ty.is_void()
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        }
     }
 
     pub fn is_function(&self) -> bool {
-        matches!(self.kind(), TypeKind::Function(_, _))
+        match self.kind() {
+            TypeKind::Function(_, _) => true,
+            TypeKind::Identified(name) => {
+                if let Some(ty) = Self::get_identified(name) {
+                    ty.is_function()
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        }
     }
 
     pub fn is_zero_initializable(&self) -> bool {
-        !matches!(
-            self.kind(),
-            TypeKind::Void | TypeKind::Function(_, _) | TypeKind::Label | TypeKind::Identified(_)
-        )
+        self.is_numeric() || self.is_ptr() || self.is_aggregate()
     }
 
-    pub fn as_array(&self) -> Option<(usize, &Type)> {
+    pub fn as_array(&self) -> Option<(usize, Type)> {
         match self.kind() {
-            TypeKind::Array(size, ty) => Some((*size, ty)),
+            TypeKind::Array(size, ty) => Some((*size, ty.clone())),
+            TypeKind::Identified(name) => {
+                if let Some(ty) = Self::get_identified(name) {
+                    ty.as_array()
+                } else {
+                    None
+                }
+            }
             _ => None,
         }
     }
@@ -253,15 +359,22 @@ impl Type {
     ///
     /// If the type is not a struct type, return `None`.
     /// Note that for identified types, this function returns `None` for now.
-    pub fn as_struct(&self) -> Option<&[Type]> {
+    pub fn as_struct(&self) -> Option<Vec<Type>> {
         match self.kind() {
-            TypeKind::Struct(fields) => Some(fields),
+            TypeKind::Struct(fields) => Some(fields.clone()),
+            TypeKind::Identified(name) => {
+                if let Some(ty) = Self::get_identified(name) {
+                    ty.as_struct()
+                } else {
+                    None
+                }
+            }
             _ => None,
         }
     }
 
     pub fn is_aggregate(&self) -> bool {
-        matches!(self.kind(), TypeKind::Array(_, _) | TypeKind::Struct(_))
+        self.as_array().is_some() || self.as_struct().is_some()
     }
 }
 
@@ -366,25 +479,24 @@ mod test {
 
     #[test]
     fn test_size() {
-        let dl = DataLayout { pointer_size: 8 };
-        assert_eq!(Type::mk_void().size(Some(&dl)), 0);
-        assert_eq!(Type::mk_label().size(Some(&dl)), 0);
-        assert_eq!(Type::mk_identified("name".to_string()).size(Some(&dl)), 0);
-        assert_eq!(Type::mk_int(1).size(Some(&dl)), 1);
-        assert_eq!(Type::mk_int(32).size(Some(&dl)), 4);
-        assert_eq!(Type::mk_int(64).size(Some(&dl)), 8);
-        assert_eq!(Type::mk_half().size(Some(&dl)), 2);
-        assert_eq!(Type::mk_float().size(Some(&dl)), 4);
-        assert_eq!(Type::mk_double().size(Some(&dl)), 8);
-        assert_eq!(Type::mk_ptr().size(Some(&dl)), 8);
-        assert_eq!(Type::mk_array(10, Type::mk_int(32)).size(Some(&dl)), 40);
+        assert_eq!(Type::mk_void().bytewidth(), 0);
+        assert_eq!(Type::mk_label().bytewidth(), 0);
+        assert_eq!(Type::mk_identified("name".to_string()).bytewidth(), 0);
+        assert_eq!(Type::mk_int(1).bytewidth(), 1);
+        assert_eq!(Type::mk_int(32).bytewidth(), 4);
+        assert_eq!(Type::mk_int(64).bytewidth(), 8);
+        assert_eq!(Type::mk_half().bytewidth(), 2);
+        assert_eq!(Type::mk_float().bytewidth(), 4);
+        assert_eq!(Type::mk_double().bytewidth(), 8);
+        assert_eq!(Type::mk_ptr().bytewidth(), 8);
+        assert_eq!(Type::mk_array(10, Type::mk_int(32)).bytewidth(), 40);
         let ty = Type::mk_function(vec![], Type::mk_void());
-        assert_eq!(ty.size(Some(&dl)), 8);
+        assert_eq!(ty.bytewidth(), 8);
         let ty = Type::mk_function(vec![Type::mk_int(32)], Type::mk_void());
-        assert_eq!(ty.size(Some(&dl)), 8);
+        assert_eq!(ty.bytewidth(), 8);
         let ty = Type::mk_function(vec![Type::mk_int(32), Type::mk_int(64)], Type::mk_void());
-        assert_eq!(ty.size(Some(&dl)), 8);
+        assert_eq!(ty.bytewidth(), 8);
         let ty = Type::mk_struct(vec![Type::mk_int(32), Type::mk_int(64)]);
-        assert_eq!(ty.size(Some(&dl)), 12);
+        assert_eq!(ty.bytewidth(), 12);
     }
 }

@@ -1,0 +1,13 @@
+
+func @function(i32) -> i32 {
+^entry(i32 %0):
+  %1 = add i32 %0, i32 1
+  ret i32 %1
+}
+
+func @main() -> void {
+^entry:
+    %0 = getelemptr (i32) -> i32, @function, i32 0
+    %1 = call i32 %0(i32 1)
+    ret void
+}
