@@ -324,7 +324,7 @@ where
     type Ok = ();
     type Err = io::Error;
 
-    fn run(&mut self, module: &mut Module) -> Result<Self::Ok, Self::Err> {
+    fn run(&mut self, module: &Module) -> Result<Self::Ok, Self::Err> {
         self.print_module(module)?;
         Ok(())
     }

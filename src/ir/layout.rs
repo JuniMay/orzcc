@@ -158,8 +158,13 @@ impl Layout {
         self.inst_blocks.get(&inst).copied()
     }
 
-    /// Get the next non-empty block
+    /// Get the next block
     pub fn next_block(&self, block: Block) -> Option<Block> {
+        self.blocks.node(block)?.next()
+    }
+
+    /// Get the next non-empty block
+    pub fn next_non_empty_block(&self, block: Block) -> Option<Block> {
         let mut next_block = self.blocks.node(block)?.next();
         loop {
             if let Some(block) = next_block {
@@ -186,7 +191,7 @@ impl Layout {
         let node = self.blocks.node(parent_block).unwrap();
         let next_inst = node.insts().node(inst)?.next().or_else(|| {
             // this is the end of the block
-            self.next_block(parent_block)
+            self.next_non_empty_block(parent_block)
                 .and_then(|next_block| self.blocks.node(next_block).unwrap().insts().front())
         });
         next_inst
@@ -203,6 +208,13 @@ impl Layout {
         self.blocks
             .node(block)
             .and_then(|node| node.insts().front())
+    }
+
+    /// Get the exit/last instruction of a block
+    pub fn exit_inst_of_block(&self, block: Block) -> Option<Inst> {
+        self.blocks
+            .node(block)
+            .and_then(|node| node.insts().back())
     }
 
     pub fn append_block(&mut self, block: Block) -> Result<(), LayoutOpErr> {
@@ -559,6 +571,8 @@ mod test {
         let inst1 = allocate_test_inst();
         let inst2 = allocate_test_inst();
         let inst3 = allocate_test_inst();
+        let inst4 = allocate_test_inst();
+        let inst5 = allocate_test_inst();
 
         layout.append_block(block0).unwrap();
         layout.append_block(block1).unwrap();
@@ -569,6 +583,18 @@ mod test {
         layout.append_inst(inst1, block1).unwrap();
         layout.append_inst(inst2, block2).unwrap();
         layout.append_inst(inst3, block3).unwrap();
+        layout.append_inst(inst4, block3).unwrap();
+        layout.append_inst(inst5, block3).unwrap();
+
+        assert_eq!(layout.entry_inst_of_block(block0), Some(inst0));
+        assert_eq!(layout.entry_inst_of_block(block1), Some(inst1));
+        assert_eq!(layout.entry_inst_of_block(block2), Some(inst2));
+        assert_eq!(layout.entry_inst_of_block(block3), Some(inst3));
+
+        assert_eq!(layout.exit_inst_of_block(block0), Some(inst0));
+        assert_eq!(layout.exit_inst_of_block(block1), Some(inst1));
+        assert_eq!(layout.exit_inst_of_block(block2), Some(inst2));
+        assert_eq!(layout.exit_inst_of_block(block3), Some(inst5));
 
         assert_eq!(
             format!("{}", layout.append_block(block0).unwrap_err()),

@@ -132,15 +132,15 @@ impl DataFlowGraph {
         }
     }
 
-    pub fn get_local_value_by_name(&self, name: &String) -> Option<Value> {
+    pub fn get_local_value_by_name(&self, name: &str) -> Option<Value> {
         self.value_name_allocator.borrow().try_get_by_name(name)
     }
 
-    pub fn get_block_by_name(&self, name: &String) -> Option<Block> {
+    pub fn get_block_by_name(&self, name: &str) -> Option<Block> {
         self.block_name_allocator.borrow().try_get_by_name(name)
     }
 
-    pub fn get_value_by_name(&self, name: &String) -> Option<Value> {
+    pub fn get_value_by_name(&self, name: &str) -> Option<Value> {
         self.value_name_allocator.borrow().try_get_by_name(name).or_else(|| {
             self.global_name_allocator
                 .upgrade()
@@ -311,7 +311,7 @@ impl Module {
         self.name_allocator.borrow_mut().assign(value, name)
     }
 
-    pub fn get_value_by_name(&self, name: &String) -> Option<Value> {
+    pub fn get_value_by_name(&self, name: &str) -> Option<Value> {
         self.name_allocator.borrow().try_get_by_name(name)
     }
 
@@ -456,7 +456,8 @@ where
         self.map.get(&key).cloned()
     }
 
-    pub fn try_get_by_name(&self, name: &String) -> Option<T> {
-        self.map.get_rev(name).copied()
+    pub fn try_get_by_name(&self, name: &str) -> Option<T> {
+        let name = name.to_string();
+        self.map.get_rev(&name).copied()
     }
 }
