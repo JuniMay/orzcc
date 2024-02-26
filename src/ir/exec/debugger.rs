@@ -1,11 +1,11 @@
 //! # Debugger of OrzIR
-//! 
+//!
 //! Debugger facilitates the virtual machine of OrzIR to realize interactive debugging like GDB.
 //!
 //! Currently, there are several simple commands.
 //!
 //! | Command Format               |                    Description                                    |              Note             |
-//! |------------------------------|-------------------------------------------------------------------|-------------------------------| 
+//! |------------------------------|-------------------------------------------------------------------|-------------------------------|
 //! | `entry <name>`               | Set the entry function to debug                                   | Use function name to specify  |
 //! | `continue`                   | Continue the execution                                            |                               |
 //! | `step <count>`               | Step the execution by `count` instructions                        |                               |
@@ -36,8 +36,10 @@ pub struct Debugger<'a> {
     vm: VirtualMachine<'a>,
     module: &'a Module,
     breakpoints: HashSet<Inst>,
+    last_command: Option<DebugCommand>,
 }
 
+#[derive(Clone)]
 enum DebugCommand {
     Entry(String),
     Continue,
@@ -56,6 +58,7 @@ impl<'a> Debugger<'a> {
             vm,
             module,
             breakpoints: HashSet::new(),
+            last_command: None,
         }
     }
 
@@ -67,12 +70,12 @@ impl<'a> Debugger<'a> {
         input.trim().to_string()
     }
 
-    fn parse_command(&self, line: String) -> Option<DebugCommand> {
+    fn parse_command(&mut self, line: String) -> Option<DebugCommand> {
         // split the line into args
         let args = line.split_whitespace().collect::<Vec<&str>>();
 
         if args.is_empty() {
-            return None;
+            return self.last_command.clone();
         }
 
         let command = match args[0] {
@@ -87,11 +90,36 @@ impl<'a> Debugger<'a> {
             }
             "continue" | "c" => Some(DebugCommand::Continue),
             "step" | "s" => {
-                let count = args.get(1).map(|s| s.parse::<usize>().unwrap());
+                let count = args
+                    .get(1)
+                    .map(|s| {
+                        let count = s.parse::<usize>();
+                        if let Err(e) = count {
+                            println!("invalid step count: {:?}", e);
+                            None
+                        } else {
+                            count.ok()
+                        }
+                    })
+                    .flatten();
                 Some(DebugCommand::Step(count))
             }
             "break" | "b" => {
-                let inst = args.get(1).map(|s| s.parse::<usize>().unwrap());
+                let inst = args
+                    .get(1)
+                    .map(|s| {
+                        let inst = s.parse::<usize>();
+                        if let Err(e) = inst {
+                            println!("invalid instruction ID: {:?}", e);
+                            None
+                        } else {
+                            inst.ok()
+                        }
+                    })
+                    .flatten();
+                if inst.is_none() {
+                    return None;
+                }
                 Some(DebugCommand::Break(Value::new(inst.unwrap()).into()))
             }
             "show" => {
@@ -101,9 +129,36 @@ impl<'a> Debugger<'a> {
             }
             "quit" | "q" => Some(DebugCommand::Quit),
             "dump-memory" | "dm" => {
-                let addr = args.get(1).map(|s| s.parse::<u64>().unwrap());
-                let size = args.get(2).map(|s| s.parse::<usize>().unwrap());
-                Some(DebugCommand::DumpMemory(addr.map(|i| Addr::new(i)), size))
+                let addr = args
+                    .get(1)
+                    .map(|s| {
+                        let radix = if s.starts_with("0x") { 16 } else { 10 };
+                        let addr = u64::from_str_radix(s.trim_start_matches("0x"), radix)
+                            .map(|i| i as u64);
+                        if let Err(e) = addr {
+                            println!("invalid address: {:?}", e);
+                            None
+                        } else {
+                            addr.ok()
+                        }
+                    })
+                    .flatten()
+                    .map(|i| Addr::new(i));
+                let size = args
+                    .get(2)
+                    .map(|s| {
+                        let radix = if s.starts_with("0x") { 16 } else { 10 };
+                        let size = u64::from_str_radix(s.trim_start_matches("0x"), radix)
+                            .map(|i| i as usize);
+                        if let Err(e) = size {
+                            println!("invalid size: {:?}", e);
+                            None
+                        } else {
+                            size.ok()
+                        }
+                    })
+                    .flatten();
+                Some(DebugCommand::DumpMemory(addr, size))
             }
             "dump-vreg" | "dv" => {
                 let function = args.get(1).cloned().map(|s| s.to_string());
@@ -113,13 +168,21 @@ impl<'a> Debugger<'a> {
             _ => None,
         };
 
+        self.last_command = command.clone();
+
         command
     }
 
-    pub fn run_vm(&mut self, steps: Option<usize>) -> ExecResult<()> {
+    pub fn run_vm(&mut self, steps: Option<usize>) {
         let mut steps = steps.unwrap_or(u64::MAX as usize);
         while steps > 0 {
-            self.vm.step()?;
+            let res = self.vm.step();
+
+            if let Err(e) = res {
+                println!("execution error: {:?}", e);
+                break;
+            }
+
             if self.vm.stopped() {
                 println!("execution finished.");
                 break;
@@ -129,20 +192,20 @@ impl<'a> Debugger<'a> {
                 println!("breakpoint hit at {:?}", inst);
                 self.show(Some(self.vm.curr_function()), Some(inst))
                     .unwrap();
-                return Ok(());
             }
             steps -= 1;
         }
-        Ok(())
     }
 
     pub fn show(&self, function: Option<Function>, inst: Option<Inst>) -> ExecResult<()> {
-        let function_fallback_layout = vec![self.vm.curr_function()];
+        let mut function_fallback_layout = vec![self.vm.curr_function()];
 
         let functions = if function.is_none() {
             self.module.function_layout()
         } else {
-            &function_fallback_layout
+            function_fallback_layout.clear();
+            function_fallback_layout.push(function.unwrap());
+            function_fallback_layout.as_slice()
         };
 
         for function in functions {
@@ -248,7 +311,7 @@ impl<'a> Debugger<'a> {
             for (value, _data) in dfg.values() {
                 let name = dfg.value_name(*value);
                 let vreg = self.vm.read_vreg(*value);
-                println!("[{:^4}] {:10} = {:?}", value.index(), name, vreg);
+                println!("[{:^4}] {:10} = {}", value.index(), name, vreg);
             }
         }
 
@@ -325,7 +388,6 @@ impl<'a> Debugger<'a> {
 
             let command = command.unwrap();
 
-            // TODO: error handling
             match command {
                 DebugCommand::Entry(name) => {
                     let function = self.module.get_value_by_name(&name);
@@ -336,10 +398,10 @@ impl<'a> Debugger<'a> {
                     }
                 }
                 DebugCommand::Continue => {
-                    self.run_vm(None).unwrap();
+                    self.run_vm(None);
                 }
                 DebugCommand::Step(count) => {
-                    self.run_vm(count.or(Some(1))).unwrap();
+                    self.run_vm(count.or(Some(1)));
                 }
                 DebugCommand::Break(inst) => {
                     self.breakpoints.insert(inst);

@@ -19,6 +19,7 @@
 //!
 
 use std::collections::HashMap;
+use std::fmt;
 
 use crate::collections::BiMap;
 
@@ -118,6 +119,12 @@ impl VReg {
 
     pub fn from_double(f: f64) -> Self {
         Self(u64::from_le_bytes(f.to_le_bytes()))
+    }
+}
+
+impl fmt::Display for VReg {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "0x{:016x}", self.0)
     }
 }
 
