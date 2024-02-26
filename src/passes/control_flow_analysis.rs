@@ -40,35 +40,36 @@ impl LocalPassMut for ControlFlowAnalysis {
         let mut cfg = ControlFlowGraph::new();
 
         let layout = data.layout();
-        for (block, block_node) in layout.blocks() {
+        for (block, _block_node) in layout.blocks() {
             let mut succ = Vec::new();
-            for (inst, _inst_node) in block_node.insts() {
-                let inst_data = data.dfg().local_value_data(inst.into()).unwrap();
-                match inst_data.kind() {
-                    ValueKind::Jump(jump) => {
-                        succ.push(jump.dst());
-                        if cfg.pred.contains_key(&jump.dst()) {
-                            cfg.pred.get_mut(&jump.dst()).unwrap().push(block);
-                        } else {
-                            cfg.pred.insert(jump.dst(), vec![block]);
-                        }
+            // just get the last instruction of the block
+            // because the normalization pass ensures that the last instruction is a terminator
+            let inst = layout.exit_inst_of_block(block).unwrap();
+            let inst_data = data.dfg().local_value_data(inst.into()).unwrap();
+            match inst_data.kind() {
+                ValueKind::Jump(jump) => {
+                    succ.push(jump.dst());
+                    if cfg.pred.contains_key(&jump.dst()) {
+                        cfg.pred.get_mut(&jump.dst()).unwrap().push(block);
+                    } else {
+                        cfg.pred.insert(jump.dst(), vec![block]);
                     }
-                    ValueKind::Branch(br) => {
-                        succ.push(br.then_dst());
-                        succ.push(br.else_dst());
-                        if cfg.pred.contains_key(&br.then_dst()) {
-                            cfg.pred.get_mut(&br.then_dst()).unwrap().push(block);
-                        } else {
-                            cfg.pred.insert(br.then_dst(), vec![block]);
-                        }
-                        if cfg.pred.contains_key(&br.else_dst()) {
-                            cfg.pred.get_mut(&br.else_dst()).unwrap().push(block);
-                        } else {
-                            cfg.pred.insert(br.else_dst(), vec![block]);
-                        }
-                    }
-                    _ => {}
                 }
+                ValueKind::Branch(br) => {
+                    succ.push(br.then_dst());
+                    succ.push(br.else_dst());
+                    if cfg.pred.contains_key(&br.then_dst()) {
+                        cfg.pred.get_mut(&br.then_dst()).unwrap().push(block);
+                    } else {
+                        cfg.pred.insert(br.then_dst(), vec![block]);
+                    }
+                    if cfg.pred.contains_key(&br.else_dst()) {
+                        cfg.pred.get_mut(&br.else_dst()).unwrap().push(block);
+                    } else {
+                        cfg.pred.insert(br.else_dst(), vec![block]);
+                    }
+                }
+                _ => {}
             }
             cfg.succ.insert(block, succ);
         }
@@ -82,7 +83,11 @@ mod test {
     use std::io::{self, Cursor};
 
     use crate::{
-        ir::{frontend::parser::Parser, module::Module, pass::{GlobalPass, LocalPassMut}},
+        ir::{
+            frontend::parser::Parser,
+            module::Module,
+            pass::{GlobalPass, LocalPassMut},
+        },
         passes::printer::Printer,
     };
 
