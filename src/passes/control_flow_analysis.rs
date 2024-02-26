@@ -25,6 +25,14 @@ impl ControlFlowGraph {
             succ: HashMap::new(),
         }
     }
+
+    pub fn get_succ(&self, block: &Block) -> Option<&Vec<Block>> {
+        self.succ.get(block)
+    }
+
+    pub fn get_pred(&self, block: &Block) -> Option<&Vec<Block>> {
+        self.pred.get(block)
+    }
 }
 
 pub struct ControlFlowAnalysis {}
