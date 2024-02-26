@@ -1,3 +1,22 @@
+//! # Debugger of OrzIR
+//! 
+//! Debugger facilitates the virtual machine of OrzIR to realize interactive debugging like GDB.
+//!
+//! Currently, there are several simple commands.
+//! | Command Format               |                    Description                                    |              Note             |
+//! |------------------------------|-------------------------------------------------------------------|-------------------------------| 
+//! | `entry <name>`               | Set the entry function to debug                                   | Use function name to specify  |
+//! | `continue`                   | Continue the execution                                            |                               |
+//! | `step <count>`               | Step the execution by `count` instructions                        |                               |
+//! | `break <inst>`               | Set a breakpoint at the instruction                               | Use ID to specify             |
+//! | `show <func> <inst>`         | Show the given instruction in the function and corresponding IDs  | Use name to specify           |
+//! | `quit`                       | Quit the debugger                                                 |                               |
+//! | `dump-memory <addr> <size>`  | Dump the memory at the given address                              |                               |
+//! | `dump-vreg <func> <value>`   | Dump the virtual registers of the function                        |                               |
+//!
+//! Please refer to the parse function for more details of the command.
+//!
+
 use std::collections::HashSet;
 use std::io::{stdin, stdout, BufWriter, Write};
 
@@ -235,6 +254,62 @@ impl<'a> Debugger<'a> {
         Ok(())
     }
 
+    fn print_memory(&self, addr: Addr, bytes: &[u8]) {
+        // format:
+        // <address> | <byte 0> <byte 1> ... <byte 15> | <ascii>
+        let mut ascii = String::new();
+        let mut hex = String::new();
+        for (i, byte) in bytes.iter().enumerate() {
+            if i % 16 == 0 {
+                if i != 0 {
+                    println!("| {:016x} | {:48} | {:16} |", addr.0 + i as u64, hex, ascii);
+                    hex.clear();
+                    ascii.clear();
+                }
+            }
+            hex.push_str(&format!("{:02x} ", byte));
+            ascii.push(if *byte >= 32 && *byte <= 126 {
+                *byte as char
+            } else {
+                '.'
+            });
+        }
+        if !hex.is_empty() {
+            println!(
+                "| {:016x} | {:48} | {:16} |",
+                addr.0 + bytes.len() as u64,
+                hex,
+                ascii
+            );
+        }
+    }
+
+    fn dump_memory(&self, addr: Option<Addr>, size: Option<usize>) {
+        match (addr, size) {
+            (None, None) => {
+                let memory = self.vm.memory();
+                for (segment, mem) in memory {
+                    println!("Memory Segment: {:?}", segment);
+                    self.print_memory(segment.to_addr(0), &mem.data);
+                }
+            }
+            (Some(addr), None) => {
+                let memory = self.vm.memory();
+                let segment = addr.segment().unwrap();
+                let mem = memory.get(&segment).unwrap();
+                self.print_memory(addr, &mem.data);
+            }
+            (Some(addr), Some(size)) => {
+                let memory = self.vm.memory();
+                let segment = addr.segment().unwrap();
+                let mem = memory.get(&segment).unwrap();
+                let size = size.min(mem.data.len());
+                self.print_memory(addr, &mem.data[..size]);
+            }
+            _ => todo!(),
+        }
+    }
+
     pub fn repl(&mut self) {
         println!("Welcome to OrzDB!");
         let _ = stdout().flush().unwrap();
@@ -292,7 +367,7 @@ impl<'a> Debugger<'a> {
                     break;
                 }
                 DebugCommand::DumpMemory(addr, size) => {
-                    todo!()
+                    self.dump_memory(addr, size);
                 }
                 DebugCommand::DumpVregs(function, value) => {
                     let function = function

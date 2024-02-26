@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use thiserror::Error;
 
 use crate::ir::{
@@ -40,48 +38,25 @@ impl From<BuilderErr> for AstSyntaxErr {
 
 struct AstLoweringContext {
     module: Module,
-    global_map: HashMap<String, Value>,
-    value_map: HashMap<String, Value>,
-    block_map: HashMap<String, Block>,
 }
 
 impl AstLoweringContext {
     fn new(module_name: String) -> Self {
         Self {
             module: Module::new(module_name),
-            global_map: HashMap::new(),
-            value_map: HashMap::new(),
-            block_map: HashMap::new(),
         }
-    }
-
-    fn map_local(&mut self, name: String, value: Value) {
-        self.value_map.insert(name, value);
-    }
-
-    fn map_global(&mut self, name: String, value: Value) {
-        self.global_map.insert(name, value);
-    }
-
-    fn map_block(&mut self, name: String, block: Block) {
-        self.block_map.insert(name, block);
-    }
-
-    fn get_value(&self, name: &str) -> Option<Value> {
-        self.value_map
-            .get(name)
-            .cloned()
-            .or_else(|| self.global_map.get(name).cloned())
-    }
-
-    fn get_block(&self, name: &str) -> Option<Block> {
-        self.block_map.get(name).cloned()
     }
 }
 
 macro_rules! dfg_mut {
     ($module:expr, $function:expr) => {
         $module.function_data_mut($function).unwrap().dfg_mut()
+    };
+}
+
+macro_rules! dfg {
+    ($module:expr, $function:expr) => {
+        $module.function_data($function).unwrap().dfg()
     };
 }
 
@@ -108,23 +83,27 @@ impl Ast {
 
                     let init = self.global_init_to_value(ty.clone(), &def.init, &mut ctx.module)?;
                     let value = ctx.module.builder().global_slot(init, mutable)?;
-                    ctx.map_global(name, value);
+                    ctx.module
+                        .assign_name(value, name)
+                        .map_err(|_| AstSyntaxErr::NameDuplicated(def.init.span.clone()))?;
                 }
                 AstNodeKind::FunctionDecl(ref decl) => {
                     let name = decl.name.clone();
                     let ty = decl.ty.clone();
 
                     let function = ctx.module.builder().function_decl(name.clone(), ty)?;
-
-                    ctx.map_global(name, function.into());
+                    ctx.module
+                        .assign_name(function.into(), name)
+                        .map_err(|_| AstSyntaxErr::NameDuplicated(item.span.clone()))?;
                 }
                 AstNodeKind::FunctionDef(ref def) => {
                     let function = ctx
                         .module
                         .builder()
                         .function_def(def.name.clone(), def.ty.clone())?;
-
-                    ctx.map_global(def.name.clone(), function.into());
+                    ctx.module
+                        .assign_name(function.into(), def.name.clone())
+                        .map_err(|_| AstSyntaxErr::NameDuplicated(item.span.clone()))?;
                 }
                 _ => unreachable!(),
             }
@@ -133,7 +112,8 @@ impl Ast {
         for item in self.items.iter() {
             if let AstNodeKind::FunctionDef(ref def) = item.as_ref().kind {
                 let function = ctx
-                    .get_value(&def.name)
+                    .module
+                    .get_value_by_name(&def.name)
                     .expect("function should be found in the context")
                     .into();
 
@@ -146,8 +126,7 @@ impl Ast {
                                     .builder()
                                     .block_param(param_type.clone())?;
                                 params.push(value);
-                                ctx.map_local(param_name.clone(), value);
-                                dfg_mut!(ctx.module, function)
+                                dfg!(ctx.module, function)
                                     .assign_local_value_name(value, param_name.clone())
                                     .map_err(|_| {
                                         AstSyntaxErr::NameDuplicated(block_node.span.clone())
@@ -155,8 +134,7 @@ impl Ast {
                             }
                             let block: Block =
                                 dfg_mut!(ctx.module, function).builder().block(params)?;
-                            ctx.map_block(ast_block.name.clone(), block);
-                            dfg_mut!(ctx.module, function)
+                            dfg!(ctx.module, function)
                                 .assign_block_name(block, ast_block.name.clone())
                                 .map_err(|_| {
                                     AstSyntaxErr::NameDuplicated(block_node.span.clone())
@@ -172,8 +150,8 @@ impl Ast {
                 for block_node in def.blocks.iter() {
                     match block_node.as_ref().kind {
                         AstNodeKind::Block(ref ast_block) => {
-                            let block: Block = ctx
-                                .get_block(&ast_block.name)
+                            let block: Block = dfg!(ctx.module, function)
+                                .get_block_by_name(&ast_block.name)
                                 .ok_or(AstSyntaxErr::BlockNameNotFound(block_node.span.clone()))?;
 
                             for inst_node in ast_block.insts.iter() {
@@ -187,9 +165,6 @@ impl Ast {
                         _ => unreachable!(),
                     }
                 }
-
-                // remove all local-scoped values
-                ctx.value_map.clear();
             }
         }
 
@@ -259,9 +234,11 @@ impl Ast {
                             _ => unreachable!(),
                         };
 
-                        let block = ctx.get_block(&name).ok_or(AstSyntaxErr::BlockNameNotFound(
-                            ast_inst.operands[0].span.clone(),
-                        ))?;
+                        let block = dfg_mut!(ctx.module, function)
+                            .get_block_by_name(&name)
+                            .ok_or(AstSyntaxErr::BlockNameNotFound(
+                                ast_inst.operands[0].span.clone(),
+                            ))?;
 
                         dfg_mut!(ctx.module, function).builder().jump(block, args)?
                     }
@@ -289,17 +266,17 @@ impl Ast {
                             }
                             _ => unreachable!(),
                         };
-                        let then_block =
-                            ctx.get_block(&then_name)
-                                .ok_or(AstSyntaxErr::BlockNameNotFound(
-                                    ast_inst.operands[1].span.clone(),
-                                ))?;
+                        let then_block = dfg_mut!(ctx.module, function)
+                            .get_block_by_name(&then_name)
+                            .ok_or(AstSyntaxErr::BlockNameNotFound(
+                                ast_inst.operands[1].span.clone(),
+                            ))?;
 
-                        let else_block =
-                            ctx.get_block(&else_name)
-                                .ok_or(AstSyntaxErr::BlockNameNotFound(
-                                    ast_inst.operands[2].span.clone(),
-                                ))?;
+                        let else_block = dfg_mut!(ctx.module, function)
+                            .get_block_by_name(&else_name)
+                            .ok_or(AstSyntaxErr::BlockNameNotFound(
+                                ast_inst.operands[2].span.clone(),
+                            ))?;
 
                         dfg_mut!(ctx.module, function)
                             .builder()
@@ -328,9 +305,11 @@ impl Ast {
                             }
                             _ => unreachable!(),
                         };
-                        let callee = ctx.get_value(&name).ok_or(
-                            AstSyntaxErr::ValueNameNotFound(ast_inst.operands[0].span.clone()),
-                        )?;
+                        let callee = dfg_mut!(ctx.module, function)
+                            .get_value_by_name(&name)
+                            .ok_or(AstSyntaxErr::ValueNameNotFound(
+                                ast_inst.operands[0].span.clone(),
+                            ))?;
 
                         dfg_mut!(ctx.module, function).builder().call(
                             ast_inst.ty.clone().unwrap(),
@@ -354,7 +333,6 @@ impl Ast {
                     }
                 };
                 if ast_inst.dest.is_some() {
-                    ctx.map_local(ast_inst.dest.clone().unwrap(), value);
                     dfg_mut!(ctx.module, function)
                         .assign_local_value_name(value, ast_inst.dest.clone().unwrap())
                         .map_err(|_| AstSyntaxErr::NameDuplicated(inst.span.clone()))?;
@@ -374,10 +352,11 @@ impl Ast {
         match operand.as_ref().kind {
             AstNodeKind::Operand(ref operand) => match operand.value.as_ref().kind {
                 AstNodeKind::GlobalIdent(ref name) => ctx
-                    .get_value(name)
+                    .module
+                    .get_value_by_name(name)
                     .ok_or(AstSyntaxErr::ValueNameNotFound(operand.value.span.clone())),
-                AstNodeKind::LocalIdent(ref name) => ctx
-                    .get_value(name)
+                AstNodeKind::LocalIdent(ref name) => dfg!(ctx.module, function)
+                    .get_local_value_by_name(name)
                     .ok_or(AstSyntaxErr::ValueNameNotFound(operand.value.span.clone())),
                 AstNodeKind::Bytes(ref bytes) => {
                     if let Some(ref ty) = operand.ty {

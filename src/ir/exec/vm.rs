@@ -1,3 +1,23 @@
+//! # Virtual Machine of OrzIR
+//!
+//! The virtual machine is used to execute the Orz IR. The virtual machine is represented as a 
+//! 64-bit  little-endian machine using a segmented memory model.
+//!
+//! Note that a virtual machine is just a approximation of the real behavior of the IR. The
+//! virtual machine is not designed to be a full-featured runtime, but a tool to help debug and
+//! optimize the IR.
+//!
+//! The address format in the VM is as below
+//! ```text
+//! +----------------+----------------+----------------+----------------+
+//! |   Segment (8)  |                   Offset (56)                    |
+//! +----------------+----------------+----------------+----------------+
+//! ```
+//! 
+//! The program counter or instruction pointer in the VM is represented using a combination of 
+//! current function and current instruction.
+//!
+
 use std::collections::HashMap;
 
 use crate::collections::BiMap;
@@ -13,20 +33,26 @@ use super::ExecErr;
 
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub enum Segment {
-    Code,
-    Data,
-    Constant,
-    Stack,
+    Code = 0,
+    Data = 1,
+    Constant = 2,
+    Stack = 3,
+}
+
+impl Segment {
+    pub fn to_addr(&self, offset: usize) -> Addr {
+        Addr(((*self as u64) << 56) | (offset as u64))
+    }
 }
 
 pub type ExecResult<T> = Result<T, ExecErr>;
 
 pub struct Memory {
-    data: Vec<u8>,
+    pub(super) data: Vec<u8>,
 }
 
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
-pub struct Addr(u64);
+pub struct Addr(pub(super) u64);
 
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct VReg(u64);
@@ -163,7 +189,8 @@ impl<'a> VirtualMachine<'a> {
     }
 
     fn alloc_memory(&mut self, segment: Segment, size: usize) -> ExecResult<Addr> {
-        let addr = Addr(self.memory[&segment].data.len() as u64);
+        let offset = self.memory[&segment].data.len() as u64;
+        let addr = segment.to_addr(offset as usize);
         let new_len = self.memory[&segment].data.len() + size;
         self.memory
             .get_mut(&segment)
@@ -200,6 +227,10 @@ impl<'a> VirtualMachine<'a> {
         let segment = addr.segment()?;
         let offset = addr.offset();
         Ok(&self.memory[&segment].data[offset..offset + size])
+    }
+
+    pub(super) fn memory(&self) -> &HashMap<Segment, Memory> {
+        &self.memory
     }
 
     fn write_global_init(&mut self, addr: Addr, init: Value) -> ExecResult<()> {
@@ -378,7 +409,7 @@ impl<'a> VirtualMachine<'a> {
             }
             ValueKind::Store(store) => {
                 let val = store.val();
-                let ptr = store.val();
+                let ptr = store.ptr();
                 let size = dfg
                     .with_value_data(val, |data| data.ty().size(Some(&data_layout)))
                     .expect("val to store should exist");
@@ -726,6 +757,9 @@ impl<'a> VirtualMachine<'a> {
 
                 let addr: Addr = self
                     .module
+                    .function_data(self.curr_function)
+                    .unwrap()
+                    .dfg()
                     .with_value_data(ptr, |data| match data.kind() {
                         ValueKind::GlobalSlot(_slot) => {
                             *self.addrs.get(&ptr).expect("addr should exist")

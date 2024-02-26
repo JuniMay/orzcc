@@ -140,6 +140,16 @@ impl DataFlowGraph {
         self.block_name_allocator.borrow().try_get_by_name(name)
     }
 
+    pub fn get_value_by_name(&self, name: &String) -> Option<Value> {
+        self.value_name_allocator.borrow().try_get_by_name(name).or_else(|| {
+            self.global_name_allocator
+                .upgrade()
+                .expect("global name allocator should be alive.")
+                .borrow()
+                .try_get_by_name(name)
+        })
+    }
+
     /// Get the name of a block
     pub fn block_name(&self, block: Block) -> String {
         if self.blocks.contains_key(&block) {
@@ -274,13 +284,6 @@ impl Module {
         function_data: FunctionData,
     ) -> Function {
         let function = Value::new(self.allocate_id());
-        let function_name = function_data.name().to_string();
-
-        assert!(function_name.starts_with(GLOBAL_PREFIX));
-        self.name_allocator
-            .borrow_mut()
-            .assign(function, function_name)
-            .expect("function name should be unique.");
 
         self.globals.borrow_mut().insert(function, value_data);
         self.functions.insert(function.into(), function_data);
