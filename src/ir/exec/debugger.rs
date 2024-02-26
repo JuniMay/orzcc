@@ -3,6 +3,7 @@
 //! Debugger facilitates the virtual machine of OrzIR to realize interactive debugging like GDB.
 //!
 //! Currently, there are several simple commands.
+//!
 //! | Command Format               |                    Description                                    |              Note             |
 //! |------------------------------|-------------------------------------------------------------------|-------------------------------| 
 //! | `entry <name>`               | Set the entry function to debug                                   | Use function name to specify  |
