@@ -22,12 +22,12 @@ use std::collections::HashSet;
 use std::io::{stdin, stdout, BufWriter, Write};
 
 use crate::ir::entities::FunctionKind;
+use crate::ir::passes::printer::Printer;
 use crate::ir::values::{Inst, ValueIndexer};
 use crate::ir::{
     module::Module,
     values::{Function, Value},
 };
-use crate::passes::printer::Printer;
 
 use super::vm::{Addr, ExecResult, VirtualMachine};
 use super::ExecErr;
@@ -82,7 +82,7 @@ impl<'a> Debugger<'a> {
             "entry" | "e" => {
                 let function_name = args.get(1).map(|s| s.to_string());
                 if let Some(name) = function_name {
-                    Some(DebugCommand::Entry(name.clone()))
+                    Some(DebugCommand::Entry(name))
                 } else {
                     println!("invalid function name: {:?}", function_name);
                     None
@@ -90,36 +90,28 @@ impl<'a> Debugger<'a> {
             }
             "continue" | "c" => Some(DebugCommand::Continue),
             "step" | "s" => {
-                let count = args
-                    .get(1)
-                    .map(|s| {
-                        let count = s.parse::<usize>();
-                        if let Err(e) = count {
-                            println!("invalid step count: {:?}", e);
-                            None
-                        } else {
-                            count.ok()
-                        }
-                    })
-                    .flatten();
+                let count = args.get(1).and_then(|s| {
+                    let count = s.parse::<usize>();
+                    if let Err(e) = count {
+                        println!("invalid step count: {:?}", e);
+                        None
+                    } else {
+                        count.ok()
+                    }
+                });
                 Some(DebugCommand::Step(count))
             }
             "break" | "b" => {
-                let inst = args
-                    .get(1)
-                    .map(|s| {
-                        let inst = s.parse::<usize>();
-                        if let Err(e) = inst {
-                            println!("invalid instruction ID: {:?}", e);
-                            None
-                        } else {
-                            inst.ok()
-                        }
-                    })
-                    .flatten();
-                if inst.is_none() {
-                    return None;
-                }
+                let inst = args.get(1).and_then(|s| {
+                    let inst = s.parse::<usize>();
+                    if let Err(e) = inst {
+                        println!("invalid instruction ID: {:?}", e);
+                        None
+                    } else {
+                        inst.ok()
+                    }
+                });
+                inst?;
                 Some(DebugCommand::Break(Value::new(inst.unwrap()).into()))
             }
             "show" => {
@@ -131,7 +123,7 @@ impl<'a> Debugger<'a> {
             "dump-memory" | "dm" => {
                 let addr = args
                     .get(1)
-                    .map(|s| {
+                    .and_then(|s| {
                         let radix = if s.starts_with("0x") { 16 } else { 10 };
                         let addr = u64::from_str_radix(s.trim_start_matches("0x"), radix)
                             .map(|i| i as u64);
@@ -142,22 +134,18 @@ impl<'a> Debugger<'a> {
                             addr.ok()
                         }
                     })
-                    .flatten()
-                    .map(|i| Addr::new(i));
-                let size = args
-                    .get(2)
-                    .map(|s| {
-                        let radix = if s.starts_with("0x") { 16 } else { 10 };
-                        let size = u64::from_str_radix(s.trim_start_matches("0x"), radix)
-                            .map(|i| i as usize);
-                        if let Err(e) = size {
-                            println!("invalid size: {:?}", e);
-                            None
-                        } else {
-                            size.ok()
-                        }
-                    })
-                    .flatten();
+                    .map(Addr::new);
+                let size = args.get(2).and_then(|s| {
+                    let radix = if s.starts_with("0x") { 16 } else { 10 };
+                    let size =
+                        u64::from_str_radix(s.trim_start_matches("0x"), radix).map(|i| i as usize);
+                    if let Err(e) = size {
+                        println!("invalid size: {:?}", e);
+                        None
+                    } else {
+                        size.ok()
+                    }
+                });
                 Some(DebugCommand::DumpMemory(addr, size))
             }
             "dump-vreg" | "dv" => {
@@ -205,19 +193,20 @@ impl<'a> Debugger<'a> {
     pub fn show(&self, function: Option<Function>, inst: Option<Inst>) -> ExecResult<()> {
         let mut function_fallback_layout = vec![self.vm.curr_function()];
 
-        let functions = if function.is_none() {
-            self.module.function_layout()
-        } else {
+        let functions = if let Some(function) = function {
             function_fallback_layout.clear();
-            function_fallback_layout.push(function.unwrap());
+            function_fallback_layout.push(function);
             function_fallback_layout.as_slice()
+        } else {
+            self.module.function_layout()
         };
 
         for function in functions {
             let function_data = self
                 .module
                 .function_data(*function)
-                .ok_or(ExecErr::FunctionNotFound((*function).into()))?;
+                .ok_or_else(|| ExecErr::FunctionNotFound((*function).into()))?;
+            let function_name = self.module.value_name((*function).into());
 
             let dfg = function_data.dfg();
             let layout = function_data.layout();
@@ -226,14 +215,14 @@ impl<'a> Debugger<'a> {
                 println!(
                     "[{:^4}] func {}{} {{",
                     function.index(),
-                    function_data.name(),
+                    function_name.clone(),
                     function_data.ty()
                 );
             } else {
                 println!(
                     "[{:^4}] decl {}{}",
                     function.index(),
-                    function_data.name(),
+                    function_name.clone(),
                     function_data.ty()
                 );
 
@@ -245,7 +234,7 @@ impl<'a> Debugger<'a> {
                 let mut buf = BufWriter::new(Vec::new());
                 let mut printer = Printer::new(&mut buf);
                 printer.print_local_value(inst.into(), dfg).unwrap();
-                let _ = buf.flush().unwrap();
+                buf.flush().unwrap();
                 let output = String::from_utf8(buf.into_inner().unwrap()).unwrap();
                 println!("[{:^4}]     {}", inst.index(), output);
                 println!("          ...");
@@ -281,14 +270,14 @@ impl<'a> Debugger<'a> {
                         let mut inner_buf = BufWriter::new(Vec::new());
                         let mut printer = Printer::new(&mut inner_buf);
                         printer.print_local_value(inst.into(), dfg).unwrap();
-                        let _ = inner_buf.flush().unwrap();
+                        inner_buf.flush().unwrap();
                         let output = String::from_utf8(inner_buf.into_inner().unwrap()).unwrap();
 
                         write!(buf, "{}", output).unwrap();
                         writeln!(buf).unwrap();
                     }
                 }
-                let _ = buf.flush().unwrap();
+                buf.flush().unwrap();
                 let output = String::from_utf8(buf.into_inner().unwrap()).unwrap();
 
                 println!("{}", output);
@@ -304,7 +293,8 @@ impl<'a> Debugger<'a> {
         let function_data = self
             .module
             .function_data(function)
-            .ok_or(ExecErr::FunctionNotFound(function.into()))?;
+            .ok_or_else(|| ExecErr::FunctionNotFound(function.into()))?;
+        let function_name = self.module.value_name(function.into());
 
         let dfg = function_data.dfg();
 
@@ -318,8 +308,8 @@ impl<'a> Debugger<'a> {
                 vreg.0
             );
         } else {
-            println!("Virtual Registers of Function {}", function_data.name());
-            for (value, _data) in dfg.values() {
+            println!("Virtual Registers of Function {}", function_name);
+            for value in dfg.values().keys() {
                 let name = dfg.value_name(*value);
                 let vreg = self.vm.read_vreg(*value);
                 println!(
@@ -341,12 +331,10 @@ impl<'a> Debugger<'a> {
         let mut ascii = String::new();
         let mut hex = String::new();
         for (i, byte) in bytes.iter().enumerate() {
-            if i % 16 == 0 {
-                if i != 0 {
-                    println!("| {:016x} | {:48} | {:16} |", addr.0 + i as u64, hex, ascii);
-                    hex.clear();
-                    ascii.clear();
-                }
+            if i % 16 == 0 && i != 0 {
+                println!("| {:016x} | {:48} | {:16} |", addr.0 + i as u64, hex, ascii);
+                hex.clear();
+                ascii.clear();
             }
             hex.push_str(&format!("{:02x} ", byte));
             ascii.push(if *byte >= 32 && *byte <= 126 {
@@ -393,7 +381,7 @@ impl<'a> Debugger<'a> {
 
     pub fn repl(&mut self) {
         println!("Welcome to OrzDB!");
-        let _ = stdout().flush().unwrap();
+        stdout().flush().unwrap();
         loop {
             let line = self.readline();
             let command = self.parse_command(line);
@@ -424,19 +412,16 @@ impl<'a> Debugger<'a> {
                     self.breakpoints.insert(inst);
                 }
                 DebugCommand::Show(function, inst) => {
-                    let function = function
-                        .map(|name| self.module.get_value_by_name(&name))
-                        .flatten();
-                    let inst = inst
-                        .map(|name| {
-                            self.module
-                                .function_data(
-                                    function.unwrap_or(self.vm.curr_function().into()).into(),
-                                )
-                                .map(|data| data.dfg().get_local_value_by_name(&name))
-                                .flatten()
-                        })
-                        .flatten();
+                    let function = function.and_then(|name| self.module.get_value_by_name(&name));
+                    let inst = inst.and_then(|name| {
+                        self.module
+                            .function_data(
+                                function
+                                    .unwrap_or_else(|| self.vm.curr_function().into())
+                                    .into(),
+                            )
+                            .and_then(|data| data.dfg().get_local_value_by_name(&name))
+                    });
 
                     let function = function.map(|f| f.into());
                     let inst = inst.map(|i| i.into());
@@ -450,22 +435,19 @@ impl<'a> Debugger<'a> {
                     self.dump_memory(addr, size);
                 }
                 DebugCommand::DumpVregs(function, value) => {
-                    let function = function
-                        .map(|name| self.module.get_value_by_name(&name))
-                        .flatten();
-                    let value = value
-                        .map(|name| {
-                            self.module
-                                .function_data(
-                                    function.unwrap_or(self.vm.curr_function().into()).into(),
-                                )
-                                .map(|data| data.dfg().get_local_value_by_name(&name))
-                                .flatten()
-                        })
-                        .flatten();
+                    let function = function.and_then(|name| self.module.get_value_by_name(&name));
+                    let value = value.and_then(|name| {
+                        self.module
+                            .function_data(
+                                function
+                                    .unwrap_or_else(|| self.vm.curr_function().into())
+                                    .into(),
+                            )
+                            .and_then(|data| data.dfg().get_local_value_by_name(&name))
+                    });
 
                     let function = function.map(|f| f.into());
-                    let value = value.map(|i| i.into());
+                    let value = value;
                     self.dump_vregs(function, value).unwrap();
                 }
             }

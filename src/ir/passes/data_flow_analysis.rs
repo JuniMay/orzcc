@@ -12,7 +12,7 @@ use thiserror::Error;
 
 use crate::ir::{
     entities::{FunctionData, ValueKind},
-    pass::LocalPass,
+    passes::LocalPass,
     values::{Function, Value},
 };
 
@@ -21,6 +21,12 @@ pub enum DataFlowAnalysisError {}
 
 pub struct DefUseChain {
     pub uses: HashMap<Value, Vec<Value>>,
+}
+
+impl Default for DefUseChain {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl DefUseChain {
@@ -46,7 +52,7 @@ impl LocalPass for DataFlowAnalysis {
     fn run(&mut self, _function: Function, data: &FunctionData) -> Result<Self::Ok, Self::Err> {
         let dfg = data.dfg();
         let mut chain = DefUseChain::new();
-        for (value, _data) in dfg.values() {
+        for value in dfg.values().keys() {
             chain.uses.insert(*value, Vec::new());
         }
 

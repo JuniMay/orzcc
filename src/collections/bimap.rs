@@ -9,6 +9,16 @@ where
     pub(crate) rev: HashMap<V, K>,
 }
 
+impl<K, V> Default for BiMap<K, V>
+where
+    K: Clone + Hash + Eq,
+    V: Clone + Hash + Eq,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<K, V> BiMap<K, V>
 where
     K: Clone + Hash + Eq,
@@ -27,23 +37,23 @@ where
     }
 
     pub fn get(&self, k: &K) -> Option<&V> {
-        self.map.get(&k)
+        self.map.get(k)
     }
 
     pub fn get_rev(&self, v: &V) -> Option<&K> {
-        self.rev.get(&v)
+        self.rev.get(v)
     }
 
     pub fn contains(&self, k: &K) -> bool {
-        self.map.contains_key(&k)
+        self.map.contains_key(k)
     }
 
     pub fn contains_rev(&self, v: &V) -> bool {
-        self.rev.contains_key(&v)
+        self.rev.contains_key(v)
     }
 
     pub fn remove(&mut self, k: &K) -> Option<V> {
-        if let Some(v) = self.map.remove(&k) {
+        if let Some(v) = self.map.remove(k) {
             self.rev.remove(&v);
             Some(v)
         } else {
@@ -52,7 +62,7 @@ where
     }
 
     pub fn remove_rev(&mut self, v: &V) -> Option<K> {
-        if let Some(k) = self.rev.remove(&v) {
+        if let Some(k) = self.rev.remove(v) {
             self.map.remove(&k);
             Some(k)
         } else {

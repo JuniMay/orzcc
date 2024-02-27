@@ -1,16 +1,16 @@
 use std::{
     cell::RefCell,
     collections::HashMap,
-    error::Error,
-    fmt,
     hash::Hash,
     rc::{Rc, Weak},
 };
 
+use thiserror::Error;
+
 use crate::collections::BiMap;
 
 use super::{
-    builder::{GlobalBuilder, LocalBuilder},
+    builders::{GlobalBuilder, LocalBuilder},
     entities::{BlockData, FunctionData, ValueData},
     types::Type,
     values::{Block, Function, Value},
@@ -60,6 +60,7 @@ impl DataFlowGraph {
         }
     }
 
+    /// Get all the values and their corresponding data.
     pub fn values(&self) -> &HashMap<Value, ValueData> {
         &self.values
     }
@@ -132,14 +133,17 @@ impl DataFlowGraph {
         }
     }
 
+    /// Get a local [`Value`] indexer by its name.
     pub fn get_local_value_by_name(&self, name: &str) -> Option<Value> {
         self.value_name_allocator.borrow().try_get_by_name(name)
     }
 
+    /// Get a local [`Block`] indexer by its name.
     pub fn get_block_by_name(&self, name: &str) -> Option<Block> {
         self.block_name_allocator.borrow().try_get_by_name(name)
     }
 
+    /// Get a local or global [`Value`] by its name.
     pub fn get_value_by_name(&self, name: &str) -> Option<Value> {
         self.value_name_allocator
             .borrow()
@@ -162,34 +166,42 @@ impl DataFlowGraph {
         }
     }
 
+    /// Assign a name to a local value.
     pub fn assign_local_value_name(&self, value: Value, name: String) -> Result<(), NameAllocErr> {
         self.value_name_allocator.borrow_mut().assign(value, name)
     }
 
+    /// Assign a name to a block.
     pub fn assign_block_name(&self, block: Block, name: String) -> Result<(), NameAllocErr> {
         self.block_name_allocator.borrow_mut().assign(block, name)
     }
 
+    /// Get the block data of a block.
     pub fn block_data(&self, block: Block) -> Option<&BlockData> {
         self.blocks.get(&block)
     }
 
+    /// Get the mutable block data of a block.
     pub fn block_data_mut(&mut self, block: Block) -> Option<&mut BlockData> {
         self.blocks.get_mut(&block)
     }
 
+    /// Get the mutable value data of a local value.
     pub fn local_value_data_mut(&mut self, value: Value) -> Option<&mut ValueData> {
         self.values.get_mut(&value)
     }
 
+    /// Replace a use of a value with another value.
     pub fn replace_use(&mut self, value: Value, old: Value, new: Value) {
         self.values.get_mut(&value).unwrap().replace_use(old, new);
     }
 
+    /// Remove a local value from the dfg.
     pub(super) fn remove_local_value(&mut self, value: Value) -> Option<ValueData> {
         self.values.remove(&value)
     }
 
+    /// Remove a block from the dfg.
     pub(super) fn remove_block(&mut self, block: Block) -> Option<BlockData> {
         self.blocks.remove(&block)
     }
@@ -255,6 +267,7 @@ impl Module {
         }
     }
 
+    /// Apply a function to the value data of a global value.
     pub fn with_value_data<F, R>(&self, value: Value, f: F) -> Option<R>
     where
         F: FnOnce(&ValueData) -> R,
@@ -266,34 +279,44 @@ impl Module {
         &self.name
     }
 
+    /// Get the layout of global slots
     pub fn global_slot_layout(&self) -> &[Value] {
         &self.global_slot_layout
     }
 
+    /// Get the layout of functions
     pub fn function_layout(&self) -> &[Function] {
         &self.function_layout
     }
 
+    /// Get the layout of identified types
     pub fn identified_type_layout(&self) -> &[String] {
         &self.identified_type_layout
     }
 
+    /// Allocate an id using [`IdAllocator`].
     fn allocate_id(&self) -> usize {
         self.id_allocator.borrow_mut().allocate()
     }
 
+    /// Get the global builder of the module.
     pub fn builder(&mut self) -> GlobalBuilder {
         GlobalBuilder::new(self)
     }
 
+    /// Get the function data of a function.
     pub fn function_data(&self, function: Function) -> Option<&FunctionData> {
         self.functions.get(&function)
     }
 
+    /// Get the mutable function data of a function.
     pub fn function_data_mut(&mut self, function: Function) -> Option<&mut FunctionData> {
         self.functions.get_mut(&function)
     }
 
+    /// Get the value data of a global value.
+    ///
+    /// This will also add the slot into the layout.
     pub(super) fn add_global_slot(&mut self, data: ValueData) -> Value {
         let value = Value::new(self.allocate_id());
         self.globals.borrow_mut().insert(value, data);
@@ -301,6 +324,9 @@ impl Module {
         value
     }
 
+    /// Add a function to the module.
+    ///
+    /// This will also add the function into the layout.
     pub(super) fn add_function(
         &mut self,
         value_data: ValueData,
@@ -326,18 +352,22 @@ impl Module {
         function.into()
     }
 
+    /// Get the name of a global value
     pub fn value_name(&self, value: Value) -> String {
         self.name_allocator.borrow_mut().get(value)
     }
 
+    /// Assign a name to a global value.
     pub fn assign_name(&mut self, value: Value, name: String) -> Result<(), NameAllocErr> {
         self.name_allocator.borrow_mut().assign(value, name)
     }
 
+    /// Get a global [`Value`] indexer by its name.
     pub fn get_value_by_name(&self, name: &str) -> Option<Value> {
         self.name_allocator.borrow().try_get_by_name(name)
     }
 
+    /// Add an identified type to the module.
     pub fn add_identified_type(&mut self, name: String) {
         self.identified_type_layout.push(name);
     }
@@ -381,24 +411,16 @@ where
     prefix: &'static str,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum NameAllocErr {
     /// The key is already assigned or allocated.
+    #[error("key is already allocated.")]
     KeyDuplicated,
+
     /// The name is already assigned or allocated.
+    #[error("name is already allocated.")]
     NameDuplicated,
 }
-
-impl fmt::Display for NameAllocErr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::KeyDuplicated => write!(f, "key is already assigned or allocated"),
-            Self::NameDuplicated => write!(f, "name is already assigned or allocated"),
-        }
-    }
-}
-
-impl Error for NameAllocErr {}
 
 impl<T> NameAllocator<T>
 where

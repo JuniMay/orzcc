@@ -1,9 +1,9 @@
 use crate::ir::{
-    entities::{FunctionData, FunctionKind, ValueKind},
+    entities::{FunctionKind, ValueKind},
     module::{DataFlowGraph, Module},
-    pass::GlobalPass,
+    passes::GlobalPass,
     types::Type,
-    values::Value,
+    values::{Function, Value},
 };
 
 use std::io;
@@ -42,20 +42,22 @@ where
         }
 
         for function in module.function_layout() {
-            self.print_function(module.function_data(*function).unwrap())?;
+            self.print_function(*function, module)?;
         }
 
         Ok(())
     }
 
-    pub fn print_function(&mut self, data: &FunctionData) -> io::Result<()> {
+    pub fn print_function(&mut self, function: Function, module: &Module) -> io::Result<()> {
+        let data = module.function_data(function).unwrap();
+        let function_name = module.value_name(function.into());
+
         if let FunctionKind::Intrinsic = data.kind() {
             return Ok(());
         }
 
         writeln!(self.buf)?;
-
-        writeln!(self.buf, "func {}{} {{", data.name(), data.ty())?;
+        writeln!(self.buf, "func {}{} {{", function_name, data.ty())?;
 
         if let FunctionKind::Declaration = data.kind() {
             return Ok(());

@@ -1,3 +1,17 @@
+//! # Builders of OrzIR.
+//!
+//! Builder is a unified interface to construct values (globals, constants, instructions, etc.) in
+//! the OrzIR. There are two kinds of builders: `LocalBuilder` and `GlobalBuilder`.
+//!
+//! ## Local Builder
+//!
+//! Local builder is used to build values in a local data flow graph (DFG). It is useful when
+//! constructing local instructions and blocks.
+//!
+//! ## Global Builder
+//!
+//! Global builder is used to build global variables, constants and even functions.
+//!
 use super::{
     entities::{BlockData, FunctionData, FunctionKind, ValueData, ValueKind},
     module::{DataFlowGraph, Module},
@@ -81,6 +95,9 @@ pub enum BuilderErr {
     IncompatibleBlockArgType(Type, Type),
 }
 
+/// Query value data.
+///
+/// This trait is used to provide the query interface for builder.
 pub trait QueryValueData {
     /// Get the type of a value.
     fn value_type(&self, value: Value) -> Result<Type, BuilderErr>;
@@ -103,19 +120,22 @@ pub trait QueryBlockData {
 
 pub trait QueryDfgData: QueryValueData + QueryBlockData {}
 
+/// Add value to the data flow graph or the module.
 pub trait AddValue {
     fn add_value(&mut self, data: ValueData) -> Result<Value, BuilderErr>;
 }
 
+/// Add block to the data flow graph.
 pub trait AddBlock {
     fn add_block(&mut self, data: BlockData) -> Result<Block, BuilderErr>;
 }
 
+/// Constant builder for both global and local purposes.
 pub trait ConstantBuilder: QueryValueData + AddValue {
     /// Build a zero constant.
     fn zero(&mut self, ty: Type) -> Result<Value, BuilderErr> {
         if !ty.is_zero_initializable() {
-            return Err(BuilderErr::InvalidType(ty.clone()));
+            return Err(BuilderErr::InvalidType(ty));
         }
         self.add_value(ValueData::new(ty, ValueKind::Zero))
     }
@@ -128,7 +148,7 @@ pub trait ConstantBuilder: QueryValueData + AddValue {
     /// Build a bytes constant.
     fn bytes(&mut self, ty: Type, bytes: Vec<u8>) -> Result<Value, BuilderErr> {
         if !ty.is_numeric() && !ty.is_ptr() {
-            return Err(BuilderErr::InvalidType(ty.clone()));
+            return Err(BuilderErr::InvalidType(ty));
         }
         self.add_value(ValueData::new(ty, ValueKind::Bytes(bytes)))
     }
@@ -160,7 +180,9 @@ pub trait ConstantBuilder: QueryValueData + AddValue {
 
     /// Build an array constant.
     fn array(&mut self, ty: Type, values: Vec<Value>) -> Result<Value, BuilderErr> {
-        let (size, elem_type) = ty.as_array().ok_or(BuilderErr::InvalidType(ty.clone()))?;
+        let (size, elem_type) = ty
+            .as_array()
+            .ok_or_else(|| BuilderErr::InvalidType(ty.clone()))?;
 
         if values.len() != size {
             return Err(BuilderErr::IncompatibleArraySize(size, values.len()));
@@ -169,7 +191,7 @@ pub trait ConstantBuilder: QueryValueData + AddValue {
         for value in &values {
             if self.value_type(*value)? != elem_type.clone() {
                 return Err(BuilderErr::IncompatibleArrayElemType(
-                    elem_type.clone(),
+                    elem_type,
                     self.value_type(*value)?,
                 ));
             }
@@ -183,7 +205,9 @@ pub trait ConstantBuilder: QueryValueData + AddValue {
 
     /// Build a struct constant.
     fn struct_(&mut self, ty: Type, values: Vec<Value>) -> Result<Value, BuilderErr> {
-        let fields = ty.as_struct().ok_or(BuilderErr::InvalidType(ty.clone()))?;
+        let fields = ty
+            .as_struct()
+            .ok_or_else(|| BuilderErr::InvalidType(ty.clone()))?;
 
         if fields.len() != values.len() {
             return Err(BuilderErr::IncompatibleStructFieldNumber(
@@ -208,6 +232,7 @@ pub trait ConstantBuilder: QueryValueData + AddValue {
     }
 }
 
+/// Local value builder for local data flow graph.
 pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
     /// Build a block parameter.
     fn block_param(&mut self, ty: Type) -> Result<Value, BuilderErr> {
@@ -222,7 +247,7 @@ pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
     /// Build a load instruction.
     fn load(&mut self, ty: Type, ptr: Value) -> Result<Value, BuilderErr> {
         if !self.value_type(ptr)?.is_ptr() {
-            return Err(BuilderErr::InvalidType(ty.clone()));
+            return Err(BuilderErr::InvalidType(ty));
         }
         self.add_value(Load::new_value_data(ty, ptr))
     }
@@ -251,18 +276,15 @@ pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
         let rhs_type = self.value_type(rhs)?;
 
         if op.require_int() && (!lhs_type.is_int() || !rhs_type.is_int()) {
-            return Err(BuilderErr::InvalidType(lhs_type.clone()));
+            return Err(BuilderErr::InvalidType(lhs_type));
         }
 
         if op.require_float() && (!lhs_type.is_float() || !rhs_type.is_float()) {
-            return Err(BuilderErr::InvalidType(lhs_type.clone()));
+            return Err(BuilderErr::InvalidType(lhs_type));
         }
 
         if op.require_same_type() && lhs_type != rhs_type {
-            return Err(BuilderErr::IncompatibleType(
-                lhs_type.clone(),
-                rhs_type.clone(),
-            ));
+            return Err(BuilderErr::IncompatibleType(lhs_type, rhs_type));
         }
 
         let res_type = match op {
@@ -278,11 +300,11 @@ pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
         let val_type = self.value_type(val)?;
 
         if op.require_int() && !val_type.is_int() {
-            return Err(BuilderErr::InvalidType(val_type.clone()));
+            return Err(BuilderErr::InvalidType(val_type));
         }
 
         if op.require_float() && !val_type.is_float() {
-            return Err(BuilderErr::InvalidType(val_type.clone()));
+            return Err(BuilderErr::InvalidType(val_type));
         }
 
         self.add_value(Unary::new_value_data(val_type, op, val))
@@ -304,10 +326,7 @@ pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
             let arg_type = self.value_type(*arg)?;
 
             if param_type != arg_type {
-                return Err(BuilderErr::IncompatibleBlockArgType(
-                    param_type.clone(),
-                    arg_type.clone(),
-                ));
+                return Err(BuilderErr::IncompatibleBlockArgType(param_type, arg_type));
             }
         }
 
@@ -349,10 +368,7 @@ pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
             let arg_type = self.value_type(*arg)?;
 
             if param_type != arg_type {
-                return Err(BuilderErr::IncompatibleBlockArgType(
-                    param_type.clone(),
-                    arg_type.clone(),
-                ));
+                return Err(BuilderErr::IncompatibleBlockArgType(param_type, arg_type));
             }
         }
 
@@ -361,10 +377,7 @@ pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
             let arg_type = self.value_type(*arg)?;
 
             if param_type != arg_type {
-                return Err(BuilderErr::IncompatibleBlockArgType(
-                    param_type.clone(),
-                    arg_type.clone(),
-                ));
+                return Err(BuilderErr::IncompatibleBlockArgType(param_type, arg_type));
             }
         }
 
@@ -405,6 +418,7 @@ pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
     }
 }
 
+/// Block builder for local data flow graph.
 pub trait LocalBlockBuilder: QueryDfgData + AddBlock {
     /// Build a block.
     fn block(&mut self, params: Vec<Value>) -> Result<Block, BuilderErr> {
@@ -418,6 +432,7 @@ pub trait LocalBlockBuilder: QueryDfgData + AddBlock {
     }
 }
 
+/// Global value builder for the module.
 pub trait GlobalValueBuilder: QueryValueData + AddValue + ConstantBuilder {
     /// Add a constructed function to the module.
     fn add_function(
@@ -436,33 +451,28 @@ pub trait GlobalValueBuilder: QueryValueData + AddValue + ConstantBuilder {
     }
 
     /// Build a global function.
-    fn function(
-        &mut self,
-        name: String,
-        ty: Type,
-        kind: FunctionKind,
-    ) -> Result<Function, BuilderErr> {
-        let data = FunctionData::new(name, ty.clone(), kind);
+    fn function(&mut self, ty: Type, kind: FunctionKind) -> Result<Function, BuilderErr> {
+        let data = FunctionData::new(ty, kind);
         self.add_function(data.new_value_data(), data)
     }
 
     /// Build a function definition.
-    fn function_def(&mut self, name: String, ty: Type) -> Result<Function, BuilderErr> {
-        let data = FunctionData::new(name, ty.clone(), FunctionKind::Definition);
+    fn function_def(&mut self, ty: Type) -> Result<Function, BuilderErr> {
+        let data = FunctionData::new(ty, FunctionKind::Definition);
         let function = self.add_function(data.new_value_data(), data)?;
         Ok(function)
     }
 
     /// Build a function declaration.
-    fn function_decl(&mut self, name: String, ty: Type) -> Result<Function, BuilderErr> {
-        let data = FunctionData::new(name, ty.clone(), FunctionKind::Declaration);
+    fn function_decl(&mut self, ty: Type) -> Result<Function, BuilderErr> {
+        let data = FunctionData::new(ty, FunctionKind::Declaration);
         let function = self.add_function(data.new_value_data(), data)?;
         Ok(function)
     }
 
     /// Build a intrinsic function.
-    fn function_intrinsic(&mut self, name: String, ty: Type) -> Result<Function, BuilderErr> {
-        let data = FunctionData::new(name, ty.clone(), FunctionKind::Intrinsic);
+    fn function_intrinsic(&mut self, ty: Type) -> Result<Function, BuilderErr> {
+        let data = FunctionData::new(ty, FunctionKind::Intrinsic);
         let function = self.add_function(data.new_value_data(), data)?;
         Ok(function)
     }

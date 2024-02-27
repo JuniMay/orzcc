@@ -14,6 +14,12 @@ pub struct DataLayout {
     pub pointer_size: usize,
 }
 
+impl Default for DataLayout {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DataLayout {
     pub fn new() -> Self {
         Self { pointer_size: 8 }
