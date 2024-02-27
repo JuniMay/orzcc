@@ -249,7 +249,11 @@ impl ValueData {
         &self.kind
     }
 
-    pub fn replace_use(&mut self, old: Value, new: Value) {
+    /// Replace the used operands in the instructions.
+    ///
+    /// If the value data is not an instruction or the `old` argument is not found in the
+    /// instruction, this method does nothing.
+    pub(super) fn replace_use(&mut self, old: Value, new: Value) {
         match self.kind {
             ValueKind::Load(ref mut load) => load.replace_use(old, new),
             ValueKind::Store(ref mut store) => store.replace_use(old, new),

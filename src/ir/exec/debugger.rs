@@ -22,12 +22,12 @@ use std::collections::HashSet;
 use std::io::{stdin, stdout, BufWriter, Write};
 
 use crate::ir::entities::FunctionKind;
+use crate::ir::passes::printer::Printer;
 use crate::ir::values::{Inst, ValueIndexer};
 use crate::ir::{
     module::Module,
     values::{Function, Value},
 };
-use crate::passes::printer::Printer;
 
 use super::vm::{Addr, ExecResult, VirtualMachine};
 use super::ExecErr;

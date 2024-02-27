@@ -1,3 +1,17 @@
+//! # Builders of OrzIR.
+//!
+//! Builder is a unified interface to construct values (globals, constants, instructions, etc.) in
+//! the OrzIR. There are two kinds of builders: `LocalBuilder` and `GlobalBuilder`.
+//!
+//! ## Local Builder
+//!
+//! Local builder is used to build values in a local data flow graph (DFG). It is useful when
+//! constructing local instructions and blocks.
+//!
+//! ## Global Builder
+//!
+//! Global builder is used to build global variables, constants and even functions.
+//!
 use super::{
     entities::{BlockData, FunctionData, FunctionKind, ValueData, ValueKind},
     module::{DataFlowGraph, Module},
@@ -81,6 +95,9 @@ pub enum BuilderErr {
     IncompatibleBlockArgType(Type, Type),
 }
 
+/// Query value data.
+///
+/// This trait is used to provide the query interface for builder.
 pub trait QueryValueData {
     /// Get the type of a value.
     fn value_type(&self, value: Value) -> Result<Type, BuilderErr>;
@@ -103,14 +120,17 @@ pub trait QueryBlockData {
 
 pub trait QueryDfgData: QueryValueData + QueryBlockData {}
 
+/// Add value to the data flow graph or the module.
 pub trait AddValue {
     fn add_value(&mut self, data: ValueData) -> Result<Value, BuilderErr>;
 }
 
+/// Add block to the data flow graph.
 pub trait AddBlock {
     fn add_block(&mut self, data: BlockData) -> Result<Block, BuilderErr>;
 }
 
+/// Constant builder for both global and local purposes.
 pub trait ConstantBuilder: QueryValueData + AddValue {
     /// Build a zero constant.
     fn zero(&mut self, ty: Type) -> Result<Value, BuilderErr> {
@@ -208,6 +228,7 @@ pub trait ConstantBuilder: QueryValueData + AddValue {
     }
 }
 
+/// Local value builder for local data flow graph.
 pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
     /// Build a block parameter.
     fn block_param(&mut self, ty: Type) -> Result<Value, BuilderErr> {
@@ -405,6 +426,7 @@ pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
     }
 }
 
+/// Block builder for local data flow graph.
 pub trait LocalBlockBuilder: QueryDfgData + AddBlock {
     /// Build a block.
     fn block(&mut self, params: Vec<Value>) -> Result<Block, BuilderErr> {
@@ -418,6 +440,7 @@ pub trait LocalBlockBuilder: QueryDfgData + AddBlock {
     }
 }
 
+/// Global value builder for the module.
 pub trait GlobalValueBuilder: QueryValueData + AddValue + ConstantBuilder {
     /// Add a constructed function to the module.
     fn add_function(

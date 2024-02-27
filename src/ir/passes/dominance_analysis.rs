@@ -9,13 +9,11 @@ use std::collections::{HashMap, HashSet};
 
 use thiserror::Error;
 
-use crate::{
-    ir::{
-        entities::FunctionData,
-        pass::LocalPass,
-        values::{Block, Function},
-    },
+use crate::ir::{
+    entities::FunctionData,
     passes::control_flow_analysis::ControlFlowAnalysis,
+    passes::LocalPass,
+    values::{Block, Function},
 };
 
 use super::control_flow_analysis::{ControlFlowAnalysisError, ControlFlowGraph};
@@ -197,7 +195,7 @@ impl LocalPass for DominanceAnalysis {
 mod test {
     use std::io::Cursor;
 
-    use crate::ir::{frontend::parser::Parser, pass::LocalPass};
+    use crate::ir::{frontend::parser::Parser, passes::LocalPass};
 
     use super::DominanceAnalysis;
 

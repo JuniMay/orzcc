@@ -12,7 +12,7 @@ use thiserror::Error;
 
 use crate::ir::{
     entities::{FunctionData, ValueKind},
-    pass::LocalPass,
+    passes::LocalPass,
     values::{Function, Value},
 };
 

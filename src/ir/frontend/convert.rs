@@ -1,7 +1,7 @@
 use thiserror::Error;
 
 use crate::ir::{
-    builder::{
+    builders::{
         BuilderErr, ConstantBuilder, GlobalValueBuilder, LocalBlockBuilder, LocalValueBuilder,
     },
     module::Module,

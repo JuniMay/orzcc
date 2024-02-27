@@ -1,7 +1,7 @@
 use crate::ir::{
     entities::{FunctionData, FunctionKind, ValueKind},
     module::{DataFlowGraph, Module},
-    pass::GlobalPass,
+    passes::GlobalPass,
     types::Type,
     values::Value,
 };

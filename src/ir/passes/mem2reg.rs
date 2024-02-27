@@ -29,10 +29,10 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use thiserror::Error;
 
 use crate::ir::{
-    builder::{ConstantBuilder, LocalValueBuilder},
+    builders::{ConstantBuilder, LocalValueBuilder},
     entities::{FunctionData, ValueKind},
     module::DataFlowGraph,
-    pass::{LocalPass, LocalPassMut},
+    passes::{LocalPass, LocalPassMut},
     types::Type,
     values::{Block, Function, Value},
 };
@@ -335,23 +335,23 @@ impl LocalPassMut for Mem2reg {
 
 #[cfg(test)]
 mod test {
-    use std::io::{self, Cursor};
+    use std::io::{BufWriter, Cursor};
 
-    use crate::{
-        ir::{
-            frontend::parser::Parser,
-            module::Module,
-            pass::{GlobalPass, LocalPassMut},
-        },
+    use crate::ir::{
+        frontend::parser::Parser,
+        module::Module,
         passes::printer::Printer,
+        passes::{GlobalPass, LocalPassMut},
     };
 
     use super::Mem2reg;
 
-    fn _print(module: &Module) {
-        let mut stdout = io::stdout();
-        let mut printer = Printer::new(&mut stdout);
+    fn print(module: &Module) {
+        let mut buf = BufWriter::new(Vec::new());
+        let mut printer = Printer::new(&mut buf);
         printer.run(module).unwrap();
+        let s = String::from_utf8(buf.into_inner().unwrap()).unwrap();
+        println!("{}", s);
     }
 
     #[test]
@@ -392,6 +392,6 @@ mod test {
 
         pass.run(function.into(), function_data).unwrap();
 
-        _print(&module);
+        print(&module);
     }
 }

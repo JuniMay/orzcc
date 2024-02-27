@@ -11,9 +11,9 @@
 use thiserror::Error;
 
 use crate::ir::{
-    builder::LocalValueBuilder,
+    builders::LocalValueBuilder,
     entities::FunctionData,
-    pass::LocalPassMut,
+    passes::LocalPassMut,
     values::{Block, Function},
 };
 
@@ -81,15 +81,13 @@ impl LocalPassMut for ControlFlowNormalization {
 #[cfg(test)]
 mod test {
     use super::ControlFlowNormalization;
-    use crate::{
-        ir::{
-            frontend::parser::Parser,
-            module::Module,
-            pass::{GlobalPass, LocalPassMut},
-        },
+    use crate::ir::{
+        frontend::parser::Parser,
+        module::Module,
         passes::printer::Printer,
+        passes::{GlobalPass, LocalPassMut},
     };
-    use std::io::{self, Cursor};
+    use std::io::{BufWriter, Cursor};
 
     fn verify(module: &Module, function_name: &str) -> bool {
         let function = module.get_value_by_name(function_name).unwrap();
@@ -119,10 +117,12 @@ mod test {
         valid
     }
 
-    fn _print(module: &Module) {
-        let mut stdout = io::stdout();
-        let mut printer = Printer::new(&mut stdout);
+    fn print(module: &Module) {
+        let mut buf = BufWriter::new(Vec::new());
+        let mut printer = Printer::new(&mut buf);
         printer.run(module).unwrap();
+        let s = String::from_utf8(buf.into_inner().unwrap()).unwrap();
+        println!("{}", s);
     }
 
     #[test]
@@ -157,6 +157,6 @@ mod test {
 
         assert!(verify(&module, "@test_func"));
 
-        // _print(&module);
+        print(&module);
     }
 }

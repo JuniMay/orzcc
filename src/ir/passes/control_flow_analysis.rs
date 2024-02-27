@@ -9,7 +9,7 @@ use thiserror::Error;
 
 use crate::ir::{
     entities::{FunctionData, ValueKind},
-    pass::LocalPass,
+    passes::LocalPass,
     values::{Block, Function},
 };
 
@@ -98,24 +98,11 @@ impl LocalPass for ControlFlowAnalysis {
 
 #[cfg(test)]
 mod test {
-    use std::io::{self, Cursor};
+    use std::io::Cursor;
 
-    use crate::{
-        ir::{
-            frontend::parser::Parser,
-            module::Module,
-            pass::{GlobalPass, LocalPass},
-        },
-        passes::printer::Printer,
-    };
+    use crate::ir::{frontend::parser::Parser, passes::LocalPass};
 
     use super::ControlFlowAnalysis;
-
-    fn _print(module: &Module) {
-        let mut stdout = io::stdout();
-        let mut printer = Printer::new(&mut stdout);
-        printer.run(module).unwrap();
-    }
 
     #[test]
     fn test_cfa() {

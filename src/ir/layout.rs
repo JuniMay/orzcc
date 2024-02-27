@@ -1,4 +1,6 @@
-use std::{collections::HashMap, error::Error, fmt};
+use std::collections::HashMap;
+
+use thiserror::Error;
 
 use crate::collections::{BiLinkedList, BiLinkedListErr, BiLinkedNode};
 
@@ -93,43 +95,30 @@ pub struct Layout {
 }
 
 /// Errors in layout operations
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum LayoutOpErr {
     /// Duplicated instruction in inertion.
+    #[error("duplicated instruction: {0:?}")]
     InstDuplicated(Inst),
 
     /// Duplicated block in insertion.
+    #[error("duplicated block: {0:?}")]
     BlockDuplicated(Block),
 
     /// Parent block cannot be indexed in the layout mapping
     ///
     /// This is usually caused by removing an instruction.
+    #[error("parent block not found for: {0:?}")]
     ParentBlockNotFound(Inst),
 
     /// Block cannot be found in a local layout (in the linked list).
+    #[error("block node not found: {0:?}")]
     BlockNodeNotFound(Block),
 
     /// Instruction cannot be found in a local layout (in the linked list).
+    #[error("instruction node not found for: {0:?}")]
     InstNodeNotFound(Inst),
 }
-
-impl fmt::Display for LayoutOpErr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            LayoutOpErr::InstDuplicated(inst) => write!(f, "duplicated instruction: {:?}", inst),
-            LayoutOpErr::BlockDuplicated(block) => write!(f, "duplicated block: {:?}", block),
-            LayoutOpErr::ParentBlockNotFound(inst) => {
-                write!(f, "parent block not found for: {:?}", inst)
-            }
-            LayoutOpErr::BlockNodeNotFound(block) => write!(f, "block node not found: {:?}", block),
-            LayoutOpErr::InstNodeNotFound(inst) => {
-                write!(f, "instruction node not found for: {:?}", inst)
-            }
-        }
-    }
-}
-
-impl Error for LayoutOpErr {}
 
 impl Default for Layout {
     fn default() -> Self {
@@ -145,10 +134,14 @@ impl Layout {
         }
     }
 
+    /// Get the entry block for the current function.
+    ///
+    /// The entry block is by default the first block in the layout.
     pub fn entry_block(&self) -> Option<Block> {
         self.blocks.front()
     }
 
+    /// Get the list of blocks.
     pub fn blocks(&self) -> &BlockList {
         &self.blocks
     }
@@ -215,12 +208,14 @@ impl Layout {
         self.blocks.node(block).and_then(|node| node.insts().back())
     }
 
+    /// Append a block to the layout
     pub fn append_block(&mut self, block: Block) -> Result<(), LayoutOpErr> {
         self.blocks
             .append(block)
             .map_err(|_| LayoutOpErr::BlockDuplicated(block))
     }
 
+    /// Append an instruction to a block
     pub fn append_inst(&mut self, inst: Inst, block: Block) -> Result<(), LayoutOpErr> {
         if self.inst_blocks.contains_key(&inst) {
             return Err(LayoutOpErr::InstDuplicated(inst));
@@ -237,6 +232,11 @@ impl Layout {
         Ok(())
     }
 
+    /// Remove a block from the layout
+    ///
+    /// For pass consrtuction, please use the
+    /// [`FunctionData::remove_block`](super::entities::FunctionData::remove_block) method,
+    /// because this method does not remove the block from the data-flow graph.
     pub(super) fn remove_block(&mut self, block: Block) -> Result<(), LayoutOpErr> {
         for (inst, _) in self
             .blocks
@@ -253,6 +253,11 @@ impl Layout {
             .map_err(|_| LayoutOpErr::BlockNodeNotFound(block))
     }
 
+    /// Remove an instruction from the layout
+    ///
+    /// For pass consrtuction, please use the
+    /// [`FunctionData::remove_inst`](super::entities::FunctionData::remove_inst) method.
+    /// because this method does not remove the instruction from the data-flow graph.
     pub(super) fn remove_inst(&mut self, inst: Inst) -> Result<(), LayoutOpErr> {
         let block = self
             .inst_blocks
