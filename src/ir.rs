@@ -110,7 +110,7 @@
 //! // construct a function type.
 //! let ty = Type::mk_function(vec![Type::mk_i32()], Type::mk_i32());
 //! // there are also `function_decl` and `function_intrinsic` methods.
-//! let function = module.builder().function_def("function_name".to_string(), ty).unwrap();
+//! let function = module.builder().function_def(ty).unwrap();
 //!
 //! // After that, you can build the function body with the `LocalBuilder`:
 //! // all the local constructions are within the function builder.
@@ -136,6 +136,7 @@
 //!
 //! module.assign_name(var, "@var_name".to_string()).unwrap();
 //! module.assign_name(const_, "@const_name".to_string()).unwrap();
+//! module.assign_name(function.into(), "@function_name".to_string()).unwrap();
 //! ```
 //!
 //! ---

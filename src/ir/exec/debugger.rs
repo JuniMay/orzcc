@@ -218,6 +218,7 @@ impl<'a> Debugger<'a> {
                 .module
                 .function_data(*function)
                 .ok_or(ExecErr::FunctionNotFound((*function).into()))?;
+            let function_name = self.module.value_name((*function).into());
 
             let dfg = function_data.dfg();
             let layout = function_data.layout();
@@ -226,14 +227,14 @@ impl<'a> Debugger<'a> {
                 println!(
                     "[{:^4}] func {}{} {{",
                     function.index(),
-                    function_data.name(),
+                    function_name.clone(),
                     function_data.ty()
                 );
             } else {
                 println!(
                     "[{:^4}] decl {}{}",
                     function.index(),
-                    function_data.name(),
+                    function_name.clone(),
                     function_data.ty()
                 );
 
@@ -305,6 +306,7 @@ impl<'a> Debugger<'a> {
             .module
             .function_data(function)
             .ok_or(ExecErr::FunctionNotFound(function.into()))?;
+        let function_name = self.module.value_name(function.into());
 
         let dfg = function_data.dfg();
 
@@ -318,7 +320,7 @@ impl<'a> Debugger<'a> {
                 vreg.0
             );
         } else {
-            println!("Virtual Registers of Function {}", function_data.name());
+            println!("Virtual Registers of Function {}", function_name);
             for (value, _data) in dfg.values() {
                 let name = dfg.value_name(*value);
                 let vreg = self.vm.read_vreg(*value);

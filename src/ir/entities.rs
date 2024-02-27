@@ -6,7 +6,6 @@ use super::{
         Alloc, Binary, Block, Branch, Call, Cast, GetElemPtr, GlobalSlot, Inst, Jump, Load, Return,
         Store, Unary, Value,
     },
-    GLOBAL_PREFIX,
 };
 
 /// Data of the block
@@ -40,8 +39,6 @@ pub enum FunctionKind {
 
 /// Data of function.
 pub struct FunctionData {
-    /// Name of the function.
-    name: String,
     /// Type of the function.
     ty: Type,
     /// The kind of the function
@@ -53,18 +50,11 @@ pub struct FunctionData {
 }
 
 impl FunctionData {
-    pub fn new(name: String, ty: Type, kind: FunctionKind) -> Self {
+    pub fn new(ty: Type, kind: FunctionKind) -> Self {
         let dfg = DataFlowGraph::new();
         let layout = Layout::new();
 
-        let mut name = name;
-
-        if !name.starts_with(GLOBAL_PREFIX) {
-            name = format!("{}{}", GLOBAL_PREFIX, name);
-        }
-
         Self {
-            name,
             ty,
             kind,
             dfg,
@@ -78,14 +68,6 @@ impl FunctionData {
     /// in the `ty` field of the [`FunctionData`] struct.
     pub fn new_value_data(&self) -> ValueData {
         ValueData::new(Type::mk_ptr(), ValueKind::Function)
-    }
-
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
-    pub fn set_name(&mut self, name: String) {
-        self.name = name;
     }
 
     pub fn ty(&self) -> &Type {

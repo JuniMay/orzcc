@@ -89,16 +89,13 @@ impl Ast {
                 AstNodeKind::FunctionDecl(ref decl) => {
                     let name = decl.name.clone();
                     let ty = decl.ty.clone();
-                    let function = ctx.module.builder().function_decl(name.clone(), ty)?;
+                    let function = ctx.module.builder().function_decl(ty)?;
                     ctx.module
                         .assign_name(function.into(), name)
                         .map_err(|_| SemanticError::NameDuplicated(item.span.clone()))?;
                 }
                 AstNodeKind::FunctionDef(ref def) => {
-                    let function = ctx
-                        .module
-                        .builder()
-                        .function_def(def.name.clone(), def.ty.clone())?;
+                    let function = ctx.module.builder().function_def(def.ty.clone())?;
                     ctx.module
                         .assign_name(function.into(), def.name.clone())
                         .map_err(|_| SemanticError::NameDuplicated(item.span.clone()))?;

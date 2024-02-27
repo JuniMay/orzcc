@@ -459,33 +459,28 @@ pub trait GlobalValueBuilder: QueryValueData + AddValue + ConstantBuilder {
     }
 
     /// Build a global function.
-    fn function(
-        &mut self,
-        name: String,
-        ty: Type,
-        kind: FunctionKind,
-    ) -> Result<Function, BuilderErr> {
-        let data = FunctionData::new(name, ty.clone(), kind);
+    fn function(&mut self, ty: Type, kind: FunctionKind) -> Result<Function, BuilderErr> {
+        let data = FunctionData::new(ty.clone(), kind);
         self.add_function(data.new_value_data(), data)
     }
 
     /// Build a function definition.
-    fn function_def(&mut self, name: String, ty: Type) -> Result<Function, BuilderErr> {
-        let data = FunctionData::new(name, ty.clone(), FunctionKind::Definition);
+    fn function_def(&mut self, ty: Type) -> Result<Function, BuilderErr> {
+        let data = FunctionData::new(ty.clone(), FunctionKind::Definition);
         let function = self.add_function(data.new_value_data(), data)?;
         Ok(function)
     }
 
     /// Build a function declaration.
-    fn function_decl(&mut self, name: String, ty: Type) -> Result<Function, BuilderErr> {
-        let data = FunctionData::new(name, ty.clone(), FunctionKind::Declaration);
+    fn function_decl(&mut self, ty: Type) -> Result<Function, BuilderErr> {
+        let data = FunctionData::new(ty.clone(), FunctionKind::Declaration);
         let function = self.add_function(data.new_value_data(), data)?;
         Ok(function)
     }
 
     /// Build a intrinsic function.
-    fn function_intrinsic(&mut self, name: String, ty: Type) -> Result<Function, BuilderErr> {
-        let data = FunctionData::new(name, ty.clone(), FunctionKind::Intrinsic);
+    fn function_intrinsic(&mut self, ty: Type) -> Result<Function, BuilderErr> {
+        let data = FunctionData::new(ty.clone(), FunctionKind::Intrinsic);
         let function = self.add_function(data.new_value_data(), data)?;
         Ok(function)
     }
