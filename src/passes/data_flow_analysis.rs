@@ -4,30 +4,99 @@
 //! maintained. This pass will build the def-use chains.
 //!
 //! Note that in OrzIR, the def of a instruction is explicit (for SSA form), but the use of a
-//! instruction is not explicit. 
+//! instruction is not explicit.
 
-use std::collections::HashSet;
+use std::collections::HashMap;
 
-use crate::ir::{entities::FunctionData, pass::LocalPass, values::{Function, Value}};
+use crate::ir::{
+    entities::{FunctionData, ValueKind},
+    pass::LocalPass,
+    values::{Function, Value},
+};
 
-pub enum DataFlowAnalysisError {
-    
-}
+pub enum DataFlowAnalysisError {}
 
 pub struct DefUseChain {
-    pub def: Value,
-    pub uses: HashSet<Value>,
+    pub uses: HashMap<Value, Vec<Value>>,
 }
 
-pub struct DataFlowAnalysis {
-    
+impl DefUseChain {
+    pub fn new() -> Self {
+        Self {
+            uses: HashMap::new(),
+        }
+    }
+}
+
+pub struct DataFlowAnalysis {}
+
+impl DataFlowAnalysis {
+    fn insert_use(&mut self, def: Value, use_: Value, chain: &mut DefUseChain) {
+        if let Some(uses) = chain.uses.get_mut(&def) {
+            uses.push(use_);
+        } else {
+            chain.uses.insert(def, vec![use_]);
+        }
+    }
 }
 
 impl LocalPass for DataFlowAnalysis {
     type Ok = DefUseChain;
     type Err = DataFlowAnalysisError;
 
-    fn run(&mut self, function: Function, data: &FunctionData) -> Result<Self::Ok, Self::Err> {
-        todo!()
+    fn run(&mut self, _function: Function, data: &FunctionData) -> Result<Self::Ok, Self::Err> {
+        let dfg = data.dfg();
+        let mut chain = DefUseChain::new();
+        for (value, data) in dfg.values() {
+            match data.kind() {
+                ValueKind::Alloc(_alloc) => {}
+                ValueKind::Load(load) => self.insert_use(*value, load.ptr(), &mut chain),
+                ValueKind::Store(store) => {
+                    self.insert_use(*value, store.ptr(), &mut chain);
+                    self.insert_use(*value, store.val(), &mut chain);
+                }
+                ValueKind::Binary(binary) => {
+                    self.insert_use(*value, binary.lhs(), &mut chain);
+                    self.insert_use(*value, binary.rhs(), &mut chain);
+                }
+                ValueKind::Unary(unary) => self.insert_use(*value, unary.val(), &mut chain),
+                ValueKind::Jump(jump) => {
+                    for arg in jump.args() {
+                        self.insert_use(*value, *arg, &mut chain);
+                    }
+                }
+                ValueKind::Branch(br) => {
+                    self.insert_use(*value, br.cond(), &mut chain);
+                    for arg in br.then_args() {
+                        self.insert_use(*value, *arg, &mut chain);
+                    }
+                    for arg in br.else_args() {
+                        self.insert_use(*value, *arg, &mut chain);
+                    }
+                }
+                ValueKind::Return(ret) => {
+                    if let Some(val) = ret.val() {
+                        self.insert_use(*value, val, &mut chain);
+                    }
+                }
+                ValueKind::Call(call) => {
+                    for arg in call.args() {
+                        self.insert_use(*value, *arg, &mut chain);
+                    }
+                }
+                ValueKind::GetElemPtr(gep) => {
+                    self.insert_use(*value, gep.ptr(), &mut chain);
+                    for idx in gep.indices() {
+                        self.insert_use(*value, *idx, &mut chain);
+                    }
+                }
+                ValueKind::Cast(cast) => {
+                    self.insert_use(*value, cast.val(), &mut chain);
+                }
+                _ => {}
+            }
+        }
+
+        Ok(chain)
     }
 }
