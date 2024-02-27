@@ -212,9 +212,7 @@ impl Layout {
 
     /// Get the exit/last instruction of a block
     pub fn exit_inst_of_block(&self, block: Block) -> Option<Inst> {
-        self.blocks
-            .node(block)
-            .and_then(|node| node.insts().back())
+        self.blocks.node(block).and_then(|node| node.insts().back())
     }
 
     pub fn append_block(&mut self, block: Block) -> Result<(), LayoutOpErr> {
@@ -239,7 +237,7 @@ impl Layout {
         Ok(())
     }
 
-    pub fn remove_block(&mut self, block: Block) -> Result<(), LayoutOpErr> {
+    pub(super) fn remove_block(&mut self, block: Block) -> Result<(), LayoutOpErr> {
         for (inst, _) in self
             .blocks
             .node(block)
@@ -255,7 +253,7 @@ impl Layout {
             .map_err(|_| LayoutOpErr::BlockNodeNotFound(block))
     }
 
-    pub fn remove_inst(&mut self, inst: Inst) -> Result<(), LayoutOpErr> {
+    pub(super) fn remove_inst(&mut self, inst: Inst) -> Result<(), LayoutOpErr> {
         let block = self
             .inst_blocks
             .remove(&inst)

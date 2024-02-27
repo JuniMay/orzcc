@@ -14,7 +14,6 @@ pub trait LocalPass {
     fn run(&mut self, function: Function, data: &FunctionData) -> Result<Self::Ok, Self::Err>;
 }
 
-
 pub trait LocalPassMut {
     type Ok;
     type Err;

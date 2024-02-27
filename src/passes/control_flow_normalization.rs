@@ -23,6 +23,9 @@ pub struct ControlFlowNormalization {}
 pub enum ControlFlowNormalizationError {
     #[error("block parameters exist in the next block, a jump cannot be added. block: {0:?}")]
     InvalidBlockParameters(Block),
+
+    #[error("next block not found for block: {0:?}, a jump cannot be added.")]
+    NextBlockNotFound(Block),
 }
 
 impl LocalPassMut for ControlFlowNormalization {
@@ -50,7 +53,9 @@ impl LocalPassMut for ControlFlowNormalization {
                 }
             }
             if !has_terminator {
-                let next_block = layout.next_block(block).unwrap();
+                let next_block = layout
+                    .next_block(block)
+                    .ok_or(ControlFlowNormalizationError::NextBlockNotFound(block))?;
                 let next_block_data = dfg.block_data(next_block).unwrap();
                 if next_block_data.params().len() > 0 {
                     // there are params in the next block, a jump cannot be added
@@ -61,7 +66,7 @@ impl LocalPassMut for ControlFlowNormalization {
         }
 
         for inst in insts_to_remove {
-            data.layout_mut().remove_inst(inst).unwrap();
+            data.remove_inst(inst);
         }
 
         for (block, next_block) in blocks_to_add_jump {

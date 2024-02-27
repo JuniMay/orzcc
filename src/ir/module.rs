@@ -141,13 +141,16 @@ impl DataFlowGraph {
     }
 
     pub fn get_value_by_name(&self, name: &str) -> Option<Value> {
-        self.value_name_allocator.borrow().try_get_by_name(name).or_else(|| {
-            self.global_name_allocator
-                .upgrade()
-                .expect("global name allocator should be alive.")
-                .borrow()
-                .try_get_by_name(name)
-        })
+        self.value_name_allocator
+            .borrow()
+            .try_get_by_name(name)
+            .or_else(|| {
+                self.global_name_allocator
+                    .upgrade()
+                    .expect("global name allocator should be alive.")
+                    .borrow()
+                    .try_get_by_name(name)
+            })
     }
 
     /// Get the name of a block
@@ -169,6 +172,26 @@ impl DataFlowGraph {
 
     pub fn block_data(&self, block: Block) -> Option<&BlockData> {
         self.blocks.get(&block)
+    }
+
+    pub fn block_data_mut(&mut self, block: Block) -> Option<&mut BlockData> {
+        self.blocks.get_mut(&block)
+    }
+
+    pub fn local_value_data_mut(&mut self, value: Value) -> Option<&mut ValueData> {
+        self.values.get_mut(&value)
+    }
+
+    pub fn replace_use(&mut self, value: Value, old: Value, new: Value) {
+        self.values.get_mut(&value).unwrap().replace_use(old, new);
+    }
+
+    pub(super) fn remove_local_value(&mut self, value: Value) -> Option<ValueData> {
+        self.values.remove(&value)
+    }
+
+    pub(super) fn remove_block(&mut self, block: Block) -> Option<BlockData> {
+        self.blocks.remove(&block)
     }
 }
 
