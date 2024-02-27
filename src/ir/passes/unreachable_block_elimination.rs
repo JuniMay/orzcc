@@ -37,7 +37,7 @@ impl LocalPassMut for UnreachableBlockElimination {
         reachable_blocks.insert(entry_block);
 
         while let Some(block) = queue.pop_front() {
-            if let Some(succs) = cfg.succ(&block) {
+            if let Some(succs) = cfg.succs(&block) {
                 for &succ in succs.iter() {
                     if reachable_blocks.insert(succ) {
                         // the block is not visited yet

@@ -147,7 +147,6 @@ impl Mem2reg {
                     }
                 }
             }
-            dbg!(dfg.value_name(value));
             Some(alloc.ty())
         } else {
             None
@@ -197,7 +196,7 @@ impl Mem2reg {
         }
 
         // edit the branch instructions
-        let succs = self.cfg.succ(&block).unwrap();
+        let succs = self.cfg.succs(&block).unwrap();
         for succ in succs {
             // args to extend the branch/jump instructions
             let mut args = Vec::new();
@@ -264,7 +263,6 @@ impl LocalPassMut for Mem2reg {
         // initialize the promotable variables
         for value in dfg.values().keys() {
             if let Some(ty) = self.promotable(*value, dfg) {
-                dbg!(dfg.value_name(*value));
                 self.variables.insert(*value);
                 self.def_blocks.insert(*value, HashSet::new());
                 self.worklists.insert(*value, VecDeque::new());

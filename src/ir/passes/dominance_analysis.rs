@@ -82,7 +82,7 @@ impl DominanceAnalysis {
 
     fn dfs(&mut self, block: Block, cfg: &ControlFlowGraph) {
         self.visited.insert(block);
-        for succ in cfg.succ(&block).unwrap() {
+        for succ in cfg.succs(&block).unwrap() {
             if !self.visited.contains(succ) {
                 self.dfs(*succ, cfg);
             }
@@ -138,7 +138,7 @@ impl LocalPass for DominanceAnalysis {
             for block in self.rpo.iter() {
                 // first processed predecessor of the block
                 let mut new_idom = None;
-                for pred in cfg.pred(block).unwrap() {
+                for pred in cfg.preds(block).unwrap() {
                     if pred == block {
                         continue;
                     }
@@ -150,7 +150,7 @@ impl LocalPass for DominanceAnalysis {
                 if new_idom.is_none() {
                     continue;
                 }
-                for pred in cfg.pred(block).unwrap() {
+                for pred in cfg.preds(block).unwrap() {
                     if idoms.get(pred).unwrap().is_some() {
                         new_idom = Some(self.intersect(new_idom.unwrap(), *pred, &idoms));
                     }
@@ -184,8 +184,8 @@ impl LocalPass for DominanceAnalysis {
         }
 
         for block in self.rpo.iter() {
-            if cfg.pred(block).unwrap().len() >= 2 {
-                for pred in cfg.pred(block).unwrap() {
+            if cfg.preds(block).unwrap().len() >= 2 {
+                for pred in cfg.preds(block).unwrap() {
                     let mut runner = *pred;
                     while runner != idoms[block].unwrap() {
                         frontiers.get_mut(&runner).unwrap().push(*block);
