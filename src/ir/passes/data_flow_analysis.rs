@@ -23,6 +23,12 @@ pub struct DefUseChain {
     pub uses: HashMap<Value, Vec<Value>>,
 }
 
+impl Default for DefUseChain {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DefUseChain {
     pub fn new() -> Self {
         Self {
@@ -46,7 +52,7 @@ impl LocalPass for DataFlowAnalysis {
     fn run(&mut self, _function: Function, data: &FunctionData) -> Result<Self::Ok, Self::Err> {
         let dfg = data.dfg();
         let mut chain = DefUseChain::new();
-        for (value, _data) in dfg.values() {
+        for value in dfg.values().keys() {
             chain.uses.insert(*value, Vec::new());
         }
 

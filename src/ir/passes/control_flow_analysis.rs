@@ -19,6 +19,12 @@ pub struct ControlFlowGraph {
     succ: HashMap<Block, Vec<Block>>,
 }
 
+impl Default for ControlFlowGraph {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ControlFlowGraph {
     pub fn new() -> Self {
         Self {
@@ -61,24 +67,29 @@ impl LocalPass for ControlFlowAnalysis {
             match inst_data.kind() {
                 ValueKind::Jump(jump) => {
                     succ.push(jump.dst());
-                    if cfg.pred.contains_key(&jump.dst()) {
-                        cfg.pred.get_mut(&jump.dst()).unwrap().push(block);
+                    if let std::collections::hash_map::Entry::Vacant(e) = cfg.pred.entry(jump.dst())
+                    {
+                        e.insert(vec![block]);
                     } else {
-                        cfg.pred.insert(jump.dst(), vec![block]);
+                        cfg.pred.get_mut(&jump.dst()).unwrap().push(block);
                     }
                 }
                 ValueKind::Branch(br) => {
                     succ.push(br.then_dst());
                     succ.push(br.else_dst());
-                    if cfg.pred.contains_key(&br.then_dst()) {
+                    if let std::collections::hash_map::Entry::Vacant(e) =
+                        cfg.pred.entry(br.then_dst())
+                    {
+                        e.insert(vec![block]);
+                    } else {
                         cfg.pred.get_mut(&br.then_dst()).unwrap().push(block);
-                    } else {
-                        cfg.pred.insert(br.then_dst(), vec![block]);
                     }
-                    if cfg.pred.contains_key(&br.else_dst()) {
-                        cfg.pred.get_mut(&br.else_dst()).unwrap().push(block);
+                    if let std::collections::hash_map::Entry::Vacant(e) =
+                        cfg.pred.entry(br.else_dst())
+                    {
+                        e.insert(vec![block]);
                     } else {
-                        cfg.pred.insert(br.else_dst(), vec![block]);
+                        cfg.pred.get_mut(&br.else_dst()).unwrap().push(block);
                     }
                 }
                 ValueKind::Return(_) => {}
@@ -87,9 +98,7 @@ impl LocalPass for ControlFlowAnalysis {
                 }
             }
             cfg.succ.insert(block, succ);
-            if !cfg.pred.contains_key(&block) {
-                cfg.pred.insert(block, vec![]);
-            }
+            cfg.pred.entry(block).or_insert_with(std::vec::Vec::new);
         }
 
         Ok(cfg)

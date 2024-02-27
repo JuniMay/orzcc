@@ -84,7 +84,7 @@ impl Ast {
                     let value = ctx.module.builder().global_slot(init, mutable)?;
                     ctx.module
                         .assign_name(value, name)
-                        .map_err(|_| SemanticError::NameDuplicated(def.init.span.clone()))?;
+                        .map_err(|_| SemanticError::NameDuplicated(def.init.span))?;
                 }
                 AstNodeKind::FunctionDecl(ref decl) => {
                     let name = decl.name.clone();
@@ -92,13 +92,13 @@ impl Ast {
                     let function = ctx.module.builder().function_decl(ty)?;
                     ctx.module
                         .assign_name(function.into(), name)
-                        .map_err(|_| SemanticError::NameDuplicated(item.span.clone()))?;
+                        .map_err(|_| SemanticError::NameDuplicated(item.span))?;
                 }
                 AstNodeKind::FunctionDef(ref def) => {
                     let function = ctx.module.builder().function_def(def.ty.clone())?;
                     ctx.module
                         .assign_name(function.into(), def.name.clone())
-                        .map_err(|_| SemanticError::NameDuplicated(item.span.clone()))?;
+                        .map_err(|_| SemanticError::NameDuplicated(item.span))?;
                 }
                 _ => unreachable!(),
             }
@@ -145,7 +145,7 @@ impl Ast {
                         AstNodeKind::Block(ref ast_block) => {
                             let block: Block = dfg!(ctx.module, function)
                                 .get_block_by_name(&ast_block.name)
-                                .ok_or(SemanticError::BlockNameNotFound(block_node.span.clone()))?;
+                                .ok_or(SemanticError::BlockNameNotFound(block_node.span))?;
 
                             for inst_node in ast_block.insts.iter() {
                                 let inst =
@@ -229,9 +229,7 @@ impl Ast {
 
                         let block = dfg_mut!(ctx.module, function)
                             .get_block_by_name(&name)
-                            .ok_or(SemanticError::BlockNameNotFound(
-                                ast_inst.operands[0].span.clone(),
-                            ))?;
+                            .ok_or(SemanticError::BlockNameNotFound(ast_inst.operands[0].span))?;
 
                         dfg_mut!(ctx.module, function).builder().jump(block, args)?
                     }
@@ -261,15 +259,11 @@ impl Ast {
                         };
                         let then_block = dfg_mut!(ctx.module, function)
                             .get_block_by_name(&then_name)
-                            .ok_or(SemanticError::BlockNameNotFound(
-                                ast_inst.operands[1].span.clone(),
-                            ))?;
+                            .ok_or(SemanticError::BlockNameNotFound(ast_inst.operands[1].span))?;
 
                         let else_block = dfg_mut!(ctx.module, function)
                             .get_block_by_name(&else_name)
-                            .ok_or(SemanticError::BlockNameNotFound(
-                                ast_inst.operands[2].span.clone(),
-                            ))?;
+                            .ok_or(SemanticError::BlockNameNotFound(ast_inst.operands[2].span))?;
 
                         dfg_mut!(ctx.module, function)
                             .builder()
@@ -300,9 +294,7 @@ impl Ast {
                         };
                         let callee = dfg_mut!(ctx.module, function)
                             .get_value_by_name(&name)
-                            .ok_or(SemanticError::ValueNameNotFound(
-                                ast_inst.operands[0].span.clone(),
-                            ))?;
+                            .ok_or(SemanticError::ValueNameNotFound(ast_inst.operands[0].span))?;
 
                         dfg_mut!(ctx.module, function).builder().call(
                             ast_inst.ty.clone().unwrap(),
@@ -347,10 +339,10 @@ impl Ast {
                 AstNodeKind::GlobalIdent(ref name) => ctx
                     .module
                     .get_value_by_name(name)
-                    .ok_or(SemanticError::ValueNameNotFound(operand.value.span.clone())),
+                    .ok_or(SemanticError::ValueNameNotFound(operand.value.span)),
                 AstNodeKind::LocalIdent(ref name) => dfg!(ctx.module, function)
                     .get_local_value_by_name(name)
-                    .ok_or(SemanticError::ValueNameNotFound(operand.value.span.clone())),
+                    .ok_or(SemanticError::ValueNameNotFound(operand.value.span)),
                 AstNodeKind::Bytes(ref bytes) => {
                     if let Some(ref ty) = operand.ty {
                         dfg_mut!(ctx.module, function)
@@ -395,8 +387,9 @@ impl Ast {
     ) -> Result<Value, SemanticError> {
         let value = match init.as_ref().kind {
             AstNodeKind::Array(ref array) => {
-                let (_size, elem_type) =
-                    ty.as_array().ok_or(BuilderErr::InvalidType(ty.clone()))?;
+                let (_size, elem_type) = ty
+                    .as_array()
+                    .ok_or_else(|| BuilderErr::InvalidType(ty.clone()))?;
                 let mut values = Vec::new();
                 for elem in array.elems.iter() {
                     let value = self.global_init_to_value(elem_type.clone(), elem, module)?;
@@ -406,7 +399,9 @@ impl Ast {
                 module.builder().array(ty, values)?
             }
             AstNodeKind::Struct(ref struct_) => {
-                let struct_ty = ty.as_struct().ok_or(BuilderErr::InvalidType(ty.clone()))?;
+                let struct_ty = ty
+                    .as_struct()
+                    .ok_or_else(|| BuilderErr::InvalidType(ty.clone()))?;
                 let mut values = Vec::new();
                 for (i, field) in struct_.fields.iter().enumerate() {
                     let value = self.global_init_to_value(struct_ty[i].clone(), field, module)?;

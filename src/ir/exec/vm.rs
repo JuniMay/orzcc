@@ -91,6 +91,12 @@ impl Addr {
     }
 }
 
+impl Default for VReg {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl VReg {
     pub fn new() -> Self {
         Self(0)
@@ -252,7 +258,7 @@ impl<'a> VirtualMachine<'a> {
                     let (_len, ty) = data
                         .ty()
                         .as_array()
-                        .ok_or(ExecErr::InvalidType(data.ty().clone()))?;
+                        .ok_or_else(|| ExecErr::InvalidType(data.ty().clone()))?;
                     let elem_size = ty.bytewidth();
 
                     let mut offset = 0;
@@ -267,7 +273,7 @@ impl<'a> VirtualMachine<'a> {
                     let field_types = data
                         .ty()
                         .as_struct()
-                        .ok_or(ExecErr::InvalidType(data.ty().clone()))?;
+                        .ok_or_else(|| ExecErr::InvalidType(data.ty().clone()))?;
                     let mut offset = 0;
                     for (field, ty) in fields.iter().zip(field_types) {
                         let field_addr = Addr(addr.0 + offset);
@@ -315,13 +321,13 @@ impl<'a> VirtualMachine<'a> {
                     }
                     _ => Err(ExecErr::InvalidGlobalItem((*function).into())),
                 })
-                .unwrap_or(Err(ExecErr::ValueNotFound((*function).into())))?;
+                .unwrap_or_else(|| Err(ExecErr::ValueNotFound((*function).into())))?;
 
             // allocate vreg for values
             let dfg = self
                 .module
                 .function_data(*function)
-                .ok_or(ExecErr::FunctionNotFound((*function).into()))?
+                .ok_or_else(|| ExecErr::FunctionNotFound((*function).into()))?
                 .dfg();
 
             for (value, data) in dfg.values() {
@@ -332,8 +338,8 @@ impl<'a> VirtualMachine<'a> {
                     }
                     ValueKind::Bytes(bytes) => {
                         let mut vreg_val = 0;
-                        for i in 0..bytes.len() {
-                            vreg_val |= (bytes[i] as u64) << (i * 8);
+                        for (i, byte) in bytes.iter().enumerate() {
+                            vreg_val |= (*byte as u64) << (i * 8);
                         }
                         self.write_vreg(*value, VReg(vreg_val));
                     }
@@ -342,12 +348,12 @@ impl<'a> VirtualMachine<'a> {
             }
         }
 
-        self.curr_function = entry_function.into();
+        self.curr_function = entry_function;
 
         let layout = self
             .module
             .function_data(self.curr_function)
-            .ok_or(ExecErr::FunctionNotFound(self.curr_function.into()))?
+            .ok_or_else(|| ExecErr::FunctionNotFound(self.curr_function.into()))?
             .layout();
 
         self.curr_inst = layout.entry_inst().expect("entry inst should exist");
@@ -370,20 +376,20 @@ impl<'a> VirtualMachine<'a> {
         let dfg = self
             .module
             .function_data(self.curr_function)
-            .ok_or(ExecErr::FunctionNotFound(self.curr_function.into()))?
+            .ok_or_else(|| ExecErr::FunctionNotFound(self.curr_function.into()))?
             .dfg();
         let layout = self
             .module
             .function_data(self.curr_function)
-            .ok_or(ExecErr::FunctionNotFound(self.curr_function.into()))?
+            .ok_or_else(|| ExecErr::FunctionNotFound(self.curr_function.into()))?
             .layout();
 
         let value_data = dfg
             .local_value_data(self.curr_inst.into())
-            .ok_or(ExecErr::ValueNotFound(self.curr_inst.into()))?;
+            .ok_or_else(|| ExecErr::ValueNotFound(self.curr_inst.into()))?;
 
         let mut next_function = self.curr_function;
-        let mut next_inst = layout.next_inst(self.curr_inst.into());
+        let mut next_inst = layout.next_inst(self.curr_inst);
 
         match value_data.kind() {
             ValueKind::Alloc(alloc) => {
@@ -395,8 +401,8 @@ impl<'a> VirtualMachine<'a> {
                 let ptr_vreg = self.read_vreg(load.ptr());
                 let bytes = self.read_memory(ptr_vreg.into(), size)?;
                 let mut vreg_val = 0;
-                for i in 0..size {
-                    vreg_val |= (bytes[i] as u64) << (i * 8);
+                for (i, byte) in bytes.iter().enumerate().take(size) {
+                    vreg_val |= (*byte as u64) << (i * 8);
                 }
                 self.write_vreg(self.curr_inst.into(), VReg(vreg_val));
             }
@@ -543,11 +549,11 @@ impl<'a> VirtualMachine<'a> {
                     }
                     BinaryOp::ICmp(cond) => match cond {
                         ICmpCond::Eq => {
-                            let result_val = if lhs_val == rhs_val { 1 } else { 0 };
+                            let result_val = (lhs_val == rhs_val ).into();
                             self.write_vreg(self.curr_inst.into(), VReg(result_val));
                         }
                         ICmpCond::Ne => {
-                            let result_val = if lhs_val != rhs_val { 1 } else { 0 };
+                            let result_val = (lhs_val != rhs_val).into();
                             self.write_vreg(self.curr_inst.into(), VReg(result_val));
                         }
                         ICmpCond::Slt => {
@@ -575,24 +581,24 @@ impl<'a> VirtualMachine<'a> {
                     BinaryOp::FCmp(cond) => {
                         // trim leading zero
                         let size = lhs_ty.bytewidth();
-                        let mask = (1 << size * 8) - 1;
+                        let mask = (1 << (size * 8)) - 1;
                         let lhs_val = lhs_val & mask;
                         let rhs_val = rhs_val & mask;
                         match cond {
                             FCmpCond::OEq => {
-                                let result_val = if lhs_val == rhs_val { 1 } else { 0 };
+                                let result_val = (lhs_val == rhs_val).into();
                                 self.write_vreg(self.curr_inst.into(), VReg(result_val));
                             }
                             FCmpCond::ONe => {
-                                let result_val = if lhs_val != rhs_val { 1 } else { 0 };
+                                let result_val = (lhs_val != rhs_val).into();
                                 self.write_vreg(self.curr_inst.into(), VReg(result_val));
                             }
                             FCmpCond::OLt => {
-                                let result_val = if lhs_val < rhs_val { 1 } else { 0 };
+                                let result_val = (lhs_val < rhs_val ).into();
                                 self.write_vreg(self.curr_inst.into(), VReg(result_val));
                             }
                             FCmpCond::OLe => {
-                                let result_val = if lhs_val <= rhs_val { 1 } else { 0 };
+                                let result_val = (lhs_val <= rhs_val).into();
                                 self.write_vreg(self.curr_inst.into(), VReg(result_val));
                             }
                         }
@@ -683,7 +689,7 @@ impl<'a> VirtualMachine<'a> {
                                 let addr = self.read_vreg(callee).into();
                                 let function =
                                     self.addrs.get_rev(&addr).expect("function should exist");
-                                callee = (*function).into();
+                                callee = *function;
                                 self.module
                                     .function_data((*function).into())
                                     .expect("function should exist")
@@ -1027,7 +1033,7 @@ impl<'a> VirtualMachine<'a> {
                         self.stack.pop().unwrap()
                     };
 
-                    let layout = self.module.function_data(caller.into()).unwrap().layout();
+                    let layout = self.module.function_data(caller).unwrap().layout();
                     next_inst = layout.next_inst(prev.into());
                     next_function = caller;
                 }
@@ -1036,7 +1042,7 @@ impl<'a> VirtualMachine<'a> {
         }
 
         if !self.stopped() {
-            self.curr_inst = next_inst.ok_or(ExecErr::EarlyStop(self.curr_inst.into()))?;
+            self.curr_inst = next_inst.ok_or_else(||ExecErr::EarlyStop(self.curr_inst.into()))?;
             self.curr_function = next_function;
         }
 

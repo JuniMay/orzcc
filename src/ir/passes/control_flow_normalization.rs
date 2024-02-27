@@ -57,7 +57,7 @@ impl LocalPassMut for ControlFlowNormalization {
                     .next_block(block)
                     .ok_or(ControlFlowNormalizationError::NextBlockNotFound(block))?;
                 let next_block_data = dfg.block_data(next_block).unwrap();
-                if next_block_data.params().len() > 0 {
+                if !next_block_data.params().is_empty() {
                     // there are params in the next block, a jump cannot be added
                     return Err(ControlFlowNormalizationError::InvalidBlockParameters(block));
                 }

@@ -65,7 +65,7 @@ where
         let token = self
             .lexer
             .next_token()
-            .ok_or(ParseError::LexerError(self.lexer.curr_pos()))?;
+            .ok_or_else(|| ParseError::LexerError(self.lexer.curr_pos()))?;
         self.curr_token = token;
         Ok(&self.curr_token)
     }
@@ -80,7 +80,7 @@ where
         let token = self
             .lexer
             .next_token()
-            .ok_or(ParseError::LexerError(self.lexer.curr_pos()))?;
+            .ok_or_else(|| ParseError::LexerError(self.lexer.curr_pos()))?;
         self.curr_token = token;
         self.peeked = true;
         Ok(&self.curr_token)

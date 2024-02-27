@@ -87,6 +87,12 @@ pub struct Mem2reg {
     alloc_types: HashMap<Value, Type>,
 }
 
+impl Default for Mem2reg {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Mem2reg {
     pub fn new() -> Self {
         Self {
@@ -256,7 +262,7 @@ impl LocalPassMut for Mem2reg {
         let dfg = data.dfg();
 
         // initialize the promotable variables
-        for (value, _data) in dfg.values() {
+        for value in dfg.values().keys() {
             if let Some(ty) = self.promotable(*value, dfg) {
                 dbg!(dfg.value_name(*value));
                 self.variables.insert(*value);

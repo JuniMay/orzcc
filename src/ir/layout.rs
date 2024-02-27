@@ -182,12 +182,12 @@ impl Layout {
     pub fn next_inst(&self, inst: Inst) -> Option<Inst> {
         let parent_block = self.parent_block(inst)?;
         let node = self.blocks.node(parent_block).unwrap();
-        let next_inst = node.insts().node(inst)?.next().or_else(|| {
+        
+        node.insts().node(inst)?.next().or_else(|| {
             // this is the end of the block
             self.next_non_empty_block(parent_block)
                 .and_then(|next_block| self.blocks.node(next_block).unwrap().insts().front())
-        });
-        next_inst
+        })
     }
 
     /// Get the entry instruction in the layout

@@ -28,6 +28,12 @@ pub struct Dominance {
     pub domtree: HashMap<Block, Vec<Block>>,
 }
 
+impl Default for Dominance {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Dominance {
     pub fn new() -> Self {
         Self {
@@ -56,6 +62,12 @@ pub struct DominanceAnalysis {
 
     /// Counter for postorder traversal.
     postorder_counter: usize,
+}
+
+impl Default for DominanceAnalysis {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl DominanceAnalysis {
@@ -126,20 +138,20 @@ impl LocalPass for DominanceAnalysis {
             for block in self.rpo.iter() {
                 // first processed predecessor of the block
                 let mut new_idom = None;
-                for pred in cfg.pred(&block).unwrap() {
+                for pred in cfg.pred(block).unwrap() {
                     if pred == block {
                         continue;
                     }
-                    if let Some(_) = idoms.get(pred).unwrap() {
+                    if idoms.get(pred).unwrap().is_some() {
                         new_idom = Some(*pred);
                         break;
                     }
                 }
-                if !new_idom.is_some() {
+                if new_idom.is_none() {
                     continue;
                 }
-                for pred in cfg.pred(&block).unwrap() {
-                    if let Some(_) = idoms.get(pred).unwrap() {
+                for pred in cfg.pred(block).unwrap() {
+                    if idoms.get(pred).unwrap().is_some() {
                         new_idom = Some(self.intersect(new_idom.unwrap(), *pred, &idoms));
                     }
                 }
@@ -172,10 +184,10 @@ impl LocalPass for DominanceAnalysis {
         }
 
         for block in self.rpo.iter() {
-            if cfg.pred(&block).unwrap().len() >= 2 {
-                for pred in cfg.pred(&block).unwrap() {
+            if cfg.pred(block).unwrap().len() >= 2 {
+                for pred in cfg.pred(block).unwrap() {
                     let mut runner = *pred;
-                    while runner != idoms[&block].unwrap() {
+                    while runner != idoms[block].unwrap() {
                         frontiers.get_mut(&runner).unwrap().push(*block);
                         runner = idoms[&runner].unwrap();
                     }

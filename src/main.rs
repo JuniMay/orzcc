@@ -7,7 +7,9 @@ struct DbgCommand {
 }
 
 fn cli() -> Command {
-    let command = Command::new("orzcc").subcommand(
+    
+
+    Command::new("orzcc").subcommand(
         Command::new("dbg").about("Debug the given IR file").arg(
             Arg::new("file")
                 .short('f')
@@ -15,9 +17,7 @@ fn cli() -> Command {
                 .required(true)
                 .help("The IR file to debug"),
         ),
-    );
-
-    command
+    )
 }
 
 fn parse_args() -> DbgCommand {
