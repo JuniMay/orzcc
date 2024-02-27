@@ -141,13 +141,16 @@ impl DataFlowGraph {
     }
 
     pub fn get_value_by_name(&self, name: &str) -> Option<Value> {
-        self.value_name_allocator.borrow().try_get_by_name(name).or_else(|| {
-            self.global_name_allocator
-                .upgrade()
-                .expect("global name allocator should be alive.")
-                .borrow()
-                .try_get_by_name(name)
-        })
+        self.value_name_allocator
+            .borrow()
+            .try_get_by_name(name)
+            .or_else(|| {
+                self.global_name_allocator
+                    .upgrade()
+                    .expect("global name allocator should be alive.")
+                    .borrow()
+                    .try_get_by_name(name)
+            })
     }
 
     /// Get the name of a block

@@ -13,6 +13,7 @@ use crate::ir::{
     values::{Block, Function},
 };
 
+#[derive(Debug, Clone)]
 pub struct ControlFlowGraph {
     pred: HashMap<Block, Vec<Block>>,
     succ: HashMap<Block, Vec<Block>>,
@@ -86,6 +87,9 @@ impl LocalPass for ControlFlowAnalysis {
                 }
             }
             cfg.succ.insert(block, succ);
+            if !cfg.pred.contains_key(&block) {
+                cfg.pred.insert(block, vec![]);
+            }
         }
 
         Ok(cfg)

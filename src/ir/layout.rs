@@ -212,9 +212,7 @@ impl Layout {
 
     /// Get the exit/last instruction of a block
     pub fn exit_inst_of_block(&self, block: Block) -> Option<Inst> {
-        self.blocks
-            .node(block)
-            .and_then(|node| node.insts().back())
+        self.blocks.node(block).and_then(|node| node.insts().back())
     }
 
     pub fn append_block(&mut self, block: Block) -> Result<(), LayoutOpErr> {

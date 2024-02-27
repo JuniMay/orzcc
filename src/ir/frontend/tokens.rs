@@ -11,7 +11,11 @@ pub struct Pos {
 
 impl Default for Pos {
     fn default() -> Self {
-        Self { row: 1, col: 0, idx: 0 }
+        Self {
+            row: 1,
+            col: 0,
+            idx: 0,
+        }
     }
 }
 

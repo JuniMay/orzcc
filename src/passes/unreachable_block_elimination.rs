@@ -25,8 +25,7 @@ impl LocalPassMut for UnreachableBlockElimination {
     type Err = UnreachableBlockEliminationError;
 
     fn run(&mut self, _function: Function, data: &mut FunctionData) -> Result<Self::Ok, Self::Err> {
-        
-        let mut cfa = ControlFlowAnalysis{};
+        let mut cfa = ControlFlowAnalysis {};
         let cfg = cfa.run(_function, data).unwrap();
 
         let mut reachable_blocks: HashSet<Block> = HashSet::new();
@@ -67,10 +66,16 @@ impl LocalPassMut for UnreachableBlockElimination {
 mod test {
     use std::io::{self, Cursor};
 
-    use crate::{ir::{frontend::parser::Parser, module::Module, pass::{GlobalPass, LocalPassMut}}, passes::{control_flow_normalization::ControlFlowNormalization, printer::Printer}};
+    use crate::{
+        ir::{
+            frontend::parser::Parser,
+            module::Module,
+            pass::{GlobalPass, LocalPassMut},
+        },
+        passes::{control_flow_normalization::ControlFlowNormalization, printer::Printer},
+    };
 
     use super::UnreachableBlockElimination;
-
 
     fn _print(module: &Module) {
         let mut stdout = io::stdout();
@@ -79,7 +84,7 @@ mod test {
     }
 
     #[test]
-    fn test_unreachable_block_elimination() {
+    fn test_unreachable_block_elimination0() {
         let ir = r#"
             func @check_positive(i32) -> i32 {
                 ^entry(i32 %0):
@@ -102,12 +107,46 @@ mod test {
         let mut buf = Cursor::new(ir);
         let mut parser = Parser::new(&mut buf);
         let mut module = parser.parse().unwrap().into_ir("test".into()).unwrap();
-        let mut normalization = ControlFlowNormalization{};
-        let mut ube =  UnreachableBlockElimination{};
+        let mut normalization = ControlFlowNormalization {};
+        let mut ube = UnreachableBlockElimination {};
 
         let function = module.get_value_by_name("@check_positive").unwrap();
         let function_data = module.function_data_mut(function.into()).unwrap();
-        
+
+        normalization.run(function.into(), function_data).unwrap();
+        ube.run(function.into(), function_data).unwrap();
+
+        _print(&module);
+    }
+
+    #[test]
+    fn test_unreachable_block_elimination1() {
+        let ir = r#"            
+            func @test_func() -> void {
+                ^1:
+                    jump ^2
+                ^2:
+                    jump ^1
+                # the following blocks are unreachable
+                ^3:
+                    jump ^2
+                ^4:
+                    jump ^1
+                ^5:
+                    %0 = add i32 1, i32 2
+                    %cond = icmp.sle i32 %0, i32 0x0
+                    br %cond, ^4, ^3
+            }"#;
+
+        let mut buf = Cursor::new(ir);
+        let mut parser = Parser::new(&mut buf);
+        let mut module = parser.parse().unwrap().into_ir("test".into()).unwrap();
+        let mut normalization = ControlFlowNormalization {};
+        let mut ube = UnreachableBlockElimination {};
+
+        let function = module.get_value_by_name("@test_func").unwrap();
+        let function_data = module.function_data_mut(function.into()).unwrap();
+
         normalization.run(function.into(), function_data).unwrap();
         ube.run(function.into(), function_data).unwrap();
 
