@@ -30,6 +30,16 @@ pub struct Dominance {
     pub domtree: HashMap<Block, Vec<Block>>,
 }
 
+impl Dominance {
+    pub fn new() -> Self {
+        Self {
+            idoms: HashMap::new(),
+            frontiers: HashMap::new(),
+            domtree: HashMap::new(),
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum DominanceAnalysisError {
     #[error(transparent)]

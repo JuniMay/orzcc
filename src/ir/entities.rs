@@ -3,8 +3,8 @@ use super::{
     module::DataFlowGraph,
     types::Type,
     values::{
-        Alloc, Binary, Branch, Call, Cast, GetElemPtr, GlobalSlot, Jump, Load, Return, Store,
-        Unary, Value,
+        Alloc, Binary, Block, Branch, Call, Cast, GetElemPtr, GlobalSlot, Inst, Jump, Load, Return,
+        Store, Unary, Value,
     },
     GLOBAL_PREFIX,
 };
@@ -110,6 +110,16 @@ impl FunctionData {
 
     pub fn layout_mut(&mut self) -> &mut Layout {
         &mut self.layout
+    }
+
+    pub fn remove_inst(&mut self, inst: Inst) -> Option<ValueData> {
+        self.layout.remove_inst(inst).unwrap();
+        self.dfg.remove_local_value(inst.into())
+    }
+
+    pub fn remove_block(&mut self, block: Block) -> Option<BlockData> {
+        self.layout.remove_block(block).unwrap();
+        self.dfg.remove_block(block)
     }
 }
 
@@ -237,5 +247,25 @@ impl ValueData {
 
     pub fn kind(&self) -> &ValueKind {
         &self.kind
+    }
+
+    pub fn replace_use(&mut self, old: Value, new: Value) {
+        match self.kind {
+            ValueKind::Load(ref mut load) => load.replace_use(old, new),
+            ValueKind::Store(ref mut store) => store.replace_use(old, new),
+            ValueKind::Binary(ref mut binary) => binary.replace_use(old, new),
+            ValueKind::Unary(ref mut unary) => unary.replace_use(old, new),
+            ValueKind::Jump(ref mut jump) => jump.replace_use(old, new),
+            ValueKind::Branch(ref mut branch) => branch.replace_use(old, new),
+            ValueKind::Return(ref mut ret) => ret.replace_use(old, new),
+            ValueKind::Call(ref mut call) => call.replace_use(old, new),
+            ValueKind::GetElemPtr(ref mut gep) => gep.replace_use(old, new),
+            ValueKind::Cast(ref mut cast) => cast.replace_use(old, new),
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn kind_mut(&mut self) -> &mut ValueKind {
+        &mut self.kind
     }
 }

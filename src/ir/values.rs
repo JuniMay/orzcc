@@ -301,6 +301,27 @@ impl Binary {
     pub fn rhs(&self) -> Value {
         self.rhs
     }
+
+    pub fn set_op(&mut self, op: BinaryOp) -> BinaryOp {
+        std::mem::replace(&mut self.op, op)
+    }
+
+    pub fn set_lhs(&mut self, lhs: Value) -> Value {
+        std::mem::replace(&mut self.lhs, lhs)
+    }
+
+    pub fn set_rhs(&mut self, rhs: Value) -> Value {
+        std::mem::replace(&mut self.rhs, rhs)
+    }
+
+    pub fn replace_use(&mut self, old: Value, new: Value) {
+        if self.lhs == old {
+            self.lhs = new;
+        }
+        if self.rhs == old {
+            self.rhs = new;
+        }
+    }
 }
 
 /// Unary instruction internals.
@@ -321,6 +342,20 @@ impl Unary {
 
     pub fn val(&self) -> Value {
         self.val
+    }
+
+    pub fn set_op(&mut self, op: UnaryOp) -> UnaryOp {
+        std::mem::replace(&mut self.op, op)
+    }
+
+    pub fn set_val(&mut self, val: Value) -> Value {
+        std::mem::replace(&mut self.val, val)
+    }
+
+    pub fn replace_use(&mut self, old: Value, new: Value) {
+        if self.val == old {
+            self.val = new;
+        }
     }
 }
 
@@ -343,6 +378,23 @@ impl Store {
     pub fn ptr(&self) -> Value {
         self.ptr
     }
+
+    pub fn set_val(&mut self, val: Value) -> Value {
+        std::mem::replace(&mut self.val, val)
+    }
+
+    pub fn set_ptr(&mut self, ptr: Value) -> Value {
+        std::mem::replace(&mut self.ptr, ptr)
+    }
+
+    pub fn replace_use(&mut self, old: Value, new: Value) {
+        if self.val == old {
+            self.val = new;
+        }
+        if self.ptr == old {
+            self.ptr = new;
+        }
+    }
 }
 
 /// Load instruction internals.
@@ -360,6 +412,16 @@ impl Load {
 
     pub fn ptr(&self) -> Value {
         self.ptr
+    }
+
+    pub fn set_ptr(&mut self, ptr: Value) -> Value {
+        std::mem::replace(&mut self.ptr, ptr)
+    }
+
+    pub fn replace_use(&mut self, old: Value, new: Value) {
+        if self.ptr == old {
+            self.ptr = new;
+        }
     }
 }
 
@@ -434,6 +496,20 @@ impl Cast {
     pub fn op(&self) -> CastOp {
         self.op.clone()
     }
+
+    pub fn set_val(&mut self, val: Value) -> Value {
+        std::mem::replace(&mut self.val, val)
+    }
+
+    pub fn set_op(&mut self, op: CastOp) -> CastOp {
+        std::mem::replace(&mut self.op, op)
+    }
+
+    pub fn replace_use(&mut self, old: Value, new: Value) {
+        if self.val == old {
+            self.val = new;
+        }
+    }
 }
 
 /// Allocation instruction internals.
@@ -482,6 +558,20 @@ impl GlobalSlot {
     pub fn mutable(&self) -> bool {
         self.mutable
     }
+
+    pub fn set_init(&mut self, init: Value) -> Value {
+        std::mem::replace(&mut self.init, init)
+    }
+
+    pub fn set_mutable(&mut self, mutable: bool) -> bool {
+        std::mem::replace(&mut self.mutable, mutable)
+    }
+
+    pub fn replace_use(&mut self, old: Value, new: Value) {
+        if self.init == old {
+            self.init = new;
+        }
+    }
 }
 
 /// Jump instruction internals.
@@ -502,6 +592,34 @@ impl Jump {
 
     pub fn args(&self) -> &[Value] {
         &self.args
+    }
+
+    pub fn set_dst(&mut self, dst: Block) -> Block {
+        std::mem::replace(&mut self.dst, dst)
+    }
+
+    pub fn set_arg(&mut self, index: usize, arg: Value) -> Value {
+        std::mem::replace(&mut self.args[index], arg)
+    }
+
+    pub fn append_arg(&mut self, arg: Value) {
+        self.args.push(arg);
+    }
+
+    pub fn extend_args(&mut self, args: Vec<Value>) {
+        self.args.extend(args);
+    }
+
+    pub fn set_args(&mut self, args: Vec<Value>) -> Vec<Value> {
+        std::mem::replace(&mut self.args, args)
+    }
+
+    pub fn replace_use(&mut self, old: Value, new: Value) {
+        for arg in &mut self.args {
+            if *arg == old {
+                *arg = new;
+            }
+        }
     }
 }
 
@@ -547,12 +665,72 @@ impl Branch {
         self.else_dst
     }
 
+    pub fn append_then_arg(&mut self, arg: Value) {
+        self.then_args.push(arg);
+    }
+
+    pub fn append_else_arg(&mut self, arg: Value) {
+        self.else_args.push(arg);
+    }
+
+    pub fn extend_then_args(&mut self, args: Vec<Value>) {
+        self.then_args.extend(args);
+    }
+
+    pub fn extend_else_args(&mut self, args: Vec<Value>) {
+        self.else_args.extend(args);
+    }
+
     pub fn then_args(&self) -> &[Value] {
         &self.then_args
     }
 
     pub fn else_args(&self) -> &[Value] {
         &self.else_args
+    }
+
+    pub fn set_cond(&mut self, cond: Value) -> Value {
+        std::mem::replace(&mut self.cond, cond)
+    }
+
+    pub fn set_then_dst(&mut self, then_dst: Block) -> Block {
+        std::mem::replace(&mut self.then_dst, then_dst)
+    }
+
+    pub fn set_else_dst(&mut self, else_dst: Block) -> Block {
+        std::mem::replace(&mut self.else_dst, else_dst)
+    }
+
+    pub fn set_then_arg(&mut self, index: usize, arg: Value) -> Value {
+        std::mem::replace(&mut self.then_args[index], arg)
+    }
+
+    pub fn set_else_arg(&mut self, index: usize, arg: Value) -> Value {
+        std::mem::replace(&mut self.else_args[index], arg)
+    }
+
+    pub fn set_then_args(&mut self, args: Vec<Value>) -> Vec<Value> {
+        std::mem::replace(&mut self.then_args, args)
+    }
+
+    pub fn set_else_args(&mut self, args: Vec<Value>) -> Vec<Value> {
+        std::mem::replace(&mut self.else_args, args)
+    }
+
+    pub fn replace_use(&mut self, old: Value, new: Value) {
+        if self.cond == old {
+            self.cond = new;
+        }
+        for arg in &mut self.then_args {
+            if *arg == old {
+                *arg = new;
+            }
+        }
+        for arg in &mut self.else_args {
+            if *arg == old {
+                *arg = new;
+            }
+        }
     }
 }
 
@@ -569,6 +747,18 @@ impl Return {
 
     pub fn val(&self) -> Option<Value> {
         self.val
+    }
+
+    pub fn set_val(&mut self, val: Option<Value>) -> Option<Value> {
+        std::mem::replace(&mut self.val, val)
+    }
+
+    pub fn replace_use(&mut self, old: Value, new: Value) {
+        if let Some(val) = &mut self.val {
+            if *val == old {
+                *val = new;
+            }
+        }
     }
 }
 
@@ -594,6 +784,29 @@ impl Call {
 
     pub fn args(&self) -> &[Value] {
         &self.args
+    }
+
+    pub fn set_callee(&mut self, callee: Value) -> Value {
+        std::mem::replace(&mut self.callee, callee)
+    }
+
+    pub fn set_arg(&mut self, index: usize, arg: Value) -> Value {
+        std::mem::replace(&mut self.args[index], arg)
+    }
+
+    pub fn set_args(&mut self, args: Vec<Value>) -> Vec<Value> {
+        std::mem::replace(&mut self.args, args)
+    }
+
+    pub fn replace_use(&mut self, old: Value, new: Value) {
+        if self.callee == old {
+            self.callee = new;
+        }
+        for arg in &mut self.args {
+            if *arg == old {
+                *arg = new;
+            }
+        }
     }
 }
 
@@ -629,5 +842,29 @@ impl GetElemPtr {
     /// Get the indices
     pub fn indices(&self) -> &[Value] {
         &self.indices
+    }
+
+    /// Set the pointer
+    pub fn set_ptr(&mut self, ptr: Value) -> Value {
+        std::mem::replace(&mut self.ptr, ptr)
+    }
+
+    pub fn set_index(&mut self, index: usize, value: Value) -> Value {
+        std::mem::replace(&mut self.indices[index], value)
+    }
+
+    pub fn set_indices(&mut self, indices: Vec<Value>) -> Vec<Value> {
+        std::mem::replace(&mut self.indices, indices)
+    }
+
+    pub fn replace_use(&mut self, old: Value, new: Value) {
+        if self.ptr == old {
+            self.ptr = new;
+        }
+        for index in &mut self.indices {
+            if *index == old {
+                *index = new;
+            }
+        }
     }
 }

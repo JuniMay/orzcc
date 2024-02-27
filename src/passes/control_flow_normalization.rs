@@ -66,7 +66,7 @@ impl LocalPassMut for ControlFlowNormalization {
         }
 
         for inst in insts_to_remove {
-            data.layout_mut().remove_inst(inst).unwrap();
+            data.remove_inst(inst);
         }
 
         for (block, next_block) in blocks_to_add_jump {

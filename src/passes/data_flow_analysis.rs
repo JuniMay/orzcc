@@ -8,12 +8,15 @@
 
 use std::collections::HashMap;
 
+use thiserror::Error;
+
 use crate::ir::{
     entities::{FunctionData, ValueKind},
     pass::LocalPass,
     values::{Function, Value},
 };
 
+#[derive(Debug, Error)]
 pub enum DataFlowAnalysisError {}
 
 pub struct DefUseChain {
@@ -31,12 +34,8 @@ impl DefUseChain {
 pub struct DataFlowAnalysis {}
 
 impl DataFlowAnalysis {
-    fn insert_use(&mut self, def: Value, use_: Value, chain: &mut DefUseChain) {
-        if let Some(uses) = chain.uses.get_mut(&def) {
-            uses.push(use_);
-        } else {
-            chain.uses.insert(def, vec![use_]);
-        }
+    fn insert_use(&mut self, use_: Value, def: Value, chain: &mut DefUseChain) {
+        chain.uses.get_mut(&def).unwrap().push(use_);
     }
 }
 
@@ -47,6 +46,10 @@ impl LocalPass for DataFlowAnalysis {
     fn run(&mut self, _function: Function, data: &FunctionData) -> Result<Self::Ok, Self::Err> {
         let dfg = data.dfg();
         let mut chain = DefUseChain::new();
+        for (value, _data) in dfg.values() {
+            chain.uses.insert(*value, Vec::new());
+        }
+
         for (value, data) in dfg.values() {
             match data.kind() {
                 ValueKind::Alloc(_alloc) => {}

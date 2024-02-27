@@ -55,7 +55,7 @@ impl LocalPassMut for UnreachableBlockElimination {
         }
 
         for block in unreachable_blocks {
-            data.layout_mut().remove_block(block).unwrap();
+            data.remove_block(block);
         }
 
         Ok(())
