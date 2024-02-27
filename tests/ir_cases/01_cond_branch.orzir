@@ -1,17 +1,18 @@
 global @y = i32 0xffffffff
 global @x = i32 0x00000005
 
+
 func @check_positive(i32) -> i32 {
-^entry(i32 %0):
-    %cmp = icmp.sle i32 %0, i32 0x0
-    %cond = not i1 %cmp
-    br i1 %cond, ^positive, ^negative
-
-^positive:
-    ret i32 0x1
-
-^negative:
-    ret i32 0xFFFFFFFF
+    ^entry(i32 %0):
+        %cmp = icmp.sle i32 %0, i32 0x0
+        %cond = not i1 %cmp
+        br i1 %cond, ^positive, ^negative(i32 0xffffffff)
+    
+    ^positive:
+        jump ^negative(i32 1)
+    
+    ^negative(i32 %1):
+        ret i32 %1
 }
 
 func @main() -> void {

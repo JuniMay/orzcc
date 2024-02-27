@@ -26,11 +26,11 @@ impl ControlFlowGraph {
         }
     }
 
-    pub fn get_succ(&self, block: &Block) -> Option<&Vec<Block>> {
+    pub fn succ(&self, block: &Block) -> Option<&Vec<Block>> {
         self.succ.get(block)
     }
 
-    pub fn get_pred(&self, block: &Block) -> Option<&Vec<Block>> {
+    pub fn pred(&self, block: &Block) -> Option<&Vec<Block>> {
         self.pred.get(block)
     }
 }
@@ -120,13 +120,13 @@ mod test {
                 ^entry(i32 %0):
                     %cmp = icmp.sle i32 %0, i32 0x0
                     %cond = not i1 %cmp
-                    br i1 %cond, ^positive, ^negative
+                    br i1 %cond, ^positive, ^negative(i32 0xffffffff)
                 
                 ^positive:
-                    ret i32 0x1
+                    jump ^negative(i32 1)
                 
-                ^negative:
-                    ret i32 0xFFFFFFFF
+                ^negative(i32 %1):
+                    ret i32 %1
             }"#;
 
         let mut buf = Cursor::new(ir);
@@ -145,7 +145,9 @@ mod test {
         let negative = function_data.dfg().get_block_by_name("^negative").unwrap();
 
         assert_eq!(cfg.succ.get(&entry).unwrap(), &vec![positive, negative]);
+        assert_eq!(cfg.succ.get(&positive).unwrap(), &vec![negative]);
+        assert_eq!(cfg.succ.get(&negative).unwrap(), &vec![]);
         assert_eq!(cfg.pred.get(&positive).unwrap(), &vec![entry]);
-        assert_eq!(cfg.pred.get(&negative).unwrap(), &vec![entry]);
+        assert_eq!(cfg.pred.get(&negative).unwrap(), &vec![entry, positive]);
     }
 }

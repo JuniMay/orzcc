@@ -1,0 +1,116 @@
+//! # Unreachable Block Elim
+//!
+//! This module contains the implementation of the Unreachable BB Elim pass.
+
+use thiserror::Error;
+
+use crate::ir::{
+    entities::FunctionData,
+    pass::{LocalPass, LocalPassMut},
+    values::{Block, Function},
+};
+
+use std::collections::HashSet;
+use std::collections::VecDeque;
+
+use super::control_flow_analysis::ControlFlowAnalysis;
+
+pub struct UnreachableBlockElimination {}
+
+#[derive(Debug, Error)]
+pub enum UnreachableBlockEliminationError {}
+
+impl LocalPassMut for UnreachableBlockElimination {
+    type Ok = ();
+    type Err = UnreachableBlockEliminationError;
+
+    fn run(&mut self, _function: Function, data: &mut FunctionData) -> Result<Self::Ok, Self::Err> {
+        
+        let mut cfa = ControlFlowAnalysis{};
+        let cfg = cfa.run(_function, data).unwrap();
+
+        let mut reachable_blocks: HashSet<Block> = HashSet::new();
+        let mut queue: VecDeque<Block> = VecDeque::new();
+
+        let entry_block = data.layout().entry_block().unwrap();
+
+        queue.push_back(entry_block);
+        reachable_blocks.insert(entry_block);
+
+        while let Some(block) = queue.pop_front() {
+            if let Some(succs) = cfg.succ(&block) {
+                for &succ in succs.iter() {
+                    if reachable_blocks.insert(succ) {
+                        // the block is not visited yet
+                        queue.push_back(succ);
+                    }
+                }
+            }
+        }
+
+        let mut unreachable_blocks: Vec<Block> = Vec::new();
+        for (block, _block_node) in data.layout().blocks() {
+            if !reachable_blocks.contains(&block) {
+                unreachable_blocks.push(block);
+            }
+        }
+
+        for block in unreachable_blocks {
+            data.layout_mut().remove_block(block).unwrap();
+        }
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::io::{self, Cursor};
+
+    use crate::{ir::{frontend::parser::Parser, module::Module, pass::{GlobalPass, LocalPassMut}}, passes::{control_flow_normalization::ControlFlowNormalization, printer::Printer}};
+
+    use super::UnreachableBlockElimination;
+
+
+    fn _print(module: &Module) {
+        let mut stdout = io::stdout();
+        let mut printer = Printer::new(&mut stdout);
+        printer.run(module).unwrap();
+    }
+
+    #[test]
+    fn test_unreachable_block_elimination() {
+        let ir = r#"
+            func @check_positive(i32) -> i32 {
+                ^entry(i32 %0):
+                    %cmp = icmp.sle i32 %0, i32 0x0
+                    %cond = not i1 %cmp
+                    br i1 %cond, ^positive, ^negative(i32 0xffffffff)
+                
+                ^unreachable_block:
+                    %2 = add i32 1, i32 2
+                    # need normalization to remove this block
+
+                ^positive:
+                    jump ^negative(i32 1)
+                
+                ^negative(i32 %1):
+                    ret i32 %1
+
+            }"#;
+
+        let mut buf = Cursor::new(ir);
+        let mut parser = Parser::new(&mut buf);
+        let mut module = parser.parse().unwrap().into_ir("test".into()).unwrap();
+        let mut normalization = ControlFlowNormalization{};
+        let mut ube =  UnreachableBlockElimination{};
+
+        let function = module.get_value_by_name("@check_positive").unwrap();
+        let function_data = module.function_data_mut(function.into()).unwrap();
+        
+        normalization.run(function.into(), function_data).unwrap();
+        ube.run(function.into(), function_data).unwrap();
+
+        _print(&module);
+    }
+}
