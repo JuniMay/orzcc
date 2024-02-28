@@ -22,7 +22,6 @@ use std::collections::HashSet;
 use std::io::{stdin, stdout, BufWriter, Write};
 
 use crate::ir::entities::FunctionKind;
-use crate::ir::passes::printer::Printer;
 use crate::ir::values::{Inst, ValueIndexer};
 use crate::ir::{
     module::Module,
@@ -231,12 +230,13 @@ impl<'a> Debugger<'a> {
 
             if let Some(inst) = inst {
                 println!("          ...");
-                let mut buf = BufWriter::new(Vec::new());
-                let mut printer = Printer::new(&mut buf);
-                printer.print_local_value(inst.into(), dfg).unwrap();
-                buf.flush().unwrap();
-                let output = String::from_utf8(buf.into_inner().unwrap()).unwrap();
-                println!("[{:^4}]     {}", inst.index(), output);
+                println!(
+                    "[{:^4}]     {}",
+                    inst.index(),
+                    Into::<Value>::into(inst)
+                        .format_as_local_value(dfg)
+                        .unwrap()
+                );
                 println!("          ...");
             } else {
                 let mut buf = BufWriter::new(Vec::new());
@@ -265,16 +265,15 @@ impl<'a> Debugger<'a> {
                     }
 
                     for (inst, _node) in node.insts() {
-                        write!(buf, "[{:^4}]    ", inst.index()).unwrap();
-                        // inefficient implementation, should be optimized
-                        let mut inner_buf = BufWriter::new(Vec::new());
-                        let mut printer = Printer::new(&mut inner_buf);
-                        printer.print_local_value(inst.into(), dfg).unwrap();
-                        inner_buf.flush().unwrap();
-                        let output = String::from_utf8(inner_buf.into_inner().unwrap()).unwrap();
-
-                        write!(buf, "{}", output).unwrap();
-                        writeln!(buf).unwrap();
+                        writeln!(
+                            buf,
+                            "[{:^4}]     {}",
+                            inst.index(),
+                            Into::<Value>::into(inst)
+                                .format_as_local_value(dfg)
+                                .unwrap()
+                        )
+                        .unwrap();
                     }
                 }
                 buf.flush().unwrap();

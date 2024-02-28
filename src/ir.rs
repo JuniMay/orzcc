@@ -147,13 +147,13 @@
 pub mod builders;
 pub mod entities;
 pub mod exec;
+pub mod format;
 pub mod frontend;
 pub mod layout;
 pub mod module;
 pub mod passes;
 pub mod types;
 pub mod values;
-pub mod format;
 
 #[allow(dead_code)]
 const LOCAL_PREFIX: &str = "%";

@@ -11,7 +11,6 @@ use super::{
     entities::{ValueData, ValueKind},
     types::Type,
 };
-use std::fmt;
 
 /// Value reference
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -38,16 +37,19 @@ pub trait ValueIndexer: From<Value> {
 
 /// Reference to an instruction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(transparent)]
 pub struct Inst(usize);
 
 /// Reference to a function.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(transparent)]
 pub struct Function(usize);
 
 /// Reference to a block
 ///
 /// Blocks are independent from values.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(transparent)]
 pub struct Block(usize);
 
 /// Implement the value indexer trait for given indexer.
@@ -103,17 +105,6 @@ pub enum ICmpCond {
     Sle,
 }
 
-impl fmt::Display for ICmpCond {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ICmpCond::Eq => write!(f, "eq"),
-            ICmpCond::Ne => write!(f, "ne"),
-            ICmpCond::Slt => write!(f, "slt"),
-            ICmpCond::Sle => write!(f, "sle"),
-        }
-    }
-}
-
 /// Condition for floating-point comparison
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum FCmpCond {
@@ -121,17 +112,6 @@ pub enum FCmpCond {
     ONe,
     OLt,
     OLe,
-}
-
-impl fmt::Display for FCmpCond {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            FCmpCond::OEq => write!(f, "oeq"),
-            FCmpCond::ONe => write!(f, "one"),
-            FCmpCond::OLt => write!(f, "olt"),
-            FCmpCond::OLe => write!(f, "ole"),
-        }
-    }
 }
 
 /// Binary operations.
@@ -220,33 +200,6 @@ impl BinaryOp {
     }
 }
 
-impl fmt::Display for BinaryOp {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            BinaryOp::Add => write!(f, "add"),
-            BinaryOp::FAdd => write!(f, "fadd"),
-            BinaryOp::Sub => write!(f, "sub"),
-            BinaryOp::FSub => write!(f, "fsub"),
-            BinaryOp::Mul => write!(f, "mul"),
-            BinaryOp::FMul => write!(f, "fmul"),
-            BinaryOp::UDiv => write!(f, "udiv"),
-            BinaryOp::SDiv => write!(f, "sdiv"),
-            BinaryOp::FDiv => write!(f, "fdiv"),
-            BinaryOp::URem => write!(f, "urem"),
-            BinaryOp::SRem => write!(f, "srem"),
-            BinaryOp::FRem => write!(f, "frem"),
-            BinaryOp::And => write!(f, "and"),
-            BinaryOp::Or => write!(f, "or"),
-            BinaryOp::Xor => write!(f, "xor"),
-            BinaryOp::Shl => write!(f, "shl"),
-            BinaryOp::LShr => write!(f, "lshr"),
-            BinaryOp::AShr => write!(f, "ashr"),
-            BinaryOp::ICmp(cond) => write!(f, "icmp.{}", cond),
-            BinaryOp::FCmp(cond) => write!(f, "fcmp.{}", cond),
-        }
-    }
-}
-
 /// Unary operations.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum UnaryOp {
@@ -265,15 +218,6 @@ impl UnaryOp {
     /// If the operation requires floating-point operands
     pub(super) fn require_float(&self) -> bool {
         matches!(self, UnaryOp::FNeg)
-    }
-}
-
-impl fmt::Display for UnaryOp {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            UnaryOp::FNeg => write!(f, "fneg"),
-            UnaryOp::Not => write!(f, "not"),
-        }
     }
 }
 
@@ -456,23 +400,6 @@ pub enum CastOp {
 
     /// Bitcast
     Bitcast,
-}
-
-impl fmt::Display for CastOp {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            CastOp::Trunc => write!(f, "trunc"),
-            CastOp::ZExt => write!(f, "zext"),
-            CastOp::SExt => write!(f, "sext"),
-            CastOp::FpToUI => write!(f, "fptoui"),
-            CastOp::FpToSI => write!(f, "fptosi"),
-            CastOp::UIToFp => write!(f, "uitofp"),
-            CastOp::SIToFp => write!(f, "sitofp"),
-            CastOp::FpTrunc => write!(f, "fptrunc"),
-            CastOp::FpExt => write!(f, "fpext"),
-            CastOp::Bitcast => write!(f, "bitcast"),
-        }
-    }
 }
 
 /// Type cast
