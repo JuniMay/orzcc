@@ -491,7 +491,7 @@ impl LocalBuilder<'_> {
 impl QueryValueData for LocalBuilder<'_> {
     fn value_type(&self, value: Value) -> Result<Type, BuilderErr> {
         self.dfg
-            .with_value_data(value, |data| data.ty().clone())
+            .with_value_data(value, |data| data.ty())
             .ok_or(BuilderErr::ValueNotFound)
     }
     fn is_value_const(&self, value: Value) -> Result<bool, BuilderErr> {
@@ -548,7 +548,7 @@ impl GlobalBuilder<'_> {
 impl QueryValueData for GlobalBuilder<'_> {
     fn value_type(&self, value: Value) -> Result<Type, BuilderErr> {
         self.module
-            .with_value_data(value, |data| data.ty().clone())
+            .with_value_data(value, |data| data.ty())
             .ok_or(BuilderErr::ValueNotFound)
     }
 

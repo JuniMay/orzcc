@@ -379,6 +379,7 @@ impl Ast {
         }
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn global_init_to_value(
         &self,
         ty: Type,

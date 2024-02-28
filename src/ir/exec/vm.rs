@@ -258,7 +258,7 @@ impl<'a> VirtualMachine<'a> {
                     let (_len, ty) = data
                         .ty()
                         .as_array()
-                        .ok_or_else(|| ExecErr::InvalidType(data.ty().clone()))?;
+                        .ok_or_else(|| ExecErr::InvalidType(data.ty()))?;
                     let elem_size = ty.bytewidth();
 
                     let mut offset = 0;
@@ -273,7 +273,7 @@ impl<'a> VirtualMachine<'a> {
                     let field_types = data
                         .ty()
                         .as_struct()
-                        .ok_or_else(|| ExecErr::InvalidType(data.ty().clone()))?;
+                        .ok_or_else(|| ExecErr::InvalidType(data.ty()))?;
                     let mut offset = 0;
                     for (field, ty) in fields.iter().zip(field_types) {
                         let field_addr = Addr(addr.0 + offset);
@@ -421,8 +421,8 @@ impl<'a> VirtualMachine<'a> {
                 let op = binary.op();
                 let lhs = binary.lhs();
                 let rhs = binary.rhs();
-                let lhs_ty = dfg.with_value_data(lhs, |data| data.ty().clone()).unwrap();
-                let rhs_ty = dfg.with_value_data(rhs, |data| data.ty().clone()).unwrap();
+                let lhs_ty = dfg.with_value_data(lhs, |data| data.ty()).unwrap();
+                let rhs_ty = dfg.with_value_data(rhs, |data| data.ty()).unwrap();
                 let lhs_vreg = self.read_vreg(lhs);
                 let rhs_vreg = self.read_vreg(rhs);
 
@@ -549,7 +549,7 @@ impl<'a> VirtualMachine<'a> {
                     }
                     BinaryOp::ICmp(cond) => match cond {
                         ICmpCond::Eq => {
-                            let result_val = (lhs_val == rhs_val ).into();
+                            let result_val = (lhs_val == rhs_val).into();
                             self.write_vreg(self.curr_inst.into(), VReg(result_val));
                         }
                         ICmpCond::Ne => {
@@ -594,7 +594,7 @@ impl<'a> VirtualMachine<'a> {
                                 self.write_vreg(self.curr_inst.into(), VReg(result_val));
                             }
                             FCmpCond::OLt => {
-                                let result_val = (lhs_val < rhs_val ).into();
+                                let result_val = (lhs_val < rhs_val).into();
                                 self.write_vreg(self.curr_inst.into(), VReg(result_val));
                             }
                             FCmpCond::OLe => {
@@ -788,7 +788,7 @@ impl<'a> VirtualMachine<'a> {
 
                 let ty = value_data.ty();
                 let operand_ty = dfg
-                    .with_value_data(operand, |data| data.ty().clone())
+                    .with_value_data(operand, |data| data.ty())
                     .ok_or(ExecErr::ValueNotFound(operand))?;
 
                 let dest_size = ty.bytewidth();
@@ -1042,7 +1042,7 @@ impl<'a> VirtualMachine<'a> {
         }
 
         if !self.stopped() {
-            self.curr_inst = next_inst.ok_or_else(||ExecErr::EarlyStop(self.curr_inst.into()))?;
+            self.curr_inst = next_inst.ok_or_else(|| ExecErr::EarlyStop(self.curr_inst.into()))?;
             self.curr_function = next_function;
         }
 

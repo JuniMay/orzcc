@@ -223,8 +223,8 @@ impl ValueData {
         Self { ty, kind }
     }
 
-    pub fn ty(&self) -> &Type {
-        &self.ty
+    pub fn ty(&self) -> Type {
+        self.ty.clone()
     }
 
     pub fn kind(&self) -> &ValueKind {

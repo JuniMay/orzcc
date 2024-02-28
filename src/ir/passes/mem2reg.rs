@@ -137,9 +137,18 @@ impl Mem2reg {
                             // the alloc result is used as a non-ptr value
                             return None;
                         }
+                        let ty = dfg.with_value_data(val, |data| data.ty()).unwrap();
+                        if ty != alloc.ty() {
+                            // different types in load and alloc
+                            return None;
+                        }
                     }
                     ValueKind::Load(_) => {
                         // the alloc result is used as a ptr in a load
+                        if data.ty() != alloc.ty() {
+                            // different types in load and alloc
+                            return None;
+                        }
                     }
                     _ => {
                         // the alloc result is used for other purposes

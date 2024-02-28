@@ -7,8 +7,6 @@ struct DbgCommand {
 }
 
 fn cli() -> Command {
-    
-
     Command::new("orzcc").subcommand(
         Command::new("dbg").about("Debug the given IR file").arg(
             Arg::new("file")

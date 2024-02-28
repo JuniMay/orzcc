@@ -153,6 +153,7 @@ pub mod module;
 pub mod passes;
 pub mod types;
 pub mod values;
+pub mod format;
 
 #[allow(dead_code)]
 const LOCAL_PREFIX: &str = "%";

@@ -182,7 +182,7 @@ impl Layout {
     pub fn next_inst(&self, inst: Inst) -> Option<Inst> {
         let parent_block = self.parent_block(inst)?;
         let node = self.blocks.node(parent_block).unwrap();
-        
+
         node.insts().node(inst)?.next().or_else(|| {
             // this is the end of the block
             self.next_non_empty_block(parent_block)

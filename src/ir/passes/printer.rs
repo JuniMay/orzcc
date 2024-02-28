@@ -149,7 +149,7 @@ where
                     }
                     ValueKind::GlobalSlot(slot) => {
                         let ty = module
-                            .with_value_data(slot.init(), |data| data.ty().clone())
+                            .with_value_data(slot.init(), |data| data.ty())
                             .unwrap();
                         if slot.mutable() {
                             write!(self.buf, "global {} = {} ", module.value_name(value), ty)?;
