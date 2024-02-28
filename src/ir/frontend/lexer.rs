@@ -171,14 +171,10 @@ where
         }
 
         // convert the string to number
-        let number = match radix {
-            10 => u64::from_str_radix(&string, 10),
-            16 => u64::from_str_radix(&string, 16),
-            _ => unreachable!(),
-        };
+        let number = u64::from_str_radix(&string, radix);
 
-        if number.is_ok() {
-            let bytes = number.unwrap().to_le_bytes().to_vec();
+        if let Ok(number) = number {
+            let bytes = number.to_le_bytes().to_vec();
             // remove leading zeros
             let bytes = bytes
                 .into_iter()

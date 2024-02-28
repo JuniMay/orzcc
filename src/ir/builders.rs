@@ -24,7 +24,7 @@ use super::{
 use thiserror::Error;
 
 #[derive(Error, Debug)]
-pub enum BuilderErr {
+pub enum BuildError {
     /// Value not found.
     ///
     /// The value is not found in the data flow graph.
@@ -100,13 +100,13 @@ pub enum BuilderErr {
 /// This trait is used to provide the query interface for builder.
 pub trait QueryValueData {
     /// Get the type of a value.
-    fn value_type(&self, value: Value) -> Result<Type, BuilderErr>;
+    fn value_type(&self, value: Value) -> Result<Type, BuildError>;
 
     /// Check if a value is a constant.
-    fn is_value_const(&self, value: Value) -> Result<bool, BuilderErr>;
+    fn is_value_const(&self, value: Value) -> Result<bool, BuildError>;
 
     /// Check if a value is a block parameter.
-    fn is_value_block_param(&self, value: Value) -> Result<bool, BuilderErr>;
+    fn is_value_block_param(&self, value: Value) -> Result<bool, BuildError>;
 
     /// Check if a value exists in the data flow graph.
     fn value_exists(&self, value: Value) -> bool {
@@ -115,46 +115,45 @@ pub trait QueryValueData {
 }
 
 pub trait QueryBlockData {
-    fn block_data(&self, block: Block) -> Result<&BlockData, BuilderErr>;
+    fn block_data(&self, block: Block) -> Result<&BlockData, BuildError>;
 }
 
 pub trait QueryDfgData: QueryValueData + QueryBlockData {}
 
 /// Add value to the data flow graph or the module.
 pub trait AddValue {
-    fn add_value(&mut self, data: ValueData) -> Result<Value, BuilderErr>;
+    fn add_value(&mut self, data: ValueData) -> Result<Value, BuildError>;
 }
 
 /// Add block to the data flow graph.
 pub trait AddBlock {
-    fn add_block(&mut self, data: BlockData) -> Result<Block, BuilderErr>;
+    fn add_block(&mut self, data: BlockData) -> Result<Block, BuildError>;
 }
 
-/// Constant builder for both global and local purposes.
-pub trait ConstantBuilder: QueryValueData + AddValue {
+pub trait BuildNonAggregateConstant: QueryValueData + AddValue {
     /// Build a zero constant.
-    fn zero(&mut self, ty: Type) -> Result<Value, BuilderErr> {
+    fn zero(&mut self, ty: Type) -> Result<Value, BuildError> {
         if !ty.is_zero_initializable() {
-            return Err(BuilderErr::InvalidType(ty));
+            return Err(BuildError::InvalidType(ty));
         }
         self.add_value(ValueData::new(ty, ValueKind::Zero))
     }
 
     /// Build an undef constant.
-    fn undef(&mut self, ty: Type) -> Result<Value, BuilderErr> {
+    fn undef(&mut self, ty: Type) -> Result<Value, BuildError> {
         self.add_value(ValueData::new(ty, ValueKind::Undef))
     }
 
     /// Build a bytes constant.
-    fn bytes(&mut self, ty: Type, bytes: Vec<u8>) -> Result<Value, BuilderErr> {
+    fn bytes(&mut self, ty: Type, bytes: Vec<u8>) -> Result<Value, BuildError> {
         if !ty.is_numeric() && !ty.is_ptr() {
-            return Err(BuilderErr::InvalidType(ty));
+            return Err(BuildError::InvalidType(ty));
         }
         self.add_value(ValueData::new(ty, ValueKind::Bytes(bytes)))
     }
 
     /// Build an integer constant of i32 type.
-    fn integer(&mut self, value: i32) -> Result<Value, BuilderErr> {
+    fn integer(&mut self, value: i32) -> Result<Value, BuildError> {
         let bytes = value.to_le_bytes().to_vec();
 
         // remove leading zeros
@@ -167,36 +166,39 @@ pub trait ConstantBuilder: QueryValueData + AddValue {
             .rev()
             .collect::<Vec<u8>>();
 
-        self.bytes(Type::mk_int(32), bytes)
+        self.bytes(Type::int(32), bytes)
     }
 
     /// Build a float constant.
     ///
     /// This is a shorthand for `bytes` with the bytes of the float.
-    fn float(&mut self, value: f32) -> Result<Value, BuilderErr> {
+    fn float(&mut self, value: f32) -> Result<Value, BuildError> {
         let bytes = value.to_le_bytes().to_vec();
-        self.bytes(Type::mk_float(), bytes)
+        self.bytes(Type::float(), bytes)
     }
+}
 
+/// Constant builder for both global and local purposes.
+pub trait BuildAggregateConstant: QueryValueData + AddValue {
     /// Build an array constant.
-    fn array(&mut self, ty: Type, values: Vec<Value>) -> Result<Value, BuilderErr> {
+    fn array(&mut self, ty: Type, values: Vec<Value>) -> Result<Value, BuildError> {
         let (size, elem_type) = ty
             .as_array()
-            .ok_or_else(|| BuilderErr::InvalidType(ty.clone()))?;
+            .ok_or_else(|| BuildError::InvalidType(ty.clone()))?;
 
         if values.len() != size {
-            return Err(BuilderErr::IncompatibleArraySize(size, values.len()));
+            return Err(BuildError::IncompatibleArraySize(size, values.len()));
         }
 
         for value in &values {
             if self.value_type(*value)? != elem_type.clone() {
-                return Err(BuilderErr::IncompatibleArrayElemType(
+                return Err(BuildError::IncompatibleArrayElemType(
                     elem_type,
                     self.value_type(*value)?,
                 ));
             }
             if !self.is_value_const(*value)? {
-                return Err(BuilderErr::InvalidMutability);
+                return Err(BuildError::InvalidMutability);
             }
         }
 
@@ -204,13 +206,13 @@ pub trait ConstantBuilder: QueryValueData + AddValue {
     }
 
     /// Build a struct constant.
-    fn struct_(&mut self, ty: Type, values: Vec<Value>) -> Result<Value, BuilderErr> {
+    fn struct_(&mut self, ty: Type, values: Vec<Value>) -> Result<Value, BuildError> {
         let fields = ty
             .as_struct()
-            .ok_or_else(|| BuilderErr::InvalidType(ty.clone()))?;
+            .ok_or_else(|| BuildError::InvalidType(ty.clone()))?;
 
         if fields.len() != values.len() {
-            return Err(BuilderErr::IncompatibleStructFieldNumber(
+            return Err(BuildError::IncompatibleStructFieldNumber(
                 fields.len(),
                 values.len(),
             ));
@@ -218,13 +220,13 @@ pub trait ConstantBuilder: QueryValueData + AddValue {
 
         for (field_type, value) in fields.iter().zip(&values) {
             if self.value_type(*value)? != field_type.clone() {
-                return Err(BuilderErr::IncompatibleStructFieldType(
+                return Err(BuildError::IncompatibleStructFieldType(
                     field_type.clone(),
                     self.value_type(*value)?,
                 ));
             }
             if !self.is_value_const(*value)? {
-                return Err(BuilderErr::InvalidMutability);
+                return Err(BuildError::InvalidMutability);
             }
         }
 
@@ -233,62 +235,62 @@ pub trait ConstantBuilder: QueryValueData + AddValue {
 }
 
 /// Local value builder for local data flow graph.
-pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
+pub trait BuildLocalValue: QueryDfgData + AddValue + BuildNonAggregateConstant {
     /// Build a block parameter.
-    fn block_param(&mut self, ty: Type) -> Result<Value, BuilderErr> {
+    fn block_param(&mut self, ty: Type) -> Result<Value, BuildError> {
         self.add_value(ValueData::new(ty, ValueKind::BlockParam))
     }
 
     /// Build an alloc instruction.
-    fn alloc(&mut self, ty: Type) -> Result<Value, BuilderErr> {
+    fn alloc(&mut self, ty: Type) -> Result<Value, BuildError> {
         self.add_value(Alloc::new_value_data(ty))
     }
 
     /// Build a load instruction.
-    fn load(&mut self, ty: Type, ptr: Value) -> Result<Value, BuilderErr> {
+    fn load(&mut self, ty: Type, ptr: Value) -> Result<Value, BuildError> {
         if !self.value_type(ptr)?.is_ptr() {
-            return Err(BuilderErr::InvalidType(ty));
+            return Err(BuildError::InvalidType(ty));
         }
         self.add_value(Load::new_value_data(ty, ptr))
     }
 
     /// Build a cast instruction
-    fn cast(&mut self, op: CastOp, ty: Type, val: Value) -> Result<Value, BuilderErr> {
+    fn cast(&mut self, op: CastOp, ty: Type, val: Value) -> Result<Value, BuildError> {
         self.add_value(Cast::new_value_data(op, ty, val))
     }
 
     /// Build a store instruction.
-    fn store(&mut self, val: Value, ptr: Value) -> Result<Value, BuilderErr> {
+    fn store(&mut self, val: Value, ptr: Value) -> Result<Value, BuildError> {
         if !self.value_type(ptr)?.is_ptr() {
-            return Err(BuilderErr::InvalidType(self.value_type(ptr)?));
+            return Err(BuildError::InvalidType(self.value_type(ptr)?));
         }
 
         if !self.value_exists(val) {
-            return Err(BuilderErr::ValueNotFound);
+            return Err(BuildError::ValueNotFound);
         }
 
         self.add_value(Store::new_value_data(val, ptr))
     }
 
     /// Build a binary instruction.
-    fn binary(&mut self, op: BinaryOp, lhs: Value, rhs: Value) -> Result<Value, BuilderErr> {
+    fn binary(&mut self, op: BinaryOp, lhs: Value, rhs: Value) -> Result<Value, BuildError> {
         let lhs_type = self.value_type(lhs)?;
         let rhs_type = self.value_type(rhs)?;
 
         if op.require_int() && (!lhs_type.is_int() || !rhs_type.is_int()) {
-            return Err(BuilderErr::InvalidType(lhs_type));
+            return Err(BuildError::InvalidType(lhs_type));
         }
 
         if op.require_float() && (!lhs_type.is_float() || !rhs_type.is_float()) {
-            return Err(BuilderErr::InvalidType(lhs_type));
+            return Err(BuildError::InvalidType(lhs_type));
         }
 
         if op.require_same_type() && lhs_type != rhs_type {
-            return Err(BuilderErr::IncompatibleType(lhs_type, rhs_type));
+            return Err(BuildError::IncompatibleType(lhs_type, rhs_type));
         }
 
         let res_type = match op {
-            BinaryOp::ICmp(_) | BinaryOp::FCmp(_) => Type::mk_int(1),
+            BinaryOp::ICmp(_) | BinaryOp::FCmp(_) => Type::int(1),
             _ => lhs_type,
         };
 
@@ -296,26 +298,26 @@ pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
     }
 
     /// Build a unary instruction.
-    fn unary(&mut self, op: UnaryOp, val: Value) -> Result<Value, BuilderErr> {
+    fn unary(&mut self, op: UnaryOp, val: Value) -> Result<Value, BuildError> {
         let val_type = self.value_type(val)?;
 
         if op.require_int() && !val_type.is_int() {
-            return Err(BuilderErr::InvalidType(val_type));
+            return Err(BuildError::InvalidType(val_type));
         }
 
         if op.require_float() && !val_type.is_float() {
-            return Err(BuilderErr::InvalidType(val_type));
+            return Err(BuildError::InvalidType(val_type));
         }
 
         self.add_value(Unary::new_value_data(val_type, op, val))
     }
 
     /// Build a jump instruction.
-    fn jump(&mut self, dst: Block, args: Vec<Value>) -> Result<Value, BuilderErr> {
+    fn jump(&mut self, dst: Block, args: Vec<Value>) -> Result<Value, BuildError> {
         let block_data = self.block_data(dst)?;
 
         if block_data.params().len() != args.len() {
-            return Err(BuilderErr::IncompatibleBlockArgNumber(
+            return Err(BuildError::IncompatibleBlockArgNumber(
                 block_data.params().len(),
                 args.len(),
             ));
@@ -326,7 +328,7 @@ pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
             let arg_type = self.value_type(*arg)?;
 
             if param_type != arg_type {
-                return Err(BuilderErr::IncompatibleBlockArgType(param_type, arg_type));
+                return Err(BuildError::IncompatibleBlockArgType(param_type, arg_type));
             }
         }
 
@@ -341,23 +343,23 @@ pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
         else_dst: Block,
         then_args: Vec<Value>,
         else_args: Vec<Value>,
-    ) -> Result<Value, BuilderErr> {
+    ) -> Result<Value, BuildError> {
         if !self.value_type(cond)?.is_int() {
-            return Err(BuilderErr::InvalidType(self.value_type(cond)?));
+            return Err(BuildError::InvalidType(self.value_type(cond)?));
         }
 
         let then_block_data = self.block_data(then_dst)?;
         let else_block_data = self.block_data(else_dst)?;
 
         if then_block_data.params().len() != then_args.len() {
-            return Err(BuilderErr::IncompatibleBlockArgNumber(
+            return Err(BuildError::IncompatibleBlockArgNumber(
                 then_block_data.params().len(),
                 then_args.len(),
             ));
         }
 
         if else_block_data.params().len() != else_args.len() {
-            return Err(BuilderErr::IncompatibleBlockArgNumber(
+            return Err(BuildError::IncompatibleBlockArgNumber(
                 else_block_data.params().len(),
                 else_args.len(),
             ));
@@ -368,7 +370,7 @@ pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
             let arg_type = self.value_type(*arg)?;
 
             if param_type != arg_type {
-                return Err(BuilderErr::IncompatibleBlockArgType(param_type, arg_type));
+                return Err(BuildError::IncompatibleBlockArgType(param_type, arg_type));
             }
         }
 
@@ -377,7 +379,7 @@ pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
             let arg_type = self.value_type(*arg)?;
 
             if param_type != arg_type {
-                return Err(BuilderErr::IncompatibleBlockArgType(param_type, arg_type));
+                return Err(BuildError::IncompatibleBlockArgType(param_type, arg_type));
             }
         }
 
@@ -387,17 +389,17 @@ pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
     }
 
     /// Build a return instruction.
-    fn return_(&mut self, val: Option<Value>) -> Result<Value, BuilderErr> {
+    fn return_(&mut self, val: Option<Value>) -> Result<Value, BuildError> {
         // type check of return is not performed here
         self.add_value(Return::new_value_data(val))
     }
 
     /// Build a call instruction.
-    fn call(&mut self, ret_ty: Type, callee: Value, args: Vec<Value>) -> Result<Value, BuilderErr> {
+    fn call(&mut self, ret_ty: Type, callee: Value, args: Vec<Value>) -> Result<Value, BuildError> {
         let callee_type = self.value_type(callee)?;
 
         if !callee_type.is_function() && !callee_type.is_ptr() {
-            return Err(BuilderErr::InvalidType(callee_type));
+            return Err(BuildError::InvalidType(callee_type));
         }
 
         self.add_value(Call::new_value_data(ret_ty, callee, args))
@@ -409,9 +411,9 @@ pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
         ptr: Value,
         ty: Type,
         indices: Vec<Value>,
-    ) -> Result<Value, BuilderErr> {
+    ) -> Result<Value, BuildError> {
         if !self.value_type(ptr)?.is_ptr() {
-            return Err(BuilderErr::InvalidType(self.value_type(ptr)?));
+            return Err(BuildError::InvalidType(self.value_type(ptr)?));
         }
 
         self.add_value(GetElemPtr::new_value_data(ptr, ty, indices))
@@ -419,12 +421,12 @@ pub trait LocalValueBuilder: QueryDfgData + AddValue + ConstantBuilder {
 }
 
 /// Block builder for local data flow graph.
-pub trait LocalBlockBuilder: QueryDfgData + AddBlock {
+pub trait BuildBlock: QueryDfgData + AddBlock {
     /// Build a block.
-    fn block(&mut self, params: Vec<Value>) -> Result<Block, BuilderErr> {
+    fn block(&mut self, params: Vec<Value>) -> Result<Block, BuildError> {
         for param in params.iter() {
             if !self.is_value_block_param(*param)? {
-                return Err(BuilderErr::InvalidKind);
+                return Err(BuildError::InvalidKind);
             }
         }
 
@@ -433,45 +435,47 @@ pub trait LocalBlockBuilder: QueryDfgData + AddBlock {
 }
 
 /// Global value builder for the module.
-pub trait GlobalValueBuilder: QueryValueData + AddValue + ConstantBuilder {
+pub trait BuildGlobalValue:
+    QueryValueData + AddValue + BuildNonAggregateConstant + BuildAggregateConstant
+{
     /// Add a constructed function to the module.
     fn add_function(
         &mut self,
         value_data: ValueData,
         function_data: FunctionData,
-    ) -> Result<Function, BuilderErr>;
+    ) -> Result<Function, BuildError>;
 
     /// Build a global slot.
-    fn global_slot(&mut self, init: Value, mutable: bool) -> Result<Value, BuilderErr> {
+    fn global_slot(&mut self, init: Value, mutable: bool) -> Result<Value, BuildError> {
         if !self.is_value_const(init)? {
-            return Err(BuilderErr::InvalidMutability);
+            return Err(BuildError::InvalidMutability);
         }
 
-        self.add_value(GlobalSlot::new_value_data(Type::mk_ptr(), init, mutable))
+        self.add_value(GlobalSlot::new_value_data(Type::ptr(), init, mutable))
     }
 
     /// Build a global function.
-    fn function(&mut self, ty: Type, kind: FunctionKind) -> Result<Function, BuilderErr> {
+    fn function(&mut self, ty: Type, kind: FunctionKind) -> Result<Function, BuildError> {
         let data = FunctionData::new(ty, kind);
         self.add_function(data.new_value_data(), data)
     }
 
     /// Build a function definition.
-    fn function_def(&mut self, ty: Type) -> Result<Function, BuilderErr> {
+    fn function_def(&mut self, ty: Type) -> Result<Function, BuildError> {
         let data = FunctionData::new(ty, FunctionKind::Definition);
         let function = self.add_function(data.new_value_data(), data)?;
         Ok(function)
     }
 
     /// Build a function declaration.
-    fn function_decl(&mut self, ty: Type) -> Result<Function, BuilderErr> {
+    fn function_decl(&mut self, ty: Type) -> Result<Function, BuildError> {
         let data = FunctionData::new(ty, FunctionKind::Declaration);
         let function = self.add_function(data.new_value_data(), data)?;
         Ok(function)
     }
 
     /// Build a intrinsic function.
-    fn function_intrinsic(&mut self, ty: Type) -> Result<Function, BuilderErr> {
+    fn function_intrinsic(&mut self, ty: Type) -> Result<Function, BuildError> {
         let data = FunctionData::new(ty, FunctionKind::Intrinsic);
         let function = self.add_function(data.new_value_data(), data)?;
         Ok(function)
@@ -489,51 +493,51 @@ impl LocalBuilder<'_> {
 }
 
 impl QueryValueData for LocalBuilder<'_> {
-    fn value_type(&self, value: Value) -> Result<Type, BuilderErr> {
+    fn value_type(&self, value: Value) -> Result<Type, BuildError> {
         self.dfg
-            .with_value_data(value, |data| data.ty().clone())
-            .ok_or(BuilderErr::ValueNotFound)
+            .with_value_data(value, |data| data.ty())
+            .ok_or(BuildError::ValueNotFound)
     }
-    fn is_value_const(&self, value: Value) -> Result<bool, BuilderErr> {
+    fn is_value_const(&self, value: Value) -> Result<bool, BuildError> {
         self.dfg
             .with_value_data(value, |data| data.kind().is_const())
-            .ok_or(BuilderErr::ValueNotFound)
+            .ok_or(BuildError::ValueNotFound)
     }
-    fn is_value_block_param(&self, value: Value) -> Result<bool, BuilderErr> {
+    fn is_value_block_param(&self, value: Value) -> Result<bool, BuildError> {
         self.dfg
             .with_value_data(value, |data| data.kind().is_block_param())
-            .ok_or(BuilderErr::ValueNotFound)
+            .ok_or(BuildError::ValueNotFound)
     }
 }
 
 impl QueryBlockData for LocalBuilder<'_> {
-    fn block_data(&self, block: Block) -> Result<&BlockData, BuilderErr> {
-        self.dfg.block_data(block).ok_or(BuilderErr::BlockNotFound)
+    fn block_data(&self, block: Block) -> Result<&BlockData, BuildError> {
+        self.dfg.block_data(block).ok_or(BuildError::BlockNotFound)
     }
 }
 
 impl AddValue for LocalBuilder<'_> {
-    fn add_value(&mut self, data: ValueData) -> Result<Value, BuilderErr> {
+    fn add_value(&mut self, data: ValueData) -> Result<Value, BuildError> {
         if data.kind().is_global() {
-            return Err(BuilderErr::InvalidGlobalValue);
+            return Err(BuildError::InvalidGlobalValue);
         }
         Ok(self.dfg.add_value(data))
     }
 }
 
 impl AddBlock for LocalBuilder<'_> {
-    fn add_block(&mut self, data: BlockData) -> Result<Block, BuilderErr> {
+    fn add_block(&mut self, data: BlockData) -> Result<Block, BuildError> {
         Ok(self.dfg.add_block(data))
     }
 }
 
 impl QueryDfgData for LocalBuilder<'_> {}
 
-impl ConstantBuilder for LocalBuilder<'_> {}
+impl BuildNonAggregateConstant for LocalBuilder<'_> {}
 
-impl LocalValueBuilder for LocalBuilder<'_> {}
+impl BuildLocalValue for LocalBuilder<'_> {}
 
-impl LocalBlockBuilder for LocalBuilder<'_> {}
+impl BuildBlock for LocalBuilder<'_> {}
 
 pub struct GlobalBuilder<'a> {
     module: &'a mut Module,
@@ -546,39 +550,41 @@ impl GlobalBuilder<'_> {
 }
 
 impl QueryValueData for GlobalBuilder<'_> {
-    fn value_type(&self, value: Value) -> Result<Type, BuilderErr> {
+    fn value_type(&self, value: Value) -> Result<Type, BuildError> {
         self.module
-            .with_value_data(value, |data| data.ty().clone())
-            .ok_or(BuilderErr::ValueNotFound)
+            .with_value_data(value, |data| data.ty())
+            .ok_or(BuildError::ValueNotFound)
     }
 
-    fn is_value_const(&self, value: Value) -> Result<bool, BuilderErr> {
+    fn is_value_const(&self, value: Value) -> Result<bool, BuildError> {
         self.module
             .with_value_data(value, |data| data.kind().is_const())
-            .ok_or(BuilderErr::ValueNotFound)
+            .ok_or(BuildError::ValueNotFound)
     }
 
-    fn is_value_block_param(&self, value: Value) -> Result<bool, BuilderErr> {
+    fn is_value_block_param(&self, value: Value) -> Result<bool, BuildError> {
         self.module
             .with_value_data(value, |data| data.kind().is_block_param())
-            .ok_or(BuilderErr::ValueNotFound)
+            .ok_or(BuildError::ValueNotFound)
     }
 }
 
 impl AddValue for GlobalBuilder<'_> {
-    fn add_value(&mut self, data: ValueData) -> Result<Value, BuilderErr> {
+    fn add_value(&mut self, data: ValueData) -> Result<Value, BuildError> {
         Ok(self.module.add_global_slot(data))
     }
 }
 
-impl ConstantBuilder for GlobalBuilder<'_> {}
+impl BuildNonAggregateConstant for GlobalBuilder<'_> {}
 
-impl GlobalValueBuilder for GlobalBuilder<'_> {
+impl BuildAggregateConstant for GlobalBuilder<'_> {}
+
+impl BuildGlobalValue for GlobalBuilder<'_> {
     fn add_function(
         &mut self,
         value_data: ValueData,
         function_data: FunctionData,
-    ) -> Result<Function, BuilderErr> {
+    ) -> Result<Function, BuildError> {
         Ok(self.module.add_function(value_data, function_data))
     }
 }

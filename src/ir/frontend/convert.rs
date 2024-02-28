@@ -2,7 +2,8 @@ use thiserror::Error;
 
 use crate::ir::{
     builders::{
-        BuilderErr, ConstantBuilder, GlobalValueBuilder, LocalBlockBuilder, LocalValueBuilder,
+        BuildAggregateConstant, BuildBlock, BuildError, BuildGlobalValue, BuildLocalValue,
+        BuildNonAggregateConstant,
     },
     module::Module,
     types::Type,
@@ -17,8 +18,8 @@ use super::{
 
 #[derive(Debug, Error)]
 pub enum SemanticError {
-    #[error("builder error: {0}")]
-    BuilderErr(BuilderErr),
+    #[error(transparent)]
+    BuildError(#[from] BuildError),
 
     #[error("name duplicated at {0:?}")]
     NameDuplicated(Span),
@@ -28,12 +29,6 @@ pub enum SemanticError {
 
     #[error("block name not found at {0:?}")]
     BlockNameNotFound(Span),
-}
-
-impl From<BuilderErr> for SemanticError {
-    fn from(err: BuilderErr) -> Self {
-        Self::BuilderErr(err)
-    }
 }
 
 struct AstLoweringContext {
@@ -379,6 +374,7 @@ impl Ast {
         }
     }
 
+    #[allow(clippy::only_used_in_recursion)]
     fn global_init_to_value(
         &self,
         ty: Type,
@@ -389,7 +385,7 @@ impl Ast {
             AstNodeKind::Array(ref array) => {
                 let (_size, elem_type) = ty
                     .as_array()
-                    .ok_or_else(|| BuilderErr::InvalidType(ty.clone()))?;
+                    .ok_or_else(|| BuildError::InvalidType(ty.clone()))?;
                 let mut values = Vec::new();
                 for elem in array.elems.iter() {
                     let value = self.global_init_to_value(elem_type.clone(), elem, module)?;
@@ -401,7 +397,7 @@ impl Ast {
             AstNodeKind::Struct(ref struct_) => {
                 let struct_ty = ty
                     .as_struct()
-                    .ok_or_else(|| BuilderErr::InvalidType(ty.clone()))?;
+                    .ok_or_else(|| BuildError::InvalidType(ty.clone()))?;
                 let mut values = Vec::new();
                 for (i, field) in struct_.fields.iter().enumerate() {
                     let value = self.global_init_to_value(struct_ty[i].clone(), field, module)?;

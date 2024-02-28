@@ -15,8 +15,8 @@ use crate::ir::{
 
 #[derive(Debug, Clone)]
 pub struct ControlFlowGraph {
-    pred: HashMap<Block, Vec<Block>>,
-    succ: HashMap<Block, Vec<Block>>,
+    preds: HashMap<Block, Vec<Block>>,
+    succs: HashMap<Block, Vec<Block>>,
 }
 
 impl Default for ControlFlowGraph {
@@ -28,17 +28,17 @@ impl Default for ControlFlowGraph {
 impl ControlFlowGraph {
     pub fn new() -> Self {
         Self {
-            pred: HashMap::new(),
-            succ: HashMap::new(),
+            preds: HashMap::new(),
+            succs: HashMap::new(),
         }
     }
 
-    pub fn succ(&self, block: &Block) -> Option<&Vec<Block>> {
-        self.succ.get(block)
+    pub fn succs(&self, block: &Block) -> Option<&Vec<Block>> {
+        self.succs.get(block)
     }
 
-    pub fn pred(&self, block: &Block) -> Option<&Vec<Block>> {
-        self.pred.get(block)
+    pub fn preds(&self, block: &Block) -> Option<&Vec<Block>> {
+        self.preds.get(block)
     }
 }
 
@@ -59,6 +59,9 @@ impl LocalPass for ControlFlowAnalysis {
 
         let layout = data.layout();
         for (block, _block_node) in layout.blocks() {
+            cfg.preds.insert(block, Vec::new());
+        }
+        for (block, _block_node) in layout.blocks() {
             let mut succ = Vec::new();
             // just get the last instruction of the block
             // because the normalization pass ensures that the last instruction is a terminator
@@ -67,38 +70,20 @@ impl LocalPass for ControlFlowAnalysis {
             match inst_data.kind() {
                 ValueKind::Jump(jump) => {
                     succ.push(jump.dst());
-                    if let std::collections::hash_map::Entry::Vacant(e) = cfg.pred.entry(jump.dst())
-                    {
-                        e.insert(vec![block]);
-                    } else {
-                        cfg.pred.get_mut(&jump.dst()).unwrap().push(block);
-                    }
+                    cfg.preds.get_mut(&jump.dst()).unwrap().push(block);
                 }
                 ValueKind::Branch(br) => {
                     succ.push(br.then_dst());
                     succ.push(br.else_dst());
-                    if let std::collections::hash_map::Entry::Vacant(e) =
-                        cfg.pred.entry(br.then_dst())
-                    {
-                        e.insert(vec![block]);
-                    } else {
-                        cfg.pred.get_mut(&br.then_dst()).unwrap().push(block);
-                    }
-                    if let std::collections::hash_map::Entry::Vacant(e) =
-                        cfg.pred.entry(br.else_dst())
-                    {
-                        e.insert(vec![block]);
-                    } else {
-                        cfg.pred.get_mut(&br.else_dst()).unwrap().push(block);
-                    }
+                    cfg.preds.get_mut(&br.then_dst()).unwrap().push(block);
+                    cfg.preds.get_mut(&br.else_dst()).unwrap().push(block);
                 }
                 ValueKind::Return(_) => {}
                 _ => {
                     return Err(ControlFlowAnalysisError::UnexpectedBlockTermination(block));
                 }
             }
-            cfg.succ.insert(block, succ);
-            cfg.pred.entry(block).or_insert_with(std::vec::Vec::new);
+            cfg.succs.insert(block, succ);
         }
 
         Ok(cfg)
@@ -144,10 +129,10 @@ mod test {
         let positive = function_data.dfg().get_block_by_name("^positive").unwrap();
         let negative = function_data.dfg().get_block_by_name("^negative").unwrap();
 
-        assert_eq!(cfg.succ.get(&entry).unwrap(), &vec![positive, negative]);
-        assert_eq!(cfg.succ.get(&positive).unwrap(), &vec![negative]);
-        assert_eq!(cfg.succ.get(&negative).unwrap(), &vec![]);
-        assert_eq!(cfg.pred.get(&positive).unwrap(), &vec![entry]);
-        assert_eq!(cfg.pred.get(&negative).unwrap(), &vec![entry, positive]);
+        assert_eq!(cfg.succs.get(&entry).unwrap(), &vec![positive, negative]);
+        assert_eq!(cfg.succs.get(&positive).unwrap(), &vec![negative]);
+        assert_eq!(cfg.succs.get(&negative).unwrap(), &vec![]);
+        assert_eq!(cfg.preds.get(&positive).unwrap(), &vec![entry]);
+        assert_eq!(cfg.preds.get(&negative).unwrap(), &vec![entry, positive]);
     }
 }

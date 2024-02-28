@@ -11,7 +11,7 @@
 use thiserror::Error;
 
 use crate::ir::{
-    builders::LocalValueBuilder,
+    builders::BuildLocalValue,
     entities::FunctionData,
     passes::LocalPassMut,
     values::{Block, Function},
