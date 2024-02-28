@@ -25,7 +25,6 @@ where
 
     fn print_module(&mut self, module: &Module) -> io::Result<()> {
         writeln!(self.buf, "# orzir module: {} ", module.name())?;
-        writeln!(self.buf)?;
         for name in module.identified_type_layout() {
             let ty = Type::get_identified(name).unwrap();
             writeln!(self.buf, "type {} = {}", name, ty)?;

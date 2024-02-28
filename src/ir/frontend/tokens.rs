@@ -4,9 +4,9 @@ use super::{InstKind, KeywordKind};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Pos {
-    row: usize,
-    col: usize,
-    idx: usize,
+    pub row: usize,
+    pub col: usize,
+    pub loc: usize,
 }
 
 impl Default for Pos {
@@ -14,7 +14,7 @@ impl Default for Pos {
         Self {
             row: 1,
             col: 0,
-            idx: 0,
+            loc: 0,
         }
     }
 }
@@ -31,7 +31,7 @@ impl Pos {
         } else {
             self.col += 1;
         }
-        self.idx += 1;
+        self.loc += 1;
     }
 }
 
@@ -43,8 +43,8 @@ impl fmt::Display for Pos {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Span {
-    start: Pos,
-    end: Pos,
+    pub start: Pos,
+    pub end: Pos,
 }
 
 impl Default for Span {
