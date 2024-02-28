@@ -268,12 +268,12 @@ where
         let token = self.next_token()?;
         match token.kind {
             TokenKind::Keyword(ref kw) => match kw {
-                KeywordKind::Int(n) => Ok(Type::mk_int(*n)),
-                KeywordKind::Half => Ok(Type::mk_half()),
-                KeywordKind::Float => Ok(Type::mk_float()),
-                KeywordKind::Double => Ok(Type::mk_double()),
-                KeywordKind::Ptr => Ok(Type::mk_ptr()),
-                KeywordKind::Void => Ok(Type::mk_void()),
+                KeywordKind::Int(n) => Ok(Type::int(*n)),
+                KeywordKind::Half => Ok(Type::half()),
+                KeywordKind::Float => Ok(Type::float()),
+                KeywordKind::Double => Ok(Type::double()),
+                KeywordKind::Ptr => Ok(Type::ptr()),
+                KeywordKind::Void => Ok(Type::void()),
                 _ => Err(self.unexpected_token()),
             },
             _ => Err(self.unexpected_token()),
@@ -283,7 +283,7 @@ where
     fn parse_type_ident(&mut self) -> Result<Type, ParseError> {
         // consume the token
         match self.next_token()?.kind {
-            TokenKind::TypeIdent(ref name) => Ok(Type::mk_identified(name.clone())),
+            TokenKind::TypeIdent(ref name) => Ok(Type::identified(name.clone())),
             _ => Err(self.unexpected_token()),
         }
     }
@@ -302,7 +302,7 @@ where
                 },
             }
         }
-        Ok(Type::mk_struct(fields))
+        Ok(Type::struct_(fields))
     }
 
     fn parse_array_type(&mut self) -> Result<Type, ParseError> {
@@ -321,7 +321,7 @@ where
             return Err(self.unexpected_token());
         };
         self.expect(TokenKind::RightBracket)?;
-        Ok(Type::mk_array(size, ty))
+        Ok(Type::array(size, ty))
     }
 
     fn parse_function_type(&mut self) -> Result<Type, ParseError> {
@@ -340,7 +340,7 @@ where
         }
         self.expect(TokenKind::Arrow)?;
         let ret = self.parse_type()?;
-        Ok(Type::mk_function(params, ret))
+        Ok(Type::function(params, ret))
     }
 
     fn parse_block(&mut self) -> Result<AstNodeBox, ParseError> {

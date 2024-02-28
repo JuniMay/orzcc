@@ -101,15 +101,15 @@
 //! // Then build global values with the global builder:
 //!
 //! // use the `init` to build a `mutable=true` global slot/
-//! let init = module.builder().zero(Type::mk_i32()).unwrap();
+//! let init = module.builder().zero(Type::i32_()).unwrap();
 //! let var = module.builder().global_slot(init, true).unwrap();
 //!
 //! // use the `init` to build a `mutable=false` global slot, which is a constant.
-//! let init = module.builder().zero(Type::mk_i32()).unwrap();
+//! let init = module.builder().zero(Type::i32_()).unwrap();
 //! let const_ = module.builder().global_slot(init, false).unwrap();
 //!
 //! // construct a function type.
-//! let ty = Type::mk_function(vec![Type::mk_i32()], Type::mk_i32());
+//! let ty = Type::function(vec![Type::i32_()], Type::i32_());
 //! // there are also `function_decl` and `function_intrinsic` methods.
 //! let function = module.builder().function_def(ty).unwrap();
 //!
@@ -119,11 +119,11 @@
 //!
 //! // example: build an entry block, and since there is a parameter of the function, we need to
 //! // add the parameter to the block.
-//! let param = function_data.dfg_mut().builder().block_param(Type::mk_i32()).unwrap();
+//! let param = function_data.dfg_mut().builder().block_param(Type::i32_()).unwrap();
 //! let entry = function_data.dfg_mut().builder().block(vec![param]).unwrap();
 //!
 //! // example: allocate a stack slot.
-//! let inst = function_data.dfg_mut().builder().alloc(Type::mk_i32()).unwrap();
+//! let inst = function_data.dfg_mut().builder().alloc(Type::i32_()).unwrap();
 //!
 //! // next, we need to add the inst to the block in the function layout.
 //! function_data.layout_mut().append_block(entry).unwrap();

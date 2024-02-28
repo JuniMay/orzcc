@@ -312,7 +312,7 @@ pub struct Store {
 
 impl Store {
     pub(super) fn new_value_data(val: Value, ptr: Value) -> ValueData {
-        ValueData::new(Type::mk_void(), ValueKind::Store(Store { val, ptr }))
+        ValueData::new(Type::void(), ValueKind::Store(Store { val, ptr }))
     }
 
     pub fn val(&self) -> Value {
@@ -451,7 +451,7 @@ pub struct Alloc {
 
 impl Alloc {
     pub(super) fn new_value_data(ty: Type) -> ValueData {
-        ValueData::new(Type::mk_ptr(), ValueKind::Alloc(Alloc { ty }))
+        ValueData::new(Type::ptr(), ValueKind::Alloc(Alloc { ty }))
     }
 
     pub fn ty(&self) -> Type {
@@ -510,7 +510,7 @@ pub struct Jump {
 
 impl Jump {
     pub(super) fn new_value_data(dst: Block, args: Vec<Value>) -> ValueData {
-        ValueData::new(Type::mk_void(), ValueKind::Jump(Jump { dst, args }))
+        ValueData::new(Type::void(), ValueKind::Jump(Jump { dst, args }))
     }
 
     pub fn dst(&self) -> Block {
@@ -569,7 +569,7 @@ impl Branch {
         else_args: Vec<Value>,
     ) -> ValueData {
         ValueData::new(
-            Type::mk_void(),
+            Type::void(),
             ValueKind::Branch(Branch {
                 cond,
                 then_dst,
@@ -669,7 +669,7 @@ pub struct Return {
 
 impl Return {
     pub(super) fn new_value_data(val: Option<Value>) -> ValueData {
-        ValueData::new(Type::mk_void(), ValueKind::Return(Return { val }))
+        ValueData::new(Type::void(), ValueKind::Return(Return { val }))
     }
 
     pub fn val(&self) -> Option<Value> {
@@ -751,7 +751,7 @@ pub struct GetElemPtr {
 impl GetElemPtr {
     pub(super) fn new_value_data(ptr: Value, ty: Type, indices: Vec<Value>) -> ValueData {
         ValueData::new(
-            Type::mk_ptr(),
+            Type::ptr(),
             ValueKind::GetElemPtr(GetElemPtr { ptr, ty, indices }),
         )
     }

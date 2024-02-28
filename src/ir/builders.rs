@@ -166,7 +166,7 @@ pub trait BuildNonAggregateConstant: QueryValueData + AddValue {
             .rev()
             .collect::<Vec<u8>>();
 
-        self.bytes(Type::mk_int(32), bytes)
+        self.bytes(Type::int(32), bytes)
     }
 
     /// Build a float constant.
@@ -174,7 +174,7 @@ pub trait BuildNonAggregateConstant: QueryValueData + AddValue {
     /// This is a shorthand for `bytes` with the bytes of the float.
     fn float(&mut self, value: f32) -> Result<Value, BuildError> {
         let bytes = value.to_le_bytes().to_vec();
-        self.bytes(Type::mk_float(), bytes)
+        self.bytes(Type::float(), bytes)
     }
 }
 
@@ -290,7 +290,7 @@ pub trait BuildLocalValue: QueryDfgData + AddValue + BuildNonAggregateConstant {
         }
 
         let res_type = match op {
-            BinaryOp::ICmp(_) | BinaryOp::FCmp(_) => Type::mk_int(1),
+            BinaryOp::ICmp(_) | BinaryOp::FCmp(_) => Type::int(1),
             _ => lhs_type,
         };
 
@@ -451,7 +451,7 @@ pub trait BuildGlobalValue:
             return Err(BuildError::InvalidMutability);
         }
 
-        self.add_value(GlobalSlot::new_value_data(Type::mk_ptr(), init, mutable))
+        self.add_value(GlobalSlot::new_value_data(Type::ptr(), init, mutable))
     }
 
     /// Build a global function.
