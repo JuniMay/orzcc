@@ -29,7 +29,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use thiserror::Error;
 
 use crate::ir::{
-    builders::{ConstantBuilder, LocalValueBuilder},
+    builders::{BuildLocalValue, BuildNonAggregateConstant},
     entities::{FunctionData, ValueKind},
     module::DataFlowGraph,
     passes::{LocalPass, LocalPassMut},

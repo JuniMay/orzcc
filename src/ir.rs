@@ -87,7 +87,8 @@
 //! ```rust
 //! use orzcc::ir::{
 //!     builders::{
-//!         BuilderErr, ConstantBuilder, GlobalValueBuilder, LocalBlockBuilder, LocalValueBuilder,
+//!         BuildError, BuildGlobalValue, BuildBlock, BuildLocalValue,
+//!         BuildNonAggregateConstant,
 //!     },
 //!     module::Module,
 //!     types::Type,
