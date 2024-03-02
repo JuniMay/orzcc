@@ -165,7 +165,7 @@ impl<'a> VirtualMachine<'a> {
             module,
             memory,
 
-            addrs: BiMap::new(),
+            addrs: BiMap::default(),
 
             vregs: HashMap::new(),
 
@@ -739,7 +739,7 @@ impl<'a> VirtualMachine<'a> {
                     .dfg()
                     .with_value_data(ptr, |data| match data.kind() {
                         ValueKind::GlobalSlot(_slot) => {
-                            *self.addrs.get(&ptr).expect("addr should exist")
+                            *self.addrs.get_fwd(&ptr).expect("addr should exist")
                         }
                         _ => {
                             let ptr_vreg = self.read_vreg(ptr);

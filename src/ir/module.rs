@@ -433,7 +433,7 @@ where
     pub fn new(prefix: &'static str) -> Self {
         Self {
             counter: 0,
-            map: BiMap::new(),
+            map: BiMap::default(),
             prefix,
         }
     }
@@ -442,7 +442,7 @@ where
     ///
     /// If the key is already allocated, return [`NameAllocErr`].
     pub fn allocate(&mut self, key: T) -> Result<(), NameAllocErr> {
-        if self.map.contains(&key) {
+        if self.map.contains_fwd(&key) {
             return Err(NameAllocErr::KeyDuplicated);
         }
 
@@ -466,7 +466,7 @@ where
             return Err(NameAllocErr::NameDuplicated);
         }
 
-        if self.map.contains(&key) {
+        if self.map.contains_fwd(&key) {
             return Err(NameAllocErr::KeyDuplicated);
         }
 
@@ -485,10 +485,10 @@ where
     ///
     /// If the name is not assigned, allocate a new name.
     pub fn get(&mut self, key: T) -> String {
-        let name = self.map.get(&key).cloned().or_else(|| {
+        let name = self.map.get_fwd(&key).cloned().or_else(|| {
             self.allocate(key)
                 .expect("allocation should be successful for non-existed key.");
-            self.map.get(&key).cloned()
+            self.map.get_fwd(&key).cloned()
         });
 
         name.unwrap()
@@ -498,7 +498,7 @@ where
     ///
     /// This will not allocate a new name if the name is not assigned.
     pub fn try_get(&self, key: T) -> Option<String> {
-        self.map.get(&key).cloned()
+        self.map.get_fwd(&key).cloned()
     }
 
     pub fn try_get_by_name(&self, name: &str) -> Option<T> {

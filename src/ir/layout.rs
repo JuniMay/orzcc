@@ -2,24 +2,18 @@ use std::collections::HashMap;
 
 use thiserror::Error;
 
-use crate::collections::{BiLinkedList, BiLinkedListErr, BiLinkedNode};
+use crate::collections::{List, ListError, ListNode};
 
 use super::values::{Block, Inst};
 
 /// Instruction node
+#[derive(Default)]
 pub struct InstNode {
     prev: Option<Inst>,
     next: Option<Inst>,
 }
 
-impl BiLinkedNode<Inst> for InstNode {
-    fn new() -> Self {
-        InstNode {
-            prev: None,
-            next: None,
-        }
-    }
-
+impl ListNode<Inst> for InstNode {
     fn next(&self) -> Option<Inst> {
         self.next
     }
@@ -37,9 +31,10 @@ impl BiLinkedNode<Inst> for InstNode {
     }
 }
 
-pub type InstList = BiLinkedList<Inst, InstNode>;
+pub type InstList = List<Inst, InstNode>;
 
 /// Basic block node
+#[derive(Default)]
 pub struct BlockNode {
     prev: Option<Block>,
     next: Option<Block>,
@@ -47,15 +42,7 @@ pub struct BlockNode {
     insts: InstList,
 }
 
-impl BiLinkedNode<Block> for BlockNode {
-    fn new() -> Self {
-        Self {
-            prev: None,
-            next: None,
-            insts: InstList::new(),
-        }
-    }
-
+impl ListNode<Block> for BlockNode {
     fn prev(&self) -> Option<Block> {
         self.prev
     }
@@ -83,9 +70,10 @@ impl BlockNode {
     }
 }
 
-pub type BlockList = BiLinkedList<Block, BlockNode>;
+pub type BlockList = List<Block, BlockNode>;
 
 /// A layout inside a function.
+#[derive(Default)]
 pub struct Layout {
     /// The basic blocks
     blocks: BlockList,
@@ -120,18 +108,9 @@ pub enum LayoutOpErr {
     InstNodeNotFound(Inst),
 }
 
-impl Default for Layout {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl Layout {
     pub fn new() -> Self {
-        Self {
-            blocks: BlockList::new(),
-            inst_blocks: HashMap::new(),
-        }
+        Self::default()
     }
 
     /// Get the entry block for the current function.
@@ -276,8 +255,8 @@ impl Layout {
         self.blocks
             .insert_before(block, before)
             .map_err(|err| match err {
-                BiLinkedListErr::KeyDuplicated(block) => LayoutOpErr::BlockDuplicated(block),
-                BiLinkedListErr::NodeNotFound(before) => LayoutOpErr::BlockNodeNotFound(before),
+                ListError::KeyDuplicated(block) => LayoutOpErr::BlockDuplicated(block),
+                ListError::NodeNotFound(before) => LayoutOpErr::BlockNodeNotFound(before),
             })
     }
 
@@ -297,9 +276,9 @@ impl Layout {
             .insts_mut()
             .insert_before(inst, before)
             .map_err(|err| match err {
-                BiLinkedListErr::KeyDuplicated(inst) => LayoutOpErr::InstDuplicated(inst),
+                ListError::KeyDuplicated(inst) => LayoutOpErr::InstDuplicated(inst),
                 // this is actually unreachable
-                BiLinkedListErr::NodeNotFound(before) => LayoutOpErr::InstNodeNotFound(before),
+                ListError::NodeNotFound(before) => LayoutOpErr::InstNodeNotFound(before),
             })?;
 
         self.inst_blocks.insert(inst, *block);
