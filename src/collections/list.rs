@@ -1,94 +1,113 @@
-use std::{collections::HashMap, fmt::Debug, hash::Hash};
+use std::{collections::HashMap, hash::Hash};
 
-/// A bi-directional linked node to store the value.
-pub trait BiLinkedNode<K>
+use thiserror::Error;
+
+pub trait ListNode<K>: Default
 where
     K: Copy,
 {
-    fn new() -> Self;
-
     fn next(&self) -> Option<K>;
     fn prev(&self) -> Option<K>;
-
     fn set_next(&mut self, next: Option<K>);
     fn set_prev(&mut self, prev: Option<K>);
 }
 
-/// A bi-directional linked list.
-pub struct BiLinkedList<K, N>
+pub struct List<K, N>
 where
     K: Copy + Eq + Hash,
-    N: BiLinkedNode<K>,
+    N: ListNode<K>,
 {
     head: Option<K>,
     tail: Option<K>,
     nodes: HashMap<K, N>,
 }
 
-/// Iterator in the bi-directional lined list.
-pub struct BiLinkedIter<'a, K, N>
+pub struct Iter<'a, K, N>
 where
     K: Copy + Eq + Hash,
-    N: BiLinkedNode<K>,
+    N: ListNode<K>,
 {
-    list: &'a BiLinkedList<K, N>,
+    list: &'a List<K, N>,
     curr: Option<K>,
 }
 
-impl<'a, K, N> Iterator for BiLinkedIter<'a, K, N>
+impl<'a, K, N> Iterator for Iter<'a, K, N>
 where
     K: Copy + Eq + Hash,
-    N: BiLinkedNode<K>,
+    N: ListNode<K>,
 {
     type Item = (K, &'a N);
 
     fn next(&mut self) -> Option<Self::Item> {
         let curr = self.curr?;
-        self.curr = self.list.nodes.get(&curr).unwrap().next();
-        Some((curr, self.list.nodes.get(&curr).unwrap()))
+        let node = self.list.nodes.get(&curr).unwrap();
+        self.curr = node.next();
+        Some((curr, node))
     }
 }
 
-/// Errors of operations in the list.
-#[derive(Debug)]
-pub enum BiLinkedListErr<K>
-where
-    K: Copy,
-{
-    /// The node can not be found in `nodes`.
-    NodeNotFound(K),
-
-    /// The key to be inserted already exists.
-    KeyDuplicated(K),
-}
-
-impl<K, N> Default for BiLinkedList<K, N>
+impl<K, N> Default for List<K, N>
 where
     K: Copy + Eq + Hash,
-    N: BiLinkedNode<K>,
+    N: ListNode<K>,
 {
     fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<K, N> BiLinkedList<K, N>
-where
-    K: Copy + Eq + Hash,
-    N: BiLinkedNode<K>,
-{
-    pub fn new() -> Self {
-        Self {
+        List {
             head: None,
             tail: None,
             nodes: HashMap::new(),
         }
     }
+}
 
-    fn contains_key(&self, key: K) -> bool {
-        self.nodes.contains_key(&key)
+#[derive(Error, Debug)]
+pub enum ListError<K>
+where
+    K: Copy,
+{
+    #[error("node {0} not found")]
+    NodeNotFound(K),
+
+    #[error("key {0} already exists")]
+    KeyDuplicated(K),
+}
+
+impl<'a, K, N> IntoIterator for &'a List<K, N>
+where
+    K: Copy + Eq + Hash,
+    N: ListNode<K>,
+{
+    type Item = (K, &'a N);
+    type IntoIter = Iter<'a, K, N>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Iter {
+            list: self,
+            curr: self.head,
+        }
     }
+}
 
+impl<K, N> Extend<K> for List<K, N>
+where
+    K: Copy + Eq + Hash,
+    N: ListNode<K>,
+{
+    fn extend<T>(&mut self, iter: T)
+    where
+        T: IntoIterator<Item = K>,
+    {
+        for key in iter {
+            self.append(key).ok();
+        }
+    }
+}
+
+impl<K, N> List<K, N>
+where
+    K: Copy + Eq + Hash,
+    N: ListNode<K>,
+{
     pub fn is_empty(&self) -> bool {
         self.head.is_none()
     }
@@ -109,159 +128,121 @@ where
         self.nodes.get_mut(&key)
     }
 
-    /// Append the key to the end.
-    ///
-    /// If `key` has been inserted, return `BiLinkedListErr::KeyDuplicated`.
-    pub fn append(&mut self, key: K) -> Result<(), BiLinkedListErr<K>> {
-        if self.contains_key(key) {
-            return Err(BiLinkedListErr::KeyDuplicated(key));
-        }
-        // new node
-        let mut node = N::new();
-        // set the node as the next of the tail
-        node.set_prev(self.tail);
+    pub fn contains(&self, key: K) -> bool {
+        self.nodes.contains_key(&key)
+    }
 
-        if self.head.is_some() {
-            // fix link from tail to node
-            self.nodes
-                .get_mut(
-                    self.tail
-                        .as_ref()
-                        .expect("tail should exist if head exists"),
-                )
-                .expect("tail of the list should be in the nodes")
-                .set_next(Some(key));
+    pub fn insert_after(&mut self, key: K, after: K) -> Result<(), ListError<K>> {
+        if self.contains(key) {
+            return Err(ListError::KeyDuplicated(key));
+        }
+
+        let mut node = N::default();
+
+        let before = self
+            .node(after)
+            .ok_or(ListError::NodeNotFound(after))?
+            .next();
+        let after_node = self.node_mut(after).ok_or(ListError::NodeNotFound(after))?;
+
+        node.set_prev(Some(after));
+        node.set_next(before);
+
+        after_node.set_next(Some(key));
+
+        if let Some(before) = before {
+            self.node_mut(before).unwrap().set_prev(Some(key));
         } else {
-            // new head
-            self.head = Some(key);
+            self.tail = Some(key);
         }
-        // map
-        self.nodes.insert(key, node);
-        // maintain tail
-        self.tail = Some(key);
 
+        self.nodes.insert(key, node);
         Ok(())
     }
 
-    /// Insert key before `before`
-    ///
-    /// If `key` has been inserted, return `BiLinkedListErr::KeyDuplicated(key)`.
-    /// If `before` is not inserted, return `BiLinkedListErr::NodeNotFound(before)`.
-    pub fn insert_before(&mut self, key: K, before: K) -> Result<(), BiLinkedListErr<K>> {
-        if self.contains_key(key) {
-            return Err(BiLinkedListErr::KeyDuplicated(key));
+    pub fn insert_before(&mut self, key: K, before: K) -> Result<(), ListError<K>> {
+        if self.contains(key) {
+            return Err(ListError::KeyDuplicated(key));
         }
 
-        // Original:
-        //  [ after ] <--> [ before ]
-        // Inserted:
-        //  [ after ] <--> [ new ] <--> [ before ]
-
-        let mut node = N::new();
+        let mut node = N::default();
 
         let after = self
-            .nodes
-            .get(&before)
-            .ok_or(BiLinkedListErr::NodeNotFound(before))?
+            .node(before)
+            .ok_or(ListError::NodeNotFound(before))?
             .prev();
+        let before_node = self
+            .node_mut(before)
+            .ok_or(ListError::NodeNotFound(before))?;
 
-        {
-            // maintain new and before
-            let before_node = self.nodes.get_mut(&before).unwrap();
-            node.set_next(Some(before));
-            node.set_prev(after);
-            before_node.set_prev(Some(key));
-        }
+        node.set_prev(after);
+        node.set_next(Some(before));
 
-        if let Some(ref after) = after {
-            // fix link from after to new
-            self.nodes
-                .get_mut(after)
-                .expect("key in the list should be in the nodes")
-                .set_next(Some(key));
+        before_node.set_prev(Some(key));
+
+        if let Some(after) = after {
+            self.node_mut(after).unwrap().set_next(Some(key));
         } else {
-            // new head
             self.head = Some(key);
         }
 
-        // map
         self.nodes.insert(key, node);
-
         Ok(())
     }
 
-    /// Remove the key from the list
-    ///
-    /// If `key` is not inserted, return `BiLinkedListErr::NodeNotFound(key)`.
-    pub fn remove(&mut self, key: K) -> Result<(), BiLinkedListErr<K>> {
-        let prev = self
+    pub fn remove(&mut self, key: K) -> Result<(), ListError<K>> {
+        let node = self
             .nodes
-            .get_mut(&key)
-            .ok_or(BiLinkedListErr::NodeNotFound(key))?
-            .prev();
-        let next = self
-            .nodes
-            .get_mut(&key)
-            .ok_or(BiLinkedListErr::NodeNotFound(key))?
-            .next();
-        {
-            let node = self
-                .nodes
-                .get_mut(&key)
-                .ok_or(BiLinkedListErr::NodeNotFound(key))?;
-            node.set_prev(None);
-            node.set_next(None);
-        }
+            .remove(&key)
+            .ok_or(ListError::NodeNotFound(key))?;
+        let prev = node.prev();
+        let next = node.next();
 
         if let Some(prev) = prev {
-            self.nodes
-                .get_mut(&prev)
-                .expect("key in the list should be in the nodes")
-                .set_next(next);
+            self.node_mut(prev).unwrap().set_next(next);
         } else {
             self.head = next;
         }
 
         if let Some(next) = next {
-            self.nodes
-                .get_mut(&next)
-                .expect("key in the list should be in the nodes")
-                .set_prev(prev);
+            self.node_mut(next).unwrap().set_prev(prev);
         } else {
             self.tail = prev;
         }
 
-        self.nodes.remove(&key);
+        Ok(())
+    }
+
+    pub fn append(&mut self, key: K) -> Result<(), ListError<K>> {
+        if self.contains(key) {
+            return Err(ListError::KeyDuplicated(key));
+        }
+
+        if let Some(tail) = self.tail {
+            self.insert_after(key, tail)?;
+        } else {
+            self.head = Some(key);
+            self.tail = Some(key);
+            self.nodes.insert(key, N::default());
+        }
 
         Ok(())
     }
-}
 
-impl<'a, K, N> IntoIterator for &'a BiLinkedList<K, N>
-where
-    K: Copy + Eq + Hash,
-    N: BiLinkedNode<K>,
-{
-    type Item = (K, &'a N);
-    type IntoIter = BiLinkedIter<'a, K, N>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        BiLinkedIter {
-            list: self,
-            curr: self.head,
+    pub fn prepend(&mut self, key: K) -> Result<(), ListError<K>> {
+        if self.contains(key) {
+            return Err(ListError::KeyDuplicated(key));
         }
-    }
-}
 
-impl<K, N> Extend<K> for BiLinkedList<K, N>
-where
-    K: Copy + Eq + Hash,
-    N: BiLinkedNode<K>,
-{
-    fn extend<T: IntoIterator<Item = K>>(&mut self, iter: T) {
-        for key in iter {
-            self.append(key).ok();
+        if let Some(head) = self.head {
+            self.insert_before(key, head)?;
+        } else {
+            self.head = Some(key);
+            self.tail = Some(key);
+            self.nodes.insert(key, N::default());
         }
+
+        Ok(())
     }
 }
 
@@ -269,20 +250,13 @@ where
 mod test {
     use super::*;
 
-    #[derive(Debug, Clone)]
-    struct Node {
+    #[derive(Debug, Clone, Default)]
+    struct TestNode {
         next: Option<usize>,
         prev: Option<usize>,
     }
 
-    impl BiLinkedNode<usize> for Node {
-        fn new() -> Self {
-            Self {
-                next: None,
-                prev: None,
-            }
-        }
-
+    impl ListNode<usize> for TestNode {
         fn next(&self) -> Option<usize> {
             self.next
         }
@@ -302,7 +276,7 @@ mod test {
 
     #[test]
     fn test_list_ops() {
-        let mut list = BiLinkedList::<usize, Node>::new();
+        let mut list = List::<usize, TestNode>::default();
         assert_eq!(list.front(), None);
 
         // 1
@@ -311,7 +285,7 @@ mod test {
         assert_eq!(list.back(), Some(1));
         assert_eq!(list.node(1).unwrap().next(), None);
         assert_eq!(list.node(1).unwrap().prev(), None);
-        assert!(list.contains_key(1));
+        assert!(list.contains(1));
 
         // 1 -- 2
         list.append(2).unwrap();
@@ -319,7 +293,7 @@ mod test {
         assert_eq!(list.back(), Some(2));
         assert_eq!(list.node(1).unwrap().next(), Some(2));
         assert_eq!(list.node(2).unwrap().prev(), Some(1));
-        assert!(list.contains_key(2));
+        assert!(list.contains(2));
 
         // 1 -- 2 -- 3
         list.append(3).unwrap();
@@ -327,7 +301,7 @@ mod test {
         assert_eq!(list.back(), Some(3));
         assert_eq!(list.node(2).unwrap().next(), Some(3));
         assert_eq!(list.node(3).unwrap().prev(), Some(2));
-        assert!(list.contains_key(3));
+        assert!(list.contains(3));
 
         // 4 -- 1 -- 2 -- 3
         list.insert_before(4, 1).unwrap();
@@ -335,15 +309,15 @@ mod test {
         assert_eq!(list.back(), Some(3));
         assert_eq!(list.node(4).unwrap().next(), Some(1));
         assert_eq!(list.node(1).unwrap().prev(), Some(4));
-        assert!(list.contains_key(4));
+        assert!(list.contains(4));
 
         // 4 -- 1 -- 5 -- 2 -- 3
-        list.insert_before(5, 2).unwrap();
+        list.insert_after(5, 1).unwrap();
         assert_eq!(list.front(), Some(4));
         assert_eq!(list.back(), Some(3));
         assert_eq!(list.node(1).unwrap().next(), Some(5));
         assert_eq!(list.node(5).unwrap().prev(), Some(1));
-        assert!(list.contains_key(5));
+        assert!(list.contains(5));
 
         // 4 -- 5 -- 2 -- 3
         list.remove(1).unwrap();
@@ -351,7 +325,7 @@ mod test {
         assert_eq!(list.back(), Some(3));
         assert_eq!(list.node(4).unwrap().next(), Some(5));
         assert_eq!(list.node(5).unwrap().prev(), Some(4));
-        assert!(!list.contains_key(1));
+        assert!(!list.contains(1));
 
         // 5 -- 2 -- 3
         list.remove(4).unwrap();
@@ -361,7 +335,7 @@ mod test {
         assert_eq!(list.node(3).unwrap().prev(), Some(2));
         assert_eq!(list.node(5).unwrap().prev(), None);
         assert_eq!(list.node(2).unwrap().prev(), Some(5));
-        assert!(!list.contains_key(4));
+        assert!(!list.contains(4));
 
         // 5 -- 3
         list.remove(2).unwrap();
@@ -369,7 +343,7 @@ mod test {
         assert_eq!(list.back(), Some(3));
         assert_eq!(list.node(3).unwrap().next(), None);
         assert_eq!(list.node(3).unwrap().prev(), Some(5));
-        assert!(!list.contains_key(2));
+        assert!(!list.contains(2));
 
         list.remove(5).unwrap();
         assert_eq!(list.front(), Some(3));
@@ -378,17 +352,17 @@ mod test {
         list.remove(3).unwrap();
         assert_eq!(list.front(), None);
         assert_eq!(list.back(), None);
-        assert!(!list.contains_key(3));
+        assert!(!list.contains(3));
     }
 
     #[test]
     fn test_list_iter() {
-        let mut list = BiLinkedList::<usize, Node>::new();
-        list.append(1).unwrap();
-        list.append(2).unwrap();
+        let mut list = List::<usize, TestNode>::default();
         list.append(3).unwrap();
         list.append(4).unwrap();
         list.append(5).unwrap();
+        list.prepend(2).unwrap();
+        list.prepend(1).unwrap();
 
         let mut iter = list.into_iter();
         for i in 1..=5 {
@@ -402,34 +376,28 @@ mod test {
 
     #[test]
     fn test_list_err() {
-        let mut list = BiLinkedList::<usize, Node>::new();
-        list.append(1).unwrap();
-        list.append(2).unwrap();
+        let mut list = List::<usize, TestNode>::default();
         list.append(3).unwrap();
         list.append(4).unwrap();
         list.append(5).unwrap();
+        list.prepend(2).unwrap();
+        list.prepend(1).unwrap();
 
-        assert!(matches!(
-            list.append(1),
-            Err(BiLinkedListErr::KeyDuplicated(1))
-        ));
+        assert!(matches!(list.append(1), Err(ListError::KeyDuplicated(1))));
         assert!(matches!(
             list.insert_before(1, 6),
-            Err(BiLinkedListErr::KeyDuplicated(1))
+            Err(ListError::KeyDuplicated(1))
         ));
         assert!(matches!(
             list.insert_before(6, 7),
-            Err(BiLinkedListErr::NodeNotFound(7))
+            Err(ListError::NodeNotFound(7))
         ));
-        assert!(matches!(
-            list.remove(6),
-            Err(BiLinkedListErr::NodeNotFound(6))
-        ));
+        assert!(matches!(list.remove(6), Err(ListError::NodeNotFound(6))));
     }
 
     #[test]
     fn test_list_extend() {
-        let mut list = BiLinkedList::<usize, Node>::new();
+        let mut list = List::<usize, TestNode>::default();
         list.extend(1..=5);
         assert_eq!(list.front(), Some(1));
         assert_eq!(list.back(), Some(5));

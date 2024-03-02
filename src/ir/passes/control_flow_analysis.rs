@@ -13,24 +13,15 @@ use crate::ir::{
     values::{Block, Function},
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ControlFlowGraph {
     preds: HashMap<Block, Vec<Block>>,
     succs: HashMap<Block, Vec<Block>>,
 }
 
-impl Default for ControlFlowGraph {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl ControlFlowGraph {
     pub fn new() -> Self {
-        Self {
-            preds: HashMap::new(),
-            succs: HashMap::new(),
-        }
+        Self::default()
     }
 
     pub fn succs(&self, block: &Block) -> Option<&Vec<Block>> {
