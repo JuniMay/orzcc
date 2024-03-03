@@ -1,11 +1,11 @@
 
-global @x = i32 zero
-const @y = i32 0x20202020
+slot @x = global i32 zero
+slot @y = const i32 0x20202020
 type !z = { i32, float }
-global @array = [ i32; 3 ] zero
-global @arrarr = [ [float ;3]; 4] zero
+slot @array = global [ i32; 3 ] zero
+slot @arrarr = global [ [float ;3]; 4] zero
 type !struct = { i32, [float; 3] }
-global @s = [!struct ; 2] zero
+slot @s = global [!struct ; 2] zero
 
 func @function(i32) -> i32 {
 

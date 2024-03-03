@@ -23,8 +23,8 @@
 //!
 //! The format to define a global slot is:
 //! ```orzir
-//! global @var_name = <type> <initial_value>
-//! const @const_name = <type> <initial_value>
+//! slot @var_name = global <type> <initial_value>
+//! slot @const_name = const <type> <initial_value>
 //! ```
 //!
 //! ### Functions

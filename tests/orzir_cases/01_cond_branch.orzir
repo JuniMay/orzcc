@@ -1,5 +1,5 @@
-global @y = i32 0xffffffff
-global @x = i32 0x00000005
+slot @y = global i32 0xffffffff
+slot @x = global i32 0x00000005
 
 
 func @check_positive(i32) -> i32 {
