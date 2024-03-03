@@ -130,9 +130,9 @@ impl Value {
                             .with_value_data(slot.init(), |data| data.ty())
                             .unwrap();
                         if slot.mutable() {
-                            write!(buf, "global {} = {} ", module.value_name(*self), ty)?;
+                            write!(buf, "slot {} = global {} ", module.value_name(*self), ty)?;
                         } else {
-                            write!(buf, "const {} = {} ", module.value_name(*self), ty)?;
+                            write!(buf, "slot {} = const {} ", module.value_name(*self), ty)?;
                         }
                         write!(buf, "{}", slot.init().format_as_global_value(module)?)
                     }

@@ -137,10 +137,9 @@ where
         match token.kind {
             TokenKind::Keyword(ref kw) => match kw {
                 KeywordKind::Type => self.parse_type_def(),
-                KeywordKind::Global => self.parse_global(true),
-                KeywordKind::Const => self.parse_global(false),
                 KeywordKind::Func => self.parse_function_def(),
                 KeywordKind::Decl => self.parse_function_decl(),
+                KeywordKind::Slot => self.parse_global(),
                 _ => Err(self.unexpected_token()),
             },
             _ => Err(self.unexpected_token()),
@@ -161,12 +160,8 @@ where
         Ok(TypeDef::new_boxed(name, ty, span))
     }
 
-    fn parse_global(&mut self, mutable: bool) -> Result<AstNodeBox, ParseError> {
-        if mutable {
-            self.expect(TokenKind::Keyword(KeywordKind::Global))?;
-        } else {
-            self.expect(TokenKind::Keyword(KeywordKind::Const))?;
-        }
+    fn parse_global(&mut self) -> Result<AstNodeBox, ParseError> {
+        self.expect(TokenKind::Keyword(KeywordKind::Slot))?;
         let mut span = self.curr_token.span;
         let token = self.next_token()?;
         let name = match token.kind {
@@ -174,6 +169,18 @@ where
             _ => return Err(self.unexpected_token()),
         };
         self.expect(TokenKind::Equal)?;
+        let token = self.peek_token()?;
+        let mutable = match token.kind {
+            TokenKind::Keyword(KeywordKind::Global) => {
+                self.consume();
+                true
+            }
+            TokenKind::Keyword(KeywordKind::Const) => {
+                self.consume();
+                false
+            }
+            _ => return Err(self.unexpected_token()),
+        };
         let ty = self.parse_type()?;
         let init = self.parse_global_init()?;
         span.extend(&self.curr_token.span);
@@ -216,15 +223,18 @@ where
         let mut span = self.curr_token.span;
         let mut elems = Vec::new();
         loop {
-            let parse_result = self.parse_global_init();
-            match parse_result {
-                Ok(node) => elems.push(node),
-                Err(_) => match self.next_token()?.kind {
-                    TokenKind::RightBracket => break,
-                    TokenKind::Comma => continue,
-                    _ => return Err(self.unexpected_token()),
-                },
+            let node = self.parse_global_init()?;
+            elems.push(node);
+            let token = self.peek_token()?;
+            if let TokenKind::Comma = token.kind {
+                self.consume();
+                continue;
             }
+            if let TokenKind::RightBracket = token.kind {
+                self.consume();
+                break;
+            }
+            return Err(self.unexpected_token());
         }
         span.extend(&self.curr_token.span);
         let node = Array::new_boxed(elems, span);
@@ -236,15 +246,18 @@ where
         let mut span = self.curr_token.span;
         let mut fields = Vec::new();
         loop {
-            let parse_result = self.parse_global_init();
-            match parse_result {
-                Ok(node) => fields.push(node),
-                Err(_) => match self.next_token()?.kind {
-                    TokenKind::RightBrace => break,
-                    TokenKind::Comma => continue,
-                    _ => return Err(self.unexpected_token()),
-                },
+            let node = self.parse_global_init()?;
+            fields.push(node);
+            let token = self.peek_token()?;
+            if let TokenKind::Comma = token.kind {
+                self.consume();
+                continue;
             }
+            if let TokenKind::RightBrace = token.kind {
+                self.consume();
+                break;
+            }
+            return Err(self.unexpected_token());
         }
         span.extend(&self.curr_token.span);
         let node = Struct::new_boxed(fields, span);
@@ -292,15 +305,18 @@ where
         self.expect(TokenKind::LeftBrace)?;
         let mut fields = Vec::new();
         loop {
-            let parse_result = self.parse_type();
-            match parse_result {
-                Ok(ty) => fields.push(ty),
-                Err(_) => match self.next_token()?.kind {
-                    TokenKind::RightBrace => break,
-                    TokenKind::Comma => continue,
-                    _ => return Err(self.unexpected_token()),
-                },
+            let ty = self.parse_type()?;
+            fields.push(ty);
+            let token = self.peek_token()?;
+            if let TokenKind::Comma = token.kind {
+                self.consume();
+                continue;
             }
+            if let TokenKind::RightBrace = token.kind {
+                self.consume();
+                break;
+            }
+            return Err(self.unexpected_token());
         }
         Ok(Type::struct_(fields))
     }
@@ -328,15 +344,22 @@ where
         self.expect(TokenKind::LeftParen)?;
         let mut params = Vec::new();
         loop {
-            let parse_result = self.parse_type();
-            match parse_result {
-                Ok(ty) => params.push(ty),
-                Err(_) => match self.next_token()?.kind {
-                    TokenKind::RightParen => break,
-                    TokenKind::Comma => continue,
-                    _ => return Err(self.unexpected_token()),
-                },
+            if let TokenKind::RightParen = self.peek_token()?.kind {
+                self.consume();
+                break;
             }
+            let ty = self.parse_type()?;
+            params.push(ty);
+            let token = self.peek_token()?;
+            if let TokenKind::Comma = token.kind {
+                self.consume();
+                continue;
+            }
+            if let TokenKind::RightParen = token.kind {
+                self.consume();
+                break;
+            }
+            return Err(self.unexpected_token());
         }
         self.expect(TokenKind::Arrow)?;
         let ret = self.parse_type()?;
@@ -614,15 +637,18 @@ where
                 span.extend(&token.span);
                 self.consume();
                 loop {
-                    let parse_result = self.parse_operand();
-                    match parse_result {
-                        Ok(node) => params.push(node),
-                        Err(_) => match self.next_token()?.kind {
-                            TokenKind::RightParen => break,
-                            TokenKind::Comma => continue,
-                            _ => return Err(self.unexpected_token()),
-                        },
+                    let node = self.parse_operand()?;
+                    params.push(node);
+                    let token = self.peek_token()?;
+                    if let TokenKind::Comma = token.kind {
+                        self.consume();
+                        continue;
                     }
+                    if let TokenKind::RightParen = token.kind {
+                        self.consume();
+                        break;
+                    }
+                    return Err(self.unexpected_token());
                 }
                 span.extend(&self.curr_token.span);
                 let callee = Callee::new_boxed(name, params, span);

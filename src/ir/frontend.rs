@@ -45,8 +45,11 @@ enum KeywordKind {
     /// `const`
     Const,
 
-    /// `Type`
+    /// `type`
     Type,
+
+    /// `slot`
+    Slot,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

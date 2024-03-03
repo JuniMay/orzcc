@@ -4,7 +4,7 @@ use super::{
     types::Type,
     values::{
         Alloc, Binary, Block, Branch, Call, Cast, GetElemPtr, GlobalSlot, Inst, Jump, Load, Return,
-        Store, Unary, Value,
+        Store, Unary, Value, ReplaceUse
     },
 };
 

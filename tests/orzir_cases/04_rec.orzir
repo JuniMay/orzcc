@@ -1,5 +1,5 @@
-global @global_counter = i32 0x00000010
-const @max_depth = i32 0x00000005
+slot @global_counter = global i32 0x00000010
+slot @max_depth = const i32 0x00000005
 
 func @deep_recursive(i32, i32) -> i32 {
 ^entry(i32 %depth, i32 %value):
