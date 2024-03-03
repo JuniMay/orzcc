@@ -40,3 +40,29 @@ pub enum ExecErr {
     #[error("early stop at {0:?}")]
     EarlyStop(Value),
 }
+
+pub struct ExecVReg {
+    pub width: usize,
+    pub data: Vec<u8>,
+}
+
+impl ExecVReg {
+    pub fn zero(ty: Type) -> Self {
+        let width = ty.bitwidth();
+        let data = vec![0; width as usize];
+        Self { width, data }
+    }
+
+    pub fn from_data(width: usize, data: Vec<u8>) -> Self {
+        Self { width, data }
+    }
+
+    pub fn as_<T>(&self) -> T
+    where
+        T: Sized,
+    {
+        let mut data = self.data.clone();
+        data.resize(std::mem::size_of::<T>(), 0);
+        unsafe { std::ptr::read(data.as_ptr() as *const T) }
+    }
+}

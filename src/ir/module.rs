@@ -441,7 +441,7 @@ where
     /// Allocate a name for the key.
     ///
     /// If the key is already allocated, return [`NameAllocErr`].
-    pub fn allocate(&mut self, key: T) -> Result<(), NameAllocErr> {
+    pub fn allocate(&mut self, key: T) -> Result<String, NameAllocErr> {
         if self.map.contains_fwd(&key) {
             return Err(NameAllocErr::KeyDuplicated);
         }
@@ -451,21 +451,15 @@ where
             if self.map.contains_rev(&name) {
                 self.counter += 1;
             } else {
-                self.map.insert(key, name);
+                self.map.insert(key, name.clone());
                 self.counter += 1;
-                break;
+                return Ok(name);
             }
         }
-
-        Ok(())
     }
 
     /// Manually assign a name for the key.
     pub fn assign(&mut self, key: T, name: String) -> Result<(), NameAllocErr> {
-        if self.map.contains_rev(&name) {
-            return Err(NameAllocErr::NameDuplicated);
-        }
-
         if self.map.contains_fwd(&key) {
             return Err(NameAllocErr::KeyDuplicated);
         }
@@ -476,6 +470,10 @@ where
             format!("{}{}", self.prefix, name)
         };
 
+        if self.map.contains_rev(&name) {
+            return Err(NameAllocErr::NameDuplicated);
+        }
+
         self.map.insert(key, name);
 
         Ok(())
@@ -485,13 +483,10 @@ where
     ///
     /// If the name is not assigned, allocate a new name.
     pub fn get(&mut self, key: T) -> String {
-        let name = self.map.get_fwd(&key).cloned().or_else(|| {
-            self.allocate(key)
-                .expect("allocation should be successful for non-existed key.");
-            self.map.get_fwd(&key).cloned()
-        });
-
-        name.unwrap()
+        self.map
+            .get_fwd(&key)
+            .cloned()
+            .unwrap_or_else(|| self.allocate(key).unwrap())
     }
 
     /// Try to get the name of the key.
