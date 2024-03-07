@@ -16,6 +16,8 @@ use crate::ir::{
     values::{Function, Value},
 };
 
+use super::PassResult;
+
 #[derive(Debug, Error)]
 pub enum DataFlowAnalysisError {}
 
@@ -47,9 +49,8 @@ impl DataFlowAnalysis {
 
 impl LocalPass for DataFlowAnalysis {
     type Ok = DefUseChain;
-    type Err = DataFlowAnalysisError;
 
-    fn run(&mut self, _function: Function, data: &FunctionData) -> Result<Self::Ok, Self::Err> {
+    fn run(&mut self, _function: Function, data: &FunctionData) -> PassResult<Self::Ok> {
         let dfg = data.dfg();
         let mut chain = DefUseChain::new();
         for value in dfg.values().keys() {

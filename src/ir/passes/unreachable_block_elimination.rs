@@ -6,6 +6,7 @@ use thiserror::Error;
 
 use crate::ir::{
     entities::FunctionData,
+    module::Module,
     passes::{LocalPass, LocalPassMut},
     values::{Block, Function},
 };
@@ -13,7 +14,7 @@ use crate::ir::{
 use std::collections::HashSet;
 use std::collections::VecDeque;
 
-use super::control_flow_analysis::ControlFlowAnalysis;
+use super::{control_flow_analysis::ControlFlowAnalysis, GlobalPassMut, PassResult};
 
 pub struct UnreachableBlockElimination {}
 
@@ -22,9 +23,8 @@ pub enum UnreachableBlockEliminationError {}
 
 impl LocalPassMut for UnreachableBlockElimination {
     type Ok = ();
-    type Err = UnreachableBlockEliminationError;
 
-    fn run(&mut self, _function: Function, data: &mut FunctionData) -> Result<Self::Ok, Self::Err> {
+    fn run(&mut self, _function: Function, data: &mut FunctionData) -> PassResult<Self::Ok> {
         let mut cfa = ControlFlowAnalysis {};
         let cfg = cfa.run(_function, data).unwrap();
 
@@ -56,6 +56,31 @@ impl LocalPassMut for UnreachableBlockElimination {
 
         for block in unreachable_blocks {
             data.remove_block(block);
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Default)]
+pub struct GlobalUnreachableBlockElimination;
+
+impl GlobalUnreachableBlockElimination {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl GlobalPassMut for GlobalUnreachableBlockElimination {
+    type Ok = ();
+
+    fn run(&mut self, module: &mut Module) -> PassResult<Self::Ok> {
+        let functions = module.function_layout().to_vec();
+
+        for function in functions {
+            let function_data = module.function_data_mut(function).unwrap();
+            let mut ube = UnreachableBlockElimination {};
+            ube.run(function, function_data).unwrap();
         }
 
         Ok(())

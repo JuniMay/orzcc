@@ -26,8 +26,6 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use thiserror::Error;
-
 use crate::ir::{
     builders::{BuildLocalValue, BuildNonAggregateConstant},
     entities::{FunctionData, ValueKind},
@@ -38,22 +36,11 @@ use crate::ir::{
 };
 
 use super::{
-    control_flow_analysis::{ControlFlowAnalysis, ControlFlowAnalysisError, ControlFlowGraph},
-    data_flow_analysis::{DataFlowAnalysis, DataFlowAnalysisError, DefUseChain},
-    dominance_analysis::{Dominance, DominanceAnalysis, DominanceAnalysisError},
+    control_flow_analysis::{ControlFlowAnalysis, ControlFlowGraph},
+    data_flow_analysis::{DataFlowAnalysis, DefUseChain},
+    dominance_analysis::{Dominance, DominanceAnalysis},
+    GlobalPassMut, PassResult,
 };
-
-#[derive(Debug, Error)]
-pub enum Mem2regError {
-    #[error(transparent)]
-    DominanceAnalysisError(#[from] DominanceAnalysisError),
-
-    #[error(transparent)]
-    ControlFlowAnalysisError(#[from] ControlFlowAnalysisError),
-
-    #[error(transparent)]
-    DataFlowAnalysisError(#[from] DataFlowAnalysisError),
-}
 
 pub struct Mem2reg {
     /// Variable set.
@@ -261,9 +248,8 @@ impl Mem2reg {
 
 impl LocalPassMut for Mem2reg {
     type Ok = ();
-    type Err = Mem2regError;
 
-    fn run(&mut self, function: Function, data: &mut FunctionData) -> Result<Self::Ok, Self::Err> {
+    fn run(&mut self, function: Function, data: &mut FunctionData) -> PassResult<Self::Ok> {
         // prepare the information
         self.prepare(function, data);
 
@@ -340,6 +326,31 @@ impl LocalPassMut for Mem2reg {
 
         for variable in self.variables.iter() {
             data.remove_inst((*variable).into());
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Default)]
+pub struct GlobalMem2reg;
+
+impl GlobalMem2reg {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl GlobalPassMut for GlobalMem2reg {
+    type Ok = ();
+
+    fn run(&mut self, module: &mut crate::ir::module::Module) -> PassResult<Self::Ok> {
+        let functions = module.function_layout().to_vec();
+
+        for function in functions {
+            let function_data = module.function_data_mut(function).unwrap();
+            let mut mem2reg = Mem2reg::new();
+            mem2reg.run(function, function_data).unwrap();
         }
 
         Ok(())

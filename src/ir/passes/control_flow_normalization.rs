@@ -17,6 +17,8 @@ use crate::ir::{
     values::{Block, Function},
 };
 
+use super::{GlobalPassMut, PassError, PassResult};
+
 pub struct ControlFlowNormalization {}
 
 #[derive(Error, Debug)]
@@ -28,11 +30,16 @@ pub enum ControlFlowNormalizationError {
     NextBlockNotFound(Block),
 }
 
+impl From<ControlFlowNormalizationError> for PassError {
+    fn from(err: ControlFlowNormalizationError) -> Self {
+        PassError::preparation_error("control-flow-normalization".to_string(), Box::new(err))
+    }
+}
+
 impl LocalPassMut for ControlFlowNormalization {
     type Ok = ();
-    type Err = ControlFlowNormalizationError;
 
-    fn run(&mut self, _function: Function, data: &mut FunctionData) -> Result<Self::Ok, Self::Err> {
+    fn run(&mut self, _function: Function, data: &mut FunctionData) -> PassResult<Self::Ok> {
         let mut insts_to_remove = Vec::new();
         let mut blocks_to_add_jump = Vec::new();
 
@@ -59,7 +66,7 @@ impl LocalPassMut for ControlFlowNormalization {
                 let next_block_data = dfg.block_data(next_block).unwrap();
                 if !next_block_data.params().is_empty() {
                     // there are params in the next block, a jump cannot be added
-                    return Err(ControlFlowNormalizationError::InvalidBlockParameters(block));
+                    return Err(ControlFlowNormalizationError::InvalidBlockParameters(block).into());
                 }
                 blocks_to_add_jump.push((block, next_block));
             }
@@ -72,6 +79,30 @@ impl LocalPassMut for ControlFlowNormalization {
         for (block, next_block) in blocks_to_add_jump {
             let jump = data.dfg_mut().builder().jump(next_block, vec![]).unwrap();
             data.layout_mut().append_inst(jump.into(), block).unwrap();
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Default)]
+pub struct GlobalControlFlowNormalization;
+
+impl GlobalControlFlowNormalization {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl GlobalPassMut for GlobalControlFlowNormalization {
+    type Ok = ();
+
+    fn run(&mut self, module: &mut crate::ir::module::Module) -> PassResult<Self::Ok> {
+        let functions = module.function_layout().to_vec();
+        for function in functions {
+            let function_data = module.function_data_mut(function).unwrap();
+            let mut pass = ControlFlowNormalization {};
+            pass.run(function, function_data)?;
         }
 
         Ok(())

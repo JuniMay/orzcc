@@ -13,6 +13,8 @@ use crate::ir::{
     values::{Block, Function},
 };
 
+use super::{PassError, PassResult};
+
 #[derive(Debug, Clone, Default)]
 pub struct ControlFlowGraph {
     preds: HashMap<Block, Vec<Block>>,
@@ -41,11 +43,16 @@ pub enum ControlFlowAnalysisError {
     UnexpectedBlockTermination(Block),
 }
 
+impl From<ControlFlowAnalysisError> for PassError {
+    fn from(err: ControlFlowAnalysisError) -> Self {
+        PassError::analysis_error("control-flow-analysis".to_string(), Box::new(err))
+    }
+}
+
 impl LocalPass for ControlFlowAnalysis {
     type Ok = ControlFlowGraph;
-    type Err = ControlFlowAnalysisError;
 
-    fn run(&mut self, _function: Function, data: &FunctionData) -> Result<Self::Ok, Self::Err> {
+    fn run(&mut self, _function: Function, data: &FunctionData) -> PassResult<Self::Ok> {
         let mut cfg = ControlFlowGraph::new();
 
         let layout = data.layout();
@@ -71,7 +78,7 @@ impl LocalPass for ControlFlowAnalysis {
                 }
                 ValueKind::Return(_) => {}
                 _ => {
-                    return Err(ControlFlowAnalysisError::UnexpectedBlockTermination(block));
+                    return Err(ControlFlowAnalysisError::UnexpectedBlockTermination(block).into());
                 }
             }
             cfg.succs.insert(block, succ);

@@ -3,8 +3,8 @@ use super::{
     module::DataFlowGraph,
     types::Type,
     values::{
-        Alloc, Binary, Block, Branch, Call, Cast, GetElemPtr, GlobalSlot, Inst, Jump, Load, Return,
-        Store, Unary, Value, ReplaceUse
+        Alloc, Binary, Block, Branch, Call, Cast, GetElemPtr, GlobalSlot, Inst, Jump, Load,
+        ReplaceUse, Return, Store, Unary, Value,
     },
 };
 
