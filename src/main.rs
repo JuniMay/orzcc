@@ -8,45 +8,128 @@ use orzcc::{
             parser::{ParseError, Parser},
         },
         module::Module,
+        passes::{
+            control_flow_canonicalization::ControlFlowCanonicalization, mem2reg::Mem2reg,
+            printer::Printer, unreachable_block_elimination::UnreachableBlockElimination,
+            GlobalPass, PassManager,
+        },
     },
 };
+
+enum CliCommand {
+    Dbg(DbgCommand),
+    Opt(OptCommand),
+}
 
 /// The debugger command
 struct DbgCommand {
     file: String,
 }
 
+struct OptCommand {
+    file: String,
+    passes: Vec<String>,
+}
+
 fn main() {
+    register_passes();
     let cmd = parse_args();
-    let module = parse_orzir(&cmd.file);
-    if module.is_none() {
-        return;
+    match cmd {
+        CliCommand::Dbg(cmd) => {
+            let module = parse_orzir(&cmd.file);
+            if module.is_none() {
+                return;
+            }
+            let module = module.unwrap();
+            let mut debugger = Debugger::new(&module);
+            debugger.repl();
+        }
+        CliCommand::Opt(cmd) => {
+            let module = parse_orzir(&cmd.file);
+            if module.is_none() {
+                return;
+            }
+            let mut module = module.unwrap();
+            for pass in cmd.passes {
+                PassManager::run_transformation(&pass, &mut module, 32);
+            }
+            let mut buf = std::io::BufWriter::new(Vec::new());
+            let mut printer = Printer::new(&mut buf);
+            printer.run_on_module(&module).unwrap();
+            let s = String::from_utf8(buf.into_inner().unwrap()).unwrap();
+            println!("{}", s);
+        }
     }
-    let module = module.unwrap();
-    let mut debugger = Debugger::new(&module);
-    debugger.repl();
+}
+
+fn register_passes() {
+    Mem2reg::register();
+    ControlFlowCanonicalization::register();
+    UnreachableBlockElimination::register();
 }
 
 fn cli() -> Command {
-    Command::new("orzcc").subcommand(
-        Command::new("dbg").about("Debug the given IR file").arg(
-            Arg::new("file")
-                .short('f')
-                .long("file")
-                .required(true)
-                .help("The IR file to debug"),
-        ),
-    )
+    Command::new("orzcc")
+        .subcommand(
+            Command::new("dbg").about("Debug the given IR file").arg(
+                Arg::new("file")
+                    .short('f')
+                    .long("file")
+                    .required(true)
+                    .help("The IR file to debug"),
+            ),
+        )
+        .subcommand(
+            Command::new("opt")
+                .about("Optimize the IR")
+                .arg(
+                    Arg::new("file")
+                        .short('f')
+                        .long("file")
+                        .required(true)
+                        .help("The IR file to optimize"),
+                )
+                .args(PassManager::get_cli_args()),
+        )
 }
 
-fn parse_args() -> DbgCommand {
+fn parse_args() -> CliCommand {
     let matches = cli().get_matches();
     match matches.subcommand() {
         Some(("dbg", args)) => {
             let file = args.get_one::<String>("file").unwrap().clone();
-            DbgCommand { file }
+            CliCommand::Dbg(DbgCommand { file })
         }
-        _ => panic!("invalid subcommand"),
+        Some(("opt", args)) => {
+            let file = args
+                .get_one::<String>("file")
+                .unwrap_or_else(|| {
+                    cli().print_help().unwrap();
+                    std::process::exit(1);
+                })
+                .clone();
+            let transformation_names = PassManager::get_transformation_names();
+            let parameter_names = PassManager::get_parameter_names();
+
+            for parameter_name in parameter_names {
+                let param = args.get_one::<String>(&parameter_name);
+                PassManager::set_parameter(&parameter_name, param.unwrap().clone());
+            }
+
+            let mut passes = Vec::new();
+
+            for transformation_name in transformation_names {
+                if args.get_count(&transformation_name) > 0 {
+                    passes.push(transformation_name);
+                }
+            }
+
+            CliCommand::Opt(OptCommand { file, passes })
+        }
+        _ => {
+            cli().print_help().unwrap();
+            std::process::exit(1);
+        }
     }
 }
 

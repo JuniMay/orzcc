@@ -7,7 +7,7 @@ use std::io::{BufWriter, Cursor};
 fn print(module: &orzcc::ir::module::Module) {
     let mut buf = BufWriter::new(Vec::new());
     let mut printer = Printer::new(&mut buf);
-    printer.run(module).unwrap();
+    printer.run_on_module(module).unwrap();
     let s = String::from_utf8(buf.into_inner().unwrap()).unwrap();
     println!("{}", s);
 }

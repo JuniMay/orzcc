@@ -8,11 +8,19 @@ use crate::ir::{
 
 use std::io;
 
+use super::{PassError, PassResult};
+
 pub struct Printer<'a, T>
 where
     T: io::Write,
 {
     buf: &'a mut T,
+}
+
+impl From<io::Error> for PassError {
+    fn from(err: io::Error) -> Self {
+        PassError::other("printer".to_string(), Box::new(err))
+    }
 }
 
 impl<'a, T> Printer<'a, T>
@@ -114,9 +122,8 @@ where
     T: io::Write,
 {
     type Ok = ();
-    type Err = io::Error;
 
-    fn run(&mut self, module: &Module) -> Result<Self::Ok, Self::Err> {
+    fn run_on_module(&mut self, module: &Module) -> PassResult<Self::Ok> {
         self.print_module(module)?;
         Ok(())
     }

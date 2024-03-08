@@ -17,10 +17,14 @@ use crate::ir::{
     values::{Block, Function},
 };
 
-pub struct ControlFlowNormalization {}
+use super::{GlobalPassMut, PassError, PassManager, PassResult, TransformationPass};
+
+const CONTROL_FLOW_CANONICALIZATION: &str = "control-flow-canonicalization";
+
+pub struct ControlFlowCanonicalization {}
 
 #[derive(Error, Debug)]
-pub enum ControlFlowNormalizationError {
+pub enum ControlFlowCanonicalizationError {
     #[error("block parameters exist in the next block, a jump cannot be added. block: {0:?}")]
     InvalidBlockParameters(Block),
 
@@ -28,16 +32,27 @@ pub enum ControlFlowNormalizationError {
     NextBlockNotFound(Block),
 }
 
-impl LocalPassMut for ControlFlowNormalization {
-    type Ok = ();
-    type Err = ControlFlowNormalizationError;
+impl From<ControlFlowCanonicalizationError> for PassError {
+    fn from(err: ControlFlowCanonicalizationError) -> Self {
+        PassError::preparation_error(CONTROL_FLOW_CANONICALIZATION.to_string(), Box::new(err))
+    }
+}
 
-    fn run(&mut self, _function: Function, data: &mut FunctionData) -> Result<Self::Ok, Self::Err> {
+impl LocalPassMut for ControlFlowCanonicalization {
+    type Ok = ();
+
+    fn run_on_function(
+        &mut self,
+        _function: Function,
+        data: &mut FunctionData,
+    ) -> PassResult<(Self::Ok, bool)> {
         let mut insts_to_remove = Vec::new();
         let mut blocks_to_add_jump = Vec::new();
 
         let dfg = data.dfg();
         let layout = data.layout();
+
+        let mut changed = false;
 
         for (block, block_node) in layout.blocks() {
             let mut has_terminator = false;
@@ -55,11 +70,13 @@ impl LocalPassMut for ControlFlowNormalization {
             if !has_terminator {
                 let next_block = layout
                     .next_block(block)
-                    .ok_or(ControlFlowNormalizationError::NextBlockNotFound(block))?;
+                    .ok_or(ControlFlowCanonicalizationError::NextBlockNotFound(block))?;
                 let next_block_data = dfg.block_data(next_block).unwrap();
                 if !next_block_data.params().is_empty() {
                     // there are params in the next block, a jump cannot be added
-                    return Err(ControlFlowNormalizationError::InvalidBlockParameters(block));
+                    return Err(
+                        ControlFlowCanonicalizationError::InvalidBlockParameters(block).into(),
+                    );
                 }
                 blocks_to_add_jump.push((block, next_block));
             }
@@ -67,25 +84,59 @@ impl LocalPassMut for ControlFlowNormalization {
 
         for inst in insts_to_remove {
             data.remove_inst(inst);
+            changed = true;
         }
 
         for (block, next_block) in blocks_to_add_jump {
             let jump = data.dfg_mut().builder().jump(next_block, vec![]).unwrap();
             data.layout_mut().append_inst(jump.into(), block).unwrap();
+            changed = true;
         }
 
-        Ok(())
+        Ok(((), changed))
     }
+}
+
+impl GlobalPassMut for ControlFlowCanonicalization {
+    type Ok = ();
+
+    fn run_on_module(
+        &mut self,
+        module: &mut crate::ir::module::Module,
+    ) -> PassResult<(Self::Ok, bool)> {
+        let functions = module.function_layout().to_vec();
+        let mut changed = false;
+        for function in functions {
+            let function_data = module.function_data_mut(function).unwrap();
+            let (_, local_changed) = self.run_on_function(function, function_data)?;
+            changed = changed || local_changed;
+        }
+
+        Ok(((), changed))
+    }
+}
+
+impl ControlFlowCanonicalization {
+    pub fn register() {
+        let pass = Box::new(ControlFlowCanonicalization {});
+        PassManager::register_transformation(CONTROL_FLOW_CANONICALIZATION, pass, Vec::new());
+    }
+}
+
+impl TransformationPass for ControlFlowCanonicalization {
+    fn reset(&mut self) {}
 }
 
 #[cfg(test)]
 mod test {
-    use super::ControlFlowNormalization;
+    use super::ControlFlowCanonicalization;
     use crate::ir::{
         frontend::parser::Parser,
         module::Module,
-        passes::printer::Printer,
-        passes::{GlobalPass, LocalPassMut},
+        passes::{
+            control_flow_canonicalization::CONTROL_FLOW_CANONICALIZATION, printer::Printer,
+            GlobalPass, PassManager,
+        },
     };
     use std::io::{BufWriter, Cursor};
 
@@ -120,13 +171,13 @@ mod test {
     fn print(module: &Module) {
         let mut buf = BufWriter::new(Vec::new());
         let mut printer = Printer::new(&mut buf);
-        printer.run(module).unwrap();
+        printer.run_on_module(module).unwrap();
         let s = String::from_utf8(buf.into_inner().unwrap()).unwrap();
         println!("{}", s);
     }
 
     #[test]
-    fn test_normalization() {
+    fn test_canonicalization() {
         let ir = r#"
             func @test_func() -> void {
             ^entry:
@@ -148,13 +199,11 @@ mod test {
         let mut parser = Parser::new(&mut buf);
         let mut module = parser.parse().unwrap().into_ir("test".into()).unwrap();
 
-        let mut pass = ControlFlowNormalization {};
+        ControlFlowCanonicalization::register();
+        let iter =
+            PassManager::run_transformation(CONTROL_FLOW_CANONICALIZATION, &mut module, 1234);
 
-        let function = module.get_value_by_name("@test_func").unwrap();
-        let function_data = module.function_data_mut(function.into()).unwrap();
-
-        pass.run(function.into(), function_data).unwrap();
-
+        assert_eq!(iter, 2);
         assert!(verify(&module, "@test_func"));
 
         print(&module);

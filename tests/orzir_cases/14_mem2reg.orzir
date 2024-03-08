@@ -1,0 +1,22 @@
+func @test_mem2reg() -> i32 {
+^entry(i32 %arg0):
+    %0 = alloc i32
+    %1 = alloc float
+    %3 = alloc [i16; 10]
+    %4 = alloc i32
+
+    %cond = icmp.slt i32 0, i32 %arg0
+    br i1 %cond, ^positive, ^negative
+    
+^positive:
+    store i32 1, %0
+    jump ^ret
+
+^negative:
+    store i32 0xffffffff, %0
+    jump ^ret
+
+^ret:
+    %ret_val = load i32, %0
+    ret i32 %ret_val
+}

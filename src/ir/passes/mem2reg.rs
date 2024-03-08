@@ -26,8 +26,6 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use thiserror::Error;
-
 use crate::ir::{
     builders::{BuildLocalValue, BuildNonAggregateConstant},
     entities::{FunctionData, ValueKind},
@@ -38,22 +36,14 @@ use crate::ir::{
 };
 
 use super::{
-    control_flow_analysis::{ControlFlowAnalysis, ControlFlowAnalysisError, ControlFlowGraph},
-    data_flow_analysis::{DataFlowAnalysis, DataFlowAnalysisError, DefUseChain},
-    dominance_analysis::{Dominance, DominanceAnalysis, DominanceAnalysisError},
+    control_flow_analysis::{ControlFlowAnalysis, ControlFlowGraph},
+    control_flow_canonicalization::ControlFlowCanonicalization,
+    data_flow_analysis::{DataFlowAnalysis, DefUseChain},
+    dominance_analysis::{Dominance, DominanceAnalysis},
+    GlobalPassMut, PassManager, PassResult, TransformationPass,
 };
 
-#[derive(Debug, Error)]
-pub enum Mem2regError {
-    #[error(transparent)]
-    DominanceAnalysisError(#[from] DominanceAnalysisError),
-
-    #[error(transparent)]
-    ControlFlowAnalysisError(#[from] ControlFlowAnalysisError),
-
-    #[error(transparent)]
-    DataFlowAnalysisError(#[from] DataFlowAnalysisError),
-}
+const MEM2REG: &str = "mem2reg";
 
 pub struct Mem2reg {
     /// Variable set.
@@ -111,15 +101,23 @@ impl Mem2reg {
         }
     }
 
+    pub fn register() {
+        let pass = Box::new(Mem2reg::new());
+        let canonic = Box::new(ControlFlowCanonicalization {});
+        PassManager::register_transformation(MEM2REG, pass, vec![canonic]);
+    }
+
     fn prepare(&mut self, function: Function, data: &FunctionData) {
         let mut dominance_analysis = DominanceAnalysis::new();
-        self.dominance = dominance_analysis.run(function, data).unwrap();
+        self.dominance = dominance_analysis.run_on_function(function, data).unwrap();
 
         let mut control_flow_analysis = ControlFlowAnalysis {};
-        self.cfg = control_flow_analysis.run(function, data).unwrap();
+        self.cfg = control_flow_analysis
+            .run_on_function(function, data)
+            .unwrap();
 
         let mut data_flow_analysis = DataFlowAnalysis {};
-        self.chain = data_flow_analysis.run(function, data).unwrap();
+        self.chain = data_flow_analysis.run_on_function(function, data).unwrap();
     }
 
     fn promotable(&self, value: Value, dfg: &DataFlowGraph) -> Option<Type> {
@@ -162,7 +160,9 @@ impl Mem2reg {
         }
     }
 
-    fn rename(&mut self, block: Block, data: &mut FunctionData) {
+    fn rename(&mut self, block: Block, data: &mut FunctionData) -> bool {
+        let mut changed = false;
+
         let node = data.layout().blocks().node(block).unwrap();
 
         let block_data = data.dfg().block_data(block).unwrap();
@@ -244,11 +244,13 @@ impl Mem2reg {
         // replace the uses
         for (use_, (old, new)) in insts_to_replace_use {
             data.dfg_mut().replace_use(use_, old, new);
+            changed = true;
         }
 
         // remove the insts
         for inst in insts_to_remove {
             data.remove_inst(inst.into());
+            changed = true;
         }
 
         // dfs dometree
@@ -256,18 +258,25 @@ impl Mem2reg {
         for child in children {
             self.rename(child, data);
         }
+
+        changed
     }
 }
 
 impl LocalPassMut for Mem2reg {
     type Ok = ();
-    type Err = Mem2regError;
 
-    fn run(&mut self, function: Function, data: &mut FunctionData) -> Result<Self::Ok, Self::Err> {
+    fn run_on_function(
+        &mut self,
+        function: Function,
+        data: &mut FunctionData,
+    ) -> PassResult<(Self::Ok, bool)> {
         // prepare the information
         self.prepare(function, data);
 
         let dfg = data.dfg();
+
+        let mut changed = false;
 
         // initialize the promotable variables
         for value in dfg.values().keys() {
@@ -336,13 +345,48 @@ impl LocalPassMut for Mem2reg {
 
         // rename the variables
         let entry_block = data.layout().entry_block().unwrap();
-        self.rename(entry_block, data);
+        changed = changed || self.rename(entry_block, data);
 
         for variable in self.variables.iter() {
             data.remove_inst((*variable).into());
+            changed = true;
         }
 
-        Ok(())
+        Ok(((), changed))
+    }
+}
+
+impl TransformationPass for Mem2reg {
+    fn reset(&mut self) {
+        self.variables.clear();
+        self.def_blocks.clear();
+        self.worklists.clear();
+        self.incomings.clear();
+        self.inserted.clear();
+        self.block_params.clear();
+        self.dominance = Dominance::new();
+        self.cfg = ControlFlowGraph::new();
+        self.chain = DefUseChain::new();
+        self.alloc_types.clear();
+    }
+}
+
+impl GlobalPassMut for Mem2reg {
+    type Ok = ();
+
+    fn run_on_module(
+        &mut self,
+        module: &mut crate::ir::module::Module,
+    ) -> PassResult<(Self::Ok, bool)> {
+        let functions = module.function_layout().to_vec();
+        let mut changed = false;
+        for function in functions {
+            let function_data = module.function_data_mut(function).unwrap();
+            let (_, local_changed) = self.run_on_function(function, function_data).unwrap();
+            changed = changed || local_changed;
+        }
+
+        Ok(((), changed))
     }
 }
 
@@ -353,16 +397,15 @@ mod test {
     use crate::ir::{
         frontend::parser::Parser,
         module::Module,
-        passes::printer::Printer,
-        passes::{GlobalPass, LocalPassMut},
+        passes::{printer::Printer, GlobalPass, PassManager},
     };
 
-    use super::Mem2reg;
+    use super::{Mem2reg, MEM2REG};
 
     fn print(module: &Module) {
         let mut buf = BufWriter::new(Vec::new());
         let mut printer = Printer::new(&mut buf);
-        printer.run(module).unwrap();
+        printer.run_on_module(module).unwrap();
         let s = String::from_utf8(buf.into_inner().unwrap()).unwrap();
         println!("{}", s);
     }
@@ -398,13 +441,10 @@ mod test {
         let mut parser = Parser::new(&mut buf);
         let mut module = parser.parse().unwrap().into_ir("test".into()).unwrap();
 
-        let function = module.get_value_by_name("@test_mem2reg").unwrap();
-        let function_data = module.function_data_mut(function.into()).unwrap();
+        Mem2reg::register();
+        let iter = PassManager::run_transformation(MEM2REG, &mut module, 1234);
 
-        let mut pass = Mem2reg::new();
-
-        pass.run(function.into(), function_data).unwrap();
-
+        assert_eq!(iter, 2);
         print(&module);
     }
 }

@@ -5,18 +5,15 @@
 //! This implements the algorithm described in "A Simple, Fast Dominance Algorithm" by Cooper et al.
 //!
 
-use std::collections::{HashMap, HashSet};
-
-use thiserror::Error;
-
 use crate::ir::{
     entities::FunctionData,
     passes::control_flow_analysis::ControlFlowAnalysis,
     passes::LocalPass,
     values::{Block, Function},
 };
+use std::collections::{HashMap, HashSet};
 
-use super::control_flow_analysis::{ControlFlowAnalysisError, ControlFlowGraph};
+use super::{control_flow_analysis::ControlFlowGraph, PassResult};
 
 /// The result of the dominance analysis pass.
 pub struct Dominance {
@@ -42,12 +39,6 @@ impl Dominance {
             domtree: HashMap::new(),
         }
     }
-}
-
-#[derive(Debug, Error)]
-pub enum DominanceAnalysisError {
-    #[error(transparent)]
-    ControlFlowAnalysisError(#[from] ControlFlowAnalysisError),
 }
 
 pub struct DominanceAnalysis {
@@ -116,11 +107,10 @@ impl DominanceAnalysis {
 
 impl LocalPass for DominanceAnalysis {
     type Ok = Dominance;
-    type Err = DominanceAnalysisError;
 
-    fn run(&mut self, function: Function, data: &FunctionData) -> Result<Self::Ok, Self::Err> {
+    fn run_on_function(&mut self, function: Function, data: &FunctionData) -> PassResult<Self::Ok> {
         let mut cfa = ControlFlowAnalysis {};
-        let cfg = cfa.run(function, data)?;
+        let cfg = cfa.run_on_function(function, data)?;
         self.prepare(&cfg, data);
 
         let mut idoms = HashMap::new();
@@ -240,7 +230,7 @@ mod test {
         let mut dominance_analysis = DominanceAnalysis::new();
 
         let dominance = dominance_analysis
-            .run(function.into(), function_data)
+            .run_on_function(function.into(), function_data)
             .unwrap();
 
         let idoms = dominance.idoms;
