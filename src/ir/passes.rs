@@ -1,11 +1,9 @@
+use super::{entities::FunctionData, module::Module, values::Function};
 use std::error::Error;
-
 use thiserror::Error;
 
-use super::{entities::FunctionData, module::Module, values::Function};
-
 pub mod control_flow_analysis;
-pub mod control_flow_normalization;
+pub mod control_flow_canonicalization;
 pub mod data_flow_analysis;
 pub mod dominance_analysis;
 pub mod mem2reg;
@@ -15,25 +13,31 @@ pub mod unreachable_block_elimination;
 pub trait GlobalPass {
     type Ok;
 
-    fn run(&mut self, module: &Module) -> PassResult<Self::Ok>;
+    fn run_on_module(&mut self, module: &Module) -> PassResult<Self::Ok>;
 }
 
 pub trait LocalPass {
     type Ok;
 
-    fn run(&mut self, function: Function, data: &FunctionData) -> PassResult<Self::Ok>;
+    fn run_on_function(&mut self, function: Function, data: &FunctionData) -> PassResult<Self::Ok>;
 }
 
 pub trait LocalPassMut {
     type Ok;
 
-    fn run(&mut self, function: Function, data: &mut FunctionData) -> PassResult<Self::Ok>;
+    /// Run the pass on function, return the payload and whether the program has changed.
+    fn run_on_function(
+        &mut self,
+        function: Function,
+        data: &mut FunctionData,
+    ) -> PassResult<(Self::Ok, bool)>;
 }
 
 pub trait GlobalPassMut {
     type Ok;
 
-    fn run(&mut self, module: &mut Module) -> PassResult<Self::Ok>;
+    /// Run the pass on module, return the payload and whether the program has changed.
+    fn run_on_module(&mut self, module: &mut Module) -> PassResult<(Self::Ok, bool)>;
 }
 
 #[derive(Debug, Error)]

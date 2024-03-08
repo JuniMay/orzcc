@@ -19,7 +19,7 @@ use crate::ir::{
 
 use super::{GlobalPassMut, PassError, PassResult};
 
-pub struct ControlFlowNormalization {}
+pub struct ControlFlowCanonicalization {}
 
 #[derive(Error, Debug)]
 pub enum ControlFlowNormalizationError {
@@ -36,15 +36,21 @@ impl From<ControlFlowNormalizationError> for PassError {
     }
 }
 
-impl LocalPassMut for ControlFlowNormalization {
+impl LocalPassMut for ControlFlowCanonicalization {
     type Ok = ();
 
-    fn run(&mut self, _function: Function, data: &mut FunctionData) -> PassResult<Self::Ok> {
+    fn run_on_function(
+        &mut self,
+        _function: Function,
+        data: &mut FunctionData,
+    ) -> PassResult<(Self::Ok, bool)> {
         let mut insts_to_remove = Vec::new();
         let mut blocks_to_add_jump = Vec::new();
 
         let dfg = data.dfg();
         let layout = data.layout();
+
+        let mut changed = false;
 
         for (block, block_node) in layout.blocks() {
             let mut has_terminator = false;
@@ -74,44 +80,38 @@ impl LocalPassMut for ControlFlowNormalization {
 
         for inst in insts_to_remove {
             data.remove_inst(inst);
+            changed = true;
         }
 
         for (block, next_block) in blocks_to_add_jump {
             let jump = data.dfg_mut().builder().jump(next_block, vec![]).unwrap();
             data.layout_mut().append_inst(jump.into(), block).unwrap();
+            changed = true;
         }
 
-        Ok(())
+        Ok(((), changed))
     }
 }
 
-#[derive(Default)]
-pub struct GlobalControlFlowNormalization;
-
-impl GlobalControlFlowNormalization {
-    pub fn new() -> Self {
-        Self::default()
-    }
-}
-
-impl GlobalPassMut for GlobalControlFlowNormalization {
+impl GlobalPassMut for ControlFlowCanonicalization {
     type Ok = ();
 
-    fn run(&mut self, module: &mut crate::ir::module::Module) -> PassResult<Self::Ok> {
+    fn run_on_module(&mut self, module: &mut crate::ir::module::Module) -> PassResult<(Self::Ok, bool)> {
         let functions = module.function_layout().to_vec();
+        let mut changed = false;
         for function in functions {
             let function_data = module.function_data_mut(function).unwrap();
-            let mut pass = ControlFlowNormalization {};
-            pass.run(function, function_data)?;
+            let (_, local_changed) = self.run_on_function(function, function_data)?;
+            changed = changed || local_changed;
         }
 
-        Ok(())
+        Ok(((), changed))
     }
 }
 
 #[cfg(test)]
 mod test {
-    use super::ControlFlowNormalization;
+    use super::ControlFlowCanonicalization;
     use crate::ir::{
         frontend::parser::Parser,
         module::Module,
@@ -151,7 +151,7 @@ mod test {
     fn print(module: &Module) {
         let mut buf = BufWriter::new(Vec::new());
         let mut printer = Printer::new(&mut buf);
-        printer.run(module).unwrap();
+        printer.run_on_module(module).unwrap();
         let s = String::from_utf8(buf.into_inner().unwrap()).unwrap();
         println!("{}", s);
     }
@@ -179,14 +179,16 @@ mod test {
         let mut parser = Parser::new(&mut buf);
         let mut module = parser.parse().unwrap().into_ir("test".into()).unwrap();
 
-        let mut pass = ControlFlowNormalization {};
+        let mut pass = ControlFlowCanonicalization {};
 
         let function = module.get_value_by_name("@test_func").unwrap();
         let function_data = module.function_data_mut(function.into()).unwrap();
 
-        pass.run(function.into(), function_data).unwrap();
+        let (_, changed) = pass.run_on_function(function.into(), function_data)
+            .unwrap();
 
         assert!(verify(&module, "@test_func"));
+        assert!(changed);
 
         print(&module);
     }

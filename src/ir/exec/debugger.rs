@@ -29,7 +29,7 @@ use crate::ir::{
 };
 
 use super::vm::{Addr, ExecResult, VirtualMachine};
-use super::ExecErr;
+use super::ExecError;
 
 pub struct Debugger<'a> {
     vm: VirtualMachine<'a>,
@@ -204,7 +204,7 @@ impl<'a> Debugger<'a> {
             let function_data = self
                 .module
                 .function_data(*function)
-                .ok_or_else(|| ExecErr::FunctionNotFound((*function).into()))?;
+                .ok_or_else(|| ExecError::FunctionNotFound((*function).into()))?;
             let function_name = self.module.value_name((*function).into());
 
             let dfg = function_data.dfg();
@@ -292,7 +292,7 @@ impl<'a> Debugger<'a> {
         let function_data = self
             .module
             .function_data(function)
-            .ok_or_else(|| ExecErr::FunctionNotFound(function.into()))?;
+            .ok_or_else(|| ExecError::FunctionNotFound(function.into()))?;
         let function_name = self.module.value_name(function.into());
 
         let dfg = function_data.dfg();

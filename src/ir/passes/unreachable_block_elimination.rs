@@ -24,9 +24,13 @@ pub enum UnreachableBlockEliminationError {}
 impl LocalPassMut for UnreachableBlockElimination {
     type Ok = ();
 
-    fn run(&mut self, _function: Function, data: &mut FunctionData) -> PassResult<Self::Ok> {
+    fn run_on_function(
+        &mut self,
+        _function: Function,
+        data: &mut FunctionData,
+    ) -> PassResult<(Self::Ok, bool)> {
         let mut cfa = ControlFlowAnalysis {};
-        let cfg = cfa.run(_function, data).unwrap();
+        let cfg = cfa.run_on_function(_function, data).unwrap();
 
         let mut reachable_blocks: HashSet<Block> = HashSet::new();
         let mut queue: VecDeque<Block> = VecDeque::new();
@@ -35,6 +39,8 @@ impl LocalPassMut for UnreachableBlockElimination {
 
         queue.push_back(entry_block);
         reachable_blocks.insert(entry_block);
+
+        let mut changed = false;
 
         while let Some(block) = queue.pop_front() {
             if let Some(succs) = cfg.succs(&block) {
@@ -56,34 +62,26 @@ impl LocalPassMut for UnreachableBlockElimination {
 
         for block in unreachable_blocks {
             data.remove_block(block);
+            changed = true;
         }
 
-        Ok(())
+        Ok(((), changed))
     }
 }
 
-#[derive(Default)]
-pub struct GlobalUnreachableBlockElimination;
-
-impl GlobalUnreachableBlockElimination {
-    pub fn new() -> Self {
-        Self::default()
-    }
-}
-
-impl GlobalPassMut for GlobalUnreachableBlockElimination {
+impl GlobalPassMut for UnreachableBlockElimination {
     type Ok = ();
 
-    fn run(&mut self, module: &mut Module) -> PassResult<Self::Ok> {
+    fn run_on_module(&mut self, module: &mut Module) -> PassResult<(Self::Ok, bool)> {
         let functions = module.function_layout().to_vec();
-
+        let mut changed = false;
         for function in functions {
             let function_data = module.function_data_mut(function).unwrap();
-            let mut ube = UnreachableBlockElimination {};
-            ube.run(function, function_data).unwrap();
+            let (_, local_changed) = self.run_on_function(function, function_data).unwrap();
+            changed = changed || local_changed;
         }
 
-        Ok(())
+        Ok(((), changed))
     }
 }
 
@@ -94,7 +92,7 @@ mod test {
     use crate::ir::{
         frontend::parser::Parser,
         module::Module,
-        passes::{control_flow_normalization::ControlFlowNormalization, printer::Printer},
+        passes::{control_flow_canonicalization::ControlFlowCanonicalization, printer::Printer},
         passes::{GlobalPass, LocalPassMut},
     };
 
@@ -103,7 +101,7 @@ mod test {
     fn print(module: &Module) {
         let mut buf = BufWriter::new(Vec::new());
         let mut printer = Printer::new(&mut buf);
-        printer.run(module).unwrap();
+        printer.run_on_module(module).unwrap();
         let s = String::from_utf8(buf.into_inner().unwrap()).unwrap();
         println!("{}", s);
     }
@@ -119,7 +117,7 @@ mod test {
                 
                 ^unreachable_block:
                     %2 = add i32 1, i32 2
-                    # need normalization to remove this block
+                    # need canonicalization to remove this block
 
                 ^positive:
                     jump ^negative(i32 1)
@@ -132,14 +130,16 @@ mod test {
         let mut buf = Cursor::new(ir);
         let mut parser = Parser::new(&mut buf);
         let mut module = parser.parse().unwrap().into_ir("test".into()).unwrap();
-        let mut normalization = ControlFlowNormalization {};
+        let mut canonicalization = ControlFlowCanonicalization {};
         let mut ube = UnreachableBlockElimination {};
 
         let function = module.get_value_by_name("@check_positive").unwrap();
         let function_data = module.function_data_mut(function.into()).unwrap();
 
-        normalization.run(function.into(), function_data).unwrap();
-        ube.run(function.into(), function_data).unwrap();
+        canonicalization.run_on_function(function.into(), function_data).unwrap();
+        let (_, changed) = ube.run_on_function(function.into(), function_data).unwrap();
+
+        assert!(changed);
 
         print(&module);
     }
@@ -166,15 +166,15 @@ mod test {
         let mut buf = Cursor::new(ir);
         let mut parser = Parser::new(&mut buf);
         let mut module = parser.parse().unwrap().into_ir("test".into()).unwrap();
-        let mut normalization = ControlFlowNormalization {};
+        let mut canonicalization = ControlFlowCanonicalization {};
         let mut ube = UnreachableBlockElimination {};
 
         let function = module.get_value_by_name("@test_func").unwrap();
         let function_data = module.function_data_mut(function.into()).unwrap();
 
-        normalization.run(function.into(), function_data).unwrap();
-        ube.run(function.into(), function_data).unwrap();
-
+        canonicalization.run_on_function(function.into(), function_data).unwrap();
+        let (_, changed) = ube.run_on_function(function.into(), function_data).unwrap();
+        assert!(changed);
         print(&module);
     }
 }

@@ -100,13 +100,15 @@ impl Mem2reg {
 
     fn prepare(&mut self, function: Function, data: &FunctionData) {
         let mut dominance_analysis = DominanceAnalysis::new();
-        self.dominance = dominance_analysis.run(function, data).unwrap();
+        self.dominance = dominance_analysis.run_on_function(function, data).unwrap();
 
         let mut control_flow_analysis = ControlFlowAnalysis {};
-        self.cfg = control_flow_analysis.run(function, data).unwrap();
+        self.cfg = control_flow_analysis
+            .run_on_function(function, data)
+            .unwrap();
 
         let mut data_flow_analysis = DataFlowAnalysis {};
-        self.chain = data_flow_analysis.run(function, data).unwrap();
+        self.chain = data_flow_analysis.run_on_function(function, data).unwrap();
     }
 
     fn promotable(&self, value: Value, dfg: &DataFlowGraph) -> Option<Type> {
@@ -249,11 +251,17 @@ impl Mem2reg {
 impl LocalPassMut for Mem2reg {
     type Ok = ();
 
-    fn run(&mut self, function: Function, data: &mut FunctionData) -> PassResult<Self::Ok> {
+    fn run_on_function(
+        &mut self,
+        function: Function,
+        data: &mut FunctionData,
+    ) -> PassResult<(Self::Ok, bool)> {
         // prepare the information
         self.prepare(function, data);
 
         let dfg = data.dfg();
+
+        let mut changed = false;
 
         // initialize the promotable variables
         for value in dfg.values().keys() {
@@ -326,34 +334,26 @@ impl LocalPassMut for Mem2reg {
 
         for variable in self.variables.iter() {
             data.remove_inst((*variable).into());
+            changed = true;
         }
 
-        Ok(())
+        Ok(((), changed))
     }
 }
 
-#[derive(Default)]
-pub struct GlobalMem2reg;
-
-impl GlobalMem2reg {
-    pub fn new() -> Self {
-        Self::default()
-    }
-}
-
-impl GlobalPassMut for GlobalMem2reg {
+impl GlobalPassMut for Mem2reg {
     type Ok = ();
 
-    fn run(&mut self, module: &mut crate::ir::module::Module) -> PassResult<Self::Ok> {
+    fn run_on_module(&mut self, module: &mut crate::ir::module::Module) -> PassResult<(Self::Ok, bool)> {
         let functions = module.function_layout().to_vec();
-
+        let mut changed = false;
         for function in functions {
             let function_data = module.function_data_mut(function).unwrap();
-            let mut mem2reg = Mem2reg::new();
-            mem2reg.run(function, function_data).unwrap();
+            let (_, local_changed) = self.run_on_function(function, function_data).unwrap();
+            changed = changed || local_changed;
         }
 
-        Ok(())
+        Ok(((), changed))
     }
 }
 
@@ -373,7 +373,7 @@ mod test {
     fn print(module: &Module) {
         let mut buf = BufWriter::new(Vec::new());
         let mut printer = Printer::new(&mut buf);
-        printer.run(module).unwrap();
+        printer.run_on_module(module).unwrap();
         let s = String::from_utf8(buf.into_inner().unwrap()).unwrap();
         println!("{}", s);
     }
@@ -414,7 +414,10 @@ mod test {
 
         let mut pass = Mem2reg::new();
 
-        pass.run(function.into(), function_data).unwrap();
+        let (_, changed) = pass.run_on_function(function.into(), function_data)
+            .unwrap();
+
+        assert!(changed);
 
         print(&module);
     }

@@ -29,7 +29,7 @@ use crate::ir::{
     values::{BinaryOp, CastOp, FCmpCond, Function, ICmpCond, Inst, UnaryOp, Value},
 };
 
-use super::ExecErr;
+use super::ExecError;
 
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub enum Segment {
@@ -45,7 +45,7 @@ impl Segment {
     }
 }
 
-pub type ExecResult<T> = Result<T, ExecErr>;
+pub type ExecResult<T> = Result<T, ExecError>;
 
 pub struct Memory {
     pub(super) data: Vec<u8>,
@@ -81,7 +81,7 @@ impl Addr {
             1 => Ok(Segment::Data),
             2 => Ok(Segment::Constant),
             3 => Ok(Segment::Stack),
-            _ => Err(ExecErr::InvalidSegement),
+            _ => Err(ExecError::InvalidSegement),
         }
     }
 
@@ -258,7 +258,7 @@ impl<'a> VirtualMachine<'a> {
                     let (_len, ty) = data
                         .ty()
                         .as_array()
-                        .ok_or_else(|| ExecErr::InvalidType(data.ty()))?;
+                        .ok_or_else(|| ExecError::InvalidType(data.ty()))?;
                     let elem_size = ty.bytewidth();
 
                     let mut offset = 0;
@@ -273,7 +273,7 @@ impl<'a> VirtualMachine<'a> {
                     let field_types = data
                         .ty()
                         .as_struct()
-                        .ok_or_else(|| ExecErr::InvalidType(data.ty()))?;
+                        .ok_or_else(|| ExecError::InvalidType(data.ty()))?;
                     let mut offset = 0;
                     for (field, ty) in fields.iter().zip(field_types) {
                         let field_addr = Addr(addr.0 + offset);
@@ -282,9 +282,9 @@ impl<'a> VirtualMachine<'a> {
                     }
                     Ok(())
                 }
-                _ => Err(ExecErr::InvalidGlobalInit(init)),
+                _ => Err(ExecError::InvalidGlobalInit(init)),
             })
-            .unwrap_or(Err(ExecErr::ValueNotFound(init)))
+            .unwrap_or(Err(ExecError::ValueNotFound(init)))
     }
 
     pub fn prepare(&mut self, entry_function: Function) -> ExecResult<()> {
@@ -306,7 +306,7 @@ impl<'a> VirtualMachine<'a> {
                     }
                     _ => Ok(()),
                 })
-                .unwrap_or(Err(ExecErr::ValueNotFound(*value)))?;
+                .unwrap_or(Err(ExecError::ValueNotFound(*value)))?;
         }
 
         for function in self.module.function_layout() {
@@ -319,15 +319,15 @@ impl<'a> VirtualMachine<'a> {
                         self.write_vreg((*function).into(), addr.into());
                         Ok(())
                     }
-                    _ => Err(ExecErr::InvalidGlobalItem((*function).into())),
+                    _ => Err(ExecError::InvalidGlobalItem((*function).into())),
                 })
-                .unwrap_or_else(|| Err(ExecErr::ValueNotFound((*function).into())))?;
+                .unwrap_or_else(|| Err(ExecError::ValueNotFound((*function).into())))?;
 
             // allocate vreg for values
             let dfg = self
                 .module
                 .function_data(*function)
-                .ok_or_else(|| ExecErr::FunctionNotFound((*function).into()))?
+                .ok_or_else(|| ExecError::FunctionNotFound((*function).into()))?
                 .dfg();
 
             for (value, data) in dfg.values() {
@@ -353,7 +353,7 @@ impl<'a> VirtualMachine<'a> {
         let layout = self
             .module
             .function_data(self.curr_function)
-            .ok_or_else(|| ExecErr::FunctionNotFound(self.curr_function.into()))?
+            .ok_or_else(|| ExecError::FunctionNotFound(self.curr_function.into()))?
             .layout();
 
         self.curr_inst = layout.entry_inst().expect("entry inst should exist");
@@ -376,17 +376,17 @@ impl<'a> VirtualMachine<'a> {
         let dfg = self
             .module
             .function_data(self.curr_function)
-            .ok_or_else(|| ExecErr::FunctionNotFound(self.curr_function.into()))?
+            .ok_or_else(|| ExecError::FunctionNotFound(self.curr_function.into()))?
             .dfg();
         let layout = self
             .module
             .function_data(self.curr_function)
-            .ok_or_else(|| ExecErr::FunctionNotFound(self.curr_function.into()))?
+            .ok_or_else(|| ExecError::FunctionNotFound(self.curr_function.into()))?
             .layout();
 
         let value_data = dfg
             .local_value_data(self.curr_inst.into())
-            .ok_or_else(|| ExecErr::ValueNotFound(self.curr_inst.into()))?;
+            .ok_or_else(|| ExecError::ValueNotFound(self.curr_inst.into()))?;
 
         let mut next_function = self.curr_function;
         let mut next_inst = layout.next_inst(self.curr_inst);
@@ -789,7 +789,7 @@ impl<'a> VirtualMachine<'a> {
                 let ty = value_data.ty();
                 let operand_ty = dfg
                     .with_value_data(operand, |data| data.ty())
-                    .ok_or(ExecErr::ValueNotFound(operand))?;
+                    .ok_or(ExecError::ValueNotFound(operand))?;
 
                 let dest_size = ty.bytewidth();
                 let operand_size = operand_ty.bytewidth();
@@ -1042,7 +1042,8 @@ impl<'a> VirtualMachine<'a> {
         }
 
         if !self.stopped() {
-            self.curr_inst = next_inst.ok_or_else(|| ExecErr::EarlyStop(self.curr_inst.into()))?;
+            self.curr_inst =
+                next_inst.ok_or_else(|| ExecError::EarlyStop(self.curr_inst.into()))?;
             self.curr_function = next_function;
         }
 

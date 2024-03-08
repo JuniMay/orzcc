@@ -52,7 +52,7 @@ impl From<ControlFlowAnalysisError> for PassError {
 impl LocalPass for ControlFlowAnalysis {
     type Ok = ControlFlowGraph;
 
-    fn run(&mut self, _function: Function, data: &FunctionData) -> PassResult<Self::Ok> {
+    fn run_on_function(&mut self, _function: Function, data: &FunctionData) -> PassResult<Self::Ok> {
         let mut cfg = ControlFlowGraph::new();
 
         let layout = data.layout();
@@ -121,7 +121,7 @@ mod test {
         let function = module.get_value_by_name("@check_positive").unwrap();
         let function_data = module.function_data(function.into()).unwrap();
 
-        let cfg = cfa.run(function.into(), function_data).unwrap();
+        let cfg = cfa.run_on_function(function.into(), function_data).unwrap();
 
         let entry = function_data.dfg().get_block_by_name("^entry").unwrap();
         let positive = function_data.dfg().get_block_by_name("^positive").unwrap();

@@ -108,9 +108,9 @@ impl DominanceAnalysis {
 impl LocalPass for DominanceAnalysis {
     type Ok = Dominance;
 
-    fn run(&mut self, function: Function, data: &FunctionData) -> PassResult<Self::Ok> {
+    fn run_on_function(&mut self, function: Function, data: &FunctionData) -> PassResult<Self::Ok> {
         let mut cfa = ControlFlowAnalysis {};
-        let cfg = cfa.run(function, data)?;
+        let cfg = cfa.run_on_function(function, data)?;
         self.prepare(&cfg, data);
 
         let mut idoms = HashMap::new();
@@ -230,7 +230,7 @@ mod test {
         let mut dominance_analysis = DominanceAnalysis::new();
 
         let dominance = dominance_analysis
-            .run(function.into(), function_data)
+            .run_on_function(function.into(), function_data)
             .unwrap();
 
         let idoms = dominance.idoms;

@@ -9,7 +9,7 @@ pub mod debugger;
 pub mod vm;
 
 #[derive(Debug, Error)]
-pub enum ExecErr {
+pub enum ExecError {
     #[error("invalid segment")]
     InvalidSegement,
 

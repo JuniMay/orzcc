@@ -123,7 +123,7 @@ where
 {
     type Ok = ();
 
-    fn run(&mut self, module: &Module) -> PassResult<Self::Ok> {
+    fn run_on_module(&mut self, module: &Module) -> PassResult<Self::Ok> {
         self.print_module(module)?;
         Ok(())
     }
