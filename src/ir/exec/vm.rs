@@ -220,7 +220,6 @@ impl<'a> VirtualMachine<'a> {
         let segment = addr.segment()?;
         let offset = addr.offset();
         let memory = &mut self.memory.get_mut(&segment).unwrap().data;
-        memory.resize(offset + data.len(), 0);
         memory[offset..offset + data.len()].copy_from_slice(data);
         Ok(())
     }
@@ -297,7 +296,11 @@ impl<'a> VirtualMachine<'a> {
                         } else {
                             Segment::Constant
                         };
-                        let addr = self.alloc_memory(segment, data.ty().bytewidth())?;
+                        let ty = self
+                            .module
+                            .with_value_data(slot.init(), |data| data.ty())
+                            .unwrap();
+                        let addr = self.alloc_memory(segment, ty.bytewidth())?;
                         self.addrs.insert(*value, addr);
                         self.write_global_init(addr, slot.init())?;
                         self.alloc_vreg(*value);
@@ -753,26 +756,35 @@ impl<'a> VirtualMachine<'a> {
                 let mut offset = 0u64;
                 let mut curr_type = bound_type;
 
-                for index in indices {
+                for (i, index) in indices.iter().enumerate() {
                     let index_val = self.read_vreg(*index).0;
 
-                    match curr_type.kind() {
-                        TypeKind::Array(_len, elem_type) => {
-                            let elem_size = elem_type.bytewidth();
-                            offset += index_val * elem_size as u64;
-                            curr_type = elem_type.clone();
-                        }
-                        TypeKind::Struct(field_types) => {
-                            let field_idx = index_val as usize;
-                            let field_type = field_types[field_idx].clone();
-                            let field_size = field_type.bytewidth();
-                            offset += field_size as u64;
-                            curr_type = field_type;
-                        }
-                        _ => {
-                            let size = curr_type.bytewidth();
-                            offset += index_val * size as u64;
-                            break;
+                    if i == 0 {
+                        let size = curr_type.bytewidth();
+                        offset += index_val * size as u64;
+                        continue;
+                    } else {
+                        match curr_type.kind() {
+                            TypeKind::Array(_len, elem_type) => {
+                                let elem_size = elem_type.bytewidth();
+                                offset += index_val * elem_size as u64;
+                                curr_type = elem_type.clone();
+                            }
+                            TypeKind::Struct(field_types) => {
+                                let field_idx = index_val as usize;
+                                let field_size = if field_idx == 0 {
+                                    0
+                                } else {
+                                    field_types[field_idx - 1].bytewidth()
+                                };
+                                offset += field_size as u64;
+                                curr_type = field_types[field_idx].clone();
+                            }
+                            _ => {
+                                let size = curr_type.bytewidth();
+                                offset += index_val * size as u64;
+                                break;
+                            }
                         }
                     }
                 }
