@@ -1,5 +1,10 @@
 use super::{entities::FunctionData, module::Module, values::Function};
-use std::{cell::RefCell, collections::HashMap, error::Error};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    error::Error,
+    str::FromStr,
+};
 use thiserror::Error;
 
 pub mod control_flow_analysis;
@@ -106,6 +111,7 @@ pub trait TransformationPass: GlobalPassMut<Ok = ()> {
 type TransformationPassObj = Box<dyn TransformationPass>;
 
 pub struct PassManager {
+    parameters: HashMap<&'static str, String>,
     transformations: HashMap<&'static str, TransformationPassObj>,
     dependencies: HashMap<&'static str, Vec<TransformationPassObj>>,
 }
@@ -117,9 +123,54 @@ impl PassManager {
 
     fn new() -> Self {
         Self {
+            parameters: HashMap::new(),
             transformations: HashMap::new(),
             dependencies: HashMap::new(),
         }
+    }
+
+    pub fn add_parameter(name: &'static str) {
+        Self::PASS_MANAGER.with(|pm| {
+            let mut pm = pm.borrow_mut();
+            pm.parameters.insert(name, String::new());
+        });
+    }
+
+    pub fn set_parameter(name: &str, value: String) {
+        Self::PASS_MANAGER.with(|pm| {
+            let mut pm = pm.borrow_mut();
+            if let Some(param) = pm.parameters.get_mut(name) {
+                *param = value;
+            }
+        });
+    }
+
+    pub fn get_parameter<T: FromStr>(name: &str) -> Option<T> {
+        Self::PASS_MANAGER.with(|pm| {
+            let pm = pm.borrow();
+            pm.parameters.get(name).and_then(|v| v.parse().ok())
+        })
+    }
+
+    pub fn get_cli_args() -> Vec<clap::Arg> {
+        Self::PASS_MANAGER.with(|pm| {
+            let pm = pm.borrow();
+            let mut args = pm
+                .parameters
+                .iter()
+                .map(|(name, _)| clap::Arg::new(name).long(name))
+                .collect::<Vec<_>>();
+
+            for transformation in pm.transformations.keys() {
+                args.push(
+                    clap::Arg::new(transformation)
+                        .long(transformation)
+                        .action(clap::ArgAction::Count),
+                );
+            }
+
+            args
+        })
     }
 
     pub fn register_transformation(
@@ -134,22 +185,40 @@ impl PassManager {
         });
     }
 
-    pub fn run_transformation(name: &'static str, module: &mut Module, max_iter: usize) -> usize {
+    pub fn get_transformation_names() -> HashSet<String> {
+        Self::PASS_MANAGER.with(|pm| {
+            let pm = pm.borrow();
+            pm.transformations
+                .keys()
+                .copied()
+                .map(String::from)
+                .collect()
+        })
+    }
+
+    pub fn get_parameter_names() -> HashSet<String> {
+        Self::PASS_MANAGER.with(|pm| {
+            let pm = pm.borrow();
+            pm.parameters.keys().copied().map(String::from).collect()
+        })
+    }
+
+    pub fn run_transformation(name: &str, module: &mut Module, max_iter: usize) -> usize {
         Self::PASS_MANAGER.with(|pm| {
             let mut pm = pm.borrow_mut();
             let mut iter = 0;
             for _ in 0..max_iter {
                 iter += 1;
                 let mut changed = false;
-                for pass in pm.dependencies.get_mut(&name).unwrap() {
+                for pass in pm.dependencies.get_mut(name).unwrap() {
                     pass.reset();
                     let (_, has_changed) = pass.run_on_module(module).unwrap();
                     changed |= has_changed;
                 }
-                pm.transformations.get_mut(&name).unwrap().reset();
+                pm.transformations.get_mut(name).unwrap().reset();
                 let (_, has_changed) = pm
                     .transformations
-                    .get_mut(&name)
+                    .get_mut(name)
                     .unwrap()
                     .run_on_module(module)
                     .unwrap();

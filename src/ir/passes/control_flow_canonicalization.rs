@@ -34,7 +34,7 @@ pub enum ControlFlowCanonicalizationError {
 
 impl From<ControlFlowCanonicalizationError> for PassError {
     fn from(err: ControlFlowCanonicalizationError) -> Self {
-        PassError::preparation_error("control-flow-normalization".to_string(), Box::new(err))
+        PassError::preparation_error(CONTROL_FLOW_CANONICALIZATION.to_string(), Box::new(err))
     }
 }
 

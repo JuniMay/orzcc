@@ -50,7 +50,11 @@ impl DataFlowAnalysis {
 impl LocalPass for DataFlowAnalysis {
     type Ok = DefUseChain;
 
-    fn run_on_function(&mut self, _function: Function, data: &FunctionData) -> PassResult<Self::Ok> {
+    fn run_on_function(
+        &mut self,
+        _function: Function,
+        data: &FunctionData,
+    ) -> PassResult<Self::Ok> {
         let dfg = data.dfg();
         let mut chain = DefUseChain::new();
         for value in dfg.values().keys() {

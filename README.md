@@ -27,3 +27,11 @@ Then run the following command to get test coverage.
 ```shell
 cargo tarpaulin
 ```
+
+## Run Transformations
+
+A simple example:
+
+```shell
+cargo run opt --file tests/orzir_cases/14_mem2reg.orzir --mem2reg
+```

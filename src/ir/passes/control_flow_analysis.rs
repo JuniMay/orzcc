@@ -52,7 +52,11 @@ impl From<ControlFlowAnalysisError> for PassError {
 impl LocalPass for ControlFlowAnalysis {
     type Ok = ControlFlowGraph;
 
-    fn run_on_function(&mut self, _function: Function, data: &FunctionData) -> PassResult<Self::Ok> {
+    fn run_on_function(
+        &mut self,
+        _function: Function,
+        data: &FunctionData,
+    ) -> PassResult<Self::Ok> {
         let mut cfg = ControlFlowGraph::new();
 
         let layout = data.layout();
