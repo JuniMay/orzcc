@@ -1,5 +1,5 @@
 use super::{entities::FunctionData, module::Module, values::Function};
-use std::error::Error;
+use std::{cell::RefCell, collections::HashMap, error::Error};
 use thiserror::Error;
 
 pub mod control_flow_analysis;
@@ -99,4 +99,66 @@ impl PassError {
     }
 }
 
-pub struct PassManager {}
+pub trait TransformationPass: GlobalPassMut<Ok = ()> {
+    fn reset(&mut self);
+}
+
+type TransformationPassObj = Box<dyn TransformationPass>;
+
+pub struct PassManager {
+    transformations: HashMap<&'static str, TransformationPassObj>,
+    dependencies: HashMap<&'static str, Vec<TransformationPassObj>>,
+}
+
+impl PassManager {
+    thread_local! {
+        static PASS_MANAGER: RefCell<PassManager> = RefCell::new(PassManager::new());
+    }
+
+    fn new() -> Self {
+        Self {
+            transformations: HashMap::new(),
+            dependencies: HashMap::new(),
+        }
+    }
+
+    pub fn register_transformation(
+        name: &'static str,
+        pass: TransformationPassObj,
+        dependencies: Vec<TransformationPassObj>,
+    ) {
+        Self::PASS_MANAGER.with(|pm| {
+            let mut pm = pm.borrow_mut();
+            pm.transformations.insert(name, pass);
+            pm.dependencies.insert(name, dependencies);
+        });
+    }
+
+    pub fn run_transformation(name: &'static str, module: &mut Module, max_iter: usize) -> usize {
+        Self::PASS_MANAGER.with(|pm| {
+            let mut pm = pm.borrow_mut();
+            let mut iter = 0;
+            for _ in 0..max_iter {
+                iter += 1;
+                let mut changed = false;
+                for pass in pm.dependencies.get_mut(&name).unwrap() {
+                    pass.reset();
+                    let (_, has_changed) = pass.run_on_module(module).unwrap();
+                    changed |= has_changed;
+                }
+                pm.transformations.get_mut(&name).unwrap().reset();
+                let (_, has_changed) = pm
+                    .transformations
+                    .get_mut(&name)
+                    .unwrap()
+                    .run_on_module(module)
+                    .unwrap();
+                changed |= has_changed;
+                if !changed {
+                    break;
+                }
+            }
+            iter
+        })
+    }
+}

@@ -14,7 +14,13 @@ use crate::ir::{
 use std::collections::HashSet;
 use std::collections::VecDeque;
 
-use super::{control_flow_analysis::ControlFlowAnalysis, GlobalPassMut, PassResult};
+use super::{
+    control_flow_analysis::ControlFlowAnalysis,
+    control_flow_canonicalization::ControlFlowCanonicalization, GlobalPassMut, PassManager,
+    PassResult, TransformationPass,
+};
+
+const UNREACHABLE_BLOCK_ELIMINATION: &str = "unreachable-block-elimination";
 
 pub struct UnreachableBlockElimination {}
 
@@ -85,6 +91,18 @@ impl GlobalPassMut for UnreachableBlockElimination {
     }
 }
 
+impl UnreachableBlockElimination {
+    pub fn register() {
+        let pass = Box::new(UnreachableBlockElimination {});
+        let canonic = Box::new(ControlFlowCanonicalization {});
+        PassManager::register_transformation(UNREACHABLE_BLOCK_ELIMINATION, pass, vec![canonic]);
+    }
+}
+
+impl TransformationPass for UnreachableBlockElimination {
+    fn reset(&mut self) {}
+}
+
 #[cfg(test)]
 mod test {
     use std::io::{BufWriter, Cursor};
@@ -92,11 +110,10 @@ mod test {
     use crate::ir::{
         frontend::parser::Parser,
         module::Module,
-        passes::{control_flow_canonicalization::ControlFlowCanonicalization, printer::Printer},
-        passes::{GlobalPass, LocalPassMut},
+        passes::{printer::Printer, GlobalPass, PassManager},
     };
 
-    use super::UnreachableBlockElimination;
+    use super::{UnreachableBlockElimination, UNREACHABLE_BLOCK_ELIMINATION};
 
     fn print(module: &Module) {
         let mut buf = BufWriter::new(Vec::new());
@@ -130,17 +147,11 @@ mod test {
         let mut buf = Cursor::new(ir);
         let mut parser = Parser::new(&mut buf);
         let mut module = parser.parse().unwrap().into_ir("test".into()).unwrap();
-        let mut canonicalization = ControlFlowCanonicalization {};
-        let mut ube = UnreachableBlockElimination {};
 
-        let function = module.get_value_by_name("@check_positive").unwrap();
-        let function_data = module.function_data_mut(function.into()).unwrap();
-
-        canonicalization.run_on_function(function.into(), function_data).unwrap();
-        let (_, changed) = ube.run_on_function(function.into(), function_data).unwrap();
-
-        assert!(changed);
-
+        UnreachableBlockElimination::register();
+        let iter =
+            PassManager::run_transformation(UNREACHABLE_BLOCK_ELIMINATION, &mut module, 1234);
+        assert_eq!(iter, 2);
         print(&module);
     }
 
@@ -166,15 +177,11 @@ mod test {
         let mut buf = Cursor::new(ir);
         let mut parser = Parser::new(&mut buf);
         let mut module = parser.parse().unwrap().into_ir("test".into()).unwrap();
-        let mut canonicalization = ControlFlowCanonicalization {};
-        let mut ube = UnreachableBlockElimination {};
 
-        let function = module.get_value_by_name("@test_func").unwrap();
-        let function_data = module.function_data_mut(function.into()).unwrap();
-
-        canonicalization.run_on_function(function.into(), function_data).unwrap();
-        let (_, changed) = ube.run_on_function(function.into(), function_data).unwrap();
-        assert!(changed);
+        UnreachableBlockElimination::register();
+        let iter =
+            PassManager::run_transformation(UNREACHABLE_BLOCK_ELIMINATION, &mut module, 1234);
+        assert_eq!(iter, 2);
         print(&module);
     }
 }
