@@ -12,23 +12,24 @@ slot @world2 = global [i8; 6] [0x57, 0x6f, 0x72, 0x6c, 0x64, 0x00]
 slot @world3 = global [i8; 6] [0x57, 0x6f, 0x72, 0x6c, 0x64, 0x00]
 slot @world4 = global [i8; 6] [0x57, 0x6f, 0x72, 0x6c, 0x64, 0x00]
 slot @world5 = global [i8; 6] [0x57, 0x6f, 0x72, 0x6c, 0x64, 0x00]
+slot @hw = global [i8; 12] [0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x57, 0x6f, 0x72, 0x6c, 0x64, 0x00]
 
 decl @sub(i32, i32) -> i32
 
 func @main() -> i32 {
 ^entry:
     %p = alloc [i8; 6]
-    %tmp0 = getelemptr [i8; 6], ptr %p, i32 0
+    %tmp0 = getelemptr [i8; 6], ptr %p, i32 0, i32 0
     store i8 0x48, ptr %tmp0
-    %tmp1 = getelemptr [i8; 6], ptr %p, i32 1
+    %tmp1 = getelemptr [i8; 6], ptr %p, i32 0, i32 1
     store i8 0x65, ptr %tmp1
-    %tmp2 = getelemptr [i8; 6], ptr %p, i32 2
+    %tmp2 = getelemptr [i8; 6], ptr %p, i32 0, i32 2
     store i8 0x6c, ptr %tmp2
-    %tmp3 = getelemptr [i8; 6], ptr %p, i32 3
+    %tmp3 = getelemptr [i8; 6], ptr %p, i32 0, i32 3
     store i8 0x6c, ptr %tmp3
-    %tmp4 = getelemptr [i8; 6], ptr %p, i32 4
+    %tmp4 = getelemptr [i8; 6], ptr %p, i32 0, i32 4
     store i8 0x6f, ptr %tmp4
-    %tmp5 = getelemptr [i8; 6], ptr %p, i32 5
+    %tmp5 = getelemptr [i8; 6], ptr %p, i32 0, i32 5
     store i8 0x00, ptr %tmp5
 
     %0 = add i32 0, i32 0xffffffff

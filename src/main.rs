@@ -173,37 +173,13 @@ fn parse_orzir(path: &str) -> Option<Module> {
     let result = result.unwrap().into_ir(path.to_string());
     if let Err(ref e) = result {
         let s = std::fs::read_to_string(path).unwrap();
+        use SemanticError::*;
         match e {
-            SemanticError::BuildError(e) => println!("error: {}", e),
-            SemanticError::NameDuplicated(span) => {
-                let start = span.start;
-                let end = span.end;
-                let diagnostic = Diagnostic::new(
-                    &s,
-                    Level::Error,
-                    path.to_string(),
-                    format!("{}", e),
-                    (start.row, end.row),
-                    start.row,
-                    (start.col, end.col),
-                );
-                println!("{}", diagnostic);
-            }
-            SemanticError::ValueNameNotFound(span) => {
-                let start = span.start;
-                let end = span.end;
-                let diagnostic = Diagnostic::new(
-                    &s,
-                    Level::Error,
-                    path.to_string(),
-                    format!("{}", e),
-                    (start.row, end.row),
-                    start.row,
-                    (start.col, end.col),
-                );
-                println!("{}", diagnostic);
-            }
-            SemanticError::BlockNameNotFound(span) => {
+            BuildError(e) => println!("error: {}", e),
+            NameDuplicated(span)
+            | ValueNameNotFound(span)
+            | BlockNameNotFound(span)
+            | TypeNotFound(span) => {
                 let start = span.start;
                 let end = span.end;
                 let diagnostic = Diagnostic::new(

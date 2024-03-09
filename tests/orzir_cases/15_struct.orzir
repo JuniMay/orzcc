@@ -1,0 +1,11 @@
+
+func @main() -> void {
+^entry:
+    %struct_ptr = alloc { i32, i32 }
+    %0 = getelemptr { i32, i32 }, %struct_ptr, i32 0, i32 0
+    store i32 0x11223344, %0
+    %1 = load { i32, i32 }, %struct_ptr
+    jump ^return
+^return:
+    ret
+}

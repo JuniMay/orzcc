@@ -1,5 +1,8 @@
-use thiserror::Error;
-
+use super::{
+    ast::{Ast, AstNodeBox, AstNodeKind},
+    tokens::Span,
+    InstKind,
+};
 use crate::ir::{
     builders::{
         BuildAggregateConstant, BuildBlock, BuildError, BuildGlobalValue, BuildLocalValue,
@@ -9,12 +12,7 @@ use crate::ir::{
     types::Type,
     values::{Block, Function, Value},
 };
-
-use super::{
-    ast::{Ast, AstNodeBox, AstNodeKind},
-    tokens::Span,
-    InstKind,
-};
+use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum SemanticError {
@@ -29,6 +27,9 @@ pub enum SemanticError {
 
     #[error("block name not found at {0:?}")]
     BlockNameNotFound(Span),
+
+    #[error("type not found for local value at {0:?}")]
+    TypeNotFound(Span),
 }
 
 struct AstLoweringContext {
@@ -329,6 +330,7 @@ impl Ast {
         ctx: &mut AstLoweringContext,
         function: Function,
     ) -> Result<Value, SemanticError> {
+        let span = operand.span;
         match operand.as_ref().kind {
             AstNodeKind::Operand(ref operand) => match operand.value.as_ref().kind {
                 AstNodeKind::GlobalIdent(ref name) => ctx
@@ -345,7 +347,7 @@ impl Ast {
                             .bytes(ty.clone(), bytes.clone())
                             .map_err(|e| e.into())
                     } else {
-                        panic!("type not found for local constant")
+                        Err(SemanticError::TypeNotFound(span))
                     }
                 }
                 AstNodeKind::Zero => {
@@ -355,7 +357,7 @@ impl Ast {
                             .zero(ty.clone())
                             .map_err(|e| e.into())
                     } else {
-                        panic!("type not found for local zero value")
+                        Err(SemanticError::TypeNotFound(span))
                     }
                 }
                 AstNodeKind::Undef => {
@@ -365,7 +367,7 @@ impl Ast {
                             .undef(ty.clone())
                             .map_err(|e| e.into())
                     } else {
-                        panic!("type not found for local undef value")
+                        Err(SemanticError::TypeNotFound(span))
                     }
                 }
                 _ => unreachable!(),
