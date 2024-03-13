@@ -19,6 +19,7 @@ use orzcc::{
 enum CliCommand {
     Dbg(DbgCommand),
     Opt(OptCommand),
+    Frontend(FrontendCommand),
 }
 
 /// The debugger command
@@ -29,6 +30,10 @@ struct DbgCommand {
 struct OptCommand {
     file: String,
     passes: Vec<String>,
+}
+
+struct FrontendCommand {
+    file: String,
 }
 
 fn main() {
@@ -59,6 +64,10 @@ fn main() {
             let s = String::from_utf8(buf.into_inner().unwrap()).unwrap();
             println!("{}", s);
         }
+        CliCommand::Frontend(cmd) => {
+            println!("TODO FOR FRONTEND");
+            todo!();
+        }        
     }
 }
 
@@ -91,6 +100,17 @@ fn cli() -> Command {
                 )
                 .args(PassManager::get_cli_args()),
         )
+        .subcommand(
+            Command::new("frontend")
+                .about("Compile the Sysy code into Orzir")
+                .arg(
+                    Arg::new("file")
+                        .short('f')
+                        .long("file")
+                        .required(true)
+                        .help("The Sysy code file to compile into Orzir"),
+                ),
+        )        
 }
 
 fn parse_args() -> CliCommand {
@@ -125,6 +145,10 @@ fn parse_args() -> CliCommand {
             }
 
             CliCommand::Opt(OptCommand { file, passes })
+        }
+        Some(("frontend", args)) => {
+            let file = args.get_one::<String>("file").unwrap().clone();
+            CliCommand::Frontend(FrontendCommand { file })
         }
         _ => {
             cli().print_help().unwrap();
