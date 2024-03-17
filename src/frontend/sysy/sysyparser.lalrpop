@@ -2,22 +2,49 @@ use crate::frontend::ast::*;
 
 grammar;
 
+match {
+  r"\s*" => {},
+  r"//[^\n\r]*[\n\r]*" => {},
+  r"/\*[^*]*\*+(?:[^/*][^*]*\*+)*/" => {},
+  _
+}
+
 // <translation-unit> ::= {<external-declaration>}*
+pub TranslationUnit: Vec<ExternalDeclaration> = {
+    <items: (ExternalDeclaration)*> => TranslationUnit
+};
 
 // <external-declaration> ::= <function-definition>
 //                          | <declaration>
 
+ExternalDeclaration: ExternalDeclaration = {
+    FuctionDefinition => GlobalItem::FunctionDefinition,
+    Declaration => GlobalItem::Declaration,
+};
+
 // <function-definition> ::= {<declaration-specifier>}* <declarator> {<declaration>}* <compound-statement>
+
+FuctionDefinition: FunctionDefinition = {
+    <items: (DeclarationSpecifier)*> <declarator> <items: (Declaration)*> <compound-statement> => FunctionDefinition
+};
 
 // <declaration-specifier> ::= <storage-class-specifier>
 //                           | <type-specifier>
 //                           | <type-qualifier>
+
+DeclarationSpecifier: DeclarationSpecifier = {
+    StorageClassSpecifier => StorageClassSpecifier,
+    TypeSpecifier => TypeSpecifier,
+    TypeQualifier => TypeQualifier,
+};
 
 // <storage-class-specifier> ::= auto
 //                             | register
 //                             | static
 //                             | extern
 //                             | typedef
+
+
 
 // <type-specifier> ::= void
 //                    | char
