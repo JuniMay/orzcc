@@ -8,254 +8,38 @@ match {
   r"/\*[^*]*\*+(?:[^/*][^*]*\*+)*/" => {},
   _
 }
-
-// <translation-unit> ::= {<external-declaration>}*
-pub TranslationUnit: Vec<ExternalDeclaration> = {
-    <items: (ExternalDeclaration)*> => TranslationUnit
-};
-
-// <external-declaration> ::= <function-definition>
-//                          | <declaration>
-
-ExternalDeclaration: ExternalDeclaration = {
-    FuctionDefinition => GlobalItem::FunctionDefinition,
-    Declaration => GlobalItem::Declaration,
-};
-
-// <function-definition> ::= {<declaration-specifier>}* <declarator> {<declaration>}* <compound-statement>
-
-FuctionDefinition: FunctionDefinition = {
-    <items: (DeclarationSpecifier)*> <declarator> <items: (Declaration)*> <compound-statement> => FunctionDefinition
-};
-
-// <declaration-specifier> ::= <storage-class-specifier>
-//                           | <type-specifier>
-//                           | <type-qualifier>
-
-DeclarationSpecifier: DeclarationSpecifier = {
-    StorageClassSpecifier => StorageClassSpecifier,
-    TypeSpecifier => TypeSpecifier,
-    TypeQualifier => TypeQualifier,
-};
-
-// <storage-class-specifier> ::= auto
-//                             | register
-//                             | static
-//                             | extern
-//                             | typedef
-
-
-
-// <type-specifier> ::= void
-//                    | char
-//                    | short
-//                    | int
-//                    | long
-//                    | float
-//                    | double
-//                    | signed
-//                    | unsigned
-//                    | <struct-or-union-specifier>
-//                    | <enum-specifier>
-//                    | <typedef-name>
-
-// <struct-or-union-specifier> ::= <struct-or-union> <identifier> { {<struct-declaration>}+ }
-//                               | <struct-or-union> { {<struct-declaration>}+ }
-//                               | <struct-or-union> <identifier>
-
-// <struct-or-union> ::= struct
-//                     | union
-
-// <struct-declaration> ::= {<specifier-qualifier>}* <struct-declarator-list>
-
-// <specifier-qualifier> ::= <type-specifier>
-//                         | <type-qualifier>
-
-// <struct-declarator-list> ::= <struct-declarator>
-//                            | <struct-declarator-list> , <struct-declarator>
-
-// <struct-declarator> ::= <declarator>
-//                       | <declarator> : <constant-expression>
-//                       | : <constant-expression>
-
-// <declarator> ::= {<pointer>}? <direct-declarator>
-
-// <pointer> ::= * {<type-qualifier>}* {<pointer>}?
-
-// <type-qualifier> ::= const
-//                    | volatile
-
-// <direct-declarator> ::= <identifier>
-//                       | ( <declarator> )
-//                       | <direct-declarator> [ {<constant-expression>}? ]
-//                       | <direct-declarator> ( <parameter-type-list> )
-//                       | <direct-declarator> ( {<identifier>}* )
-
-// <constant-expression> ::= <conditional-expression>
-
-// <conditional-expression> ::= <logical-or-expression>
-//                            | <logical-or-expression> ? <expression> : <conditional-expression>
-
-// <logical-or-expression> ::= <logical-and-expression>
-//                           | <logical-or-expression> || <logical-and-expression>
-
-// <logical-and-expression> ::= <inclusive-or-expression>
-//                            | <logical-and-expression> && <inclusive-or-expression>
-
-// <inclusive-or-expression> ::= <exclusive-or-expression>
-//                             | <inclusive-or-expression> | <exclusive-or-expression>
-
-// <exclusive-or-expression> ::= <and-expression>
-//                             | <exclusive-or-expression> ^ <and-expression>
-
-// <and-expression> ::= <equality-expression>
-//                    | <and-expression> & <equality-expression>
-
-// <equality-expression> ::= <relational-expression>
-//                         | <equality-expression> == <relational-expression>
-//                         | <equality-expression> != <relational-expression>
-
-// <relational-expression> ::= <shift-expression>
-//                           | <relational-expression> < <shift-expression>
-//                           | <relational-expression> > <shift-expression>
-//                           | <relational-expression> <= <shift-expression>
-//                           | <relational-expression> >= <shift-expression>
-
-// <shift-expression> ::= <additive-expression>
-//                      | <shift-expression> << <additive-expression>
-//                      | <shift-expression> >> <additive-expression>
-
-// <additive-expression> ::= <multiplicative-expression>
-//                         | <additive-expression> + <multiplicative-expression>
-//                         | <additive-expression> - <multiplicative-expression>
-
-// <multiplicative-expression> ::= <cast-expression>
-//                               | <multiplicative-expression> * <cast-expression>
-//                               | <multiplicative-expression> / <cast-expression>
-//                               | <multiplicative-expression> % <cast-expression>
-
-// <cast-expression> ::= <unary-expression>
-//                     | ( <type-name> ) <cast-expression>
-
-// <unary-expression> ::= <postfix-expression>
-//                      | ++ <unary-expression>
-//                      | -- <unary-expression>
-//                      | <unary-operator> <cast-expression>
-//                      | sizeof <unary-expression>
-//                      | sizeof <type-name>
-
-// <postfix-expression> ::= <primary-expression>
-//                        | <postfix-expression> [ <expression> ]
-//                        | <postfix-expression> ( {<assignment-expression>}* )
-//                        | <postfix-expression> . <identifier>
-//                        | <postfix-expression> -> <identifier>
-//                        | <postfix-expression> ++
-//                        | <postfix-expression> --
-
-// <primary-expression> ::= <identifier>
-//                        | <constant>
-//                        | <string>
-//                        | ( <expression> )
-
-// <constant> ::= <integer-constant>
-//              | <character-constant>
-//              | <floating-constant>
-//              | <enumeration-constant>
-
-// <expression> ::= <assignment-expression>
-//                | <expression> , <assignment-expression>
-
-// <assignment-expression> ::= <conditional-expression>
-//                           | <unary-expression> <assignment-operator> <assignment-expression>
-
-// <assignment-operator> ::= =
-//                         | *=
-//                         | /=
-//                         | %=
-//                         | +=
-//                         | -=
-//                         | <<=
-//                         | >>=
-//                         | &=
-//                         | ^=
-//                         | |=
-
-// <unary-operator> ::= &
-//                    | *
-//                    | +
-//                    | -
-//                    | ~
-//                    | !
-
-// <type-name> ::= {<specifier-qualifier>}+ {<abstract-declarator>}?
-
-// <parameter-type-list> ::= <parameter-list>
-//                         | <parameter-list> , ...
-
-// <parameter-list> ::= <parameter-declaration>
-//                    | <parameter-list> , <parameter-declaration>
-
-// <parameter-declaration> ::= {<declaration-specifier>}+ <declarator>
-//                           | {<declaration-specifier>}+ <abstract-declarator>
-//                           | {<declaration-specifier>}+
-
-// <abstract-declarator> ::= <pointer>
-//                         | <pointer> <direct-abstract-declarator>
-//                         | <direct-abstract-declarator>
-
-// <direct-abstract-declarator> ::=  ( <abstract-declarator> )
-//                                | {<direct-abstract-declarator>}? [ {<constant-expression>}? ]
-//                                | {<direct-abstract-declarator>}? ( {<parameter-type-list>}? )
-
-// <enum-specifier> ::= enum <identifier> { <enumerator-list> }
-//                    | enum { <enumerator-list> }
-//                    | enum <identifier>
-
-// <enumerator-list> ::= <enumerator>
-//                     | <enumerator-list> , <enumerator>
-
-// <enumerator> ::= <identifier>
-//                | <identifier> = <constant-expression>
-
-// <typedef-name> ::= <identifier>
-
-// <declaration> ::=  {<declaration-specifier>}+ {<init-declarator>}* ;
-
-// <init-declarator> ::= <declarator>
-//                     | <declarator> = <initializer>
-
-// <initializer> ::= <assignment-expression>
-//                 | { <initializer-list> }
-//                 | { <initializer-list> , }
-
-// <initializer-list> ::= <initializer>
-//                      | <initializer-list> , <initializer>
-
-// <compound-statement> ::= { {<declaration>}* {<statement>}* }
-
-// <statement> ::= <labeled-statement>
-//               | <expression-statement>
-//               | <compound-statement>
-//               | <selection-statement>
-//               | <iteration-statement>
-//               | <jump-statement>
-
-// <labeled-statement> ::= <identifier> : <statement>
-//                       | case <constant-expression> : <statement>
-//                       | default : <statement>
-
-// <expression-statement> ::= {<expression>}? ;
-
-// <selection-statement> ::= if ( <expression> ) <statement>
-//                         | if ( <expression> ) <statement> else <statement>
-//                         | switch ( <expression> ) <statement>
-
-// <iteration-statement> ::= while ( <expression> ) <statement>
-//                         | do <statement> while ( <expression> ) ;
-//                         | for ( {<expression>}? ; {<expression>}? ; {<expression>}? ) <statement>
-
-// <jump-statement> ::= goto <identifier> ;
-//                    | continue ;
-//                    | break ;
-//                    | return {<expression>}? ;
-
+// 编译单元 CompUnit → [ CompUnit ] ( Decl | FuncDef )
+// 声明 Decl → ConstDecl | VarDecl
+// 常量声明 ConstDecl → 'const' BType ConstDef { ',' ConstDef } ';'
+// 基本类型 BType → 'int' | 'float'
+// 常数定义 ConstDef → Ident { '[' ConstExp ']' } '=' ConstInitVal
+// 常量初值 ConstInitVal → ConstExp | '{' [ ConstInitVal { ',' ConstInitVal } ] '}'
+// 变量声明 VarDecl → BType VarDef { ',' VarDef } ';'
+// 变量定义 VarDef → Ident { '[' ConstExp ']' } | Ident { '[' ConstExp ']' } '=' InitVal
+// 变量初值 InitVal → Exp | '{' [ InitVal { ',' InitVal } ] '}'
+// 函数定义 FuncDef → FuncType Ident '(' [FuncFParams] ')' Block
+// 函数类型 FuncType → 'void' | 'int' | 'float'
+// 函数形参表 FuncFParams → FuncFParam { ',' FuncFParam }
+// 函数形参 FuncFParam → BType Ident ['[' ']' { '[' Exp ']' }]
+// 语句块 Block → '{' { BlockItem } '}'
+// 语句块项 BlockItem → Decl | Stmt
+// 语句 Stmt → LVal '=' Exp ';' | [Exp] ';' | Block
+//             | 'if' '( Cond ')' Stmt [ 'else' Stmt ]
+//             | 'while' '(' Cond ')' Stmt
+//             | 'break' ';' | 'continue' ';'
+//             | 'return' [Exp] ';'
+// 表达式 Exp → AddExp 注：SysY表达式是 int/float型表达式
+// 条件表达式 Cond → LOrExp
+// 左值表达式 LVal → Ident {'[' Exp ']'}
+// 基本表达式 PrimaryExp → '(' Exp ')' | LVal | Number
+// 数值 Number → IntConst | floatConst
+// 一元表达式 UnaryExp → PrimaryExp | Ident '(' [FuncRParams] ')' | UnaryOp UnaryExp
+// 单目运算符 UnaryOp → '+' | '−' | '!' 注：'!'仅出现在仅出现在条件表达式中条件表达式中
+// 函数实参表 FuncRParams → Exp { ',' Exp }
+// 乘除模表达式 MulExp → UnaryExp | MulExp ('*' | '/' | '%') UnaryExp
+// 加减表达式 AddExp → MulExp | AddExp ('+' | '−') MulExp
+// 关系表达式 RelExp → AddExp | RelExp ('<' | '>' | '<=' | '>=') AddExp
+// 相等性表达式 EqExp → RelExp | EqExp ('==' | '!=') RelExp
+// 逻辑与表达式 LAndExp → EqExp | LAndExp '&&' EqExp
+// 逻辑或表达式 LOrExp → LAndExp | LOrExp '||' LAndExp
+// 常量表达式 ConstExp → AddExp
