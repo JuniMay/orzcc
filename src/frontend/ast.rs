@@ -1,10 +1,13 @@
 use std::vec;
 
-// 编译单元 CompUnit → [ CompUnit ] ( Decl | FuncDef )
-pub enum CompUnit {
+// 编译单元 CompUnit → { CompUnitItem }
+pub struct CompUnit {
+    pub item: Vec<CompUnitItem>,
+}
+// 编译单元项 CompUnitItem → Decl | FuncDef
+pub enum CompUnitItem {
     Decl(Decl),
     FuncDef(FuncDef),
-    
 }
 // 声明 Decl → ConstDecl | VarDecl
 pub enum Decl {

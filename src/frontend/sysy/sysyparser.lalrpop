@@ -8,9 +8,14 @@ match {
   r"/\*[^*]*\*+(?:[^/*][^*]*\*+)*/" => {},
   _
 }
-// 编译单元 CompUnit → [ CompUnit ] ( Decl | FuncDef )
+// 编译单元 CompUnit → { CompUnitItem }
 pub CompUnit: CompUnit = {
-  (Decl | FuncDef)*
+  <(CompUnitItem)*>=>CompUnit{<>}
+}
+// 编译单元项 CompUnitItem → Decl | FuncDef
+pub CompUnitItem: CompUnitItem = {
+  Decl,
+  FuncDef
 }
 // 声明 Decl → ConstDecl | VarDecl
 pub Decl: Decl = {
