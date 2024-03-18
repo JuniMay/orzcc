@@ -1,4 +1,5 @@
 use crate::frontend::ast::*;
+use hexponent::FloatLiteral;
 
 grammar;
 
@@ -185,12 +186,6 @@ pub PrimaryExp: PrimaryExp = {
   Number => PrimaryExp::Number(<>),
 }
 
-// 数值 Number → IntConst | floatConst
-pub Number: Number = {
-  <n:Int> => Number::IntConst(n),
-  <f:Float> => Number::FloatConst(f),
-}
-
 Int: i32 = {
   r"[1-9][0-9]*" => i32::from_str_radix(<>, 10).unwrap(),
   r"0[0-7]*" => i32::from_str_radix(<>, 8).unwrap(),
@@ -199,7 +194,16 @@ Int: i32 = {
 
 Float: f32 = {
   r"((([0-9]*[.][0-9]*([eE][+-]?[0-9]+)?)|([0-9]+[eE][+-]?[0-9]+))[fLlL]?)" => <>.parse::<f32>().unwrap(),
-  r"(0[xX](([0-9A-Fa-f]*[.][0-9A-Fa-f]*([pP][+-]?[0-9]+)?)|([0-9A-Fa-f]+[pP][+-]?[0-9]+))[fLlL]?)" => todo!(),
+  r"(0[xX](([0-9A-Fa-f]*[.][0-9A-Fa-f]*([pP][+-]?[0-9]+)?)|([0-9A-Fa-f]+[pP][+-]?[0-9]+))[fLlL]?)" => {
+        let float_literal: hexponent::FloatLiteral = <>.parse().unwrap();
+        float_literal.convert::<f32>().inner()
+    },
+}
+
+// 数值 Number → IntConst | floatConst
+pub Number: Number = {
+  <n:Int> => Number::IntConst(n),
+  <f:Float> => Number::FloatConst(f),
 }
 
 // 一元表达式 UnaryExp → PrimaryExp | Ident '(' [FuncRParams] ')' | UnaryOp UnaryExp
