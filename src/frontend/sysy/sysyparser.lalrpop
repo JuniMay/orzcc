@@ -45,8 +45,34 @@ pub ConstDef: ConstDef = {
   }
 }
 // 常量初值 ConstInitVal → ConstExp | '{' [ ConstInitVal { ',' ConstInitVal } ] '}'
+pub ConstInitVal: ConstInitVal = {
+  <c:ConstExp> => ConstInitVal::ConstExp(c),
+  "{" <ci:ConstInitVal> <mut v:("," <ConstInitVal>)*> "}"
+  =>match ci{
+    Some(ci)=>match v
+    {
+      Some(v)=>{
+        v.push(ci);
+        ConstInitVal::ConstInitVal(c,v)
+      }
+      None=>ConstInitVal::ConstInitVal(c,vec![ci])
+    }
+    None=>ConstInitVal::ConstInitVal(c,vec![])
+  }
+}
 // 变量声明 VarDecl → BType VarDef { ',' VarDef } ';'
+pub VarDecl: VarDecl = {
+  <b:BType> <v:VarDef> <mut v:("," <VarDef>)*> ";"
+  =>match v{
+    Some(v)=>{
+      v.push(v);
+      VarDecl::VarDecl(b,v)
+    }
+    None=>VarDecl::VarDecl(b,v)
+  }
+}+
 // 变量定义 VarDef → Ident { '[' ConstExp ']' } | Ident { '[' ConstExp ']' } '=' InitVal
+
 // 变量初值 InitVal → Exp | '{' [ InitVal { ',' InitVal } ] '}'
 // 函数定义 FuncDef → FuncType Ident '(' [FuncFParams] ')' Block
 // 函数类型 FuncType → 'void' | 'int' | 'float'
