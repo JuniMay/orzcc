@@ -165,33 +165,131 @@ pub BlockItem: BlockItem = {
 //             | 'while' '(' Cond ')' Stmt
 //             | 'break' ';' | 'continue' ';'
 //             | 'return' [Exp] ';'
+pub Stmt: Stmt={
+
+}
 
 // 表达式 Exp → AddExp 注：SysY表达式是 int/float型表达式
+pub Exp: Exp = <addexp:AddExp> => Exp{<>};
 
 // 条件表达式 Cond → LOrExp
+pub Cond: Cond = <lorexp:LOrExp> => Cond{<>};
 
 // 左值表达式 LVal → Ident {'[' Exp ']'}
+pub LVal: LVal = <ident: Ident> <exp: ("[" <Exp> "]")*> => LVal { <> };
 
 // 基本表达式 PrimaryExp → '(' Exp ')' | LVal | Number
+pub PrimaryExp: PrimaryExp = {
+  "(" <Exp> ")" => PrimaryExp::Exp(<>),
+  LVal => PrimaryExp::LVal(<>),
+  Number => PrimaryExp::Number(<>),
+}
 
 // 数值 Number → IntConst | floatConst
+pub Number: Number = {
+  <n:Int> => Number::IntConst(n),
+  <f:Float> => Number::FloatConst(f),
+}
+
+Int: i32 = {
+  r"[1-9][0-9]*" => i32::from_str_radix(<>, 10).unwrap(),
+  r"0[0-7]*" => i32::from_str_radix(<>, 8).unwrap(),
+  r"0[xX][0-9a-fA-F]+" => i32::from_str_radix(&<>[2..], 16).unwrap(),
+}
+
+Float: f32 = {
+  r"((([0-9]*[.][0-9]*([eE][+-]?[0-9]+)?)|([0-9]+[eE][+-]?[0-9]+))[fLlL]?)" => <>.parse::<f32>().unwrap(),
+  r"(0[xX](([0-9A-Fa-f]*[.][0-9A-Fa-f]*([pP][+-]?[0-9]+)?)|([0-9A-Fa-f]+[pP][+-]?[0-9]+))[fLlL]?)" => todo!(),
+}
 
 // 一元表达式 UnaryExp → PrimaryExp | Ident '(' [FuncRParams] ')' | UnaryOp UnaryExp
+pub UnaryExp: UnaryExp = {
+  PrimaryExp => UnaryExp::Primary(<>),
+  <i: Ident> "(" ")" => UnaryExp::FuncCall(FuncCall { i, exp: Vec::new() }),
+  <i: Ident> "(" <e: Exp> <mut exp: ("," <Exp>)*> ")" => {
+    exp.insert(0, e);
+    UnaryExp::FuncCall(FuncCall { i, exp })
+  },
+  "+" <UnaryExp> => <>,
+  <uop: UnaryOp> <uexp: UnaryExp> => UnaryExp::UnaryOp(uop, Box::new(uexp)),
+}
 
-// 单目运算符 UnaryOp → '+' | '−' | '!' 注：'!'仅出现在仅出现在条件表达式中条件表达式中
-
-// 函数实参表 FuncRParams → Exp { ',' Exp }
+// 单目运算符 UnaryOp → '+' | '−' | '!' 注：'!'仅出现在仅出现在条件表达式中条件表达式中，其中 '+' 可以不考虑
+pub UnaryOp: UnaryOp = {
+  "-" => UnaryOp::Neg,
+  "!" => UnaryOp::Not,
+}
 
 // 乘除模表达式 MulExp → UnaryExp | MulExp ('*' | '/' | '%') UnaryExp
+pub MulExp: MulExp = {
+  UnaryExp => MulExp::UnaryExp(<>),
+  <me: MulExp> "*" <ue: UnaryExp> => {
+    MulExp::MulUExp(me, "*", ue)
+  },
+  <me: MulExp> "/" <ue: UnaryExp> => {
+    MulExp::MulUExp(me, "/", ue)
+  },
+  <me: MulExp> "%" <ue: UnaryExp> => {
+    MulExp::MulUExp(me, "%", ue)
+  },
+}
 
 // 加减表达式 AddExp → MulExp | AddExp ('+' | '−') MulExp
+pub AddExp: AddExp = {
+  MulExp => AddExp::MulExp(<>),
+  <ae: AddExp> "+" <me: MulExp> => {
+    AddExp::AddMExp(ae, "+", me)
+  },
+  <ae: AddExp> "-" <me: MulExp> => {
+    AddExp::AddMExp(ae, "-", me)
+  },
+}
 
 // 关系表达式 RelExp → AddExp | RelExp ('<' | '>' | '<=' | '>=') AddExp
+pub RelExp: RelExp = {
+  AddExp => RelExp::AddExp(<>),
+  <re: RelExp> "<" <ae: AddExp> => {
+    RelExp::RelAExp(re, "<", ae)
+  },
+  <re: RelExp> ">" <ae: AddExp> => {
+    RelExp::RelAExp(re, ">", ae)
+  },
+  <re: RelExp> "<=" <ae: AddExp> => {
+    RelExp::RelAExp(re, "<=", ae)
+  },
+  <re: RelExp> ">=" <ae: AddExp> => {
+    RelExp::RelAExp(re, ">=", ae)
+  },
+}
 
 // 相等性表达式 EqExp → RelExp | EqExp ('==' | '!=') RelExp
+pub EqExp: EqExp = {
+  RelExp => EqExp::RelExp(<>),
+  <ee: EqExp> "==" <re: RelExp> => {
+    EqExp::EqRExp(ee, "==", re)
+  },
+  <ee: EqExp> "!=" <re: RelExp> => {
+    EqExp::EqRExp(ee, "!=", re)
+  },
+}
 
 // 逻辑与表达式 LAndExp → EqExp | LAndExp '&&' EqExp
+LAndExp: LAndExp = {
+  EqExp => LAndExp::EqExp(<>),
+  <le: LAndExp> "&&" <ee: EqExp> => {
+    LAndExp::LAndEExp(le, "&&",ee)
+  },
+}
 
 // 逻辑或表达式 LOrExp → LAndExp | LOrExp '||' LAndExp
+LOrExp: LOrExp = {
+  LAndExp => LOrExp::LAndExp(<>),
+  <loe: LOrExp> "||" <lae: LAndExp> => {
+    LOrExp::LOrLExp(loe,"||" ,lae)
+  },
+}
 
 // 常量表达式 ConstExp → AddExp
+pub ConstExp: ConstExp = <addexp:AddExp> => ConstExp{<>};
+
+Ident: String = r"[_a-zA-Z][_a-zA-Z0-9]*" => <>.to_string();

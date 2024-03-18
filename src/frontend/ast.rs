@@ -90,7 +90,7 @@ pub enum BlockItem {
 //             | 'return' [Exp] ';'
 pub enum Stmt {
     Assign(LVal, Exp),
-    Exp(Exp),
+    ExpSt(ExpSt),
     Block(Block),
     If(Cond, Box<Stmt>, Option<Box<Stmt>>),
     While(Cond, Box<Stmt>),
@@ -98,6 +98,13 @@ pub enum Stmt {
     Continue,
     Return(Option<Exp>),
 }
+
+// Attension：there is a diff between the Exp and the ExpSt 
+pub struct ExpSt {
+    pub exp: Option<Exp>,
+}
+  
+
 // 表达式 Exp → AddExp 注：SysY表达式是 int/float型表达式
 pub struct Exp {
     pub addexp: AddExp,
@@ -106,68 +113,81 @@ pub struct Exp {
 pub struct Cond {
     pub lorexp: LOrExp,
 }
+
 // 左值表达式 LVal → Ident {'[' Exp ']'}
 pub struct LVal {
     pub ident: String,
-    pub exp: Option<Exp>,
+    pub exp: Vec<Exp>,
 }
+
 // 基本表达式 PrimaryExp → '(' Exp ')' | LVal | Number
 pub enum PrimaryExp {
     Exp(Exp),
     LVal(LVal),
     Number(Number),
 }
+
 // 数值 Number → IntConst | floatConst
 pub enum Number {
     IntConst(i32),
     FloatConst(f32),
 }
+
 // 一元表达式 UnaryExp → PrimaryExp | Ident '(' [FuncRParams] ')' | UnaryOp UnaryExp
 pub enum UnaryExp {
     PrimaryExp(PrimaryExp),
-    FuncRParams(FuncRParams),
+    FuncCall(FuncCall),
     UnaryOp(UnaryOp, Box<UnaryExp>),
 }
-// 单目运算符 UnaryOp → '+' | '−' | '!' 注：'!'仅出现在仅出现在条件表达式中条件表达式中
+
+// 单目运算符 UnaryOp → '+' | '−' | '!' 注：'!'仅出现在仅出现在条件表达式中条件表达式中，其中 '+' 可以不考虑
 pub enum UnaryOp {
-    Plus,
-    Minus,
+    Neg,
     Not,
 }
+
 // 函数实参表 FuncRParams → Exp { ',' Exp }
-pub struct FuncRParams {
+pub struct FuncCall {
+    pub ident: String,   
     pub exp: Vec<Exp>,
 }
+
 // 乘除模表达式 MulExp → UnaryExp | MulExp ('*' | '/' | '%') UnaryExp
 pub enum MulExp {
     UnaryExp(UnaryExp),
-    MulExp(MulExp, MulOp, UnaryExp),
+    MulUExp(MulExp, MulOp, UnaryExp),
 }
+
 // 加减表达式 AddExp → MulExp | AddExp ('+' | '−') MulExp
 pub enum AddExp {
     MulExp(MulExp),
-    AddExp(AddExp, AddOp, MulExp),
+    AddMExp(AddExp, AddOp, MulExp),
 }
+
 // 关系表达式 RelExp → AddExp | RelExp ('<' | '>' | '<=' | '>=') AddExp
 pub enum RelExp {
     AddExp(AddExp),
-    RelExp(RelExp, RelOp, AddExp),
+    RelAExp(RelExp, RelOp, AddExp),
 }
+
 // 相等性表达式 EqExp → RelExp | EqExp ('==' | '!=') RelExp
 pub enum EqExp {
     RelExp(RelExp),
-    EqExp(EqExp, EqOp, RelExp),
+    EqRExp(EqExp, EqOp, RelExp),
 }
+
 // 逻辑与表达式 LAndExp → EqExp | LAndExp '&&' EqExp
 pub enum LAndExp {
     EqExp(EqExp),
-    LAndExp(LAndExp, LAndOp, EqExp),
+    LAndEExp(LAndExp, LAndOp, EqExp),
 }
+
 // 逻辑或表达式 LOrExp → LAndExp | LOrExp '||' LAndExp
 pub enum LOrExp {
     LAndExp(LAndExp),
-    LOrExp(LOrExp, LOrOp, LAndExp),
+    LOrLExp(LOrExp, LOrOp, LAndExp),
 }
+
 // 常量表达式 ConstExp → AddExp
 pub struct ConstExp {
     pub addexp: AddExp,
