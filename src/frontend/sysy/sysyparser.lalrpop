@@ -17,7 +17,7 @@ pub CompUnit: CompUnit = {
 // 声明 Decl → ConstDecl | VarDecl
 pub Decl: Decl = {
   ConstDecl,
-  VarDecl
+  VarDecl,
 }
 
 // 常量声明 ConstDecl → 'const' BType ConstDef { ',' ConstDef } ';'
@@ -69,67 +69,125 @@ pub ConstInitVal: ConstInitVal = {
 
 // 变量声明 VarDecl → BType VarDef { ',' VarDef } ';'
 pub VarDecl: VarDecl = {
-  <b:BType> <v:VarDef> <mut v:("," <VarDef>)*> ";"
+  <b:BType> <vd:VarDef> <mut v:("," <VarDef>)*> ";"
   =>match v{
     Some(v)=>{
-      v.push(v);
+      v.push(vd);
       VarDecl::VarDecl(b,v)
     }
-    None=>VarDecl::VarDecl(b,v)
+    None=>VarDecl::VarDecl(b,vd)
   }
-}+
+}
 
 // 变量定义 VarDef → Ident { '[' ConstExp ']' } | Ident { '[' ConstExp ']' } '=' InitVal
 pub VarDef: VarDef = {
-  <i:Ident> <mut v:("[" <ConstExp> "]" )* > ("=" <c:InitVal>)?
+  <i:Ident> <mut v:("[" <ConstExp> "]" )* > ("=" <iv:InitVal>)?
   =>match v{
     Some(v)=>{
-      VarDef::VarDef(i,v,c)
+      VarDef::VarDef(i,v,iv)
     }
-    None=>VarDef::VarDef(i,vec![],c)
+    None=>VarDef::VarDef(i,vec![],iv)
   }
 }
 
 // 变量初值 InitVal → Exp | '{' [ InitVal { ',' InitVal } ] '}'
 pub InitVal: InitVal = {
-  <c:Exp> => InitVal::Exp(c),
-  "{" <ci:InitVal> <mut v:("," <InitVal>)*> "}"
-  =>match ci{
-    Some(ci)=>match v
+  <e:Exp> => InitVal::Exp(e),
+  "{" <iv:InitVal> <mut v:("," <InitVal>)*> "}"
+  =>match iv{
+    Some(iv)=>match v
     {
       Some(v)=>{
-        v.push(ci);
-        InitVal::InitVal(c,v)
+        v.push(iv);
+        InitVal::InitVal(e,v)
       }
-      None=>InitVal::InitVal(c,vec![ci])
+      None=>InitVal::InitVal(e,vec![iv])
     }
-    None=>InitVal::InitVal(c,vec![])
+    None=>InitVal::InitVal(e,vec![])
   }
 }
 
 // 函数定义 FuncDef → FuncType Ident '(' [FuncFParams] ')' Block
+pub FuncDef: FuncDef={
+  <ft:FuncType> <i:Ident> "(" ")" <b:Block> => {
+    FuncDef{ functype: ft, ident: i, funcfparams: Vec::new(), block: b }
+  },
+  <ft:FuncType> <i:Ident> "(" <fps:FuncFParams> ")" <b:Block> => {
+    FuncDef{ functype: ft, ident: i, funcfparams: fps, block: b }
+  },
+}
+
 // 函数类型 FuncType → 'void' | 'int' | 'float'
+pub FuncType: FuncType = {
+  "void" => FuncType::Void,
+  "int" => FuncType::Int,
+  "float" => FuncType::Float
+}
+
 // 函数形参表 FuncFParams → FuncFParam { ',' FuncFParam }
+pub FuncFParams: FuncFParams={
+  <fp:FuncFParam> <mut v:("," <FuncFParam>)*>
+  => match v {
+  Some(v)=>{
+    v.push(fp);
+    FuncFParams::FuncFParams(v)
+  }
+  None=>FuncFParams::FuncFParams(fp)
+  }
+}
+
 // 函数形参 FuncFParam → BType Ident ['[' ']' { '[' Exp ']' }]
+pub FuncFParam: FuncFParam={
+  <btype:BType> <ident:Ident> <exp: ("[" "]" <("[" <Exp> "]")*>)?> => {
+    FuncFParam { <> }
+  },
+}
+
 // 语句块 Block → '{' { BlockItem } '}'
+pub Block: Block={
+  "{" <blockitem: (BlockItem)*> "}" => {
+    Block{<>}
+  }
+}
+
 // 语句块项 BlockItem → Decl | Stmt
+pub BlockItem: BlockItem = {
+  Decl,
+  Stmt,
+}
+
 // 语句 Stmt → LVal '=' Exp ';' | [Exp] ';' | Block
 //             | 'if' '( Cond ')' Stmt [ 'else' Stmt ]
 //             | 'while' '(' Cond ')' Stmt
 //             | 'break' ';' | 'continue' ';'
 //             | 'return' [Exp] ';'
+
 // 表达式 Exp → AddExp 注：SysY表达式是 int/float型表达式
+
 // 条件表达式 Cond → LOrExp
+
 // 左值表达式 LVal → Ident {'[' Exp ']'}
+
 // 基本表达式 PrimaryExp → '(' Exp ')' | LVal | Number
+
 // 数值 Number → IntConst | floatConst
+
 // 一元表达式 UnaryExp → PrimaryExp | Ident '(' [FuncRParams] ')' | UnaryOp UnaryExp
+
 // 单目运算符 UnaryOp → '+' | '−' | '!' 注：'!'仅出现在仅出现在条件表达式中条件表达式中
+
 // 函数实参表 FuncRParams → Exp { ',' Exp }
+
 // 乘除模表达式 MulExp → UnaryExp | MulExp ('*' | '/' | '%') UnaryExp
+
 // 加减表达式 AddExp → MulExp | AddExp ('+' | '−') MulExp
+
 // 关系表达式 RelExp → AddExp | RelExp ('<' | '>' | '<=' | '>=') AddExp
+
 // 相等性表达式 EqExp → RelExp | EqExp ('==' | '!=') RelExp
+
 // 逻辑与表达式 LAndExp → EqExp | LAndExp '&&' EqExp
+
 // 逻辑或表达式 LOrExp → LAndExp | LOrExp '||' LAndExp
+
 // 常量表达式 ConstExp → AddExp

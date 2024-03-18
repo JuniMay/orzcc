@@ -69,7 +69,7 @@ pub struct FuncFParams {
 pub struct FuncFParam {
     pub btype: BType,
     pub ident: String,
-    pub exp: Option<Exp>,
+    pub exp: Option<Vec<Exp>>,
 }
 // 语句块 Block → '{' { BlockItem } '}'
 pub struct Block {
