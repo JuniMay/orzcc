@@ -9,10 +9,41 @@ match {
   _
 }
 // 编译单元 CompUnit → [ CompUnit ] ( Decl | FuncDef )
+pub CompUnit: CompUnit = {
+  (Decl | FuncDef)*
+}
 // 声明 Decl → ConstDecl | VarDecl
+pub Decl: Decl = {
+  ConstDecl,
+  VarDecl
+}
 // 常量声明 ConstDecl → 'const' BType ConstDef { ',' ConstDef } ';'
+pub ConstDecl: ConstDecl = {
+  "const" <b:BType> <c:ConstDef> <mut v:("," <ConstDef>)*> ";"
+  =>match v{
+    Some(v)=>{
+        v.push(c);
+        ConstDecl::ConstDecl(b,v)
+    }
+    None=>ConstDecl::ConstDecl(b,c)
+  }
+
+}
 // 基本类型 BType → 'int' | 'float'
+pub BType: BType = {
+  "int" => BType::Int,
+  "float" => BType::Float
+}
 // 常数定义 ConstDef → Ident { '[' ConstExp ']' } '=' ConstInitVal
+pub ConstDef: ConstDef = {
+  <i:Ident> <mut v:("[" <ConstExp> "]" )* > "=" <c:ConstInitVal>
+  =>match v{
+    Some(v)=>{
+      ConstDef::ConstDef(i,v,c)
+    }
+    None=>ConstDef::ConstDef(i,vec![],c)
+  }
+}
 // 常量初值 ConstInitVal → ConstExp | '{' [ ConstInitVal { ',' ConstInitVal } ] '}'
 // 变量声明 VarDecl → BType VarDef { ',' VarDef } ';'
 // 变量定义 VarDef → Ident { '[' ConstExp ']' } | Ident { '[' ConstExp ']' } '=' InitVal

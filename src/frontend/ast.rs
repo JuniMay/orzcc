@@ -1,3 +1,5 @@
+use std::vec;
+
 // 编译单元 CompUnit → [ CompUnit ] ( Decl | FuncDef )
 pub enum CompUnit {
     Decl(Decl),
@@ -22,7 +24,7 @@ pub enum BType {
 // 常数定义 ConstDef → Ident { '[' ConstExp ']' } '=' ConstInitVal
 pub struct ConstDef {
     pub ident: String,
-    pub constexp: Option<ConstExp>,
+    pub constexp: Vec<ConstExp>,
     pub constinitval: ConstInitVal,
 }
 // 常量初值 ConstInitVal → ConstExp | '{' [ ConstInitVal { ',' ConstInitVal } ] '}'
