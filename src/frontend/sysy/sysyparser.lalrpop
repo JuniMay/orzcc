@@ -180,7 +180,7 @@ pub LVal: LVal = <ident: Ident> <exp: ("[" <Exp> "]")*> => LVal { <> };
 
 // 基本表达式 PrimaryExp → '(' Exp ')' | LVal | Number
 pub PrimaryExp: PrimaryExp = {
-  "(" <Exp> ")" => PrimaryExp::Exp(<>),
+  "(" <Exp> ")" => PrimaryExp::Exp(Box::new(<>)),
   LVal => PrimaryExp::LVal(<>),
   Number => PrimaryExp::Number(<>),
 }

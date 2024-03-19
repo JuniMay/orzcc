@@ -122,7 +122,7 @@ pub struct LVal {
 
 // 基本表达式 PrimaryExp → '(' Exp ')' | LVal | Number
 pub enum PrimaryExp {
-    Exp(Exp),
+    Exp(Box<Exp>),
     LVal(LVal),
     Number(Number),
 }
@@ -155,37 +155,37 @@ pub struct FuncCall {
 // 乘除模表达式 MulExp → UnaryExp | MulExp ('*' | '/' | '%') UnaryExp
 pub enum MulExp {
     UnaryExp(UnaryExp),
-    MulUExp(MulExp, MulOp, UnaryExp),
+    MulUExp(Box<MulExp>, MulOp, UnaryExp),
 }
 
 // 加减表达式 AddExp → MulExp | AddExp ('+' | '−') MulExp
 pub enum AddExp {
     MulExp(MulExp),
-    AddMExp(AddExp, AddOp, MulExp),
+    AddMExp(Box<AddExp>, AddOp, MulExp),
 }
 
 // 关系表达式 RelExp → AddExp | RelExp ('<' | '>' | '<=' | '>=') AddExp
 pub enum RelExp {
     AddExp(AddExp),
-    RelAExp(RelExp, RelOp, AddExp),
+    RelAExp(Box<RelExp>, RelOp, AddExp),
 }
 
 // 相等性表达式 EqExp → RelExp | EqExp ('==' | '!=') RelExp
 pub enum EqExp {
     RelExp(RelExp),
-    EqRExp(EqExp, EqOp, RelExp),
+    EqRExp(Box<EqExp>, EqOp, RelExp),
 }
 
 // 逻辑与表达式 LAndExp → EqExp | LAndExp '&&' EqExp
 pub enum LAndExp {
     EqExp(EqExp),
-    LAndEExp(LAndExp, LAndOp, EqExp),
+    LAndEExp(Box<LAndExp>, LAndOp, EqExp),
 }
 
 // 逻辑或表达式 LOrExp → LAndExp | LOrExp '||' LAndExp
 pub enum LOrExp {
     LAndExp(LAndExp),
-    LOrLExp(LOrExp, LOrOp, LAndExp),
+    LOrLExp(Box(LOrExp), LOrOp, LAndExp),
 }
 
 // 常量表达式 ConstExp → AddExp
