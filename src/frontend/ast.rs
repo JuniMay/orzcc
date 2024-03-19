@@ -14,15 +14,10 @@ pub enum Decl {
     ConstDecl(ConstDecl),
     VarDecl(VarDecl),
 }
-// 常量声明 ConstDecl → 'const' BType ConstDef { ',' ConstDef } ';'
+// 常量声明 ConstDecl → 'const' BasicType ConstDef { ',' ConstDef } ';'
 pub struct ConstDecl {
-    pub btype: BType,
+    pub basictype: BasicType,
     pub constdef: Vec<ConstDef>,
-}
-// 基本类型 BType → 'int' | 'float'
-pub enum BType {
-    Int,
-    Float,
 }
 // 常数定义 ConstDef → Ident { '[' ConstExp ']' } '=' ConstInitVal
 pub struct ConstDef {
@@ -35,9 +30,9 @@ pub enum ConstInitVal {
     ConstExp(ConstExp),
     ConstInitVal(Vec<ConstInitVal>),
 }
-// 变量声明 VarDecl → BType VarDef { ',' VarDef } ';'
+// 变量声明 VarDecl → BasicType VarDef { ',' VarDef } ';'
 pub struct VarDecl {
-    pub btype: BType,
+    pub basictype: BasicType,
     pub vardef: Vec<VarDef>,
 }
 // 变量定义 VarDef → Ident { '[' ConstExp ']' } | Ident { '[' ConstExp ']' } '=' InitVal
@@ -51,15 +46,15 @@ pub enum InitVal {
     Exp(Exp),
     InitVal(Vec<InitVal>),
 }
-// 函数定义 FuncDef → FuncType Ident '(' [FuncFParams] ')' Block
+// 函数定义 FuncDef → BasicType Ident '(' [FuncFParams] ')' Block
 pub struct FuncDef {
-    pub functype: FuncType,
+    pub basictype: BasicType,
     pub ident: String,
     pub funcfparams: Option<FuncFParams>,
     pub block: Block,
 }
-// 函数类型 FuncType → 'void' | 'int' | 'float'
-pub enum FuncType {
+// 函数类型 BasicType → 'void' | 'int' | 'float'
+pub enum BasicType {
     Void,
     Int,
     Float,
@@ -68,9 +63,9 @@ pub enum FuncType {
 pub struct FuncFParams {
     pub funcfparam: Vec<FuncFParam>,
 }
-// 函数形参 FuncFParam → BType Ident ['[' ']' { '[' Exp ']' }]
+// 函数形参 FuncFParam → BasicType Ident ['[' ']' { '[' Exp ']' }]
 pub struct FuncFParam {
-    pub btype: BType,
+    pub basictype: BasicType,
     pub ident: String,
     pub exp: Option<Vec<Exp>>,
 }
@@ -96,8 +91,12 @@ pub enum Stmt {
     While(Cond, Box<Stmt>),
     Break,
     Continue,
-    Return(Option<Exp>),
+    Return(Return),
 }
+
+pub struct Return {
+    pub exp: Option<Exp>,
+  }  
 
 // Attension：there is a diff between the Exp and the ExpSt 
 pub struct ExpSt {
@@ -158,10 +157,23 @@ pub enum MulExp {
     MulUExp(Box<MulExp>, MulOp, UnaryExp),
 }
 
+// 乘除模运算符 MulOp → '*' | '/' | '%'
+pub enum MulOp {
+    Mul,
+    Div,
+    Mod,
+}
+
 // 加减表达式 AddExp → MulExp | AddExp ('+' | '−') MulExp
 pub enum AddExp {
     MulExp(MulExp),
     AddMExp(Box<AddExp>, AddOp, MulExp),
+}
+
+// 加减运算符 AddOp → '+' | '−'
+pub enum AddOp {
+    Add,
+    Sub,
 }
 
 // 关系表达式 RelExp → AddExp | RelExp ('<' | '>' | '<=' | '>=') AddExp
@@ -170,10 +182,24 @@ pub enum RelExp {
     RelAExp(Box<RelExp>, RelOp, AddExp),
 }
 
+// 关系运算符 RelOp → '<' | '>' | '<=' | '>='
+pub enum RelOp {
+    Lt,
+    Gt,
+    Le,
+    Ge,
+}
+
 // 相等性表达式 EqExp → RelExp | EqExp ('==' | '!=') RelExp
 pub enum EqExp {
     RelExp(RelExp),
     EqRExp(Box<EqExp>, EqOp, RelExp),
+}
+
+// 相等性运算符 EqOp → '==' | '!='
+pub enum EqOp {
+    Eq,
+    Ne,
 }
 
 // 逻辑与表达式 LAndExp → EqExp | LAndExp '&&' EqExp
@@ -182,10 +208,20 @@ pub enum LAndExp {
     LAndEExp(Box<LAndExp>, LAndOp, EqExp),
 }
 
+// 逻辑与运算符 LAndOp → '&&'
+pub enum LAndOp {
+    And,
+}
+
 // 逻辑或表达式 LOrExp → LAndExp | LOrExp '||' LAndExp
 pub enum LOrExp {
     LAndExp(LAndExp),
-    LOrLExp(Box(LOrExp), LOrOp, LAndExp),
+    LOrLExp(Box<LOrExp>, LOrOp, LAndExp),
+}
+
+// 逻辑或运算符 LOrOp → '||'
+pub enum LOrOp {
+    Or,
 }
 
 // 常量表达式 ConstExp → AddExp

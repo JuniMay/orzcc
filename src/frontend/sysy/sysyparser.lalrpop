@@ -17,33 +17,33 @@ pub CompUnit: CompUnit = {
 
 // 编译单元项 CompUnitItem → Decl | FuncDef
 pub CompUnitItem: CompUnitItem = {
-  Decl,
-  FuncDef
+  <d:Decl> => CompUnitItem::Decl(d),
+  <f:FuncDef> => CompUnitItem::FuncDef(f)
 }
 
 // 声明 Decl → ConstDecl | VarDecl
 pub Decl: Decl = {
-  ConstDecl,
-  VarDecl,
+  <d:ConstDecl> => Decl::ConstDecl(d),
+  <v:VarDecl> => Decl::VarDecl(v)
 }
 
-// 常量声明 ConstDecl → 'const' BType ConstDef { ',' ConstDef } ';'
+// 类型 BasicType → 'void' | 'int' | 'float'
+pub BasicType: BasicType = {
+  "void" => BasicType::Void,
+  "int" => BasicType::Int,
+  "float" => BasicType::Float
+}
+
+// 常量声明 ConstDecl → 'const' BasicType ConstDef { ',' ConstDef } ';'
 pub ConstDecl: ConstDecl = {
-  "const" <b:BType> <c:ConstDef> <mut v:("," <ConstDef>)*> ";"
+  "const" <t:BasicType> <c:ConstDef> <mut v:("," <ConstDef>)*> ";"
   =>match v{
     Some(v)=>{
-        v.push(c);
-        ConstDecl::ConstDecl(b,v)
+      v.push(c);
+      ConstDecl { t, v }
     }
-    None=>ConstDecl::ConstDecl(b,c)
+    None=>ConstDecl { t, v: vec![c] }
   }
-
-}
-
-// 基本类型 BType → 'int' | 'float'
-pub BType: BType = {
-  "int" => BType::Int,
-  "float" => BType::Float
 }
 
 // 常量定义 ConstDef → Ident { '[' ConstExp ']' } '=' ConstInitVal
@@ -51,9 +51,9 @@ pub ConstDef: ConstDef = {
   <i:Ident> <mut v:("[" <ConstExp> "]" )* > "=" <c:ConstInitVal>
   =>match v{
     Some(v)=>{
-      ConstDef::ConstDef(i,v,c)
+      ConstDef { i, v, c }
     }
-    None=>ConstDef::ConstDef(i,vec![],c)
+    None=>ConstDef { i, v: vec![], c }
   }
 }
 
@@ -63,30 +63,30 @@ pub ConstInitVal: ConstInitVal = {
   "{" <ci:ConstInitVal> <mut v:("," <ConstInitVal>)*> "}" => {
     v.push(ci);
     ConstInitVal::ConstInitVal(v)
-  }
+  },
   "{" "}" => ConstInitVal::ConstInitVal(Vec::new())
 }
 
-// 变量声明 VarDecl → BType VarDef { ',' VarDef } ';'
+// 变量声明 VarDecl → BasicType VarDef { ',' VarDef } ';'
 pub VarDecl: VarDecl = {
-  <b:BType> <vd:VarDef> <mut v:("," <VarDef>)*> ";"
+  <t:BasicType> <vd:VarDef> <mut v:("," <VarDef>)*> ";"
   =>match v{
-    Some(v)=>{
-      v.push(vd);
-      VarDecl::VarDecl(b,v)
-    }
-    None=>VarDecl::VarDecl(b,vd)
+      Some(v)=>{
+          v.push(vd);
+          VarDecl { t, v }
+      }
+      None=>VarDecl { t, v: vec![vd] }
   }
 }
 
 // 变量定义 VarDef → Ident { '[' ConstExp ']' } | Ident { '[' ConstExp ']' } '=' InitVal
 pub VarDef: VarDef = {
-  <i:Ident> <mut v:("[" <ConstExp> "]" )* > <initval:("=" <InitVal>)?>
+  <i:Ident> <mut v:("[" <ConstExp> "]" )* > "=" <initval:InitVal>
   =>match v{
     Some(v)=>{
-      VarDef::VarDef(i,v,initval)
+      VarDef { i, v, initval }
     }
-    None=>VarDef::VarDef(i,vec![],initval)
+    None=>VarDef { i, v: vec![], initval }
   }
 }
 
@@ -100,21 +100,14 @@ pub InitVal: InitVal = {
   "{" "}" => InitVal::InitVal(Vec::new())
 }
 
-// 函数定义 FuncDef → FuncType Ident '(' [FuncFParams] ')' Block
+// 函数定义 FuncDef → BasicType Ident '(' [FuncFParams] ')' Block
 pub FuncDef: FuncDef={
-  <ft:FuncType> <i:Ident> "(" ")" <b:Block> => {
-    FuncDef{ functype: ft, ident: i, funcfparams: Vec::new(), block: b }
+  <t:BasicType> <i:Ident> "(" ")" <b:Block> => {
+    FuncDef{ BasicType: t, ident: i, funcfparams: Vec::new(), block: b }
   },
-  <ft:FuncType> <i:Ident> "(" <fps:FuncFParams> ")" <b:Block> => {
-    FuncDef{ functype: ft, ident: i, funcfparams: fps, block: b }
+  <t:BasicType> <i:Ident> "(" <fps:FuncFParams> ")" <b:Block> => {
+    FuncDef{ BasicType: t, ident: i, funcfparams: fps, block: b }
   },
-}
-
-// 函数类型 FuncType → 'void' | 'int' | 'float'
-pub FuncType: FuncType = {
-  "void" => FuncType::Void,
-  "int" => FuncType::Int,
-  "float" => FuncType::Float
 }
 
 // 函数形参表 FuncFParams → FuncFParam { ',' FuncFParam }
@@ -129,9 +122,9 @@ pub FuncFParams: FuncFParams={
   }
 }
 
-// 函数形参 FuncFParam → BType Ident ['[' ']' { '[' Exp ']' }]
+// 函数形参 FuncFParam → BasicType Ident ['[' ']' { '[' Exp ']' }]
 pub FuncFParam: FuncFParam={
-  <btype:BType> <ident:Ident> <exp: ("[" "]" <("[" <Exp> "]")*>)?> => {
+  <t:BasicType> <ident:Ident> <exp: ("[" "]" <("[" <Exp> "]")*>)?> => {
     FuncFParam { <> }
   },
 }
@@ -163,20 +156,20 @@ pub MStmt: Stmt = {
   <exp:(Exp)?> ";" => Stmt::ExpSt(ExpSt{<>}),
   <b:Block> => Stmt::Block(b),
   "if" "(" <c:Cond> ")" <s1:MStmt> "else" <s2:MStmt> => {
-    Stmt::If(c, Box::new(s1), Box::new(s2)),
+    Stmt::If(c, Box::new(s1), Box::new(s2))
   },
   "while" "(" <c:Cond> ")" <s:MStmt> => Stmt::While(c, Box::new(s)),
   "break;" => Stmt::Break,
   "continue;" => Stmt::Continue,
-  "return" <e:(Exp)?> ";" => Stmt::Return(Return { <> }),
+  "return" <e:(Exp)?> ";" => Stmt::Return(Return{exp:e}),
 }
 
 pub OStmt: Stmt = {
   "if" "(" <c:Cond> ")" <s1: Stmt> => {
-    Stmt::If(c, Box::new(s1), Box::new(<>)),
+    Stmt::If(c, Box::new(s1), Box::new(<>))
   },
   "if" "(" <c:Cond> ")" <s1: MStmt> "else" <s2: OStmt> => {
-    Stmt::If(c, Box::new(s1), Box::new(s2)),
+    Stmt::If(c, Box::new(s1), Box::new(s2))
   },
   "while" "(" <c:Cond> ")" <s:OStmt> => Stmt::While(c, Box::new(s)),
 }
@@ -219,7 +212,7 @@ pub Number: Number = {
 
 // 一元表达式 UnaryExp → PrimaryExp | Ident '(' [FuncRParams] ')' | UnaryOp UnaryExp
 pub UnaryExp: UnaryExp = {
-  PrimaryExp => UnaryExp::Primary(<>),
+  PrimaryExp => UnaryExp::PrimaryExp(<>),
   <i: Ident> "(" ")" => UnaryExp::FuncCall(FuncCall { i, exp: Vec::new() }),
   <i: Ident> "(" <e: Exp> <mut exp: ("," <Exp>)*> ")" => {
     exp.insert(0, e);
