@@ -11,7 +11,7 @@ match {
 }
 // 编译单元 CompUnit → [ CompUnit ] ( Decl | FuncDef )
 pub CompUnit: CompUnit = {
-  <(CompUnitItem)*>=>CompUnit{<>}
+  <item: (CompUnitItem)*> => CompUnit { <> }
 }
 // 编译单元项 CompUnitItem → Decl | FuncDef
 pub CompUnitItem: CompUnitItem = {
@@ -58,18 +58,11 @@ pub ConstDef: ConstDef = {
 // 常量初值 ConstInitVal → ConstExp | '{' [ ConstInitVal { ',' ConstInitVal } ] '}'
 pub ConstInitVal: ConstInitVal = {
   <c:ConstExp> => ConstInitVal::ConstExp(c),
-  "{" <ci:ConstInitVal> <mut v:("," <ConstInitVal>)*> "}"
-  =>match ci{
-    Some(ci)=>match v
-    {
-      Some(v)=>{
-        v.push(ci);
-        ConstInitVal::ConstInitVal(c,v)
-      }
-      None=>ConstInitVal::ConstInitVal(c,vec![ci])
-    }
-    None=>ConstInitVal::ConstInitVal(c,vec![])
+  "{" <ci:ConstInitVal> <mut v:("," <ConstInitVal>)*> "}" => {
+    v.push(ci);
+    ConstInitVal::ConstInitVal(v)
   }
+  "{" "}" => ConstInitVal::ConstInitVal(Vec::new())
 }
 
 // 变量声明 VarDecl → BType VarDef { ',' VarDef } ';'
@@ -86,30 +79,23 @@ pub VarDecl: VarDecl = {
 
 // 变量定义 VarDef → Ident { '[' ConstExp ']' } | Ident { '[' ConstExp ']' } '=' InitVal
 pub VarDef: VarDef = {
-  <i:Ident> <mut v:("[" <ConstExp> "]" )* > ("=" <iv:InitVal>)?
+  <i:Ident> <mut v:("[" <ConstExp> "]" )* > <initval:("=" <InitVal>)?>
   =>match v{
     Some(v)=>{
-      VarDef::VarDef(i,v,iv)
+      VarDef::VarDef(i,v,initval)
     }
-    None=>VarDef::VarDef(i,vec![],iv)
+    None=>VarDef::VarDef(i,vec![],initval)
   }
 }
 
 // 变量初值 InitVal → Exp | '{' [ InitVal { ',' InitVal } ] '}'
 pub InitVal: InitVal = {
   <e:Exp> => InitVal::Exp(e),
-  "{" (<iv:InitVal> <mut v:("," <InitVal>)*>)?"}"
-  =>match iv{
-    Some(iv)=>match v
-    {
-      Some(v)=>{
-        v.push(iv);
-        InitVal::InitVal(e,v)
-      }
-      None=>InitVal::InitVal(e,vec![iv])
-    }
-    None=>InitVal::InitVal(e,vec![])
+  "{" <iv:InitVal> <mut v:("," <InitVal>)*> "}" => {
+    v.push(iv);
+    InitVal::InitVal(v)
   }
+  "{" "}" => InitVal::InitVal(Vec::new())
 }
 
 // 函数定义 FuncDef → FuncType Ident '(' [FuncFParams] ')' Block
@@ -168,16 +154,18 @@ pub Stmt: Stmt={
   <lval:LVal> "=" <exp:Exp> ";" => Stmt::Assign(lval, exp),
   <exp:Exp> ";" => Stmt::Exp(exp),
   <b:Block> => Stmt::Block(b),
-  "if" "(" <c:Cond> ")" <s1:Stmt> ("else" <s2:Stmt>)? => match s2 {
-    Some(s2) => Stmt::If(c, Box::new(s1), Box::new(s2)),
-    None => Stmt::If(c, Box::new(s1), Box::new(Stmt::Empty)),
+  "if" "(" <c:Cond> ")" <s1:Stmt> "else" <s2:Stmt> => {
+    Stmt::If(c, Box::new(s1), Box::new(s2)),
+  },
+  "if" "(" <c:Cond> ")" <s1:Stmt> => {
+    Stmt::If(c, Box::new(s1), Box::new()),
   },
   "while" "(" <c:Cond> ")" <s:Stmt> => Stmt::While(c, Box::new(s)),
   "break;" => Stmt::Break,
   "continue;" => Stmt::Continue,
-  "return" (<e:Exp>)? ";" => match e {
+  "return" <e:(Exp)?> ";" => match e {
     Some(e) => Stmt::Return(e),
-    None => Stmt::Return(Box::new(Exp::Empty)),
+    None => Stmt::Return(Box::new()),
   },
 }
 
