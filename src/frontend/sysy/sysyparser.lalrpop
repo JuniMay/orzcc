@@ -9,10 +9,12 @@ match {
   r"/\*[^*]*\*+(?:[^/*][^*]*\*+)*/" => {},
   _
 }
+
 // 编译单元 CompUnit → [ CompUnit ] ( Decl | FuncDef )
 pub CompUnit: CompUnit = {
   <item: (CompUnitItem)*> => CompUnit { <> }
 }
+
 // 编译单元项 CompUnitItem → Decl | FuncDef
 pub CompUnitItem: CompUnitItem = {
   Decl,
@@ -150,23 +152,33 @@ pub BlockItem: BlockItem = {
 //             | 'while' '(' Cond ')' Stmt
 //             | 'break' ';' | 'continue' ';'
 //             | 'return' [Exp] ';'
+// 需要处理else悬挂问题
 pub Stmt: Stmt={
+  MStmt => <>,
+  OStmt => <>,
+}
+
+pub MStmt: Stmt = {
   <lval:LVal> "=" <exp:Exp> ";" => Stmt::Assign(lval, exp),
-  <exp:Exp> ";" => Stmt::Exp(exp),
+  <exp:(Exp)?> ";" => Stmt::ExpSt(ExpSt{<>}),
   <b:Block> => Stmt::Block(b),
-  "if" "(" <c:Cond> ")" <s1:Stmt> "else" <s2:Stmt> => {
+  "if" "(" <c:Cond> ")" <s1:MStmt> "else" <s2:MStmt> => {
     Stmt::If(c, Box::new(s1), Box::new(s2)),
   },
-  "if" "(" <c:Cond> ")" <s1:Stmt> => {
-    Stmt::If(c, Box::new(s1), Box::new()),
-  },
-  "while" "(" <c:Cond> ")" <s:Stmt> => Stmt::While(c, Box::new(s)),
+  "while" "(" <c:Cond> ")" <s:MStmt> => Stmt::While(c, Box::new(s)),
   "break;" => Stmt::Break,
   "continue;" => Stmt::Continue,
-  "return" <e:(Exp)?> ";" => match e {
-    Some(e) => Stmt::Return(e),
-    None => Stmt::Return(Box::new()),
+  "return" <e:(Exp)?> ";" => Stmt::Return(Return { <> }),
+}
+
+pub OStmt: Stmt = {
+  "if" "(" <c:Cond> ")" <s1: Stmt> => {
+    Stmt::If(c, Box::new(s1), Box::new(<>)),
   },
+  "if" "(" <c:Cond> ")" <s1: MStmt> "else" <s2: OStmt> => {
+    Stmt::If(c, Box::new(s1), Box::new(s2)),
+  },
+  "while" "(" <c:Cond> ")" <s:OStmt> => Stmt::While(c, Box::new(s)),
 }
 
 // 表达式 Exp → AddExp 注：SysY表达式是 int/float型表达式
