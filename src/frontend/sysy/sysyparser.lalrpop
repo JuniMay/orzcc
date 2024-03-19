@@ -40,9 +40,9 @@ pub ConstDecl: ConstDecl = {
   =>match v{
     Some(v)=>{
       v.push(c);
-      ConstDecl { t, v }
+      ConstDecl { basictype:t, constdef:v }
     }
-    None=>ConstDecl { t, v: vec![c] }
+    None=>ConstDecl { basictype:t, constdef:vec![c] }
   }
 }
 
@@ -51,9 +51,9 @@ pub ConstDef: ConstDef = {
   <i:Ident> <mut v:("[" <ConstExp> "]" )* > "=" <c:ConstInitVal>
   =>match v{
     Some(v)=>{
-      ConstDef { i, v, c }
+      ConstDef { ident:i, constexp:v, constinitval:c }
     }
-    None=>ConstDef { i, v: vec![], c }
+    None=>ConstDef { ident:i, constexp:vec![], constinitval:c }
   }
 }
 
@@ -73,20 +73,20 @@ pub VarDecl: VarDecl = {
   =>match v{
       Some(v)=>{
           v.push(vd);
-          VarDecl { t, v }
+          VarDecl { basictype:t, vardef:v }
       }
-      None=>VarDecl { t, v: vec![vd] }
+      None=>VarDecl { basictype:t, vardef:vec![vd] }
   }
 }
 
 // 变量定义 VarDef → Ident { '[' ConstExp ']' } | Ident { '[' ConstExp ']' } '=' InitVal
 pub VarDef: VarDef = {
-  <i:Ident> <mut v:("[" <ConstExp> "]" )* > "=" <initval:InitVal>
+  <i:Ident> <mut v:("[" <ConstExp> "]" )* > "=" <ini:InitVal>
   =>match v{
     Some(v)=>{
-      VarDef { i, v, initval }
+      VarDef { ident:i, constexp:v, initval:ini }
     }
-    None=>VarDef { i, v: vec![], initval }
+    None=>VarDef { ident:i, constexp:vec![], initval:ini }
   }
 }
 
@@ -96,29 +96,29 @@ pub InitVal: InitVal = {
   "{" <iv:InitVal> <mut v:("," <InitVal>)*> "}" => {
     v.push(iv);
     InitVal::InitVal(v)
-  }
+  },
   "{" "}" => InitVal::InitVal(Vec::new())
 }
 
 // 函数定义 FuncDef → BasicType Ident '(' [FuncFParams] ')' Block
 pub FuncDef: FuncDef={
   <t:BasicType> <i:Ident> "(" ")" <b:Block> => {
-    FuncDef{ BasicType: t, ident: i, funcfparams: Vec::new(), block: b }
+    FuncDef{ basictype: t, ident: i, funcfparams: Vec::new(), block: b }
   },
   <t:BasicType> <i:Ident> "(" <fps:FuncFParams> ")" <b:Block> => {
-    FuncDef{ BasicType: t, ident: i, funcfparams: fps, block: b }
+    FuncDef{ basictype: t, ident: i, funcfparams: fps, block: b }
   },
 }
 
 // 函数形参表 FuncFParams → FuncFParam { ',' FuncFParam }
 pub FuncFParams: FuncFParams={
   <fp:FuncFParam> <mut v:("," <FuncFParam>)*>
-  => match v {
-  Some(v)=>{
-    v.push(fp);
-    FuncFParams::FuncFParams(v)
-  }
-  None=>FuncFParams::FuncFParams(fp)
+  =>match v{
+    Some(v)=>{
+      v.push(fp);
+      FuncFParams { funcfparam:v }
+    }
+    None=>FuncFParams { funcfparam:vec![fp] }
   }
 }
 

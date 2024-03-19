@@ -38,7 +38,7 @@ pub struct VarDecl {
 // 变量定义 VarDef → Ident { '[' ConstExp ']' } | Ident { '[' ConstExp ']' } '=' InitVal
 pub struct VarDef {
     pub ident: String,
-    pub constexp: Option<ConstExp>,
+    pub constexp: Vec<ConstExp>,
     pub initval: Option<InitVal>,
 }
 // 变量初值 InitVal → Exp | '{' [ InitVal { ',' InitVal } ] '}'
