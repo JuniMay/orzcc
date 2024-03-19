@@ -175,7 +175,7 @@ pub Stmt: Stmt={
   "while" "(" <c:Cond> ")" <s:Stmt> => Stmt::While(c, Box::new(s)),
   "break;" => Stmt::Break,
   "continue;" => Stmt::Continue,
-  "return" <e:Exp>? ";" => match e {
+  "return" (<e:Exp>)? ";" => match e {
     Some(e) => Stmt::Return(e),
     None => Stmt::Return(Box::new(Exp::Empty)),
   },
