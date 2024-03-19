@@ -98,7 +98,7 @@ pub VarDef: VarDef = {
 // 变量初值 InitVal → Exp | '{' [ InitVal { ',' InitVal } ] '}'
 pub InitVal: InitVal = {
   <e:Exp> => InitVal::Exp(e),
-  "{" <iv:InitVal> <mut v:("," <InitVal>)*> "}"
+  "{" (<iv:InitVal> <mut v:("," <InitVal>)*>)?"}"
   =>match iv{
     Some(iv)=>match v
     {
@@ -150,9 +150,7 @@ pub FuncFParam: FuncFParam={
 
 // 语句块 Block → '{' { BlockItem } '}'
 pub Block: Block={
-  "{" <blockitem: (BlockItem)*> "}" => {
-    Block{<>}
-  }
+  "{" <blockitem: (BlockItem)*> "}" => Block{<>}
 }
 
 // 语句块项 BlockItem → Decl | Stmt
@@ -167,7 +165,20 @@ pub BlockItem: BlockItem = {
 //             | 'break' ';' | 'continue' ';'
 //             | 'return' [Exp] ';'
 pub Stmt: Stmt={
-
+  <lval:LVal> "=" <exp:Exp> ";" => Stmt::Assign(lval, exp),
+  <exp:Exp> ";" => Stmt::Exp(exp),
+  <b:Block> => Stmt::Block(b),
+  "if" "(" <c:Cond> ")" <s1:Stmt> ("else" <s2:Stmt>)? => match s2 {
+    Some(s2) => Stmt::If(c, Box::new(s1), Box::new(s2)),
+    None => Stmt::If(c, Box::new(s1), Box::new(Stmt::Empty)),
+  },
+  "while" "(" <c:Cond> ")" <s:Stmt> => Stmt::While(c, Box::new(s)),
+  "break;" => Stmt::Break,
+  "continue;" => Stmt::Continue,
+  "return" <e:Exp>? ";" => match e {
+    Some(e) => Stmt::Return(e),
+    None => Stmt::Return(Box::new(Exp::Empty)),
+  },
 }
 
 // 表达式 Exp → AddExp 注：SysY表达式是 int/float型表达式
@@ -187,14 +198,14 @@ pub PrimaryExp: PrimaryExp = {
 }
 
 Int: i32 = {
-  r"[1-9][0-9]*" => i32::from_str_radix(<>, 10).unwrap(),
-  r"0[0-7]*" => i32::from_str_radix(<>, 8).unwrap(),
-  r"0[xX][0-9a-fA-F]+" => i32::from_str_radix(&<>[2..], 16).unwrap(),
+  r"[1-9][0-9]*" => i32::from_str_radix(<>, 10).unwrap(),
+  r"0[0-7]*" => i32::from_str_radix(<>, 8).unwrap(),
+  r"0[xX][0-9a-fA-F]+" => i32::from_str_radix(&<>[2..], 16).unwrap(),
 }
 
 Float: f32 = {
-  r"((([0-9]*[.][0-9]*([eE][+-]?[0-9]+)?)|([0-9]+[eE][+-]?[0-9]+))[fLlL]?)" => <>.parse::<f32>().unwrap(),
-  r"(0[xX](([0-9A-Fa-f]*[.][0-9A-Fa-f]*([pP][+-]?[0-9]+)?)|([0-9A-Fa-f]+[pP][+-]?[0-9]+))[fLlL]?)" => {
+  r"((([0-9]*[.][0-9]*([eE][+-]?[0-9]+)?)|([0-9]+[eE][+-]?[0-9]+))[fLlL]?)" => <>.parse::<f32>().unwrap(),
+  r"(0[xX](([0-9A-Fa-f]*[.][0-9A-Fa-f]*([pP][+-]?[0-9]+)?)|([0-9A-Fa-f]+[pP][+-]?[0-9]+))[fLlL]?)" => {
         let float_literal: hexponent::FloatLiteral = <>.parse().unwrap();
         float_literal.convert::<f32>().inner()
     },
@@ -228,13 +239,13 @@ pub UnaryOp: UnaryOp = {
 pub MulExp: MulExp = {
   UnaryExp => MulExp::UnaryExp(<>),
   <me: MulExp> "*" <ue: UnaryExp> => {
-    MulExp::MulUExp(me, "*", ue)
+    MulExp::MulUExp(Box::new(me), "*", ue)
   },
   <me: MulExp> "/" <ue: UnaryExp> => {
-    MulExp::MulUExp(me, "/", ue)
+    MulExp::MulUExp(Box::new(me), "/", ue)
   },
   <me: MulExp> "%" <ue: UnaryExp> => {
-    MulExp::MulUExp(me, "%", ue)
+    MulExp::MulUExp(Box::new(me), "%", ue)
   },
 }
 
@@ -242,10 +253,10 @@ pub MulExp: MulExp = {
 pub AddExp: AddExp = {
   MulExp => AddExp::MulExp(<>),
   <ae: AddExp> "+" <me: MulExp> => {
-    AddExp::AddMExp(ae, "+", me)
+    AddExp::AddMExp(Box::new(ae), "+", me)
   },
   <ae: AddExp> "-" <me: MulExp> => {
-    AddExp::AddMExp(ae, "-", me)
+    AddExp::AddMExp(Box::new(ae), "-", me)
   },
 }
 
@@ -253,16 +264,16 @@ pub AddExp: AddExp = {
 pub RelExp: RelExp = {
   AddExp => RelExp::AddExp(<>),
   <re: RelExp> "<" <ae: AddExp> => {
-    RelExp::RelAExp(re, "<", ae)
+    RelExp::RelAExp(Box::new(re), "<", ae)
   },
   <re: RelExp> ">" <ae: AddExp> => {
-    RelExp::RelAExp(re, ">", ae)
+    RelExp::RelAExp(Box::new(re), ">", ae)
   },
   <re: RelExp> "<=" <ae: AddExp> => {
-    RelExp::RelAExp(re, "<=", ae)
+    RelExp::RelAExp(Box::new(re), "<=", ae)
   },
   <re: RelExp> ">=" <ae: AddExp> => {
-    RelExp::RelAExp(re, ">=", ae)
+    RelExp::RelAExp(Box::new(re), ">=", ae)
   },
 }
 
@@ -270,10 +281,10 @@ pub RelExp: RelExp = {
 pub EqExp: EqExp = {
   RelExp => EqExp::RelExp(<>),
   <ee: EqExp> "==" <re: RelExp> => {
-    EqExp::EqRExp(ee, "==", re)
+    EqExp::EqRExp(Box::new(ee), "==", re)
   },
   <ee: EqExp> "!=" <re: RelExp> => {
-    EqExp::EqRExp(ee, "!=", re)
+    EqExp::EqRExp(Box::new(ee), "!=", re)
   },
 }
 
@@ -281,7 +292,7 @@ pub EqExp: EqExp = {
 LAndExp: LAndExp = {
   EqExp => LAndExp::EqExp(<>),
   <le: LAndExp> "&&" <ee: EqExp> => {
-    LAndExp::LAndEExp(le, "&&",ee)
+    LAndExp::LAndEExp(Box::new(le), "&&",ee)
   },
 }
 
@@ -289,7 +300,7 @@ LAndExp: LAndExp = {
 LOrExp: LOrExp = {
   LAndExp => LOrExp::LAndExp(<>),
   <loe: LOrExp> "||" <lae: LAndExp> => {
-    LOrExp::LOrLExp(loe,"||" ,lae)
+    LOrExp::LOrLExp(Box::new(loe),"||" ,lae)
   },
 }
 
