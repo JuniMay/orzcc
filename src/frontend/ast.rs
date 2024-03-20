@@ -1,4 +1,3 @@
-use std::vec;
 
 // 编译单元 CompUnit → { CompUnitItem }
 pub struct CompUnit {
@@ -50,7 +49,7 @@ pub enum InitVal {
 pub struct FuncDef {
     pub basictype: BasicType,
     pub ident: String,
-    pub funcfparams: Option<FuncFParams>,
+    pub funcfparams: FuncFParams,
     pub block: Block,
 }
 // 函数类型 BasicType → 'void' | 'int' | 'float'

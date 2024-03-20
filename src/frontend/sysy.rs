@@ -6,7 +6,7 @@ lalrpop_mod!(pub sysyparser, "/frontend/sysy/sysyparser.rs");
 
 #[cfg(test)]
 mod tests {
-    use crate::frontend::sysy::sysyparser;
+    //use crate::frontend::sysy::sysyparser;
     #[test]
     fn test_sysy() {
         // valid-cases
