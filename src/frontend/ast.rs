@@ -205,23 +205,13 @@ pub enum EqOp {
 // 逻辑与表达式 LAndExp → EqExp | LAndExp '&&' EqExp
 pub enum LAndExp {
     EqExp(EqExp),
-    LAndEExp(Box<LAndExp>, LAndOp, EqExp),
-}
-
-// 逻辑与运算符 LAndOp → '&&'
-pub enum LAndOp {
-    And,
+    LAndEExp(Box<LAndExp>, EqExp),
 }
 
 // 逻辑或表达式 LOrExp → LAndExp | LOrExp '||' LAndExp
 pub enum LOrExp {
     LAndExp(LAndExp),
-    LOrLExp(Box<LOrExp>, LOrOp, LAndExp),
-}
-
-// 逻辑或运算符 LOrOp → '||'
-pub enum LOrOp {
-    Or,
+    LOrLExp(Box<LOrExp>, LAndExp),
 }
 
 // 常量表达式 ConstExp → AddExp

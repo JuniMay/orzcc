@@ -219,26 +219,21 @@ pub UnaryExp: UnaryExp = {
     UnaryExp::FuncCall(FuncCall { i, exp })
   },
   "+" <UnaryExp> => <>,
-  <uop: UnaryOp> <uexp: UnaryExp> => UnaryExp::UnaryOp(uop, Box::new(uexp)),
-}
-
-// 单目运算符 UnaryOp → '+' | '−' | '!' 注：'!'仅出现在仅出现在条件表达式中条件表达式中，其中 '+' 可以不考虑
-pub UnaryOp: UnaryOp = {
-  "-" => UnaryOp::Neg,
-  "!" => UnaryOp::Not,
+  "-" <uexp: UnaryExp> => UnaryExp::UnaryOp(UnaryOp::Neg, Box::new(uexp)),
+  "!" <uexp: UnaryExp> => UnaryExp::UnaryOp(UnaryOp::Not, Box::new(uexp)),
 }
 
 // 乘除模表达式 MulExp → UnaryExp | MulExp ('*' | '/' | '%') UnaryExp
 pub MulExp: MulExp = {
   UnaryExp => MulExp::UnaryExp(<>),
   <me: MulExp> "*" <ue: UnaryExp> => {
-    MulExp::MulUExp(Box::new(me), "*", ue)
+    MulExp::MulUExp(Box::new(me), MulOp::Mul, ue)
   },
   <me: MulExp> "/" <ue: UnaryExp> => {
-    MulExp::MulUExp(Box::new(me), "/", ue)
+    MulExp::MulUExp(Box::new(me), MulOp::Div, ue)
   },
   <me: MulExp> "%" <ue: UnaryExp> => {
-    MulExp::MulUExp(Box::new(me), "%", ue)
+    MulExp::MulUExp(Box::new(me), MulOp::Mod, ue)
   },
 }
 
@@ -246,10 +241,10 @@ pub MulExp: MulExp = {
 pub AddExp: AddExp = {
   MulExp => AddExp::MulExp(<>),
   <ae: AddExp> "+" <me: MulExp> => {
-    AddExp::AddMExp(Box::new(ae), "+", me)
+    AddExp::AddMExp(Box::new(ae), AddOp::Add, me)
   },
   <ae: AddExp> "-" <me: MulExp> => {
-    AddExp::AddMExp(Box::new(ae), "-", me)
+    AddExp::AddMExp(Box::new(ae), AddOp::Sub, me)
   },
 }
 
@@ -257,16 +252,16 @@ pub AddExp: AddExp = {
 pub RelExp: RelExp = {
   AddExp => RelExp::AddExp(<>),
   <re: RelExp> "<" <ae: AddExp> => {
-    RelExp::RelAExp(Box::new(re), "<", ae)
+    RelExp::RelAExp(Box::new(re), RelOp::Lt, ae)
   },
   <re: RelExp> ">" <ae: AddExp> => {
-    RelExp::RelAExp(Box::new(re), ">", ae)
+    RelExp::RelAExp(Box::new(re), RelOp::Gt, ae)
   },
   <re: RelExp> "<=" <ae: AddExp> => {
-    RelExp::RelAExp(Box::new(re), "<=", ae)
+    RelExp::RelAExp(Box::new(re), RelOp::Le, ae)
   },
   <re: RelExp> ">=" <ae: AddExp> => {
-    RelExp::RelAExp(Box::new(re), ">=", ae)
+    RelExp::RelAExp(Box::new(re), RelOp::Ge, ae)
   },
 }
 
@@ -274,10 +269,10 @@ pub RelExp: RelExp = {
 pub EqExp: EqExp = {
   RelExp => EqExp::RelExp(<>),
   <ee: EqExp> "==" <re: RelExp> => {
-    EqExp::EqRExp(Box::new(ee), "==", re)
+    EqExp::EqRExp(Box::new(ee), EqOp::Eq, re)
   },
   <ee: EqExp> "!=" <re: RelExp> => {
-    EqExp::EqRExp(Box::new(ee), "!=", re)
+    EqExp::EqRExp(Box::new(ee), EqOp::Ne, re)
   },
 }
 
@@ -285,7 +280,7 @@ pub EqExp: EqExp = {
 LAndExp: LAndExp = {
   EqExp => LAndExp::EqExp(<>),
   <le: LAndExp> "&&" <ee: EqExp> => {
-    LAndExp::LAndEExp(Box::new(le), "&&",ee)
+    LAndExp::LAndEExp(Box::new(le),ee)
   },
 }
 
@@ -293,7 +288,7 @@ LAndExp: LAndExp = {
 LOrExp: LOrExp = {
   LAndExp => LOrExp::LAndExp(<>),
   <loe: LOrExp> "||" <lae: LAndExp> => {
-    LOrExp::LOrLExp(Box::new(loe),"||" ,lae)
+    LOrExp::LOrLExp(Box::new(loe),lae)
   },
 }
 
