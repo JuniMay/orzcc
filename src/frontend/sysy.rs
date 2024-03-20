@@ -155,15 +155,5 @@ mod tests {
         for case in valid_cases {
             assert!(sysyparser::CompUnitParser::new().parse(&case).is_ok(), "Failed to parse valid case: {}", case);
         }
-
-        // invalid-cases
-        let invalid_cases = vec![
-            "int main() { return; }",
-            // add more invalid cases here
-        ];
-
-        for case in invalid_cases {
-            //assert!(sysyparser::ProgramParser::new().parse(&case).is_err(), "Incorrectly parsed invalid case: {}", case);
-        }
     }
 }
