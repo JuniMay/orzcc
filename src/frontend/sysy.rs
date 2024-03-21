@@ -4,13 +4,14 @@ use lalrpop_util::lalrpop_mod;
 
 lalrpop_mod!(pub sysyparser, "/frontend/sysy/sysyparser.rs");
 
+
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use crate::frontend::sysy::sysyparser;
     #[test]
-    fn test_sysy() {
+    pub fn test_sysy() {
         // valid-cases
-        let valid_cases = vec![
+        pub const VALID_CASES: &[&str] = &[
             "const int a = 1+3, c=4;
             const float k[2][3]={1.0, 2.0, 3.0, 4.0, 5.0, 6.0};
             const int b = 2;
@@ -160,7 +161,7 @@ mod tests {
             // add more valid cases here
         ];
 
-        for case in valid_cases {
+        for case in VALID_CASES {
             assert!(sysyparser::CompUnitParser::new().parse(&case).is_ok(), "Failed to parse valid case: {}", case);
             let result = sysyparser::CompUnitParser::new().parse(&case).unwrap();
             println!("{:?}", result);

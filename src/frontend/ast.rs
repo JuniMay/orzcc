@@ -1,4 +1,18 @@
 use std::fmt;
+
+pub fn off2lineno(content: &str, offset: usize) -> usize {
+    content[..offset].matches('\n').count() + 1
+}
+
+pub struct SourcePos {
+    pub start: usize,
+    pub end: usize,
+}
+impl fmt::Debug for SourcePos {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "({}, {})", self.start, self.end)
+    }
+}
 // 编译单元 CompUnit → { CompUnitItem }
 pub struct CompUnit {
     pub item: Vec<CompUnitItem>,
@@ -374,6 +388,7 @@ impl fmt::Debug for UnaryOp {
 pub struct FuncCall {
     pub ident: String,   
     pub exp: Vec<Exp>,
+    pub pos: SourcePos,
 }
 impl fmt::Debug for FuncCall {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -381,7 +396,7 @@ impl fmt::Debug for FuncCall {
             .map(|exp| format!("{:?}", exp))
             .collect::<Vec<_>>()
             .join(", ");
-        write!(f, "FuncCall(FuncName: {:?}, Exp: {})", self.ident, exps)
+        write!(f, "FuncCall(FuncName: {:?}, Exp: {}, Pos: {:?})", self.ident, exps, self.pos)
     }
 }
 // 乘除模表达式 MulExp → UnaryExp | MulExp ('*' | '/' | '%') UnaryExp

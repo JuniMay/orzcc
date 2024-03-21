@@ -192,10 +192,10 @@ pub Number: Number = {
 // 一元表达式 UnaryExp → PrimaryExp | Ident '(' [FuncRParams] ')' | UnaryOp UnaryExp
 pub UnaryExp: UnaryExp = {
   PrimaryExp => UnaryExp::PrimaryExp(<>),
-  <i: Ident> "(" ")" => UnaryExp::FuncCall(FuncCall { ident:i, exp: Vec::new() }),
-  <i: Ident> "(" <e: Exp> <mut exp: ("," <Exp>)*> ")" => {
+  <start:@L> <i: Ident> <end:@R> "(" ")" => UnaryExp::FuncCall(FuncCall { ident:i, exp: Vec::new(),  pos: SourcePos { start, end }}),
+  <start:@L> <i: Ident> <end:@R> "(" <e: Exp> <mut exp: ("," <Exp>)*> ")" => {
     exp.insert(0, e);
-    UnaryExp::FuncCall(FuncCall { ident:i, exp })
+    UnaryExp::FuncCall(FuncCall { ident:i, exp, pos: SourcePos { start, end }})
   },
   "+" <UnaryExp> => <>,
   "-" <uexp: UnaryExp> => UnaryExp::UnaryOp(UnaryOp::Neg, Box::new(uexp)),
