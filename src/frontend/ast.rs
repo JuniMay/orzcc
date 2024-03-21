@@ -6,6 +6,7 @@ pub struct CompUnit {
 impl fmt::Debug for CompUnit {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "CompUnit {{")?;
+        writeln!(f)?;
         for item in &self.item {
             writeln!(f, "  {:?}", item)?;
         }
@@ -20,8 +21,8 @@ pub enum CompUnitItem {
 impl fmt::Debug for CompUnitItem {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            CompUnitItem::Decl(decl) => write!(f, "Decl({:?})", decl),
-            CompUnitItem::FuncDef(funcdef) => write!(f, "FuncDef({:?})", funcdef),
+            CompUnitItem::Decl(decl) => write!(f, "Decl: {:?}", decl),
+            CompUnitItem::FuncDef(funcdef) => write!(f, "FuncDef: {:?}", funcdef),
         }
     }
 }
@@ -33,8 +34,8 @@ pub enum Decl {
 impl fmt::Debug for Decl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Decl::ConstDecl(constdecl) => write!(f, "ConstDecl({:?})", constdecl),
-            Decl::VarDecl(vardecl) => write!(f, "VarDecl({:?})", vardecl),
+            Decl::ConstDecl(constdecl) => write!(f, "ConstDecl: {:?}", constdecl),
+            Decl::VarDecl(vardecl) => write!(f, "VarDecl: {:?}", vardecl),
         }
     }
 }
@@ -45,13 +46,12 @@ pub struct ConstDecl {
 }
 impl fmt::Debug for ConstDecl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "ConstDecl {{ basictype: {:?}, constdef: ", self.basictype)?;
+        writeln!(f, "Type: {:?}", self.basictype)?;
         for def in &self.constdef {
-            write!(f, "{:?}, ", def)?;
+            writeln!(f, "{:?} ", def)?;
         }
-        write!(f, "}}")
+        Ok(())
     }
-    
 }
 // 常数定义 ConstDef → Ident { '[' ConstExp ']' } '=' ConstInitVal
 pub struct ConstDef {
@@ -61,11 +61,11 @@ pub struct ConstDef {
 }
 impl fmt::Debug for ConstDef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "ConstDef {{ ident: {:?}, constexp: ", self.ident)?;
+        write!(f, "     Id: {:?}", self.ident)?;
         for exp in &self.constexp {
-            write!(f, "{:?}, ", exp)?;
+            write!(f, "[{:?}]", exp)?;
         }
-        write!(f, ", constinitval: {:?} }}", self.constinitval)
+        write!(f, " = {:?}", self.constinitval)
     }
 }
 // 常量初值 ConstInitVal → ConstExp | '{' [ ConstInitVal { ',' ConstInitVal } ] '}'
@@ -94,7 +94,7 @@ pub struct VarDecl {
 }
 impl fmt::Debug for VarDecl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "VarDecl {{ basictype: {:?}, vardef: ", self.basictype)?;
+        write!(f, "{{ basictype: {:?}, vardef: ", self.basictype)?;
         for def in &self.vardef {
             write!(f, "{:?}, ", def)?;
         }
