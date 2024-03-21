@@ -37,7 +37,7 @@ pub BasicType: BasicType = {
 // 常量声明 ConstDecl → 'const' BasicType ConstDef { ',' ConstDef } ';'
 pub ConstDecl: ConstDecl = {
   "const" <t:BasicType> <c:ConstDef> <mut v:("," <ConstDef>)*> ";" => {
-    v.push(c); 
+    v.insert(0, c); 
     ConstDecl { basictype: t, constdef: v } 
   }
 }
@@ -53,7 +53,7 @@ pub ConstDef: ConstDef = {
 pub ConstInitVal: ConstInitVal = {
   <c:ConstExp> => ConstInitVal::ConstExp(c),
   "{" <ci:ConstInitVal> <mut v:("," <ConstInitVal>)*> "}" => {
-    v.push(ci);
+    v.insert(0, ci);
     ConstInitVal::ConstInitVal(v)
   },
   "{" "}" => ConstInitVal::ConstInitVal(Vec::new())
@@ -62,7 +62,7 @@ pub ConstInitVal: ConstInitVal = {
 // 变量声明 VarDecl → BasicType VarDef { ',' VarDef } ';'
 pub VarDecl: VarDecl = {
   <t:BasicType> <vd:VarDef> <mut v:("," <VarDef>)*> ";" => {
-    v.push(vd); 
+    v.insert(0, vd); 
     VarDecl { basictype: t, vardef: v } 
   }
 }
@@ -78,7 +78,7 @@ pub VarDef: VarDef = {
 pub InitVal: InitVal = {
   <e:Exp> => InitVal::Exp(e),
   "{" <iv:InitVal> <mut v:("," <InitVal>)*> "}" => {
-    v.push(iv);
+    v.insert(0, iv);
     InitVal::InitVal(v)
   },
   "{" "}" => InitVal::InitVal(Vec::new())
@@ -97,7 +97,7 @@ pub FuncDef: FuncDef={
 // 函数形参表 FuncFParams → FuncFParam { ',' FuncFParam }
 pub FuncFParams: FuncFParams={
   <fp:FuncFParam> <mut v:("," <FuncFParam>)*> => {
-    v.push(fp);
+    v.insert(0, fp);
     FuncFParams { funcfparam:v }
   }
 }

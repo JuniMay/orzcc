@@ -94,11 +94,11 @@ pub struct VarDecl {
 }
 impl fmt::Debug for VarDecl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Type: {:?}, ", self.basictype)?;
-        for def in &self.vardef {
-            write!(f, "{:?}, ", def)?;
-        }
-        write!(f, "}}")
+        let defs = self.vardef.iter()
+            .map(|def| format!("{:?}", def))
+            .collect::<Vec<_>>()
+            .join(", ");
+        write!(f, "Type: {:?}, VarDef: {}", self.basictype, defs)
     }
 }
 // 变量定义 VarDef → Ident { '[' ConstExp ']' } | Ident { '[' ConstExp ']' } '=' InitVal
@@ -111,7 +111,7 @@ impl fmt::Debug for VarDef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Id: {:?}", self.ident)?;
         for exp in &self.constexp {
-            write!(f, "[{:?}]", exp)?;
+            write!(f, "{:?}", exp)?;
         }
         write!(f, ", InitVal: {:?}", self.initval)
     }
@@ -144,7 +144,7 @@ pub struct FuncDef {
 }
 impl fmt::Debug for FuncDef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Type: {:?}, Funcname: {:?}\n{:?}\n{:?}", 
+        write!(f, "Type: {:?}, FuncName: {:?}\n{:?}\n{:?}", 
         self.basictype, self.ident, self.funcfparams, self.block)
     }
 }
@@ -377,11 +377,11 @@ pub struct FuncCall {
 }
 impl fmt::Debug for FuncCall {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "FuncCall {{ ident: {:?}, exp: ", self.ident)?;
-        for exp in &self.exp {
-            write!(f, "{:?}, ", exp)?;
-        }
-        write!(f, "}}")
+        let exps = self.exp.iter()
+            .map(|exp| format!("{:?}", exp))
+            .collect::<Vec<_>>()
+            .join(", ");
+        write!(f, "FuncCall(FuncName: {:?}, Exp: {})", self.ident, exps)
     }
 }
 // 乘除模表达式 MulExp → UnaryExp | MulExp ('*' | '/' | '%') UnaryExp
