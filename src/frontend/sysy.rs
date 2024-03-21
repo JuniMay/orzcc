@@ -11,7 +11,7 @@ mod tests {
     fn test_sysy() {
         // valid-cases
         let valid_cases = vec![
-            "const int a = 1, c=4;
+            "const int a = 1+3, c=4;
             const float k[2][3]={1.0, 2.0, 3.0, 4.0, 5.0, 6.0};
             const int b = 2;
             int main() {

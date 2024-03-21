@@ -76,7 +76,7 @@ pub enum ConstInitVal {
 impl fmt::Debug for ConstInitVal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ConstInitVal::ConstExp(exp) => write!(f, "ConstExp({:?})", exp),
+            ConstInitVal::ConstExp(exp) => write!(f, "{:?}", exp),
             ConstInitVal::ConstInitVal(initval) => {
                 write!(f, "{{")?;
                 for val in initval {
@@ -287,7 +287,7 @@ pub struct Exp {
 }
 impl fmt::Debug for Exp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Exp {{ addexp: {:?} }}", self.addexp)
+        write!(f, "Exp: {:?}", self.addexp)
     }
 }
 // 条件表达式 Cond → LOrExp
@@ -296,7 +296,7 @@ pub struct Cond {
 }
 impl fmt::Debug for Cond {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Cond {{ lorexp: {:?} }}", self.lorexp)
+        write!(f, "Cond: {:?}", self.lorexp)
     }
 }
 // 左值表达式 LVal → Ident {'[' Exp ']'}
@@ -306,13 +306,12 @@ pub struct LVal {
 }
 impl fmt::Debug for LVal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "LVal {{ ident: {:?}, exp: ", self.ident)?;
+        write!(f, "ident: {:?}, exp: ", self.ident)?;
         for exp in &self.exp {
-            write!(f, "{:?}, ", exp)?;
+            write!(f, "[{:?}]", exp)?;
         }
-        write!(f, "}}")
+        write!(f, "")
     }
-    
 }
 // 基本表达式 PrimaryExp → '(' Exp ')' | LVal | Number
 pub enum PrimaryExp {
@@ -325,7 +324,7 @@ impl fmt::Debug for PrimaryExp {
         match self {
             PrimaryExp::Exp(exp) => write!(f, "Exp({:?})", exp),
             PrimaryExp::LVal(lval) => write!(f, "LVal({:?})", lval),
-            PrimaryExp::Number(number) => write!(f, "Number({:?})", number),
+            PrimaryExp::Number(number) => write!(f, "{:?}", number),
         }
     }
 }
@@ -337,8 +336,8 @@ pub enum Number {
 impl fmt::Debug for Number {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Number::IntConst(i) => write!(f, "IntConst({})", i),
-            Number::FloatConst(fl) => write!(f, "FloatConst({})", fl),
+            Number::IntConst(i) => write!(f, "Int({})", i),
+            Number::FloatConst(fl) => write!(f, "Float({})", fl),
         }
     }
     
@@ -352,9 +351,9 @@ pub enum UnaryExp {
 impl fmt::Debug for UnaryExp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            UnaryExp::PrimaryExp(exp) => write!(f, "PrimaryExp({:?})", exp),
-            UnaryExp::FuncCall(func) => write!(f, "FuncCall({:?})", func),
-            UnaryExp::UnaryOp(op, exp) => write!(f, "UnaryOp({:?}, {:?})", op, exp),
+            UnaryExp::PrimaryExp(exp) => write!(f, "{:?}", exp),
+            UnaryExp::FuncCall(func) => write!(f, "{:?}", func),
+            UnaryExp::UnaryOp(op, exp) => write!(f, "{:?}{:?}", op, exp),
         }
     }
 }
@@ -366,8 +365,8 @@ pub enum UnaryOp {
 impl fmt::Debug for UnaryOp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            UnaryOp::Neg => write!(f, "Neg"),
-            UnaryOp::Not => write!(f, "Not"),
+            UnaryOp::Neg => write!(f, "-"),
+            UnaryOp::Not => write!(f, "!"),
         }
     }
 }
@@ -393,8 +392,8 @@ pub enum MulExp {
 impl fmt::Debug for MulExp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            MulExp::UnaryExp(exp) => write!(f, "UnaryExp({:?})", exp),
-            MulExp::MulUExp(exp1, op, exp2) => write!(f, "MulUExp({:?}, {:?}, {:?})", exp1, op, exp2),
+            MulExp::UnaryExp(exp) => write!(f, "{:?}", exp),
+            MulExp::MulUExp(exp1, op, exp2) => write!(f, "{:?}{:?}{:?}", exp1, op, exp2),
         }
     }
 }
@@ -407,9 +406,9 @@ pub enum MulOp {
 impl fmt::Debug for MulOp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            MulOp::Mul => write!(f, "Mul"),
-            MulOp::Div => write!(f, "Div"),
-            MulOp::Mod => write!(f, "Mod"),
+            MulOp::Mul => write!(f, "*"),
+            MulOp::Div => write!(f, "/"),
+            MulOp::Mod => write!(f, "%"),
         }
     }
 }
@@ -421,8 +420,8 @@ pub enum AddExp {
 impl fmt::Debug for AddExp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AddExp::MulExp(exp) => write!(f, "MulExp({:?})", exp),
-            AddExp::AddMExp(exp1, op, exp2) => write!(f, "AddMExp({:?}, {:?}, {:?})", exp1, op, exp2),
+            AddExp::MulExp(exp) => write!(f, "{:?}", exp),
+            AddExp::AddMExp(exp1, op, exp2) => write!(f, "{:?}{:?}{:?}", exp1, op, exp2),
         }
     }
 }
@@ -434,8 +433,8 @@ pub enum AddOp {
 impl fmt::Debug for AddOp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AddOp::Add => write!(f, "Add"),
-            AddOp::Sub => write!(f, "Sub"),
+            AddOp::Add => write!(f, "+"),
+            AddOp::Sub => write!(f, "-"),
         }
     }
 }
@@ -447,8 +446,8 @@ pub enum RelExp {
 impl fmt::Debug for RelExp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RelExp::AddExp(exp) => write!(f, "AddExp({:?})", exp),
-            RelExp::RelAExp(exp1, op, exp2) => write!(f, "RelAExp({:?}, {:?}, {:?})", exp1, op, exp2),
+            RelExp::AddExp(exp) => write!(f, "{:?}", exp),
+            RelExp::RelAExp(exp1, op, exp2) => write!(f, "{:?}{:?}{:?}", exp1, op, exp2),
         }
     }
 }
@@ -462,10 +461,10 @@ pub enum RelOp {
 impl fmt::Debug for RelOp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RelOp::Lt => write!(f, "Lt"),
-            RelOp::Gt => write!(f, "Gt"),
-            RelOp::Le => write!(f, "Le"),
-            RelOp::Ge => write!(f, "Ge"),
+            RelOp::Lt => write!(f, "<"),
+            RelOp::Gt => write!(f, ">"),
+            RelOp::Le => write!(f, "<="),
+            RelOp::Ge => write!(f, ">="),
         }
     }
 }
@@ -477,8 +476,8 @@ pub enum EqExp {
 impl fmt::Debug for EqExp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            EqExp::RelExp(exp) => write!(f, "RelExp({:?})", exp),
-            EqExp::EqRExp(exp1, op, exp2) => write!(f, "EqRExp({:?}, {:?}, {:?})", exp1, op, exp2),
+            EqExp::RelExp(exp) => write!(f, "{:?}", exp),
+            EqExp::EqRExp(exp1, op, exp2) => write!(f, "{:?}{:?}{:?}", exp1, op, exp2),
         }
     }
 }
@@ -490,8 +489,8 @@ pub enum EqOp {
 impl fmt::Debug for EqOp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            EqOp::Eq => write!(f, "Eq"),
-            EqOp::Ne => write!(f, "Ne"),
+            EqOp::Eq => write!(f, "=="),
+            EqOp::Ne => write!(f, "!="),
         }
     }
 }
@@ -503,8 +502,8 @@ pub enum LAndExp {
 impl fmt::Debug for LAndExp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            LAndExp::EqExp(exp) => write!(f, "EqExp({:?})", exp),
-            LAndExp::LAndEExp(exp1, exp2) => write!(f, "LAndEExp({:?}, {:?})", exp1, exp2),
+            LAndExp::EqExp(exp) => write!(f, "{:?}", exp),
+            LAndExp::LAndEExp(exp1, exp2) => write!(f, "{:?}&&{:?}", exp1, exp2),
         }
     }
 }
@@ -516,8 +515,8 @@ pub enum LOrExp {
 impl fmt::Debug for LOrExp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            LOrExp::LAndExp(exp) => write!(f, "LAndExp({:?})", exp),
-            LOrExp::LOrLExp(exp1, exp2) => write!(f, "LOrLExp({:?}, {:?})", exp1, exp2),
+            LOrExp::LAndExp(exp) => write!(f, "{:?}", exp),
+            LOrExp::LOrLExp(exp1, exp2) => write!(f, "{:?}||{:?}", exp1, exp2),
         }
     }
 }
@@ -527,6 +526,6 @@ pub struct ConstExp {
 }
 impl fmt::Debug for ConstExp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "ConstExp {{ addexp: {:?} }}", self.addexp)
+        write!(f, "ConstExp: {:?}", self.addexp)
     }
 }
