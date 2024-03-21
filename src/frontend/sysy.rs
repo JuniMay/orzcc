@@ -6,6 +6,8 @@ lalrpop_mod!(pub sysyparser, "/frontend/sysy/sysyparser.rs");
 
 #[cfg(test)]
 mod tests {
+    use std::result;
+
     use crate::frontend::sysy::sysyparser;
     #[test]
     fn test_sysy() {
@@ -154,6 +156,8 @@ mod tests {
 
         for case in valid_cases {
             assert!(sysyparser::CompUnitParser::new().parse(&case).is_ok(), "Failed to parse valid case: {}", case);
+            let result = sysyparser::CompUnitParser::new().parse(&case).unwrap();
+            println!("{:?}", result);
         }
     }
 }
