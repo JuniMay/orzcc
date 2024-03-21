@@ -21,8 +21,8 @@ pub enum CompUnitItem {
 impl fmt::Debug for CompUnitItem {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            CompUnitItem::Decl(decl) => write!(f, "Decl: {:?}", decl),
-            CompUnitItem::FuncDef(funcdef) => write!(f, "FuncDef: {:?}", funcdef),
+            CompUnitItem::Decl(decl) => write!(f, "     Decl: {:?}", decl),
+            CompUnitItem::FuncDef(funcdef) => write!(f, "     FuncDef: {:?}", funcdef),
         }
     }
 }
@@ -94,7 +94,7 @@ pub struct VarDecl {
 }
 impl fmt::Debug for VarDecl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{{ basictype: {:?}, vardef: ", self.basictype)?;
+        write!(f, "Type: {:?}, ", self.basictype)?;
         for def in &self.vardef {
             write!(f, "{:?}, ", def)?;
         }
@@ -109,11 +109,11 @@ pub struct VarDef {
 }
 impl fmt::Debug for VarDef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "VarDef {{ ident: {:?}, constexp: ", self.ident)?;
+        write!(f, "Id: {:?}", self.ident)?;
         for exp in &self.constexp {
-            write!(f, "{:?}, ", exp)?;
+            write!(f, "[{:?}]", exp)?;
         }
-        write!(f, ", initval: {:?} }}", self.initval)
+        write!(f, ", InitVal: {:?}", self.initval)
     }
 }
 // 变量初值 InitVal → Exp | '{' [ InitVal { ',' InitVal } ] '}'
@@ -144,7 +144,8 @@ pub struct FuncDef {
 }
 impl fmt::Debug for FuncDef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "FuncDef {{ basictype: {:?}, ident: {:?}, funcfparams: {:?}, block: {:?} }}", self.basictype, self.ident, self.funcfparams, self.block)
+        write!(f, "Type: {:?}, Funcname: {:?}\n{:?}\n{:?}", 
+        self.basictype, self.ident, self.funcfparams, self.block)
     }
 }
 // 函数类型 BasicType → 'void' | 'int' | 'float'
@@ -168,11 +169,11 @@ pub struct FuncFParams {
 }
 impl fmt::Debug for FuncFParams {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "FuncFParams {{ funcfparam: ")?;
-        for param in &self.funcfparam {
-            write!(f, "{:?}, ", param)?;
-        }
-        write!(f, "}}")
+        let params = self.funcfparam.iter()
+            .map(|param| format!("{:?}", param))
+            .collect::<Vec<_>>()
+            .join(", ");
+        write!(f, "     FuncFParams({})", params)
     }
 }
 // 函数形参 FuncFParam → BasicType Ident ['[' ']' { '[' Exp ']' }]
@@ -183,14 +184,13 @@ pub struct FuncFParam {
 }
 impl fmt::Debug for FuncFParam {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "FuncFParam {{ basictype: {:?}, ident: {:?}, exp: ", self.basictype, self.ident)?;
+        write!(f, "FuncFParam(basictype: {:?}, ident: {:?}, exp: ", self.basictype, self.ident)?;
         match &self.exp {
             Some(exp) => {
-                write!(f, "{{")?;
                 for e in exp {
                     write!(f, "{:?}, ", e)?;
                 }
-                write!(f, "}}")
+                write!(f, ")")
             }
             None => write!(f, "None"),
         }
@@ -202,11 +202,11 @@ pub struct Block {
 }
 impl fmt::Debug for Block {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Block {{ blockitem: ")?;
+        write!(f, "      Block {{\n")?;
         for item in &self.blockitem {
-            write!(f, "{:?}, ", item)?;
+            write!(f, "         {:?}\n", item)?;
         }
-        write!(f, "}}")
+        write!(f, "      }}")
     }
 }
 // 语句块项 BlockItem → Decl | Stmt
@@ -244,16 +244,16 @@ impl fmt::Debug for Stmt {
             Stmt::ExpSt(expst) => write!(f, "ExpSt({:?})", expst),
             Stmt::Block(block) => write!(f, "Block({:?})", block),
             Stmt::If(cond, stmt1, stmt2) => {
-                write!(f, "If({:?}, {:?}, ", cond, stmt1)?;
+                write!(f, "If({:?}) {:?}", cond, stmt1)?;
                 match stmt2 {
-                    Some(stmt) => write!(f, "{:?})", stmt),
-                    None => write!(f, "None)"),
+                    Some(stmt) => write!(f, "else {:?}", stmt),
+                    None => write!(f, ""),
                 }
             }
-            Stmt::While(cond, stmt) => write!(f, "While({:?}, {:?})", cond, stmt),
+            Stmt::While(cond, stmt) => write!(f, "While({:?}){:?}", cond, stmt),
             Stmt::Break => write!(f, "Break"),
             Stmt::Continue => write!(f, "Continue"),
-            Stmt::Return(ret) => write!(f, "Return({:?})", ret),
+            Stmt::Return(ret) => write!(f, "{:?}", ret),
         }
     }
 }
@@ -263,8 +263,8 @@ pub struct Return {
 impl fmt::Debug for Return {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.exp {
-            Some(exp) => write!(f, "Some({:?})", exp),
-            None => write!(f, "None"),
+            Some(exp) => write!(f, "Return({:?})", exp),
+            None => write!(f, "Return"),
         }
     }
 }
@@ -275,7 +275,7 @@ pub struct ExpSt {
 impl fmt::Debug for ExpSt {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.exp {
-            Some(exp) => write!(f, "Some({:?})", exp),
+            Some(exp) => write!(f, "{:?}", exp),
             None => write!(f, "None"),
         }
     }
@@ -287,7 +287,7 @@ pub struct Exp {
 }
 impl fmt::Debug for Exp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Exp: {:?}", self.addexp)
+        write!(f, "{:?}", self.addexp)
     }
 }
 // 条件表达式 Cond → LOrExp
@@ -296,7 +296,7 @@ pub struct Cond {
 }
 impl fmt::Debug for Cond {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Cond: {:?}", self.lorexp)
+        write!(f, "{:?}", self.lorexp)
     }
 }
 // 左值表达式 LVal → Ident {'[' Exp ']'}
@@ -306,7 +306,7 @@ pub struct LVal {
 }
 impl fmt::Debug for LVal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "ident: {:?}, exp: ", self.ident)?;
+        write!(f, "{:?}", self.ident)?;
         for exp in &self.exp {
             write!(f, "[{:?}]", exp)?;
         }
