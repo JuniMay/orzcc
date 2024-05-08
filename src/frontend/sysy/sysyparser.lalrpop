@@ -10,31 +10,31 @@ match {
   _
 }
 
-// 编译单元 CompUnit → [ CompUnit ] ( Decl | FuncDef )
+// Compilation unit CompUnit → [ CompUnit ] ( Decl | FuncDef )
 pub CompUnit: CompUnit = {
   <item: (CompUnitItem)*> => CompUnit { <> }
 }
 
-// 编译单元项 CompUnitItem → Decl | FuncDef
+// Compilation unit item CompUnitItem → Decl | FuncDef
 pub CompUnitItem: CompUnitItem = {
   <d:Decl> => CompUnitItem::Decl(d),
   <f:FuncDef> => CompUnitItem::FuncDef(f)
 }
 
-// 声明 Decl → ConstDecl | VarDecl
+// Declaration Decl → ConstDecl | VarDecl
 pub Decl: Decl = {
   <d:ConstDecl> => Decl::ConstDecl(d),
   <v:VarDecl> => Decl::VarDecl(v)
 }
 
-// 类型 BasicType → 'void' | 'int' | 'float'
+// Type BasicType → 'void' | 'int' | 'float'
 pub BasicType: BasicType = {
   "void" => BasicType::Void,
   "int" => BasicType::Int,
   "float" => BasicType::Float
 }
 
-// 常量声明 ConstDecl → 'const' BasicType ConstDef { ',' ConstDef } ';'
+// Constant declaration ConstDecl → 'const' BasicType ConstDef { ',' ConstDef } ';'
 pub ConstDecl: ConstDecl = {
   "const" <t:BasicType> <c:ConstDef> <mut v:("," <ConstDef>)*> ";" => {
     v.insert(0, c); 
@@ -42,14 +42,14 @@ pub ConstDecl: ConstDecl = {
   }
 }
 
-// 常量定义 ConstDef → Ident { '[' ConstExp ']' } '=' ConstInitVal
+// Constant definition ConstDef → Ident { '[' ConstExp ']' } '=' ConstInitVal
 pub ConstDef: ConstDef = {
   <i:Ident> <v:("[" <ConstExp> "]" )* > "=" <c:ConstInitVal> => {
     ConstDef { ident: i, constexp: v, constinitval: c }
   }
 }
 
-// 常量初值 ConstInitVal → ConstExp | '{' [ ConstInitVal { ',' ConstInitVal } ] '}'
+// Constant value ConstInitVal → ConstExp | '{' [ ConstInitVal { ',' ConstInitVal } ] '}'
 pub ConstInitVal: ConstInitVal = {
   <c:ConstExp> => ConstInitVal::ConstExp(c),
   "{" <ci:ConstInitVal> <mut v:("," <ConstInitVal>)*> "}" => {
@@ -59,7 +59,7 @@ pub ConstInitVal: ConstInitVal = {
   "{" "}" => ConstInitVal::ConstInitVal(Vec::new())
 }
 
-// 变量声明 VarDecl → BasicType VarDef { ',' VarDef } ';'
+// Variable declaration VarDecl → BasicType VarDef { ',' VarDef } ';'
 pub VarDecl: VarDecl = {
   <t:BasicType> <vd:VarDef> <mut v:("," <VarDef>)*> ";" => {
     v.insert(0, vd); 
@@ -67,14 +67,14 @@ pub VarDecl: VarDecl = {
   }
 }
 
-// 变量定义 VarDef → Ident { '[' ConstExp ']' } | Ident { '[' ConstExp ']' } '=' InitVal
+// Variable definition VarDef → Ident { '[' ConstExp ']' } | Ident { '[' ConstExp ']' } '=' InitVal
 pub VarDef: VarDef = {
   <i:Ident> <v:("[" <ConstExp> "]" )* > <ini: ("=" <InitVal>)?> => {
     VarDef { ident: i, constexp: v, initval: ini }
   }
 }
 
-// 变量初值 InitVal → Exp | '{' [ InitVal { ',' InitVal } ] '}'
+// Variable initial value InitVal → Exp | '{' [ InitVal { ',' InitVal } ] '}'
 pub InitVal: InitVal = {
   <e:Exp> => InitVal::Exp(e),
   "{" <iv:InitVal> <mut v:("," <InitVal>)*> "}" => {
@@ -84,7 +84,7 @@ pub InitVal: InitVal = {
   "{" "}" => InitVal::InitVal(Vec::new())
 }
 
-// 函数定义 FuncDef → BasicType Ident '(' [FuncFParams] ')' Block
+// Function definition FuncDef → BasicType Ident '(' [FuncFParams] ')' Block
 pub FuncDef: FuncDef={
   <t:BasicType> <i:Ident> "(" ")" <b:Block> => {
     FuncDef{ basictype: t, ident: i, funcfparams: FuncFParams { funcfparam: vec![] }, block: b }
@@ -94,7 +94,7 @@ pub FuncDef: FuncDef={
   },
 }
 
-// 函数形参表 FuncFParams → FuncFParam { ',' FuncFParam }
+// Function formal parameter table FuncFParams → FuncFParam { ',' FuncFParam }
 pub FuncFParams: FuncFParams={
   <fp:FuncFParam> <mut v:("," <FuncFParam>)*> => {
     v.insert(0, fp);
@@ -102,29 +102,29 @@ pub FuncFParams: FuncFParams={
   }
 }
 
-// 函数形参 FuncFParam → BasicType Ident ['[' ']' { '[' Exp ']' }]
+// Function formal parameter FuncFParam → BasicType Ident ['[' ']' { '[' Exp ']' }]
 pub FuncFParam: FuncFParam={
   <basictype:BasicType> <ident:Ident> <exp: ("[" "]" <("[" <Exp> "]")*>)?> => {
     FuncFParam { <> }
   },
 }
 
-// 语句块 Block → '{' { BlockItem } '}'
+// Statement block Block → '{' { BlockItem } '}'
 Block: Block = "{" <blockitem: (BlockItem)*> "}" => Block { <> };
 
 
-// 语句块项 BlockItem → Decl | Stmt
+// Statement block item BlockItem → Decl | Stmt
 pub BlockItem: BlockItem = {
   Decl => BlockItem::Decl(<>),
   Stmt => BlockItem::Stmt(<>),
 }
 
-// 语句 Stmt → LVal '=' Exp ';' | [Exp] ';' | Block
+// Statement Stmt → LVal '=' Exp ';' | [Exp] ';' | Block
 //             | 'if' '( Cond ')' Stmt [ 'else' Stmt ]
 //             | 'while' '(' Cond ')' Stmt
 //             | 'break' ';' | 'continue' ';'
 //             | 'return' [Exp] ';'
-// 需要处理else悬挂问题
+// Need to handle else hanging problem
 pub Stmt: Stmt={
   MStmt => <>,
   OStmt => <>,
@@ -153,16 +153,16 @@ pub OStmt: Stmt = {
   "while" "(" <c:Cond> ")" <s:OStmt> => Stmt::While(c, Box::new(s)),
 }
 
-// 表达式 Exp → AddExp 注：SysY表达式是 int/float型表达式
+// Expression Exp → AddExp 
 pub Exp: Exp = <addexp:AddExp> => Exp{<>};
 
-// 条件表达式 Cond → LOrExp
+// Conditional expression Cond → LOrExp
 pub Cond: Cond = <lorexp:LOrExp> => Cond{<>};
 
-// 左值表达式 LVal → Ident {'[' Exp ']'}
+// Left value expression LVal → Ident {'[' Exp ']'}
 pub LVal: LVal = <ident: Ident> <exp: ("[" <Exp> "]")*> => LVal { <> };
 
-// 基本表达式 PrimaryExp → '(' Exp ')' | LVal | Number
+// Basic expression PrimaryExp → '(' Exp ')' | LVal | Number
 pub PrimaryExp: PrimaryExp = {
   "(" <Exp> ")" => PrimaryExp::Exp(Box::new(<>)),
   LVal => PrimaryExp::LVal(<>),
@@ -183,13 +183,13 @@ Float: f32 = {
     },
 }
 
-// 数值 Number → IntConst | floatConst
+// value Number → IntConst | floatConst
 pub Number: Number = {
   <n:Int> => Number::IntConst(n),
   <f:Float> => Number::FloatConst(f),
 }
 
-// 一元表达式 UnaryExp → PrimaryExp | Ident '(' [FuncRParams] ')' | UnaryOp UnaryExp
+// Unary expression UnaryExp → PrimaryExp | Ident '(' [FuncRParams] ')' | UnaryOp UnaryExp
 pub UnaryExp: UnaryExp = {
   PrimaryExp => UnaryExp::PrimaryExp(<>),
   <start:@L> <i: Ident> <end:@R> "(" ")" => UnaryExp::FuncCall(FuncCall { ident:i, exp: Vec::new(),  pos: SourcePos { start, end }}),
@@ -202,7 +202,7 @@ pub UnaryExp: UnaryExp = {
   "!" <uexp: UnaryExp> => UnaryExp::UnaryOp(UnaryOp::Not, Box::new(uexp)),
 }
 
-// 乘除模表达式 MulExp → UnaryExp | MulExp ('*' | '/' | '%') UnaryExp
+// Multiplication and division modulus expression MulExp → UnaryExp | MulExp ('*' | '/' | '%') UnaryExp
 pub MulExp: MulExp = {
   UnaryExp => MulExp::UnaryExp(<>),
   <me: MulExp> "*" <ue: UnaryExp> => {
@@ -216,7 +216,7 @@ pub MulExp: MulExp = {
   },
 }
 
-// 加减表达式 AddExp → MulExp | AddExp ('+' | '−') MulExp
+// Addition and subtraction expression AddExp → MulExp | AddExp ('+' | '−') MulExp
 pub AddExp: AddExp = {
   MulExp => AddExp::MulExp(<>),
   <ae: AddExp> "+" <me: MulExp> => {
@@ -227,7 +227,7 @@ pub AddExp: AddExp = {
   },
 }
 
-// 关系表达式 RelExp → AddExp | RelExp ('<' | '>' | '<=' | '>=') AddExp
+// Relational expression RelExp → AddExp | RelExp ('<' | '>' | '<=' | '>=') AddExp
 pub RelExp: RelExp = {
   AddExp => RelExp::AddExp(<>),
   <re: RelExp> "<" <ae: AddExp> => {
@@ -244,7 +244,7 @@ pub RelExp: RelExp = {
   },
 }
 
-// 相等性表达式 EqExp → RelExp | EqExp ('==' | '!=') RelExp
+// Equality expression EqExp → RelExp | EqExp ('==' | '!=') RelExp
 pub EqExp: EqExp = {
   RelExp => EqExp::RelExp(<>),
   <ee: EqExp> "==" <re: RelExp> => {
@@ -255,7 +255,7 @@ pub EqExp: EqExp = {
   },
 }
 
-// 逻辑与表达式 LAndExp → EqExp | LAndExp '&&' EqExp
+// Logical AND expression LAndExp → EqExp | LAndExp '&&' EqExp
 LAndExp: LAndExp = {
   EqExp => LAndExp::EqExp(<>),
   <le: LAndExp> "&&" <ee: EqExp> => {
@@ -263,7 +263,7 @@ LAndExp: LAndExp = {
   },
 }
 
-// 逻辑或表达式 LOrExp → LAndExp | LOrExp '||' LAndExp
+// Logical OR expression LOrExp → LAndExp | LOrExp '||' LAndExp
 LOrExp: LOrExp = {
   LAndExp => LOrExp::LAndExp(<>),
   <loe: LOrExp> "||" <lae: LAndExp> => {
@@ -271,7 +271,7 @@ LOrExp: LOrExp = {
   },
 }
 
-// 常量表达式 ConstExp → AddExp
+// Constant expression ConstExp → AddExp
 pub ConstExp: ConstExp = <addexp:AddExp> => ConstExp{<>};
 
 Ident: String = r"[_a-zA-Z][_a-zA-Z0-9]*" => <>.to_string();
