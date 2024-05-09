@@ -372,7 +372,6 @@ impl fmt::Display for MachineContext {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MachineBlock(usize);
 
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct MachineInst(usize);
 
@@ -622,39 +621,42 @@ impl fmt::Display for MachineSymbol {
 
 pub struct MachineGlobalData {
     symbol: MachineSymbol,
-    size: usize,
     align: usize,
-    data: Vec<u8>,
+    kind: MachineGlobalKind,
+}
+
+pub enum MachineGlobalKind {
+    Bss { size: usize },
+    Data { data: Vec<u8> },
 }
 
 impl MachineGlobalData {
-    pub fn new(symbol: MachineSymbol, size: usize, align: usize) -> Self {
+    pub fn new_bss(symbol: MachineSymbol, size: usize, align: usize) -> Self {
         Self {
             symbol,
-            size,
             align,
-            data: vec![0; size],
+            kind: MachineGlobalKind::Bss { size },
+        }
+    }
+
+    pub fn new_data(symbol: MachineSymbol, data: Vec<u8>, align: usize) -> Self {
+        Self {
+            symbol,
+            align,
+            kind: MachineGlobalKind::Data { data },
         }
     }
 
     pub fn symbol(&self) -> &MachineSymbol {
         &self.symbol
     }
-
-    pub fn size(&self) -> usize {
-        self.size
-    }
-
+    
     pub fn align(&self) -> usize {
         self.align
     }
 
-    pub fn data(&self) -> &[u8] {
-        &self.data
-    }
-
-    pub fn data_mut(&mut self) -> &mut [u8] {
-        &mut self.data
+    pub fn kind(&self) -> &MachineGlobalKind {
+        &self.kind
     }
 }
 
