@@ -1,23 +1,24 @@
 //! # Control-Flow Normalization Pass of IR
 //!
-//! This pass will normalize the IR structure, which will transform the following:
-//! 1. If a block has no terminator (which is a jump, branch, or a return instruction), a jump
-//!    to the next block will be added.
-//! 2. If a block has more instructions after the terminator, those instructions will removed.
+//! This pass will normalize the IR structure, which will transform the
+//! following:
+//! 1. If a block has no terminator (which is a jump, branch, or a return
+//!    instruction), a jump to the next block will be added.
+//! 2. If a block has more instructions after the terminator, those instructions
+//!    will removed.
 //!
-//! This pass will not optimize the code, but make the IR structure more consistent and easier to
-//! work with.
+//! This pass will not optimize the code, but make the IR structure more
+//! consistent and easier to work with.
 
 use thiserror::Error;
 
+use super::{GlobalPassMut, PassError, PassManager, PassResult, TransformationPass};
 use crate::ir::{
     builders::BuildLocalValue,
     entities::FunctionData,
     passes::LocalPassMut,
     values::{Block, Function},
 };
-
-use super::{GlobalPassMut, PassError, PassManager, PassResult, TransformationPass};
 
 const CONTROL_FLOW_CANONICALIZATION: &str = "control-flow-canonicalization";
 
@@ -129,16 +130,19 @@ impl TransformationPass for ControlFlowCanonicalization {
 
 #[cfg(test)]
 mod test {
+    use std::io::{BufWriter, Cursor};
+
     use super::ControlFlowCanonicalization;
     use crate::ir::{
         frontend::parser::Parser,
         module::Module,
         passes::{
-            control_flow_canonicalization::CONTROL_FLOW_CANONICALIZATION, printer::Printer,
-            GlobalPass, PassManager,
+            control_flow_canonicalization::CONTROL_FLOW_CANONICALIZATION,
+            printer::Printer,
+            GlobalPass,
+            PassManager,
         },
     };
-    use std::io::{BufWriter, Cursor};
 
     fn verify(module: &Module, function_name: &str) -> bool {
         let function = module.get_value_by_name(function_name).unwrap();

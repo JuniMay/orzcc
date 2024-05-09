@@ -7,15 +7,16 @@ use std::{
 
 use thiserror::Error;
 
-use crate::collections::BiMap;
-
 use super::{
     builders::{GlobalBuilder, LocalBuilder},
     entities::{BlockData, FunctionData, ValueData},
     types::Type,
     values::{Block, Function, Value},
-    GLOBAL_PREFIX, LABEL_PREFIX, LOCAL_PREFIX,
+    GLOBAL_PREFIX,
+    LABEL_PREFIX,
+    LOCAL_PREFIX,
 };
+use crate::collections::BiMap;
 
 /// The data flow graph.
 pub struct DataFlowGraph {
@@ -42,9 +43,7 @@ pub struct DataFlowGraph {
 }
 
 impl Default for DataFlowGraph {
-    fn default() -> Self {
-        Self::new()
-    }
+    fn default() -> Self { Self::new() }
 }
 
 impl DataFlowGraph {
@@ -61,9 +60,7 @@ impl DataFlowGraph {
     }
 
     /// Get all the values and their corresponding data.
-    pub fn values(&self) -> &HashMap<Value, ValueData> {
-        &self.values
-    }
+    pub fn values(&self) -> &HashMap<Value, ValueData> { &self.values }
 
     /// Allocate an id using [`IdAllocator`].
     fn allocate_id(&self) -> usize {
@@ -89,14 +86,10 @@ impl DataFlowGraph {
     }
 
     /// Get the local builder of the dfg.
-    pub fn builder(&mut self) -> LocalBuilder {
-        LocalBuilder::new(self)
-    }
+    pub fn builder(&mut self) -> LocalBuilder { LocalBuilder::new(self) }
 
     /// Get the value data of a local value.
-    pub fn local_value_data(&self, value: Value) -> Option<&ValueData> {
-        self.values.get(&value)
-    }
+    pub fn local_value_data(&self, value: Value) -> Option<&ValueData> { self.values.get(&value) }
 
     /// Apply a function to the value data of a local or global value.
     pub fn with_value_data<F, R>(&self, value: Value, f: F) -> Option<R>
@@ -177,9 +170,7 @@ impl DataFlowGraph {
     }
 
     /// Get the block data of a block.
-    pub fn block_data(&self, block: Block) -> Option<&BlockData> {
-        self.blocks.get(&block)
-    }
+    pub fn block_data(&self, block: Block) -> Option<&BlockData> { self.blocks.get(&block) }
 
     /// Get the mutable block data of a block.
     pub fn block_data_mut(&mut self, block: Block) -> Option<&mut BlockData> {
@@ -217,16 +208,16 @@ pub type BlockNameAllocator = NameAllocator<Block>;
 
 /// A module.
 ///
-/// Module is the top-level container of the IR. It contains all the global values,
-/// functions, and user defined types.
+/// Module is the top-level container of the IR. It contains all the global
+/// values, functions, and user defined types.
 pub struct Module {
     /// Module name
     name: String,
 
     /// Globals
     ///
-    /// This includes global memory slots and functions. Note that the [`ValueData`] and
-    /// [`FunctionData`] of a function are different.
+    /// This includes global memory slots and functions. Note that the
+    /// [`ValueData`] and [`FunctionData`] of a function are different.
     globals: Rc<RefCell<GlobalValueMap>>,
 
     /// Layout of global slots
@@ -275,34 +266,22 @@ impl Module {
         self.globals.borrow().get(&value).map(f)
     }
 
-    pub fn name(&self) -> &str {
-        &self.name
-    }
+    pub fn name(&self) -> &str { &self.name }
 
     /// Get the layout of global slots
-    pub fn global_slot_layout(&self) -> &[Value] {
-        &self.global_slot_layout
-    }
+    pub fn global_slot_layout(&self) -> &[Value] { &self.global_slot_layout }
 
     /// Get the layout of functions
-    pub fn function_layout(&self) -> &[Function] {
-        &self.function_layout
-    }
+    pub fn function_layout(&self) -> &[Function] { &self.function_layout }
 
     /// Get the layout of identified types
-    pub fn identified_type_layout(&self) -> &[String] {
-        &self.identified_type_layout
-    }
+    pub fn identified_type_layout(&self) -> &[String] { &self.identified_type_layout }
 
     /// Allocate an id using [`IdAllocator`].
-    fn allocate_id(&self) -> usize {
-        self.id_allocator.borrow_mut().allocate()
-    }
+    fn allocate_id(&self) -> usize { self.id_allocator.borrow_mut().allocate() }
 
     /// Get the global builder of the module.
-    pub fn builder(&mut self) -> GlobalBuilder {
-        GlobalBuilder::new(self)
-    }
+    pub fn builder(&mut self) -> GlobalBuilder { GlobalBuilder::new(self) }
 
     /// Get the function data of a function.
     pub fn function_data(&self, function: Function) -> Option<&FunctionData> {
@@ -353,9 +332,7 @@ impl Module {
     }
 
     /// Get the name of a global value
-    pub fn value_name(&self, value: Value) -> String {
-        self.name_allocator.borrow_mut().get(value)
-    }
+    pub fn value_name(&self, value: Value) -> String { self.name_allocator.borrow_mut().get(value) }
 
     /// Assign a name to a global value.
     pub fn assign_name(&mut self, value: Value, name: String) -> Result<(), NameAllocErr> {
@@ -368,9 +345,7 @@ impl Module {
     }
 
     /// Add an identified type to the module.
-    pub fn add_identified_type(&mut self, name: String) {
-        self.identified_type_layout.push(name);
-    }
+    pub fn add_identified_type(&mut self, name: String) { self.identified_type_layout.push(name); }
 }
 
 /// Allocator of ids.
@@ -382,15 +357,11 @@ pub struct IdAllocator {
 }
 
 impl Default for IdAllocator {
-    fn default() -> Self {
-        Self::new()
-    }
+    fn default() -> Self { Self::new() }
 }
 
 impl IdAllocator {
-    pub fn new() -> Self {
-        Self { counter: 0 }
-    }
+    pub fn new() -> Self { Self { counter: 0 } }
 
     pub fn allocate(&mut self) -> usize {
         let id = self.counter;
@@ -428,8 +399,8 @@ where
 {
     /// Create a new name allocator.
     ///
-    /// The `prefix` is the prefix of the name, e.g. in `%value`, `^block`, `@global`, the prefix
-    /// is `%`, `^`, `@` respectively.
+    /// The `prefix` is the prefix of the name, e.g. in `%value`, `^block`,
+    /// `@global`, the prefix is `%`, `^`, `@` respectively.
     pub fn new(prefix: &'static str) -> Self {
         Self {
             counter: 0,
@@ -492,9 +463,7 @@ where
     /// Try to get the name of the key.
     ///
     /// This will not allocate a new name if the name is not assigned.
-    pub fn try_get(&self, key: T) -> Option<String> {
-        self.map.get_fwd(&key).cloned()
-    }
+    pub fn try_get(&self, key: T) -> Option<String> { self.map.get_fwd(&key).cloned() }
 
     pub fn try_get_by_name(&self, name: &str) -> Option<T> {
         let name = name.to_string();

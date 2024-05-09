@@ -77,8 +77,8 @@ where
     K: Copy + Eq + Hash,
     N: ListNode<K>,
 {
-    type Item = (K, &'a N);
     type IntoIter = Iter<'a, K, N>;
+    type Item = (K, &'a N);
 
     fn into_iter(self) -> Self::IntoIter {
         Iter {
@@ -108,29 +108,17 @@ where
     K: Copy + Eq + Hash,
     N: ListNode<K>,
 {
-    pub fn is_empty(&self) -> bool {
-        self.head.is_none()
-    }
+    pub fn is_empty(&self) -> bool { self.head.is_none() }
 
-    pub fn front(&self) -> Option<K> {
-        self.head
-    }
+    pub fn front(&self) -> Option<K> { self.head }
 
-    pub fn back(&self) -> Option<K> {
-        self.tail
-    }
+    pub fn back(&self) -> Option<K> { self.tail }
 
-    pub fn node(&self, key: K) -> Option<&N> {
-        self.nodes.get(&key)
-    }
+    pub fn node(&self, key: K) -> Option<&N> { self.nodes.get(&key) }
 
-    pub fn node_mut(&mut self, key: K) -> Option<&mut N> {
-        self.nodes.get_mut(&key)
-    }
+    pub fn node_mut(&mut self, key: K) -> Option<&mut N> { self.nodes.get_mut(&key) }
 
-    pub fn contains(&self, key: K) -> bool {
-        self.nodes.contains_key(&key)
-    }
+    pub fn contains(&self, key: K) -> bool { self.nodes.contains_key(&key) }
 
     pub fn insert_after(&mut self, key: K, after: K) -> Result<(), ListError<K>> {
         if self.contains(key) {
@@ -257,21 +245,13 @@ mod test {
     }
 
     impl ListNode<usize> for TestNode {
-        fn next(&self) -> Option<usize> {
-            self.next
-        }
+        fn next(&self) -> Option<usize> { self.next }
 
-        fn prev(&self) -> Option<usize> {
-            self.prev
-        }
+        fn prev(&self) -> Option<usize> { self.prev }
 
-        fn set_next(&mut self, next: Option<usize>) {
-            self.next = next;
-        }
+        fn set_next(&mut self, next: Option<usize>) { self.next = next; }
 
-        fn set_prev(&mut self, prev: Option<usize>) {
-            self.prev = prev;
-        }
+        fn set_prev(&mut self, prev: Option<usize>) { self.prev = prev; }
     }
 
     #[test]

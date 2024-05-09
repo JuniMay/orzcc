@@ -294,9 +294,7 @@ impl Value {
                 }
             }
             ValueKind::Function | ValueKind::GlobalSlot(_) | ValueKind::BlockParam => {
-                panic!(
-                    "function, global slot, and block param should not be formatted as local value."
-                );
+                panic!("function, global slot, and block param should not be formatted as local value.");
             }
         }
 

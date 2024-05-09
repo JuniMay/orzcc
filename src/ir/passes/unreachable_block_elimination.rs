@@ -2,22 +2,23 @@
 //!
 //! This module contains the implementation of the Unreachable BB Elim pass.
 
+use std::collections::{HashSet, VecDeque};
+
 use thiserror::Error;
 
+use super::{
+    control_flow_analysis::ControlFlowAnalysis,
+    control_flow_canonicalization::ControlFlowCanonicalization,
+    GlobalPassMut,
+    PassManager,
+    PassResult,
+    TransformationPass,
+};
 use crate::ir::{
     entities::FunctionData,
     module::Module,
     passes::{LocalPass, LocalPassMut},
     values::{Block, Function},
-};
-
-use std::collections::HashSet;
-use std::collections::VecDeque;
-
-use super::{
-    control_flow_analysis::ControlFlowAnalysis,
-    control_flow_canonicalization::ControlFlowCanonicalization, GlobalPassMut, PassManager,
-    PassResult, TransformationPass,
 };
 
 const UNREACHABLE_BLOCK_ELIMINATION: &str = "unreachable-block-elimination";
@@ -107,13 +108,12 @@ impl TransformationPass for UnreachableBlockElimination {
 mod test {
     use std::io::{BufWriter, Cursor};
 
+    use super::{UnreachableBlockElimination, UNREACHABLE_BLOCK_ELIMINATION};
     use crate::ir::{
         frontend::parser::Parser,
         module::Module,
         passes::{printer::Printer, GlobalPass, PassManager},
     };
-
-    use super::{UnreachableBlockElimination, UNREACHABLE_BLOCK_ELIMINATION};
 
     fn print(module: &Module) {
         let mut buf = BufWriter::new(Vec::new());

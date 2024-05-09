@@ -2,9 +2,8 @@ use std::collections::HashMap;
 
 use thiserror::Error;
 
-use crate::collections::{List, ListError, ListNode};
-
 use super::values::{Block, Inst};
+use crate::collections::{List, ListError, ListNode};
 
 /// Instruction node
 #[derive(Default)]
@@ -14,21 +13,13 @@ pub struct InstNode {
 }
 
 impl ListNode<Inst> for InstNode {
-    fn next(&self) -> Option<Inst> {
-        self.next
-    }
+    fn next(&self) -> Option<Inst> { self.next }
 
-    fn prev(&self) -> Option<Inst> {
-        self.prev
-    }
+    fn prev(&self) -> Option<Inst> { self.prev }
 
-    fn set_next(&mut self, next: Option<Inst>) {
-        self.next = next;
-    }
+    fn set_next(&mut self, next: Option<Inst>) { self.next = next; }
 
-    fn set_prev(&mut self, prev: Option<Inst>) {
-        self.prev = prev;
-    }
+    fn set_prev(&mut self, prev: Option<Inst>) { self.prev = prev; }
 }
 
 pub type InstList = List<Inst, InstNode>;
@@ -43,31 +34,19 @@ pub struct BlockNode {
 }
 
 impl ListNode<Block> for BlockNode {
-    fn prev(&self) -> Option<Block> {
-        self.prev
-    }
+    fn prev(&self) -> Option<Block> { self.prev }
 
-    fn next(&self) -> Option<Block> {
-        self.next
-    }
+    fn next(&self) -> Option<Block> { self.next }
 
-    fn set_prev(&mut self, prev: Option<Block>) {
-        self.prev = prev;
-    }
+    fn set_prev(&mut self, prev: Option<Block>) { self.prev = prev; }
 
-    fn set_next(&mut self, next: Option<Block>) {
-        self.next = next;
-    }
+    fn set_next(&mut self, next: Option<Block>) { self.next = next; }
 }
 
 impl BlockNode {
-    pub fn insts(&self) -> &InstList {
-        &self.insts
-    }
+    pub fn insts(&self) -> &InstList { &self.insts }
 
-    pub fn insts_mut(&mut self) -> &mut InstList {
-        &mut self.insts
-    }
+    pub fn insts_mut(&mut self) -> &mut InstList { &mut self.insts }
 }
 
 pub type BlockList = List<Block, BlockNode>;
@@ -109,31 +88,21 @@ pub enum LayoutOpErr {
 }
 
 impl Layout {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 
     /// Get the entry block for the current function.
     ///
     /// The entry block is by default the first block in the layout.
-    pub fn entry_block(&self) -> Option<Block> {
-        self.blocks.front()
-    }
+    pub fn entry_block(&self) -> Option<Block> { self.blocks.front() }
 
     /// Get the list of blocks.
-    pub fn blocks(&self) -> &BlockList {
-        &self.blocks
-    }
+    pub fn blocks(&self) -> &BlockList { &self.blocks }
 
     /// Get the parent block of an instruction
-    pub fn parent_block(&self, inst: Inst) -> Option<Block> {
-        self.inst_blocks.get(&inst).copied()
-    }
+    pub fn parent_block(&self, inst: Inst) -> Option<Block> { self.inst_blocks.get(&inst).copied() }
 
     /// Get the next block
-    pub fn next_block(&self, block: Block) -> Option<Block> {
-        self.blocks.node(block)?.next()
-    }
+    pub fn next_block(&self, block: Block) -> Option<Block> { self.blocks.node(block)?.next() }
 
     /// Get the next non-empty block
     pub fn next_non_empty_block(&self, block: Block) -> Option<Block> {
@@ -156,8 +125,9 @@ impl Layout {
 
     /// Get the next instruction in the layout
     ///
-    /// If this is the end of the block, return the first instruction of the next block.
-    /// Note that this is not the execution order, but the layout order.
+    /// If this is the end of the block, return the first instruction of the
+    /// next block. Note that this is not the execution order, but the
+    /// layout order.
     pub fn next_inst(&self, inst: Inst) -> Option<Inst> {
         let parent_block = self.parent_block(inst)?;
         let node = self.blocks.node(parent_block).unwrap();
@@ -235,8 +205,9 @@ impl Layout {
     /// Remove an instruction from the layout
     ///
     /// For pass consrtuction, please use the
-    /// [`FunctionData::remove_inst`](super::entities::FunctionData::remove_inst) method.
-    /// because this method does not remove the instruction from the data-flow graph.
+    /// [`FunctionData::remove_inst`](super::entities::FunctionData::remove_inst)
+    /// method. because this method does not remove the instruction from the
+    /// data-flow graph.
     pub(super) fn remove_inst(&mut self, inst: Inst) -> Result<(), LayoutOpErr> {
         let block = self
             .inst_blocks
@@ -289,11 +260,12 @@ impl Layout {
 
 #[cfg(test)]
 mod test {
+    use std::cell::RefCell;
+
     use crate::ir::{
         module::IdAllocator,
         values::{Block, Inst, Value},
     };
-    use std::cell::RefCell;
 
     thread_local! {
         static ID_ALLOCATOR: RefCell<IdAllocator> = RefCell::new(IdAllocator::new());

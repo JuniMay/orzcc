@@ -1,3 +1,5 @@
+use thiserror::Error;
+
 use super::{
     ast::{Ast, AstNodeBox, AstNodeKind},
     tokens::Span,
@@ -5,14 +7,17 @@ use super::{
 };
 use crate::ir::{
     builders::{
-        BuildAggregateConstant, BuildBlock, BuildError, BuildGlobalValue, BuildLocalValue,
+        BuildAggregateConstant,
+        BuildBlock,
+        BuildError,
+        BuildGlobalValue,
+        BuildLocalValue,
         BuildNonAggregateConstant,
     },
     module::Module,
     types::Type,
     values::{Block, Function, Value},
 };
-use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum SemanticError {

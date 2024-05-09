@@ -1,19 +1,18 @@
 //! # Control Flow Analysis
 //!
-//! This module contains the implementation of the control flow analysis (CFA) pass.
-//!
+//! This module contains the implementation of the control flow analysis (CFA)
+//! pass.
 
 use std::collections::HashMap;
 
 use thiserror::Error;
 
+use super::{PassError, PassResult};
 use crate::ir::{
     entities::{FunctionData, ValueKind},
     passes::LocalPass,
     values::{Block, Function},
 };
-
-use super::{PassError, PassResult};
 
 #[derive(Debug, Clone, Default)]
 pub struct ControlFlowGraph {
@@ -22,24 +21,20 @@ pub struct ControlFlowGraph {
 }
 
 impl ControlFlowGraph {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 
-    pub fn succs(&self, block: &Block) -> Option<&Vec<Block>> {
-        self.succs.get(block)
-    }
+    pub fn succs(&self, block: &Block) -> Option<&Vec<Block>> { self.succs.get(block) }
 
-    pub fn preds(&self, block: &Block) -> Option<&Vec<Block>> {
-        self.preds.get(block)
-    }
+    pub fn preds(&self, block: &Block) -> Option<&Vec<Block>> { self.preds.get(block) }
 }
 
 pub struct ControlFlowAnalysis {}
 
 #[derive(Debug, Error)]
 pub enum ControlFlowAnalysisError {
-    #[error("unexpected termination at block: {0:?}, please run the control flow normalization pass first.")]
+    #[error(
+    "unexpected termination at block: {0:?}, please run the control flow normalization pass first."
+  )]
     UnexpectedBlockTermination(Block),
 }
 
@@ -66,7 +61,8 @@ impl LocalPass for ControlFlowAnalysis {
         for (block, _block_node) in layout.blocks() {
             let mut succ = Vec::new();
             // just get the last instruction of the block
-            // because the normalization pass ensures that the last instruction is a terminator
+            // because the normalization pass ensures that the last instruction is a
+            // terminator
             let inst = layout.exit_inst_of_block(block).unwrap();
             let inst_data = data.dfg().local_value_data(inst.into()).unwrap();
             match inst_data.kind() {
@@ -96,9 +92,8 @@ impl LocalPass for ControlFlowAnalysis {
 mod test {
     use std::io::Cursor;
 
-    use crate::ir::{frontend::parser::Parser, passes::LocalPass};
-
     use super::ControlFlowAnalysis;
+    use crate::ir::{frontend::parser::Parser, passes::LocalPass};
 
     #[test]
     fn test_cfa() {

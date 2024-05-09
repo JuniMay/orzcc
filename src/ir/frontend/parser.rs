@@ -2,17 +2,29 @@ use std::io::{self};
 
 use thiserror::Error;
 
-use crate::ir::types::Type;
-
 use super::{
     ast::{
-        self, Array, Ast, AstNode, AstNodeBox, Block, Callee, FunctionDecl, FunctionDef, GlobalDef,
-        Inst, Operand, Struct, TypeDef,
+        self,
+        Array,
+        Ast,
+        AstNode,
+        AstNodeBox,
+        Block,
+        Callee,
+        FunctionDecl,
+        FunctionDef,
+        GlobalDef,
+        Inst,
+        Operand,
+        Struct,
+        TypeDef,
     },
     lexer::Lexer,
     tokens::{Pos, Span, Token, TokenKind},
-    InstKind, KeywordKind,
+    InstKind,
+    KeywordKind,
 };
+use crate::ir::types::Type;
 
 /// A parser.  
 pub struct Parser<'a, T>
@@ -24,7 +36,8 @@ where
 
     /// Current token.
     ///
-    /// If peeked is true, this is a peeked token. Otherwise, this is a consumed/eaten token.
+    /// If peeked is true, this is a peeked token. Otherwise, this is a
+    /// consumed/eaten token.
     curr_token: Token,
 
     /// If the current token is a peeked token.
@@ -89,20 +102,14 @@ where
     /// Consume the peeked token.
     ///
     /// If the current token is not a peeked token, do nothing.
-    fn consume(&mut self) {
-        self.peeked = false;
-    }
+    fn consume(&mut self) { self.peeked = false; }
 
     /// Backtrack to the peeked token.
     ///
     /// This will make the current token a peeked token.
-    fn backtrack(&mut self) {
-        self.peeked = true;
-    }
+    fn backtrack(&mut self) { self.peeked = true; }
 
-    fn unexpected_token(&self) -> ParseError {
-        ParseError::UnexpectedToken(self.curr_token.span)
-    }
+    fn unexpected_token(&self) -> ParseError { ParseError::UnexpectedToken(self.curr_token.span) }
 
     /// Consume the token and verify.
     ///

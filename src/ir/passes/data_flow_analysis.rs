@@ -1,22 +1,21 @@
 //! # Data-Flow Analysis Pass for OrzIR
 //!
-//! There is already a data-flow graph (DFG) in OrzIR, however, the def-use chains are not
-//! maintained. This pass will build the def-use chains.
+//! There is already a data-flow graph (DFG) in OrzIR, however, the def-use
+//! chains are not maintained. This pass will build the def-use chains.
 //!
-//! Note that in OrzIR, the def of a instruction is explicit (for SSA form), but the use of a
-//! instruction is not explicit.
+//! Note that in OrzIR, the def of a instruction is explicit (for SSA form), but
+//! the use of a instruction is not explicit.
 
 use std::collections::HashMap;
 
 use thiserror::Error;
 
+use super::PassResult;
 use crate::ir::{
     entities::{FunctionData, ValueKind},
     passes::LocalPass,
     values::{Function, Value},
 };
-
-use super::PassResult;
 
 #[derive(Debug, Error)]
 pub enum DataFlowAnalysisError {}
@@ -26,9 +25,7 @@ pub struct DefUseChain {
 }
 
 impl Default for DefUseChain {
-    fn default() -> Self {
-        Self::new()
-    }
+    fn default() -> Self { Self::new() }
 }
 
 impl DefUseChain {

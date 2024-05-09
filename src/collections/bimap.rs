@@ -51,13 +51,9 @@ where
         self.rev.insert(r, l);
     }
 
-    pub fn get_fwd(&self, l: &L) -> Option<&R> {
-        self.fwd.get(l)
-    }
+    pub fn get_fwd(&self, l: &L) -> Option<&R> { self.fwd.get(l) }
 
-    pub fn get_rev(&self, r: &R) -> Option<&L> {
-        self.rev.get(r)
-    }
+    pub fn get_rev(&self, r: &R) -> Option<&L> { self.rev.get(r) }
 
     pub fn remove_fwd(&mut self, l: &L) -> Option<R> {
         self.fwd.remove(l).map(|r| {
@@ -73,13 +69,9 @@ where
         })
     }
 
-    pub fn contains_fwd(&self, l: &L) -> bool {
-        self.fwd.contains_key(l)
-    }
+    pub fn contains_fwd(&self, l: &L) -> bool { self.fwd.contains_key(l) }
 
-    pub fn contains_rev(&self, r: &R) -> bool {
-        self.rev.contains_key(r)
-    }
+    pub fn contains_rev(&self, r: &R) -> bool { self.rev.contains_key(r) }
 }
 
 #[cfg(test)]

@@ -20,9 +20,7 @@ impl Default for Pos {
 }
 
 impl Pos {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 
     pub fn update(&mut self, c: char) {
         if c == '\n' {
@@ -48,9 +46,7 @@ pub struct Span {
 }
 
 impl Default for Span {
-    fn default() -> Self {
-        Self::new(Pos::new())
-    }
+    fn default() -> Self { Self::new(Pos::new()) }
 }
 
 impl Span {
@@ -59,13 +55,9 @@ impl Span {
         Self { start, end }
     }
 
-    pub fn update(&mut self, end: Pos) {
-        self.end = end;
-    }
+    pub fn update(&mut self, end: Pos) { self.end = end; }
 
-    pub fn extend(&mut self, other: &Self) {
-        self.end = cmp::max(self.end, other.end);
-    }
+    pub fn extend(&mut self, other: &Self) { self.end = cmp::max(self.end, other.end); }
 }
 
 impl fmt::Display for Span {
@@ -87,9 +79,7 @@ pub(super) struct Token {
 }
 
 impl Token {
-    pub fn new(span: Span, kind: TokenKind) -> Self {
-        Self { span, kind }
-    }
+    pub fn new(span: Span, kind: TokenKind) -> Self { Self { span, kind } }
 }
 
 /// Kinds of tokens.
@@ -97,22 +87,26 @@ impl Token {
 pub(super) enum TokenKind {
     /// A label identifier
     ///
-    /// A label starts with a `^` and followed by a sequence of alphanumeric characters.
+    /// A label starts with a `^` and followed by a sequence of alphanumeric
+    /// characters.
     LabelIdent(String),
 
     /// A global identifier
     ///
-    /// A global identifier starts with a `@` and followed by a sequence of alphanumeric characters.
+    /// A global identifier starts with a `@` and followed by a sequence of
+    /// alphanumeric characters.
     GlobalIdent(String),
 
     /// A local identifier
     ///
-    /// A local identifier starts with a `%` and followed by a sequence of alphanumeric characters.
+    /// A local identifier starts with a `%` and followed by a sequence of
+    /// alphanumeric characters.
     LocalIdent(String),
 
     /// A type identifier
     ///
-    /// A type identifier starts with a `$` and followed by a sequence of alphanumeric characters.
+    /// A type identifier starts with a `$` and followed by a sequence of
+    /// alphanumeric characters.
     TypeIdent(String),
 
     /// A number

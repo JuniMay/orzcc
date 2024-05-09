@@ -1,8 +1,12 @@
+use std::io::{BufWriter, Cursor};
+
 use orzcc::{
     self,
-    ir::{frontend::parser::Parser, passes::printer::Printer, passes::GlobalPass},
+    ir::{
+        frontend::parser::Parser,
+        passes::{printer::Printer, GlobalPass},
+    },
 };
-use std::io::{BufWriter, Cursor};
 
 fn print(module: &orzcc::ir::module::Module) {
     let mut buf = BufWriter::new(Vec::new());

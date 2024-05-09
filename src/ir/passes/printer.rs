@@ -1,3 +1,6 @@
+use std::io;
+
+use super::{PassError, PassResult};
 use crate::ir::{
     entities::FunctionKind,
     module::{DataFlowGraph, Module},
@@ -5,10 +8,6 @@ use crate::ir::{
     types::Type,
     values::{Function, Value},
 };
-
-use std::io;
-
-use super::{PassError, PassResult};
 
 pub struct Printer<'a, T>
 where
@@ -18,18 +17,14 @@ where
 }
 
 impl From<io::Error> for PassError {
-    fn from(err: io::Error) -> Self {
-        PassError::other("printer".to_string(), Box::new(err))
-    }
+    fn from(err: io::Error) -> Self { PassError::other("printer".to_string(), Box::new(err)) }
 }
 
 impl<'a, T> Printer<'a, T>
 where
     T: io::Write,
 {
-    pub fn new(buf: &'a mut T) -> Self {
-        Self { buf }
-    }
+    pub fn new(buf: &'a mut T) -> Self { Self { buf } }
 
     fn print_module(&mut self, module: &Module) -> io::Result<()> {
         writeln!(self.buf, "# orzir module: {} ", module.name())?;

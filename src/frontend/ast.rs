@@ -82,7 +82,8 @@ impl fmt::Debug for ConstDef {
         write!(f, " = {:?}", self.constinitval)
     }
 }
-// 常量初值 ConstInitVal → ConstExp | '{' [ ConstInitVal { ',' ConstInitVal } ] '}'
+// 常量初值 ConstInitVal → ConstExp | '{' [ ConstInitVal { ',' ConstInitVal } ]
+// '}'
 pub enum ConstInitVal {
     ConstExp(ConstExp),
     ConstInitVal(Vec<ConstInitVal>),
@@ -108,14 +109,17 @@ pub struct VarDecl {
 }
 impl fmt::Debug for VarDecl {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let defs = self.vardef.iter()
+        let defs = self
+            .vardef
+            .iter()
             .map(|def| format!("{:?}", def))
             .collect::<Vec<_>>()
             .join(", ");
         write!(f, "Type: {:?}, VarDef: {}", self.basictype, defs)
     }
 }
-// 变量定义 VarDef → Ident { '[' ConstExp ']' } | Ident { '[' ConstExp ']' } '=' InitVal
+// 变量定义 VarDef → Ident { '[' ConstExp ']' } | Ident { '[' ConstExp ']' } '='
+// InitVal
 pub struct VarDef {
     pub ident: String,
     pub constexp: Vec<ConstExp>,
@@ -158,8 +162,11 @@ pub struct FuncDef {
 }
 impl fmt::Debug for FuncDef {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Type: {:?}, FuncName: {:?}\n{:?}\n{:?}", 
-        self.basictype, self.ident, self.funcfparams, self.block)
+        write!(
+            f,
+            "Type: {:?}, FuncName: {:?}\n{:?}\n{:?}",
+            self.basictype, self.ident, self.funcfparams, self.block
+        )
     }
 }
 // 函数类型 BasicType → 'void' | 'int' | 'float'
@@ -183,7 +190,9 @@ pub struct FuncFParams {
 }
 impl fmt::Debug for FuncFParams {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let params = self.funcfparam.iter()
+        let params = self
+            .funcfparam
+            .iter()
             .map(|param| format!("{:?}", param))
             .collect::<Vec<_>>()
             .join(", ");
@@ -198,7 +207,11 @@ pub struct FuncFParam {
 }
 impl fmt::Debug for FuncFParam {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "FuncFParam(basictype: {:?}, ident: {:?}, exp: ", self.basictype, self.ident)?;
+        write!(
+            f,
+            "FuncFParam(basictype: {:?}, ident: {:?}, exp: ",
+            self.basictype, self.ident
+        )?;
         match &self.exp {
             Some(exp) => {
                 for e in exp {
@@ -273,7 +286,7 @@ impl fmt::Debug for Stmt {
 }
 pub struct Return {
     pub exp: Option<Exp>,
-  }  
+}
 impl fmt::Debug for Return {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.exp {
@@ -282,7 +295,7 @@ impl fmt::Debug for Return {
         }
     }
 }
-// Attension：there is a diff between the Exp and the ExpSt 
+// Attension：there is a diff between the Exp and the ExpSt
 pub struct ExpSt {
     pub exp: Option<Exp>,
 }
@@ -300,18 +313,14 @@ pub struct Exp {
     pub addexp: AddExp,
 }
 impl fmt::Debug for Exp {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self.addexp)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{:?}", self.addexp) }
 }
 // 条件表达式 Cond → LOrExp
 pub struct Cond {
     pub lorexp: LOrExp,
 }
 impl fmt::Debug for Cond {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self.lorexp)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{:?}", self.lorexp) }
 }
 // 左值表达式 LVal → Ident {'[' Exp ']'}
 pub struct LVal {
@@ -354,9 +363,9 @@ impl fmt::Debug for Number {
             Number::FloatConst(fl) => write!(f, "Float({})", fl),
         }
     }
-    
 }
-// 一元表达式 UnaryExp → PrimaryExp | Ident '(' [FuncRParams] ')' | UnaryOp UnaryExp
+// 一元表达式 UnaryExp → PrimaryExp | Ident '(' [FuncRParams] ')' | UnaryOp
+// UnaryExp
 pub enum UnaryExp {
     PrimaryExp(PrimaryExp),
     FuncCall(FuncCall),
@@ -371,7 +380,8 @@ impl fmt::Debug for UnaryExp {
         }
     }
 }
-// 单目运算符 UnaryOp → '+' | '−' | '!' 注：'!'仅出现在仅出现在条件表达式中条件表达式中，其中 '+' 可以不考虑
+// 单目运算符 UnaryOp → '+' | '−' | '!'
+// 注：'!'仅出现在仅出现在条件表达式中条件表达式中，其中 '+' 可以不考虑
 pub enum UnaryOp {
     Neg,
     Not,
@@ -386,17 +396,23 @@ impl fmt::Debug for UnaryOp {
 }
 // 函数实参表 FuncRParams → Exp { ',' Exp }
 pub struct FuncCall {
-    pub ident: String,   
+    pub ident: String,
     pub exp: Vec<Exp>,
     pub pos: SourcePos,
 }
 impl fmt::Debug for FuncCall {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let exps = self.exp.iter()
+        let exps = self
+            .exp
+            .iter()
             .map(|exp| format!("{:?}", exp))
             .collect::<Vec<_>>()
             .join(", ");
-        write!(f, "FuncCall(FuncName: {:?}, Exp: {}, Pos: {:?})", self.ident, exps, self.pos)
+        write!(
+            f,
+            "FuncCall(FuncName: {:?}, Exp: {}, Pos: {:?})",
+            self.ident, exps, self.pos
+        )
     }
 }
 // 乘除模表达式 MulExp → UnaryExp | MulExp ('*' | '/' | '%') UnaryExp

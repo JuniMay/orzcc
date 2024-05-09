@@ -1,14 +1,17 @@
 use std::io;
 
+use super::{
+    tokens::{Pos, Token},
+    InstKind,
+    KeywordKind,
+};
 use crate::ir::{
     frontend::tokens::{Span, TokenKind},
     values::{BinaryOp, CastOp, FCmpCond, ICmpCond, UnaryOp},
-    GLOBAL_PREFIX_CHAR, LABEL_PREFIX_CHAR, LOCAL_PREFIX_CHAR, TYPE_PREFIX_CHAR,
-};
-
-use super::{
-    tokens::{Pos, Token},
-    InstKind, KeywordKind,
+    GLOBAL_PREFIX_CHAR,
+    LABEL_PREFIX_CHAR,
+    LOCAL_PREFIX_CHAR,
+    TYPE_PREFIX_CHAR,
 };
 
 pub struct Lexer<'a, T>
@@ -32,9 +35,7 @@ where
         }
     }
 
-    pub(super) fn curr_pos(&self) -> Pos {
-        self.curr_pos
-    }
+    pub(super) fn curr_pos(&self) -> Pos { self.curr_pos }
 
     fn next_char(&mut self) -> Option<char> {
         let mut buf = [0; 1];
@@ -307,8 +308,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::io::Cursor;
+
+    use super::*;
 
     #[test]
     fn test_lexer0() {

@@ -2,14 +2,15 @@
 //!
 //! This module contains the intermediate representation (IR) for the OrzCC.
 //!
-//! The OrzIR is a low-level representation of programming languages. It is inspired by
-//! the LLVM IR, Koopa and Cranelift IRs. The IR is designed to preserve the semantics and
-//! structure of higher-level programming languages, while being simple and efficient to
-//! manipulate and optimize.
+//! The OrzIR is a low-level representation of programming languages. It is
+//! inspired by the LLVM IR, Koopa and Cranelift IRs. The IR is designed to
+//! preserve the semantics and structure of higher-level programming languages,
+//! while being simple and efficient to manipulate and optimize.
 //!
-//! The IR has a hierarchical structure, with a module at the top level, which contains functions,
-//! globals, and types. Each function contains a data flow graph (DFG) and a layout. The DFG
-//! contains the instructions and the layout contains the sequence of basic blocks and instructions.
+//! The IR has a hierarchical structure, with a module at the top level, which
+//! contains functions, globals, and types. Each function contains a data flow
+//! graph (DFG) and a layout. The DFG contains the instructions and the layout
+//! contains the sequence of basic blocks and instructions.
 //!
 //! ## OrzIR Syntax
 //!
@@ -17,9 +18,10 @@
 //!
 //! ### Global Slots
 //!
-//! The [global slots](values::GlobalSlot) are used to store global variables and constants.
-//! The global slots are allocated in the data segment of the program, and are used to store the
-//! initial values of the global variables and constants.
+//! The [global slots](values::GlobalSlot) are used to store global variables
+//! and constants. The global slots are allocated in the data segment of the
+//! program, and are used to store the initial values of the global variables
+//! and constants.
 //!
 //! The format to define a global slot is:
 //! ```orzir
@@ -29,7 +31,8 @@
 //!
 //! ### Functions
 //!
-//! The [functions](entities::FunctionData) are the main units of computation in the OrzIR.
+//! The [functions](entities::FunctionData) are the main units of computation in
+//! the OrzIR.
 //!
 //! The format to define a function is:
 //! ```orzir
@@ -45,13 +48,14 @@
 //!
 //! ### Blocks
 //!
-//! The [blocks](entities::BlockData) are the basic units of control flow in the OrzIR.
-//! The type of a block is [`label`](types::TypeKind::Label), and the name of a block starts with
-//! a `^` followed by a sequence of alphanumeric characters.
+//! The [blocks](entities::BlockData) are the basic units of control flow in the
+//! OrzIR. The type of a block is [`label`](types::TypeKind::Label), and the
+//! name of a block starts with a `^` followed by a sequence of alphanumeric
+//! characters.
 //!
-//! In the OrzIR, phi nodes are not used for SSA, instead, block parameters are used to represent
-//! the incoming values from the predecessors of the block. This is the same as MLIR, Koopa, and
-//! Cranelift IRs.
+//! In the OrzIR, phi nodes are not used for SSA, instead, block parameters are
+//! used to represent the incoming values from the predecessors of the block.
+//! This is the same as MLIR, Koopa, and Cranelift IRs.
 //!
 //! The format to define a block is:
 //! ```orzir
@@ -142,8 +146,8 @@
 //!
 //! ---
 //!
-//! For more details, please refer to the documentation of each module and the source code.
-//!
+//! For more details, please refer to the documentation of each module and the
+//! source code.
 
 pub mod builders;
 pub mod entities;

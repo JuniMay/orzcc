@@ -1,11 +1,13 @@
-use super::{entities::FunctionData, module::Module, values::Function};
 use std::{
     cell::RefCell,
     collections::{HashMap, HashSet},
     error::Error,
     str::FromStr,
 };
+
 use thiserror::Error;
+
+use super::{entities::FunctionData, module::Module, values::Function};
 
 pub mod control_flow_analysis;
 pub mod control_flow_canonicalization;
@@ -30,7 +32,8 @@ pub trait LocalPass {
 pub trait LocalPassMut {
     type Ok;
 
-    /// Run the pass on function, return the payload and whether the program has changed.
+    /// Run the pass on function, return the payload and whether the program has
+    /// changed.
     fn run_on_function(
         &mut self,
         function: Function,
@@ -41,7 +44,8 @@ pub trait LocalPassMut {
 pub trait GlobalPassMut {
     type Ok;
 
-    /// Run the pass on module, return the payload and whether the program has changed.
+    /// Run the pass on module, return the payload and whether the program has
+    /// changed.
     fn run_on_module(&mut self, module: &mut Module) -> PassResult<(Self::Ok, bool)>;
 }
 

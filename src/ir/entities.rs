@@ -3,8 +3,22 @@ use super::{
     module::DataFlowGraph,
     types::Type,
     values::{
-        Alloc, Binary, Block, Branch, Call, Cast, GetElemPtr, GlobalSlot, Inst, Jump, Load,
-        ReplaceUse, Return, Store, Unary, Value,
+        Alloc,
+        Binary,
+        Block,
+        Branch,
+        Call,
+        Cast,
+        GetElemPtr,
+        GlobalSlot,
+        Inst,
+        Jump,
+        Load,
+        ReplaceUse,
+        Return,
+        Store,
+        Unary,
+        Value,
     },
 };
 
@@ -15,17 +29,11 @@ pub struct BlockData {
 }
 
 impl BlockData {
-    pub fn new(params: Vec<Value>) -> Self {
-        Self { params }
-    }
+    pub fn new(params: Vec<Value>) -> Self { Self { params } }
 
-    pub fn params(&self) -> &[Value] {
-        &self.params
-    }
+    pub fn params(&self) -> &[Value] { &self.params }
 
-    pub fn params_mut(&mut self) -> &mut Vec<Value> {
-        &mut self.params
-    }
+    pub fn params_mut(&mut self) -> &mut Vec<Value> { &mut self.params }
 }
 
 pub enum FunctionKind {
@@ -64,35 +72,21 @@ impl FunctionData {
 
     /// Create a new `ValueData` struct for the function
     ///
-    /// The type is a pointer type, and the kind is `Function`. The function type can be found
-    /// in the `ty` field of the [`FunctionData`] struct.
-    pub fn new_value_data(&self) -> ValueData {
-        ValueData::new(Type::ptr(), ValueKind::Function)
-    }
+    /// The type is a pointer type, and the kind is `Function`. The function
+    /// type can be found in the `ty` field of the [`FunctionData`] struct.
+    pub fn new_value_data(&self) -> ValueData { ValueData::new(Type::ptr(), ValueKind::Function) }
 
-    pub fn ty(&self) -> &Type {
-        &self.ty
-    }
+    pub fn ty(&self) -> &Type { &self.ty }
 
-    pub fn kind(&self) -> &FunctionKind {
-        &self.kind
-    }
+    pub fn kind(&self) -> &FunctionKind { &self.kind }
 
-    pub fn dfg(&self) -> &DataFlowGraph {
-        &self.dfg
-    }
+    pub fn dfg(&self) -> &DataFlowGraph { &self.dfg }
 
-    pub fn dfg_mut(&mut self) -> &mut DataFlowGraph {
-        &mut self.dfg
-    }
+    pub fn dfg_mut(&mut self) -> &mut DataFlowGraph { &mut self.dfg }
 
-    pub fn layout(&self) -> &Layout {
-        &self.layout
-    }
+    pub fn layout(&self) -> &Layout { &self.layout }
 
-    pub fn layout_mut(&mut self) -> &mut Layout {
-        &mut self.layout
-    }
+    pub fn layout_mut(&mut self) -> &mut Layout { &mut self.layout }
 
     pub fn remove_inst(&mut self, inst: Inst) -> Option<ValueData> {
         self.layout.remove_inst(inst).unwrap();
@@ -125,7 +119,8 @@ pub enum ValueKind {
 
     /// A global memory slot
     ///
-    /// A global value is actually a memory location(pointer) to the global variable.
+    /// A global value is actually a memory location(pointer) to the global
+    /// variable.
     GlobalSlot(GlobalSlot),
 
     /// Alloc
@@ -141,7 +136,8 @@ pub enum ValueKind {
 
     /// Binary instruction
     ///
-    /// Binary instructions include arithmetic, logical, bitwise and comparison operations.
+    /// Binary instructions include arithmetic, logical, bitwise and comparison
+    /// operations.
     Binary(Binary),
 
     /// Unary instruction
@@ -172,7 +168,8 @@ pub enum ValueKind {
 
     /// Function
     ///
-    /// Functions are also global values. The data and instructions are stored in `FunctionData`
+    /// Functions are also global values. The data and instructions are stored
+    /// in `FunctionData`
     Function,
 }
 
@@ -192,9 +189,7 @@ impl ValueKind {
         matches!(self, ValueKind::GlobalSlot(_) | ValueKind::Function)
     }
 
-    pub fn is_global_slot(&self) -> bool {
-        matches!(self, ValueKind::GlobalSlot(_))
-    }
+    pub fn is_global_slot(&self) -> bool { matches!(self, ValueKind::GlobalSlot(_)) }
 
     pub fn is_terminator(&self) -> bool {
         matches!(
@@ -203,9 +198,7 @@ impl ValueKind {
         )
     }
 
-    pub fn is_block_param(&self) -> bool {
-        matches!(self, ValueKind::BlockParam)
-    }
+    pub fn is_block_param(&self) -> bool { matches!(self, ValueKind::BlockParam) }
 }
 
 /// Data of a value
@@ -219,22 +212,16 @@ pub struct ValueData {
 }
 
 impl ValueData {
-    pub fn new(ty: Type, kind: ValueKind) -> Self {
-        Self { ty, kind }
-    }
+    pub fn new(ty: Type, kind: ValueKind) -> Self { Self { ty, kind } }
 
-    pub fn ty(&self) -> Type {
-        self.ty.clone()
-    }
+    pub fn ty(&self) -> Type { self.ty.clone() }
 
-    pub fn kind(&self) -> &ValueKind {
-        &self.kind
-    }
+    pub fn kind(&self) -> &ValueKind { &self.kind }
 
     /// Replace the used operands in the instructions.
     ///
-    /// If the value data is not an instruction or the `old` argument is not found in the
-    /// instruction, this method does nothing.
+    /// If the value data is not an instruction or the `old` argument is not
+    /// found in the instruction, this method does nothing.
     pub(super) fn replace_use(&mut self, old: Value, new: Value) {
         match self.kind {
             ValueKind::Load(ref mut load) => load.replace_use(old, new),
@@ -251,7 +238,5 @@ impl ValueData {
         }
     }
 
-    pub fn kind_mut(&mut self) -> &mut ValueKind {
-        &mut self.kind
-    }
+    pub fn kind_mut(&mut self) -> &mut ValueKind { &mut self.kind }
 }

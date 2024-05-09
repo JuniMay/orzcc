@@ -8,8 +8,8 @@
 //!     %x0 = phi [%val0, %pred0], [%val1, %pred1], ...
 //! ```
 //!
-//! But here, since we use block arguments insead of phi instructions, the generated code will be
-//! like:
+//! But here, since we use block arguments insead of phi instructions, the
+//! generated code will be like:
 //! ```orzir
 //! ^pred0:
 //!     #...
@@ -21,11 +21,21 @@
 //!     #...
 //! ```
 //!
-//! The algorithms are similar, except that multiple phis become multiple parameters of the block.
-//!
+//! The algorithms are similar, except that multiple phis become multiple
+//! parameters of the block.
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
+use super::{
+    control_flow_analysis::{ControlFlowAnalysis, ControlFlowGraph},
+    control_flow_canonicalization::ControlFlowCanonicalization,
+    data_flow_analysis::{DataFlowAnalysis, DefUseChain},
+    dominance_analysis::{Dominance, DominanceAnalysis},
+    GlobalPassMut,
+    PassManager,
+    PassResult,
+    TransformationPass,
+};
 use crate::ir::{
     builders::{BuildLocalValue, BuildNonAggregateConstant},
     entities::{FunctionData, ValueKind},
@@ -33,14 +43,6 @@ use crate::ir::{
     passes::{LocalPass, LocalPassMut},
     types::Type,
     values::{Block, Function, Value},
-};
-
-use super::{
-    control_flow_analysis::{ControlFlowAnalysis, ControlFlowGraph},
-    control_flow_canonicalization::ControlFlowCanonicalization,
-    data_flow_analysis::{DataFlowAnalysis, DefUseChain},
-    dominance_analysis::{Dominance, DominanceAnalysis},
-    GlobalPassMut, PassManager, PassResult, TransformationPass,
 };
 
 const MEM2REG: &str = "mem2reg";
@@ -78,9 +80,7 @@ pub struct Mem2reg {
 }
 
 impl Default for Mem2reg {
-    fn default() -> Self {
-        Self::new()
-    }
+    fn default() -> Self { Self::new() }
 }
 
 impl Mem2reg {
@@ -394,13 +394,12 @@ impl GlobalPassMut for Mem2reg {
 mod test {
     use std::io::{BufWriter, Cursor};
 
+    use super::{Mem2reg, MEM2REG};
     use crate::ir::{
         frontend::parser::Parser,
         module::Module,
         passes::{printer::Printer, GlobalPass, PassManager},
     };
-
-    use super::{Mem2reg, MEM2REG};
 
     fn print(module: &Module) {
         let mut buf = BufWriter::new(Vec::new());

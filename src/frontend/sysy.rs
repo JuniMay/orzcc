@@ -1,9 +1,9 @@
 use lalrpop_util::lalrpop_mod;
 
-// The sysy.rs file will contain the generated parser which laies in the target/debug/build/out/frontend/sysy/sysy.rs.
+// The sysy.rs file will contain the generated parser which laies in the
+// target/debug/build/out/frontend/sysy/sysy.rs.
 
-lalrpop_mod!(pub sysyparser, "/frontend/sysy/sysyparser.rs");
-
+lalrpop_mod!(#[allow(clippy::all)] pub sysyparser, "/frontend/sysy/sysyparser.rs");
 
 #[cfg(test)]
 pub mod tests {
@@ -583,7 +583,11 @@ pub mod tests {
         ];
 
         for case in VALID_CASES {
-            assert!(sysyparser::CompUnitParser::new().parse(&case).is_ok(), "Failed to parse valid case: {}", case);
+            assert!(
+                sysyparser::CompUnitParser::new().parse(&case).is_ok(),
+                "Failed to parse valid case: {}",
+                case
+            );
             let result = sysyparser::CompUnitParser::new().parse(&case).unwrap();
             println!("{:?}", result);
         }

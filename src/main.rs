@@ -9,9 +9,12 @@ use orzcc::{
         },
         module::Module,
         passes::{
-            control_flow_canonicalization::ControlFlowCanonicalization, mem2reg::Mem2reg,
-            printer::Printer, unreachable_block_elimination::UnreachableBlockElimination,
-            GlobalPass, PassManager,
+            control_flow_canonicalization::ControlFlowCanonicalization,
+            mem2reg::Mem2reg,
+            printer::Printer,
+            unreachable_block_elimination::UnreachableBlockElimination,
+            GlobalPass,
+            PassManager,
         },
     },
 };
@@ -67,7 +70,7 @@ fn main() {
         CliCommand::Frontend(cmd) => {
             println!("TODO FOR FRONTEND");
             todo!();
-        }        
+        }
     }
 }
 
@@ -110,7 +113,7 @@ fn cli() -> Command {
                         .required(true)
                         .help("The Sysy code file to compile into Orzir"),
                 ),
-        )        
+        )
 }
 
 fn parse_args() -> CliCommand {

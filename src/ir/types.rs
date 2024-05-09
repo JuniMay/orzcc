@@ -1,9 +1,4 @@
-use std::cell::RefCell;
-use std::cmp;
-use std::collections::HashMap;
-use std::fmt;
-use std::hash;
-use std::rc::Rc;
+use std::{cell::RefCell, cmp, collections::HashMap, fmt, hash, rc::Rc};
 
 use super::TYPE_PREFIX;
 
@@ -15,15 +10,11 @@ pub struct DataLayout {
 }
 
 impl Default for DataLayout {
-    fn default() -> Self {
-        Self::new()
-    }
+    fn default() -> Self { Self::new() }
 }
 
 impl DataLayout {
-    pub fn new() -> Self {
-        Self { pointer_size: 8 }
-    }
+    pub fn new() -> Self { Self { pointer_size: 8 } }
 }
 
 /// Kind of types.
@@ -43,7 +34,8 @@ pub enum TypeKind {
     Ptr,
     /// Array
     ///
-    /// Array is a type that represents a fixed number of elements of the same type.
+    /// Array is a type that represents a fixed number of elements of the same
+    /// type.
     Array(usize, Type),
     /// Function
     ///
@@ -99,9 +91,7 @@ impl fmt::Display for TypeKind {
 pub struct Type(Rc<TypeKind>);
 
 impl fmt::Display for Type {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
 impl Type {
@@ -129,49 +119,29 @@ impl Type {
         })
     }
 
-    pub fn int(bits: usize) -> Type {
-        Type::make(TypeKind::Int(bits))
-    }
+    pub fn int(bits: usize) -> Type { Type::make(TypeKind::Int(bits)) }
 
-    pub fn i32_() -> Type {
-        Type::int(32)
-    }
+    pub fn i32_() -> Type { Type::int(32) }
 
-    pub fn i1() -> Type {
-        Type::int(1)
-    }
+    pub fn i1() -> Type { Type::int(1) }
 
-    pub fn void() -> Type {
-        Type::make(TypeKind::Void)
-    }
+    pub fn void() -> Type { Type::make(TypeKind::Void) }
 
-    pub fn half() -> Type {
-        Type::make(TypeKind::Half)
-    }
+    pub fn half() -> Type { Type::make(TypeKind::Half) }
 
-    pub fn float() -> Type {
-        Type::make(TypeKind::Float)
-    }
+    pub fn float() -> Type { Type::make(TypeKind::Float) }
 
-    pub fn double() -> Type {
-        Type::make(TypeKind::Double)
-    }
+    pub fn double() -> Type { Type::make(TypeKind::Double) }
 
-    pub fn ptr() -> Type {
-        Type::make(TypeKind::Ptr)
-    }
+    pub fn ptr() -> Type { Type::make(TypeKind::Ptr) }
 
-    pub fn array(size: usize, ty: Type) -> Type {
-        Type::make(TypeKind::Array(size, ty))
-    }
+    pub fn array(size: usize, ty: Type) -> Type { Type::make(TypeKind::Array(size, ty)) }
 
     pub fn function(params: Vec<Type>, ret: Type) -> Type {
         Type::make(TypeKind::Function(params, ret))
     }
 
-    pub fn struct_(fields: Vec<Type>) -> Type {
-        Type::make(TypeKind::Struct(fields))
-    }
+    pub fn struct_(fields: Vec<Type>) -> Type { Type::make(TypeKind::Struct(fields)) }
 
     pub fn identified(name: String) -> Type {
         let name = if !name.starts_with(TYPE_PREFIX) {
@@ -196,9 +166,7 @@ impl Type {
         })
     }
 
-    pub fn kind(&self) -> &TypeKind {
-        &self.0
-    }
+    pub fn kind(&self) -> &TypeKind { &self.0 }
 
     pub fn set_data_layout(data_layout: DataLayout) {
         Self::DATA_LAYOUT.with(|dl| {
@@ -286,9 +254,7 @@ impl Type {
         }
     }
 
-    pub fn is_numeric(&self) -> bool {
-        self.is_int() || self.is_float()
-    }
+    pub fn is_numeric(&self) -> bool { self.is_int() || self.is_float() }
 
     pub fn is_ptr(&self) -> bool {
         match self.kind() {
@@ -368,27 +334,19 @@ impl Type {
         }
     }
 
-    pub fn is_aggregate(&self) -> bool {
-        self.as_array().is_some() || self.as_struct().is_some()
-    }
+    pub fn is_aggregate(&self) -> bool { self.as_array().is_some() || self.as_struct().is_some() }
 }
 
 impl hash::Hash for Type {
-    fn hash<H: hash::Hasher>(&self, state: &mut H) {
-        self.0.hash(state);
-    }
+    fn hash<H: hash::Hasher>(&self, state: &mut H) { self.0.hash(state); }
 }
 
 impl fmt::Debug for Type {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
 impl cmp::PartialEq for Type {
-    fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.0, &other.0)
-    }
+    fn eq(&self, other: &Self) -> bool { Rc::ptr_eq(&self.0, &other.0) }
 }
 
 #[cfg(test)]

@@ -2,18 +2,17 @@
 //!
 //! This module contains the implementation of the dominance analysis pass.
 //!
-//! This implements the algorithm described in "A Simple, Fast Dominance Algorithm" by Cooper et al.
-//!
+//! This implements the algorithm described in "A Simple, Fast Dominance
+//! Algorithm" by Cooper et al.
 
-use crate::ir::{
-    entities::FunctionData,
-    passes::control_flow_analysis::ControlFlowAnalysis,
-    passes::LocalPass,
-    values::{Block, Function},
-};
 use std::collections::{HashMap, HashSet};
 
 use super::{control_flow_analysis::ControlFlowGraph, PassResult};
+use crate::ir::{
+    entities::FunctionData,
+    passes::{control_flow_analysis::ControlFlowAnalysis, LocalPass},
+    values::{Block, Function},
+};
 
 /// The result of the dominance analysis pass.
 pub struct Dominance {
@@ -26,9 +25,7 @@ pub struct Dominance {
 }
 
 impl Default for Dominance {
-    fn default() -> Self {
-        Self::new()
-    }
+    fn default() -> Self { Self::new() }
 }
 
 impl Dominance {
@@ -56,9 +53,7 @@ pub struct DominanceAnalysis {
 }
 
 impl Default for DominanceAnalysis {
-    fn default() -> Self {
-        Self::new()
-    }
+    fn default() -> Self { Self::new() }
 }
 
 impl DominanceAnalysis {
@@ -197,9 +192,8 @@ impl LocalPass for DominanceAnalysis {
 mod test {
     use std::io::Cursor;
 
-    use crate::ir::{frontend::parser::Parser, passes::LocalPass};
-
     use super::DominanceAnalysis;
+    use crate::ir::{frontend::parser::Parser, passes::LocalPass};
 
     #[test]
     fn test_dominance_analysis() {

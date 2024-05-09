@@ -1,11 +1,12 @@
 //! # Virtual Machine of OrzIR
 //!
-//! The virtual machine is used to execute the Orz IR. The virtual machine is represented as a
-//! 64-bit  little-endian machine using a segmented memory model.
+//! The virtual machine is used to execute the Orz IR. The virtual machine is
+//! represented as a 64-bit  little-endian machine using a segmented memory
+//! model.
 //!
-//! Note that a virtual machine is just a approximation of the real behavior of the IR. The
-//! virtual machine is not designed to be a full-featured runtime, but a tool to help debug and
-//! optimize the IR.
+//! Note that a virtual machine is just a approximation of the real behavior of
+//! the IR. The virtual machine is not designed to be a full-featured runtime,
+//! but a tool to help debug and optimize the IR.
 //!
 //! The address format in the VM is as below
 //! ```text
@@ -14,22 +15,21 @@
 //! +-------------+--------------------------------------------------+
 //! ```
 //!
-//! The program counter or instruction pointer in the VM is represented using a combination of
-//! current function and current instruction.
-//!
+//! The program counter or instruction pointer in the VM is represented using a
+//! combination of current function and current instruction.
 
 use std::collections::HashMap;
 
-use crate::collections::BiMap;
-
-use crate::ir::{
-    entities::ValueKind,
-    module::Module,
-    types::TypeKind,
-    values::{BinaryOp, CastOp, FCmpCond, Function, ICmpCond, Inst, UnaryOp, Value},
-};
-
 use super::ExecError;
+use crate::{
+    collections::BiMap,
+    ir::{
+        entities::ValueKind,
+        module::Module,
+        types::TypeKind,
+        values::{BinaryOp, CastOp, FCmpCond, Function, ICmpCond, Inst, UnaryOp, Value},
+    },
+};
 
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub enum Segment {
@@ -40,9 +40,7 @@ pub enum Segment {
 }
 
 impl Segment {
-    pub fn to_addr(&self, offset: usize) -> Addr {
-        Addr(((*self as u64) << 56) | (offset as u64))
-    }
+    pub fn to_addr(&self, offset: usize) -> Addr { Addr(((*self as u64) << 56) | (offset as u64)) }
 }
 
 pub type ExecResult<T> = Result<T, ExecError>;
@@ -58,21 +56,15 @@ pub struct Addr(pub(super) u64);
 pub struct VReg(pub(super) u64);
 
 impl From<Addr> for VReg {
-    fn from(addr: Addr) -> Self {
-        Self(addr.0)
-    }
+    fn from(addr: Addr) -> Self { Self(addr.0) }
 }
 
 impl From<VReg> for Addr {
-    fn from(vreg: VReg) -> Self {
-        Self(vreg.0)
-    }
+    fn from(vreg: VReg) -> Self { Self(vreg.0) }
 }
 
 impl Addr {
-    pub fn new(addr: u64) -> Self {
-        Self(addr)
-    }
+    pub fn new(addr: u64) -> Self { Self(addr) }
 
     pub fn segment(&self) -> ExecResult<Segment> {
         // high 8 bits
@@ -92,39 +84,23 @@ impl Addr {
 }
 
 impl Default for VReg {
-    fn default() -> Self {
-        Self::new()
-    }
+    fn default() -> Self { Self::new() }
 }
 
 impl VReg {
-    pub fn new() -> Self {
-        Self(0)
-    }
+    pub fn new() -> Self { Self(0) }
 
-    pub fn to_le_bytes(&self) -> [u8; 8] {
-        self.0.to_le_bytes()
-    }
+    pub fn to_le_bytes(&self) -> [u8; 8] { self.0.to_le_bytes() }
 
-    pub fn from_le_bytes(bytes: [u8; 8]) -> Self {
-        Self(u64::from_le_bytes(bytes))
-    }
+    pub fn from_le_bytes(bytes: [u8; 8]) -> Self { Self(u64::from_le_bytes(bytes)) }
 
-    pub fn to_float(&self) -> f32 {
-        f32::from_le_bytes((self.0 as u32).to_le_bytes())
-    }
+    pub fn to_float(&self) -> f32 { f32::from_le_bytes((self.0 as u32).to_le_bytes()) }
 
-    pub fn from_float(f: f32) -> Self {
-        Self(u32::from_le_bytes(f.to_le_bytes()) as u64)
-    }
+    pub fn from_float(f: f32) -> Self { Self(u32::from_le_bytes(f.to_le_bytes()) as u64) }
 
-    pub fn to_double(&self) -> f64 {
-        f64::from_le_bytes(self.0.to_le_bytes())
-    }
+    pub fn to_double(&self) -> f64 { f64::from_le_bytes(self.0.to_le_bytes()) }
 
-    pub fn from_double(f: f64) -> Self {
-        Self(u64::from_le_bytes(f.to_le_bytes()))
-    }
+    pub fn from_double(f: f64) -> Self { Self(u64::from_le_bytes(f.to_le_bytes())) }
 }
 
 pub struct VirtualMachine<'a> {
@@ -178,17 +154,11 @@ impl<'a> VirtualMachine<'a> {
         }
     }
 
-    pub fn stopped(&self) -> bool {
-        self.stopped
-    }
+    pub fn stopped(&self) -> bool { self.stopped }
 
-    pub(super) fn curr_function(&self) -> Function {
-        self.curr_function
-    }
+    pub(super) fn curr_function(&self) -> Function { self.curr_function }
 
-    pub(super) fn curr_inst(&self) -> Inst {
-        self.curr_inst
-    }
+    pub(super) fn curr_inst(&self) -> Inst { self.curr_inst }
 
     fn alloc_memory(&mut self, segment: Segment, size: usize) -> ExecResult<Addr> {
         let offset = self.memory[&segment].data.len() as u64;
@@ -208,13 +178,9 @@ impl<'a> VirtualMachine<'a> {
         vreg
     }
 
-    fn write_vreg(&mut self, value: Value, vreg: VReg) {
-        self.vregs.insert(value, vreg);
-    }
+    fn write_vreg(&mut self, value: Value, vreg: VReg) { self.vregs.insert(value, vreg); }
 
-    pub(super) fn read_vreg(&self, value: Value) -> VReg {
-        *self.vregs.get(&value).unwrap()
-    }
+    pub(super) fn read_vreg(&self, value: Value) -> VReg { *self.vregs.get(&value).unwrap() }
 
     fn write_memory(&mut self, addr: Addr, data: &[u8]) -> ExecResult<()> {
         let segment = addr.segment()?;
@@ -230,9 +196,7 @@ impl<'a> VirtualMachine<'a> {
         Ok(&self.memory[&segment].data[offset..offset + size])
     }
 
-    pub(super) fn memory(&self) -> &HashMap<Segment, Memory> {
-        &self.memory
-    }
+    pub(super) fn memory(&self) -> &HashMap<Segment, Memory> { &self.memory }
 
     fn write_global_init(&mut self, addr: Addr, init: Value) -> ExecResult<()> {
         self.module

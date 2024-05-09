@@ -1,27 +1,45 @@
 //! # Builders of OrzIR.
 //!
-//! Builder is a unified interface to construct values (globals, constants, instructions, etc.) in
-//! the OrzIR. There are two kinds of builders: `LocalBuilder` and `GlobalBuilder`.
+//! Builder is a unified interface to construct values (globals, constants,
+//! instructions, etc.) in the OrzIR. There are two kinds of builders:
+//! `LocalBuilder` and `GlobalBuilder`.
 //!
 //! ## Local Builder
 //!
-//! Local builder is used to build values in a local data flow graph (DFG). It is useful when
-//! constructing local instructions and blocks.
+//! Local builder is used to build values in a local data flow graph (DFG). It
+//! is useful when constructing local instructions and blocks.
 //!
 //! ## Global Builder
 //!
-//! Global builder is used to build global variables, constants and even functions.
-//!
+//! Global builder is used to build global variables, constants and even
+//! functions.
+use thiserror::Error;
+
 use super::{
     entities::{BlockData, FunctionData, FunctionKind, ValueData, ValueKind},
     module::{DataFlowGraph, Module},
     types::Type,
     values::{
-        Alloc, Binary, BinaryOp, Block, Branch, Call, Cast, CastOp, Function, GetElemPtr,
-        GlobalSlot, Jump, Load, Return, Store, Unary, UnaryOp, Value,
+        Alloc,
+        Binary,
+        BinaryOp,
+        Block,
+        Branch,
+        Call,
+        Cast,
+        CastOp,
+        Function,
+        GetElemPtr,
+        GlobalSlot,
+        Jump,
+        Load,
+        Return,
+        Store,
+        Unary,
+        UnaryOp,
+        Value,
     },
 };
-use thiserror::Error;
 
 #[derive(Error, Debug)]
 pub enum BuildError {
@@ -43,8 +61,9 @@ pub enum BuildError {
 
     /// Invalid value type.
     ///
-    /// This can be used when the value type is not valid for the operation/construction,
-    /// e.g. a function type provided for zero/bytes/...
+    /// This can be used when the value type is not valid for the
+    /// operation/construction, e.g. a function type provided for
+    /// zero/bytes/...
     #[error("invalid value type: {0}")]
     InvalidType(Type),
 
@@ -66,7 +85,8 @@ pub enum BuildError {
 
     /// Incompatible value type.
     ///
-    /// This can be used when two values are not compatible, e.g. in binary operations.
+    /// This can be used when two values are not compatible, e.g. in binary
+    /// operations.
     #[error("incompatible value type of {0} and {1}")]
     IncompatibleType(Type, Type),
 
@@ -109,9 +129,7 @@ pub trait QueryValueData {
     fn is_value_block_param(&self, value: Value) -> Result<bool, BuildError>;
 
     /// Check if a value exists in the data flow graph.
-    fn value_exists(&self, value: Value) -> bool {
-        self.value_type(value).is_ok()
-    }
+    fn value_exists(&self, value: Value) -> bool { self.value_type(value).is_ok() }
 }
 
 pub trait QueryBlockData {
@@ -487,9 +505,7 @@ pub struct LocalBuilder<'a> {
 }
 
 impl LocalBuilder<'_> {
-    pub fn new(dfg: &mut DataFlowGraph) -> LocalBuilder {
-        LocalBuilder { dfg }
-    }
+    pub fn new(dfg: &mut DataFlowGraph) -> LocalBuilder { LocalBuilder { dfg } }
 }
 
 impl QueryValueData for LocalBuilder<'_> {
@@ -498,11 +514,13 @@ impl QueryValueData for LocalBuilder<'_> {
             .with_value_data(value, |data| data.ty())
             .ok_or(BuildError::ValueNotFound)
     }
+
     fn is_value_const(&self, value: Value) -> Result<bool, BuildError> {
         self.dfg
             .with_value_data(value, |data| data.kind().is_const())
             .ok_or(BuildError::ValueNotFound)
     }
+
     fn is_value_block_param(&self, value: Value) -> Result<bool, BuildError> {
         self.dfg
             .with_value_data(value, |data| data.kind().is_block_param())
@@ -544,9 +562,7 @@ pub struct GlobalBuilder<'a> {
 }
 
 impl GlobalBuilder<'_> {
-    pub fn new(module: &mut Module) -> GlobalBuilder {
-        GlobalBuilder { module }
-    }
+    pub fn new(module: &mut Module) -> GlobalBuilder { GlobalBuilder { module } }
 }
 
 impl QueryValueData for GlobalBuilder<'_> {

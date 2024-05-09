@@ -8,15 +8,18 @@ use crate::{
     ir::module::IdAllocator,
 };
 
+/// The layout in a machine function/procedure.
 #[derive(Default)]
 pub struct MachineLayout {
+    /// The block list, including the instruction layout.
     blocks: MachineBlockList,
+    /// The mapping from machinr instructions to the blocks.
     inst_blocks: HashMap<MachineInst, MachineBlock>,
 }
 
 /// Errors in layout operations
 #[derive(Debug, Error)]
-pub enum LayoutOpErr {
+pub enum MachineLayoutOpErr {
     /// Duplicated instruction in inertion.
     #[error("duplicated instruction: {0:?}")]
     InstDuplicated(MachineInst),
@@ -41,21 +44,15 @@ pub enum LayoutOpErr {
 }
 
 impl MachineLayout {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 
     /// Get the entry block for the current function.
     ///
     /// The entry block is by default the first block in the layout.
-    pub fn entry_block(&self) -> Option<MachineBlock> {
-        self.blocks.front()
-    }
+    pub fn entry_block(&self) -> Option<MachineBlock> { self.blocks.front() }
 
     /// Get the list of blocks.
-    pub fn blocks(&self) -> &MachineBlockList {
-        &self.blocks
-    }
+    pub fn blocks(&self) -> &MachineBlockList { &self.blocks }
 
     /// Get the parent block of an instruction
     pub fn parent_block(&self, inst: MachineInst) -> Option<MachineBlock> {
@@ -88,8 +85,9 @@ impl MachineLayout {
 
     /// Get the next instruction in the layout
     ///
-    /// If this is the end of the block, return the first instruction of the next block.
-    /// Note that this is not the execution order, but the layout order.
+    /// If this is the end of the block, return the first instruction of the
+    /// next block. Note that this is not the execution order, but the
+    /// layout order.
     pub fn next_inst(&self, inst: MachineInst) -> Option<MachineInst> {
         let parent_block = self.parent_block(inst)?;
         let node = self.blocks.node(parent_block).unwrap();
@@ -120,10 +118,10 @@ impl MachineLayout {
     }
 
     /// Append a block to the layout
-    pub fn append_block(&mut self, block: MachineBlock) -> Result<(), LayoutOpErr> {
+    pub fn append_block(&mut self, block: MachineBlock) -> Result<(), MachineLayoutOpErr> {
         self.blocks
             .append(block)
-            .map_err(|_| LayoutOpErr::BlockDuplicated(block))
+            .map_err(|_| MachineLayoutOpErr::BlockDuplicated(block))
     }
 
     /// Append an instruction to a block
@@ -131,16 +129,16 @@ impl MachineLayout {
         &mut self,
         inst: MachineInst,
         block: MachineBlock,
-    ) -> Result<(), LayoutOpErr> {
+    ) -> Result<(), MachineLayoutOpErr> {
         if self.inst_blocks.contains_key(&inst) {
-            return Err(LayoutOpErr::InstDuplicated(inst));
+            return Err(MachineLayoutOpErr::InstDuplicated(inst));
         }
         self.blocks
             .node_mut(block)
-            .ok_or(LayoutOpErr::BlockNodeNotFound(block))?
+            .ok_or(MachineLayoutOpErr::BlockNodeNotFound(block))?
             .insts_mut()
             .append(inst)
-            .map_err(|_| LayoutOpErr::InstDuplicated(inst))?;
+            .map_err(|_| MachineLayoutOpErr::InstDuplicated(inst))?;
 
         self.inst_blocks.insert(inst, block);
 
@@ -148,11 +146,11 @@ impl MachineLayout {
     }
 
     /// Remove a block from the layout
-    pub(super) fn remove_block(&mut self, block: MachineBlock) -> Result<(), LayoutOpErr> {
+    pub(super) fn remove_block(&mut self, block: MachineBlock) -> Result<(), MachineLayoutOpErr> {
         for (inst, _) in self
             .blocks
             .node(block)
-            .ok_or(LayoutOpErr::BlockNodeNotFound(block))?
+            .ok_or(MachineLayoutOpErr::BlockNodeNotFound(block))?
             .insts()
             .into_iter()
         {
@@ -161,33 +159,33 @@ impl MachineLayout {
 
         self.blocks
             .remove(block)
-            .map_err(|_| LayoutOpErr::BlockNodeNotFound(block))
+            .map_err(|_| MachineLayoutOpErr::BlockNodeNotFound(block))
     }
 
-    pub(super) fn remove_inst(&mut self, inst: MachineInst) -> Result<(), LayoutOpErr> {
+    pub(super) fn remove_inst(&mut self, inst: MachineInst) -> Result<(), MachineLayoutOpErr> {
         let block = self
             .inst_blocks
             .remove(&inst)
-            .ok_or(LayoutOpErr::ParentBlockNotFound(inst))?;
+            .ok_or(MachineLayoutOpErr::ParentBlockNotFound(inst))?;
 
         self.blocks
             .node_mut(block)
-            .ok_or(LayoutOpErr::BlockNodeNotFound(block))?
+            .ok_or(MachineLayoutOpErr::BlockNodeNotFound(block))?
             .insts_mut()
             .remove(inst)
-            .map_err(|_| LayoutOpErr::InstNodeNotFound(inst))
+            .map_err(|_| MachineLayoutOpErr::InstNodeNotFound(inst))
     }
 
     pub fn insert_block_before(
         &mut self,
         block: MachineBlock,
         before: MachineBlock,
-    ) -> Result<(), LayoutOpErr> {
+    ) -> Result<(), MachineLayoutOpErr> {
         self.blocks
             .insert_before(block, before)
             .map_err(|err| match err {
-                ListError::KeyDuplicated(block) => LayoutOpErr::BlockDuplicated(block),
-                ListError::NodeNotFound(before) => LayoutOpErr::BlockNodeNotFound(before),
+                ListError::KeyDuplicated(block) => MachineLayoutOpErr::BlockDuplicated(block),
+                ListError::NodeNotFound(before) => MachineLayoutOpErr::BlockNodeNotFound(before),
             })
     }
 
@@ -195,25 +193,25 @@ impl MachineLayout {
         &mut self,
         inst: MachineInst,
         before: MachineInst,
-    ) -> Result<(), LayoutOpErr> {
+    ) -> Result<(), MachineLayoutOpErr> {
         if self.inst_blocks.contains_key(&inst) {
-            return Err(LayoutOpErr::InstDuplicated(inst));
+            return Err(MachineLayoutOpErr::InstDuplicated(inst));
         }
 
         let block = self
             .inst_blocks
             .get(&before)
-            .ok_or(LayoutOpErr::ParentBlockNotFound(before))?;
+            .ok_or(MachineLayoutOpErr::ParentBlockNotFound(before))?;
 
         self.blocks
             .node_mut(*block)
-            .ok_or(LayoutOpErr::BlockNodeNotFound(*block))?
+            .ok_or(MachineLayoutOpErr::BlockNodeNotFound(*block))?
             .insts_mut()
             .insert_before(inst, before)
             .map_err(|err| match err {
-                ListError::KeyDuplicated(inst) => LayoutOpErr::InstDuplicated(inst),
+                ListError::KeyDuplicated(inst) => MachineLayoutOpErr::InstDuplicated(inst),
                 // this is actually unreachable
-                ListError::NodeNotFound(before) => LayoutOpErr::InstNodeNotFound(before),
+                ListError::NodeNotFound(before) => MachineLayoutOpErr::InstNodeNotFound(before),
             })?;
 
         self.inst_blocks.insert(inst, *block);
@@ -222,11 +220,21 @@ impl MachineLayout {
     }
 }
 
+/// The machine function data.
 pub struct MachineFunctionData {
+    /// The name of he function.
     name: MachineSymbol,
+    /// The layout inside this function.
     layout: MachineLayout,
 }
 
+impl MachineFunctionData {
+    pub fn layout(&self) -> &MachineLayout { &self.layout }
+
+    pub fn layout_mut(&mut self) -> &mut MachineLayout { &mut self.layout }
+}
+
+/// An instruction node in the list.
 #[derive(Default)]
 pub struct MachineInstNode {
     prev: Option<MachineInst>,
@@ -234,105 +242,94 @@ pub struct MachineInstNode {
 }
 
 impl ListNode<MachineInst> for MachineInstNode {
-    fn prev(&self) -> Option<MachineInst> {
-        self.prev
-    }
+    fn prev(&self) -> Option<MachineInst> { self.prev }
 
-    fn next(&self) -> Option<MachineInst> {
-        self.next
-    }
+    fn next(&self) -> Option<MachineInst> { self.next }
 
-    fn set_prev(&mut self, prev: Option<MachineInst>) {
-        self.prev = prev;
-    }
+    fn set_prev(&mut self, prev: Option<MachineInst>) { self.prev = prev; }
 
-    fn set_next(&mut self, next: Option<MachineInst>) {
-        self.next = next;
-    }
+    fn set_next(&mut self, next: Option<MachineInst>) { self.next = next; }
 }
 
 pub type MachineInstList = List<MachineInst, MachineInstNode>;
 
+/// The block node in the list.
 #[derive(Default)]
 pub struct MachineBlockNode {
     prev: Option<MachineBlock>,
     next: Option<MachineBlock>,
-
+    /// The instructions in the block.
     insts: MachineInstList,
 }
 
 pub type MachineBlockList = List<MachineBlock, MachineBlockNode>;
 
 impl MachineBlockNode {
-    pub fn insts(&self) -> &MachineInstList {
-        &self.insts
-    }
+    pub fn insts(&self) -> &MachineInstList { &self.insts }
 
-    pub fn insts_mut(&mut self) -> &mut MachineInstList {
-        &mut self.insts
-    }
+    pub fn insts_mut(&mut self) -> &mut MachineInstList { &mut self.insts }
 }
 
 impl ListNode<MachineBlock> for MachineBlockNode {
-    fn prev(&self) -> Option<MachineBlock> {
-        self.prev
-    }
+    fn prev(&self) -> Option<MachineBlock> { self.prev }
 
-    fn next(&self) -> Option<MachineBlock> {
-        self.next
-    }
+    fn next(&self) -> Option<MachineBlock> { self.next }
 
-    fn set_prev(&mut self, prev: Option<MachineBlock>) {
-        self.prev = prev;
-    }
+    fn set_prev(&mut self, prev: Option<MachineBlock>) { self.prev = prev; }
 
-    fn set_next(&mut self, next: Option<MachineBlock>) {
-        self.next = next;
-    }
+    fn set_next(&mut self, next: Option<MachineBlock>) { self.next = next; }
 }
 
 #[derive(Default)]
 pub struct MachineContext {
+    /// The allocator for virtual register ids.
     vreg_allocator: IdAllocator,
+    /// The allocator for block ids.
     block_allocator: IdAllocator,
+    /// The allocator for instruction ids.
     inst_allocator: IdAllocator,
-
+    /// The functions in the context.
     functions: HashMap<MachineSymbol, MachineFunctionData>,
+    /// The globals in the context.
     globals: HashMap<MachineSymbol, MachineGlobalData>,
+    /// The instructions in the context.
+    ///
+    /// TODO: This arena-style storage can be reimplemented with a simple [Vec]
     insts: HashMap<MachineInst, InstData>,
 }
 
 impl MachineContext {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 
-    fn new_vreg(&mut self) -> Register {
+    /// Create a new virtual register.
+    pub fn new_vreg(&mut self) -> Register {
         Register::Virtual(VirtualRegister(self.vreg_allocator.allocate()))
     }
 
-    pub fn new_block(&mut self) -> MachineBlock {
-        MachineBlock(self.block_allocator.allocate())
-    }
+    /// Create a new block.
+    pub fn new_block(&mut self) -> MachineBlock { MachineBlock(self.block_allocator.allocate()) }
 
+    /// Create a new instruction.
     fn new_inst(&mut self, data: InstData) -> MachineInst {
         let inst = MachineInst(self.inst_allocator.allocate());
         self.insts.insert(inst, data);
         inst
     }
 
-    fn inst_data(&self, inst: MachineInst) -> Option<&InstData> {
-        self.insts.get(&inst)
-    }
+    /// Get the instruction data.
+    fn inst_data(&self, inst: MachineInst) -> Option<&InstData> { self.insts.get(&inst) }
 
+    /// Get the mutable instruction data.
     fn inst_data_mut(&mut self, inst: MachineInst) -> Option<&mut InstData> {
         self.insts.get_mut(&inst)
     }
 
+    /// Get the function data.
     pub fn function_data(&self, symbol: &MachineSymbol) -> Option<&MachineFunctionData> {
         self.functions.get(symbol)
     }
 
+    /// Get the mutable function data.
     pub fn function_data_mut(
         &mut self,
         symbol: &MachineSymbol,
@@ -340,6 +337,7 @@ impl MachineContext {
         self.functions.get_mut(symbol)
     }
 
+    /// Create a new function.
     pub fn new_function(&mut self, name: MachineSymbol) {
         self.functions.insert(
             name.clone(),
@@ -350,6 +348,7 @@ impl MachineContext {
         );
     }
 
+    /// Create a new global.
     pub fn new_global(&mut self, name: MachineSymbol, data: MachineGlobalData) {
         self.globals.insert(name, data);
     }
@@ -527,15 +526,22 @@ impl fmt::Display for RiscvFloatingPointRegister {
 }
 
 impl fmt::Display for VirtualRegister {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "$v{}", self.0)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "$v{}", self.0) }
 }
 
 pub enum Register {
     General(RiscvGeneralPurposeRegister),
     FloatingPoint(RiscvFloatingPointRegister),
     Virtual(VirtualRegister),
+}
+
+impl Register {
+    pub fn as_virtual_register(&self) -> Option<VirtualRegister> {
+        match self {
+            Register::Virtual(vreg) => Some(*vreg),
+            _ => None,
+        }
+    }
 }
 
 impl fmt::Display for Register {
@@ -551,76 +557,53 @@ impl fmt::Display for Register {
 pub struct Immediate(i128);
 
 impl fmt::Display for Immediate {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
 impl From<i128> for Immediate {
-    fn from(value: i128) -> Self {
-        Immediate(value)
-    }
+    fn from(value: i128) -> Self { Immediate(value) }
 }
 
 impl From<u64> for Immediate {
-    fn from(value: u64) -> Self {
-        Immediate(value as i128)
-    }
+    fn from(value: u64) -> Self { Immediate(value as i128) }
 }
 
 impl From<u32> for Immediate {
-    fn from(value: u32) -> Self {
-        Immediate(value as i128)
-    }
+    fn from(value: u32) -> Self { Immediate(value as i128) }
 }
 
 impl From<u16> for Immediate {
-    fn from(value: u16) -> Self {
-        Immediate(value as i128)
-    }
+    fn from(value: u16) -> Self { Immediate(value as i128) }
 }
 
 impl From<u8> for Immediate {
-    fn from(value: u8) -> Self {
-        Immediate(value as i128)
-    }
+    fn from(value: u8) -> Self { Immediate(value as i128) }
 }
 
 impl From<i64> for Immediate {
-    fn from(value: i64) -> Self {
-        Immediate(value as i128)
-    }
+    fn from(value: i64) -> Self { Immediate(value as i128) }
 }
 
 impl From<i32> for Immediate {
-    fn from(value: i32) -> Self {
-        Immediate(value as i128)
-    }
+    fn from(value: i32) -> Self { Immediate(value as i128) }
 }
 
 impl From<i16> for Immediate {
-    fn from(value: i16) -> Self {
-        Immediate(value as i128)
-    }
+    fn from(value: i16) -> Self { Immediate(value as i128) }
 }
 
 impl From<i8> for Immediate {
-    fn from(value: i8) -> Self {
-        Immediate(value as i128)
-    }
+    fn from(value: i8) -> Self { Immediate(value as i128) }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MachineSymbol(String);
 
 impl fmt::Display for MachineSymbol {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.0)
-    }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
 pub struct MachineGlobalData {
-    symbol: MachineSymbol,
     align: usize,
     kind: MachineGlobalKind,
 }
@@ -631,37 +614,31 @@ pub enum MachineGlobalKind {
 }
 
 impl MachineGlobalData {
-    pub fn new_bss(symbol: MachineSymbol, size: usize, align: usize) -> Self {
+    pub fn new_bss(size: usize, align: usize) -> Self {
         Self {
-            symbol,
             align,
             kind: MachineGlobalKind::Bss { size },
         }
     }
 
-    pub fn new_data(symbol: MachineSymbol, data: Vec<u8>, align: usize) -> Self {
+    pub fn new_data(data: Vec<u8>, align: usize) -> Self {
         Self {
-            symbol,
             align,
             kind: MachineGlobalKind::Data { data },
         }
     }
 
-    pub fn symbol(&self) -> &MachineSymbol {
-        &self.symbol
-    }
-    
-    pub fn align(&self) -> usize {
-        self.align
-    }
+    pub fn align(&self) -> usize { self.align }
 
-    pub fn kind(&self) -> &MachineGlobalKind {
-        &self.kind
-    }
+    pub fn kind(&self) -> &MachineGlobalKind { &self.kind }
+
+    pub fn set_kind(&mut self, kind: MachineGlobalKind) { self.kind = kind; }
 }
 
 impl From<String> for MachineSymbol {
     fn from(name: String) -> Self {
+        // TODO: check the name, the global names in IR starts with `@`, the validity
+        // needs to be checked.
         MachineSymbol(name)
     }
 }
@@ -1061,33 +1038,21 @@ impl InstData {
         )
     }
 
-    pub fn is_branch(&self) -> bool {
-        matches!(self, InstData::Branch { .. } | InstData::J { .. })
-    }
+    pub fn is_branch(&self) -> bool { matches!(self, InstData::Branch { .. } | InstData::J { .. }) }
 
-    pub fn is_call(&self) -> bool {
-        matches!(self, InstData::Call { .. })
-    }
+    pub fn is_call(&self) -> bool { matches!(self, InstData::Call { .. }) }
 
-    pub fn is_ret(&self) -> bool {
-        matches!(self, InstData::Ret)
-    }
+    pub fn is_ret(&self) -> bool { matches!(self, InstData::Ret) }
 
-    pub fn is_move(&self) -> bool {
-        matches!(self, InstData::FloatMove { .. })
-    }
+    pub fn is_move(&self) -> bool { matches!(self, InstData::FloatMove { .. }) }
 
-    pub fn is_convert(&self) -> bool {
-        matches!(self, InstData::FloatConvert { .. })
-    }
+    pub fn is_convert(&self) -> bool { matches!(self, InstData::FloatConvert { .. }) }
 
     pub fn is_binary(&self) -> bool {
         matches!(self, InstData::Binary { .. } | InstData::BinaryImm { .. })
     }
 
-    pub fn is_float_binary(&self) -> bool {
-        matches!(self, InstData::FloatBinary { .. })
-    }
+    pub fn is_float_binary(&self) -> bool { matches!(self, InstData::FloatBinary { .. }) }
 }
 
 impl fmt::Display for InstData {

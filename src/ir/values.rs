@@ -1,11 +1,13 @@
 //! # Value Reference and Internals
 //!
-//! There are four references in the IR: [`Value`], [`Inst`], [`Function`] and [`Block`].
+//! There are four references in the IR: [`Value`], [`Inst`], [`Function`] and
+//! [`Block`].
 //!
-//! The [`Value`], [`Inst`], [`Function`] can be converted from one to another, but [`Block`] cannot.
+//! The [`Value`], [`Inst`], [`Function`] can be converted from one to another,
+//! but [`Block`] cannot.
 //!
-//! In the current implementation, all the references share the same [`IdAllocator`](super::module::IdAllocator).
-//!
+//! In the current implementation, all the references share the same
+//! [`IdAllocator`](super::module::IdAllocator).
 
 use super::{
     entities::{ValueData, ValueKind},
@@ -18,18 +20,16 @@ use super::{
 pub struct Value(usize);
 
 impl Value {
-    pub fn new(index: usize) -> Self {
-        Self(index)
-    }
+    pub fn new(index: usize) -> Self { Self(index) }
 
-    pub fn index(&self) -> usize {
-        self.0
-    }
+    pub fn index(&self) -> usize { self.0 }
 }
 
-/// Value indexer indicates an indexer for a value and can be converted from/into a Value.
+/// Value indexer indicates an indexer for a value and can be converted
+/// from/into a Value.
 ///
-/// Indexer is actually a wrapper of usize, representing a reference to the data.
+/// Indexer is actually a wrapper of usize, representing a reference to the
+/// data.
 pub trait ValueIndexer: From<Value> {
     fn new(index: usize) -> Self;
     fn index(&self) -> usize;
@@ -56,19 +56,13 @@ pub struct Block(usize);
 macro_rules! impl_value_indexer {
     ($indexer:ident) => {
         impl ValueIndexer for $indexer {
-            fn new(id: usize) -> Self {
-                Self(id)
-            }
+            fn new(id: usize) -> Self { Self(id) }
 
-            fn index(&self) -> usize {
-                self.0
-            }
+            fn index(&self) -> usize { self.0 }
         }
 
         impl From<Value> for $indexer {
-            fn from(value: Value) -> Self {
-                Self::new(value.index())
-            }
+            fn from(value: Value) -> Self { Self::new(value.index()) }
         }
     };
 }
@@ -78,22 +72,16 @@ impl_value_indexer!(Inst);
 impl_value_indexer!(Function);
 
 impl Block {
-    pub fn new(index: usize) -> Self {
-        Self(index)
-    }
+    pub fn new(index: usize) -> Self { Self(index) }
 
-    pub fn index(&self) -> usize {
-        self.0
-    }
+    pub fn index(&self) -> usize { self.0 }
 }
 
 impl<T> From<T> for Value
 where
     T: ValueIndexer,
 {
-    fn from(indexer: T) -> Self {
-        Self::new(indexer.index())
-    }
+    fn from(indexer: T) -> Self { Self::new(indexer.index()) }
 }
 
 /// Condition for integer comparison
@@ -211,14 +199,10 @@ pub enum UnaryOp {
 
 impl UnaryOp {
     /// If the operation requires integer operands
-    pub(super) fn require_int(&self) -> bool {
-        false
-    }
+    pub(super) fn require_int(&self) -> bool { false }
 
     /// If the operation requires floating-point operands
-    pub(super) fn require_float(&self) -> bool {
-        matches!(self, UnaryOp::FNeg)
-    }
+    pub(super) fn require_float(&self) -> bool { matches!(self, UnaryOp::FNeg) }
 }
 
 pub trait ReplaceUse {
@@ -238,29 +222,17 @@ impl Binary {
         ValueData::new(ty, ValueKind::Binary(Binary { op, lhs, rhs }))
     }
 
-    pub fn op(&self) -> BinaryOp {
-        self.op.clone()
-    }
+    pub fn op(&self) -> BinaryOp { self.op.clone() }
 
-    pub fn lhs(&self) -> Value {
-        self.lhs
-    }
+    pub fn lhs(&self) -> Value { self.lhs }
 
-    pub fn rhs(&self) -> Value {
-        self.rhs
-    }
+    pub fn rhs(&self) -> Value { self.rhs }
 
-    pub fn set_op(&mut self, op: BinaryOp) -> BinaryOp {
-        std::mem::replace(&mut self.op, op)
-    }
+    pub fn set_op(&mut self, op: BinaryOp) -> BinaryOp { std::mem::replace(&mut self.op, op) }
 
-    pub fn set_lhs(&mut self, lhs: Value) -> Value {
-        std::mem::replace(&mut self.lhs, lhs)
-    }
+    pub fn set_lhs(&mut self, lhs: Value) -> Value { std::mem::replace(&mut self.lhs, lhs) }
 
-    pub fn set_rhs(&mut self, rhs: Value) -> Value {
-        std::mem::replace(&mut self.rhs, rhs)
-    }
+    pub fn set_rhs(&mut self, rhs: Value) -> Value { std::mem::replace(&mut self.rhs, rhs) }
 }
 
 impl ReplaceUse for Binary {
@@ -286,21 +258,13 @@ impl Unary {
         ValueData::new(ty, ValueKind::Unary(Unary { op, val }))
     }
 
-    pub fn op(&self) -> UnaryOp {
-        self.op.clone()
-    }
+    pub fn op(&self) -> UnaryOp { self.op.clone() }
 
-    pub fn val(&self) -> Value {
-        self.val
-    }
+    pub fn val(&self) -> Value { self.val }
 
-    pub fn set_op(&mut self, op: UnaryOp) -> UnaryOp {
-        std::mem::replace(&mut self.op, op)
-    }
+    pub fn set_op(&mut self, op: UnaryOp) -> UnaryOp { std::mem::replace(&mut self.op, op) }
 
-    pub fn set_val(&mut self, val: Value) -> Value {
-        std::mem::replace(&mut self.val, val)
-    }
+    pub fn set_val(&mut self, val: Value) -> Value { std::mem::replace(&mut self.val, val) }
 }
 
 impl ReplaceUse for Unary {
@@ -323,21 +287,13 @@ impl Store {
         ValueData::new(Type::void(), ValueKind::Store(Store { val, ptr }))
     }
 
-    pub fn val(&self) -> Value {
-        self.val
-    }
+    pub fn val(&self) -> Value { self.val }
 
-    pub fn ptr(&self) -> Value {
-        self.ptr
-    }
+    pub fn ptr(&self) -> Value { self.ptr }
 
-    pub fn set_val(&mut self, val: Value) -> Value {
-        std::mem::replace(&mut self.val, val)
-    }
+    pub fn set_val(&mut self, val: Value) -> Value { std::mem::replace(&mut self.val, val) }
 
-    pub fn set_ptr(&mut self, ptr: Value) -> Value {
-        std::mem::replace(&mut self.ptr, ptr)
-    }
+    pub fn set_ptr(&mut self, ptr: Value) -> Value { std::mem::replace(&mut self.ptr, ptr) }
 }
 
 impl ReplaceUse for Store {
@@ -364,13 +320,9 @@ impl Load {
         ValueData::new(ty, ValueKind::Load(Load { ptr }))
     }
 
-    pub fn ptr(&self) -> Value {
-        self.ptr
-    }
+    pub fn ptr(&self) -> Value { self.ptr }
 
-    pub fn set_ptr(&mut self, ptr: Value) -> Value {
-        std::mem::replace(&mut self.ptr, ptr)
-    }
+    pub fn set_ptr(&mut self, ptr: Value) -> Value { std::mem::replace(&mut self.ptr, ptr) }
 }
 
 impl ReplaceUse for Load {
@@ -428,21 +380,13 @@ impl Cast {
         ValueData::new(ty, ValueKind::Cast(Cast { op, val }))
     }
 
-    pub fn val(&self) -> Value {
-        self.val
-    }
+    pub fn val(&self) -> Value { self.val }
 
-    pub fn op(&self) -> CastOp {
-        self.op.clone()
-    }
+    pub fn op(&self) -> CastOp { self.op.clone() }
 
-    pub fn set_val(&mut self, val: Value) -> Value {
-        std::mem::replace(&mut self.val, val)
-    }
+    pub fn set_val(&mut self, val: Value) -> Value { std::mem::replace(&mut self.val, val) }
 
-    pub fn set_op(&mut self, op: CastOp) -> CastOp {
-        std::mem::replace(&mut self.op, op)
-    }
+    pub fn set_op(&mut self, op: CastOp) -> CastOp { std::mem::replace(&mut self.op, op) }
 }
 
 impl ReplaceUse for Cast {
@@ -468,9 +412,7 @@ impl Alloc {
         ValueData::new(Type::ptr(), ValueKind::Alloc(Alloc { ty }))
     }
 
-    pub fn ty(&self) -> Type {
-        self.ty.clone()
-    }
+    pub fn ty(&self) -> Type { self.ty.clone() }
 }
 
 /// A global memory slot.
@@ -492,17 +434,11 @@ impl GlobalSlot {
         ValueData::new(ty, ValueKind::GlobalSlot(GlobalSlot { init, mutable }))
     }
 
-    pub fn init(&self) -> Value {
-        self.init
-    }
+    pub fn init(&self) -> Value { self.init }
 
-    pub fn mutable(&self) -> bool {
-        self.mutable
-    }
+    pub fn mutable(&self) -> bool { self.mutable }
 
-    pub fn set_init(&mut self, init: Value) -> Value {
-        std::mem::replace(&mut self.init, init)
-    }
+    pub fn set_init(&mut self, init: Value) -> Value { std::mem::replace(&mut self.init, init) }
 
     pub fn set_mutable(&mut self, mutable: bool) -> bool {
         std::mem::replace(&mut self.mutable, mutable)
@@ -529,29 +465,19 @@ impl Jump {
         ValueData::new(Type::void(), ValueKind::Jump(Jump { dst, args }))
     }
 
-    pub fn dst(&self) -> Block {
-        self.dst
-    }
+    pub fn dst(&self) -> Block { self.dst }
 
-    pub fn args(&self) -> &[Value] {
-        &self.args
-    }
+    pub fn args(&self) -> &[Value] { &self.args }
 
-    pub fn set_dst(&mut self, dst: Block) -> Block {
-        std::mem::replace(&mut self.dst, dst)
-    }
+    pub fn set_dst(&mut self, dst: Block) -> Block { std::mem::replace(&mut self.dst, dst) }
 
     pub fn set_arg(&mut self, index: usize, arg: Value) -> Value {
         std::mem::replace(&mut self.args[index], arg)
     }
 
-    pub fn append_arg(&mut self, arg: Value) {
-        self.args.push(arg);
-    }
+    pub fn append_arg(&mut self, arg: Value) { self.args.push(arg); }
 
-    pub fn extend_args(&mut self, args: Vec<Value>) {
-        self.args.extend(args);
-    }
+    pub fn extend_args(&mut self, args: Vec<Value>) { self.args.extend(args); }
 
     pub fn set_args(&mut self, args: Vec<Value>) -> Vec<Value> {
         std::mem::replace(&mut self.args, args)
@@ -598,45 +524,25 @@ impl Branch {
         )
     }
 
-    pub fn cond(&self) -> Value {
-        self.cond
-    }
+    pub fn cond(&self) -> Value { self.cond }
 
-    pub fn then_dst(&self) -> Block {
-        self.then_dst
-    }
+    pub fn then_dst(&self) -> Block { self.then_dst }
 
-    pub fn else_dst(&self) -> Block {
-        self.else_dst
-    }
+    pub fn else_dst(&self) -> Block { self.else_dst }
 
-    pub fn append_then_arg(&mut self, arg: Value) {
-        self.then_args.push(arg);
-    }
+    pub fn append_then_arg(&mut self, arg: Value) { self.then_args.push(arg); }
 
-    pub fn append_else_arg(&mut self, arg: Value) {
-        self.else_args.push(arg);
-    }
+    pub fn append_else_arg(&mut self, arg: Value) { self.else_args.push(arg); }
 
-    pub fn extend_then_args(&mut self, args: Vec<Value>) {
-        self.then_args.extend(args);
-    }
+    pub fn extend_then_args(&mut self, args: Vec<Value>) { self.then_args.extend(args); }
 
-    pub fn extend_else_args(&mut self, args: Vec<Value>) {
-        self.else_args.extend(args);
-    }
+    pub fn extend_else_args(&mut self, args: Vec<Value>) { self.else_args.extend(args); }
 
-    pub fn then_args(&self) -> &[Value] {
-        &self.then_args
-    }
+    pub fn then_args(&self) -> &[Value] { &self.then_args }
 
-    pub fn else_args(&self) -> &[Value] {
-        &self.else_args
-    }
+    pub fn else_args(&self) -> &[Value] { &self.else_args }
 
-    pub fn set_cond(&mut self, cond: Value) -> Value {
-        std::mem::replace(&mut self.cond, cond)
-    }
+    pub fn set_cond(&mut self, cond: Value) -> Value { std::mem::replace(&mut self.cond, cond) }
 
     pub fn set_then_dst(&mut self, then_dst: Block) -> Block {
         std::mem::replace(&mut self.then_dst, then_dst)
@@ -692,9 +598,7 @@ impl Return {
         ValueData::new(Type::void(), ValueKind::Return(Return { val }))
     }
 
-    pub fn val(&self) -> Option<Value> {
-        self.val
-    }
+    pub fn val(&self) -> Option<Value> { self.val }
 
     pub fn set_val(&mut self, val: Option<Value>) -> Option<Value> {
         std::mem::replace(&mut self.val, val)
@@ -727,13 +631,9 @@ impl Call {
         ValueData::new(ret_ty, ValueKind::Call(Call { callee, args }))
     }
 
-    pub fn callee(&self) -> Value {
-        self.callee
-    }
+    pub fn callee(&self) -> Value { self.callee }
 
-    pub fn args(&self) -> &[Value] {
-        &self.args
-    }
+    pub fn args(&self) -> &[Value] { &self.args }
 
     pub fn set_callee(&mut self, callee: Value) -> Value {
         std::mem::replace(&mut self.callee, callee)
@@ -781,24 +681,16 @@ impl GetElemPtr {
     }
 
     /// Get the pointer
-    pub fn ptr(&self) -> Value {
-        self.ptr
-    }
+    pub fn ptr(&self) -> Value { self.ptr }
 
     /// Get the bound type
-    pub fn ty(&self) -> Type {
-        self.ty.clone()
-    }
+    pub fn ty(&self) -> Type { self.ty.clone() }
 
     /// Get the indices
-    pub fn indices(&self) -> &[Value] {
-        &self.indices
-    }
+    pub fn indices(&self) -> &[Value] { &self.indices }
 
     /// Set the pointer
-    pub fn set_ptr(&mut self, ptr: Value) -> Value {
-        std::mem::replace(&mut self.ptr, ptr)
-    }
+    pub fn set_ptr(&mut self, ptr: Value) -> Value { std::mem::replace(&mut self.ptr, ptr) }
 
     pub fn set_index(&mut self, index: usize, value: Value) -> Value {
         std::mem::replace(&mut self.indices[index], value)
