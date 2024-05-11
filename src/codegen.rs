@@ -13,6 +13,7 @@ use crate::{
         MachineBinaryImmOp,
         MachineBinaryOp,
         MachineBlock,
+        MachineBranchOp,
         MachineContext,
         MachineFloatBinaryFmt,
         MachineFloatBinaryOp,
@@ -1971,9 +1972,260 @@ impl CodegenContext {
                         }
                     }
                 }
+
+                let j = InstData::new_j(&mut self.machine_ctx, self.block_map[&block]);
+                machine_function_layout!(mut self.machine_ctx, &function_name)
+                    .append_inst(j, self.block_map[&block])
+                    .unwrap();
             }
             ValueKind::Branch(branch) => {
-                todo!()
+                let cond = branch.cond();
+                let then_block = branch.then_dst();
+                let else_block = branch.else_dst();
+
+                let cond_data = function_data.dfg().local_value_data(cond).unwrap();
+
+                let cond_reg = match cond_data.kind() {
+                    ValueKind::GlobalSlot(_)
+                    | ValueKind::Array(_)
+                    | ValueKind::Struct(_)
+                    | ValueKind::Function
+                    | ValueKind::Store(_)
+                    | ValueKind::Jump(_)
+                    | ValueKind::Branch(_)
+                    | ValueKind::Return(_)
+                    | ValueKind::Zero
+                    | ValueKind::Undef => unreachable!(),
+                    ValueKind::Bytes(bytes) => {
+                        let imm: Immediate = bytes.into();
+                        let (rd, li) = InstData::new_li(&mut self.machine_ctx, imm);
+                        machine_function_layout!(mut self.machine_ctx, &function_name)
+                            .append_inst(li, self.block_map[&block])
+                            .unwrap();
+                        rd
+                    }
+                    _ => {
+                        let codegen_result = self.get_value(cond);
+                        if let ValueCodegenResult::Register(reg) = codegen_result {
+                            *reg
+                        } else {
+                            unreachable!();
+                        }
+                    }
+                };
+
+                // params <- args
+                let params = function_data.dfg().block_data(then_block).unwrap().params();
+                let args = branch.then_args();
+
+                assert_eq!(params.len(), args.len());
+
+                // same as jump
+                for (arg, param) in args.iter().zip(params.iter()) {
+                    // the register should have been assigned to the block argument.
+                    let rd = if let ValueCodegenResult::Register(reg) = self.get_value(*param) {
+                        *reg
+                    } else {
+                        unreachable!();
+                    };
+                    let arg_data = function_data.dfg().local_value_data(*arg).unwrap();
+                    match arg_data.kind() {
+                        ValueKind::GlobalSlot(_)
+                        | ValueKind::Array(_)
+                        | ValueKind::Struct(_)
+                        | ValueKind::Function
+                        | ValueKind::Store(_)
+                        | ValueKind::Jump(_)
+                        | ValueKind::Branch(_)
+                        | ValueKind::Return(_) => unreachable!(),
+                        ValueKind::Zero | ValueKind::Undef => {
+                            let zero = self
+                                .machine_ctx
+                                .new_gp_reg(RiscvGeneralPurposeRegister::Zero);
+
+                            if arg_data.ty().is_float() {
+                                let dst_fmt = match arg_data.ty().bytewidth() {
+                                    2 => FMvFmt::H,
+                                    4 => FMvFmt::S,
+                                    8 => FMvFmt::D,
+                                    _ => unimplemented!(),
+                                };
+                                let fmv = InstData::build_fmv(
+                                    &mut self.machine_ctx,
+                                    dst_fmt,
+                                    FMvFmt::X,
+                                    rd,
+                                    zero,
+                                );
+                                machine_function_layout!(mut self.machine_ctx, &function_name)
+                                    .append_inst(fmv, self.block_map[&block])
+                                    .unwrap();
+                            } else if arg_data.ty().is_int() || arg_data.ty().is_ptr() {
+                                let mv = InstData::build_gp_move(&mut self.machine_ctx, rd, zero);
+                                machine_function_layout!(mut self.machine_ctx, &function_name)
+                                    .append_inst(mv, self.block_map[&block])
+                                    .unwrap();
+                            } else {
+                                unreachable!()
+                            }
+                        }
+                        ValueKind::Bytes(bytes) => {
+                            let imm: Immediate = bytes.into();
+                            if arg_data.ty().is_float() {
+                                let (tmp, li) = InstData::new_li(&mut self.machine_ctx, imm);
+                                let mv = InstData::build_fp_move(&mut self.machine_ctx, rd, tmp);
+                                machine_function_layout!(mut self.machine_ctx, &function_name)
+                                    .append_inst(li, self.block_map[&block])
+                                    .unwrap();
+                                machine_function_layout!(mut self.machine_ctx, &function_name)
+                                    .append_inst(mv, self.block_map[&block])
+                                    .unwrap();
+                            } else if arg_data.ty().is_int() || arg_data.ty().is_ptr() {
+                                let li = InstData::build_li(&mut self.machine_ctx, rd, imm);
+                                machine_function_layout!(mut self.machine_ctx, &function_name)
+                                    .append_inst(li, self.block_map[&block])
+                                    .unwrap();
+                            } else {
+                                unreachable!()
+                            }
+                        }
+                        _ => {
+                            let codegen_result = self.get_value(*arg);
+                            let rs = if let ValueCodegenResult::Register(reg) = codegen_result {
+                                *reg
+                            } else {
+                                unreachable!();
+                            };
+                            let mv = if arg_data.ty().is_float() {
+                                InstData::build_fp_move(&mut self.machine_ctx, rd, rs)
+                            } else if arg_data.ty().is_int() || arg_data.ty().is_ptr() {
+                                InstData::build_gp_move(&mut self.machine_ctx, rd, rs)
+                            } else {
+                                unreachable!();
+                            };
+                            machine_function_layout!(mut self.machine_ctx, &function_name)
+                                .append_inst(mv, self.block_map[&block])
+                                .unwrap();
+                        }
+                    }
+                }
+
+                // bnez $cond, $then_block
+                let zero = self
+                    .machine_ctx
+                    .new_gp_reg(RiscvGeneralPurposeRegister::Zero);
+                let bne = InstData::new_branch(
+                    &mut self.machine_ctx,
+                    MachineBranchOp::Bne,
+                    cond_reg,
+                    zero,
+                    self.block_map[&then_block],
+                );
+
+                machine_function_layout!(mut self.machine_ctx, &function_name)
+                    .append_inst(bne, self.block_map[&block])
+                    .unwrap();
+
+                // params <- args
+                let params = function_data.dfg().block_data(else_block).unwrap().params();
+                let args = branch.else_args();
+
+                assert_eq!(params.len(), args.len());
+
+                for (arg, param) in args.iter().zip(params.iter()) {
+                    // the register should have been assigned to the block argument.
+                    let rd = if let ValueCodegenResult::Register(reg) = self.get_value(*param) {
+                        *reg
+                    } else {
+                        unreachable!();
+                    };
+                    let arg_data = function_data.dfg().local_value_data(*arg).unwrap();
+                    match arg_data.kind() {
+                        ValueKind::GlobalSlot(_)
+                        | ValueKind::Array(_)
+                        | ValueKind::Struct(_)
+                        | ValueKind::Function
+                        | ValueKind::Store(_)
+                        | ValueKind::Jump(_)
+                        | ValueKind::Branch(_)
+                        | ValueKind::Return(_) => unreachable!(),
+                        ValueKind::Zero | ValueKind::Undef => {
+                            let zero = self
+                                .machine_ctx
+                                .new_gp_reg(RiscvGeneralPurposeRegister::Zero);
+
+                            if arg_data.ty().is_float() {
+                                let dst_fmt = match arg_data.ty().bytewidth() {
+                                    2 => FMvFmt::H,
+                                    4 => FMvFmt::S,
+                                    8 => FMvFmt::D,
+                                    _ => unimplemented!(),
+                                };
+                                let fmv = InstData::build_fmv(
+                                    &mut self.machine_ctx,
+                                    dst_fmt,
+                                    FMvFmt::X,
+                                    rd,
+                                    zero,
+                                );
+                                machine_function_layout!(mut self.machine_ctx, &function_name)
+                                    .append_inst(fmv, self.block_map[&block])
+                                    .unwrap();
+                            } else if arg_data.ty().is_int() || arg_data.ty().is_ptr() {
+                                let mv = InstData::build_gp_move(&mut self.machine_ctx, rd, zero);
+                                machine_function_layout!(mut self.machine_ctx, &function_name)
+                                    .append_inst(mv, self.block_map[&block])
+                                    .unwrap();
+                            } else {
+                                unreachable!()
+                            }
+                        }
+                        ValueKind::Bytes(bytes) => {
+                            let imm: Immediate = bytes.into();
+                            if arg_data.ty().is_float() {
+                                let (tmp, li) = InstData::new_li(&mut self.machine_ctx, imm);
+                                let mv = InstData::build_fp_move(&mut self.machine_ctx, rd, tmp);
+                                machine_function_layout!(mut self.machine_ctx, &function_name)
+                                    .append_inst(li, self.block_map[&block])
+                                    .unwrap();
+                                machine_function_layout!(mut self.machine_ctx, &function_name)
+                                    .append_inst(mv, self.block_map[&block])
+                                    .unwrap();
+                            } else if arg_data.ty().is_int() || arg_data.ty().is_ptr() {
+                                let li = InstData::build_li(&mut self.machine_ctx, rd, imm);
+                                machine_function_layout!(mut self.machine_ctx, &function_name)
+                                    .append_inst(li, self.block_map[&block])
+                                    .unwrap();
+                            } else {
+                                unreachable!()
+                            }
+                        }
+                        _ => {
+                            let codegen_result = self.get_value(*arg);
+                            let rs = if let ValueCodegenResult::Register(reg) = codegen_result {
+                                *reg
+                            } else {
+                                unreachable!();
+                            };
+                            let mv = if arg_data.ty().is_float() {
+                                InstData::build_fp_move(&mut self.machine_ctx, rd, rs)
+                            } else if arg_data.ty().is_int() || arg_data.ty().is_ptr() {
+                                InstData::build_gp_move(&mut self.machine_ctx, rd, rs)
+                            } else {
+                                unreachable!();
+                            };
+                            machine_function_layout!(mut self.machine_ctx, &function_name)
+                                .append_inst(mv, self.block_map[&block])
+                                .unwrap();
+                        }
+                    }
+                }
+
+                // j $else_block
+                let j = InstData::new_j(&mut self.machine_ctx, self.block_map[&else_block]);
+                machine_function_layout!(mut self.machine_ctx, &function_name)
+                    .append_inst(j, self.block_map[&block])
+                    .unwrap();
             }
             ValueKind::GetElemPtr(gep) => {
                 todo!()
