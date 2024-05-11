@@ -229,9 +229,9 @@ pub struct Block {
 }
 impl fmt::Debug for Block {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "      Block {{\n")?;
+        writeln!(f, "      Block {{")?;
         for item in &self.blockitem {
-            write!(f, "         {:?}\n", item)?;
+            writeln!(f, "         {:?}", item)?;
         }
         write!(f, "      }}")
     }

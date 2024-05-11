@@ -729,10 +729,22 @@ impl fmt::Display for Register {
     }
 }
 
-pub struct Immediate(i128);
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Immediate(pub i128);
 
 impl fmt::Display for Immediate {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
+}
+
+impl From<&Vec<u8>> for Immediate {
+    fn from(data: &Vec<u8>) -> Self {
+        let mut value = 0;
+        for byte in data.iter().rev() {
+            value <<= 8;
+            value |= *byte as i128;
+        }
+        Immediate(value)
+    }
 }
 
 impl From<i128> for Immediate {
@@ -870,34 +882,34 @@ pub enum InstData {
         base: Register,
         offset: Immediate,
     },
-    FloatMove {
-        dst_fmt: FloatMoveFmt,
-        src_fmt: FloatMoveFmt,
+    FMv {
+        dst_fmt: FMvFmt,
+        src_fmt: FMvFmt,
 
         rd: Register,
         rs: Register,
     },
-    FloatConvert {
-        dst_fmt: FloatConvertFmt,
-        src_fmt: FloatConvertFmt,
+    FCvt {
+        dst_fmt: FCvtFmt,
+        src_fmt: FCvtFmt,
         rd: Register,
         rs: Register,
     },
     Binary {
-        kind: BinaryOpKind,
+        kind: MachineBinaryOp,
         rd: Register,
         rs1: Register,
         rs2: Register,
     },
     BinaryImm {
-        kind: BinaryImmOpKind,
+        kind: MachineBinaryImmOp,
         rd: Register,
         rs1: Register,
         imm: Immediate,
     },
     FloatBinary {
-        kind: FloatBinaryOpKind,
-        fmt: FloatBinaryFmt,
+        kind: MachineFloatBinaryOp,
+        fmt: MachineFloatBinaryFmt,
         rd: Register,
         rs1: Register,
         rs2: Register,
@@ -911,8 +923,8 @@ pub enum InstData {
         rs3: Register,
     },
     FloatUnary {
-        kind: FloatUnary,
-        fmt: FloatUnaryFmt,
+        kind: MachineFloatUnaryOp,
+        fmt: MachineFloatUnaryFmt,
         rd: Register,
         rs: Register,
     },
@@ -925,7 +937,7 @@ pub enum InstData {
         symbol: MachineSymbol,
     },
     Branch {
-        kind: BranchOpKind,
+        kind: MachineBranchOp,
         rs1: Register,
         rs2: Register,
         block: MachineBlock,
@@ -941,7 +953,7 @@ impl InstData {
         kind: LoadKind,
         base: Register,
         offset: Immediate,
-    ) -> MachineInst {
+    ) -> (Register, MachineInst) {
         let dest = ctx.new_virtual_reg(VirtualRegisterKind::General);
         let data = InstData::Load {
             kind,
@@ -949,7 +961,7 @@ impl InstData {
             base,
             offset,
         };
-        ctx.new_inst(data)
+        (dest, ctx.new_inst(data))
     }
 
     pub fn new_float_load(
@@ -957,7 +969,7 @@ impl InstData {
         kind: FloatLoadKind,
         base: Register,
         offset: Immediate,
-    ) -> MachineInst {
+    ) -> (Register, MachineInst) {
         let dest = ctx.new_virtual_reg(VirtualRegisterKind::FloatingPoint);
         let data = InstData::FloatLoad {
             kind,
@@ -965,7 +977,7 @@ impl InstData {
             base,
             offset,
         };
-        ctx.new_inst(data)
+        (dest, ctx.new_inst(data))
     }
 
     pub fn new_pseudo_load(
@@ -999,7 +1011,7 @@ impl InstData {
         kind: FloatPseudoLoadKind,
         symbol: MachineSymbol,
         rt: Register,
-    ) -> MachineInst {
+    ) -> (Register, MachineInst) {
         let dest = ctx.new_virtual_reg(VirtualRegisterKind::FloatingPoint);
         let data = InstData::FloatPseudoLoad {
             kind,
@@ -1007,7 +1019,7 @@ impl InstData {
             symbol,
             rt,
         };
-        ctx.new_inst(data)
+        (dest, ctx.new_inst(data))
     }
 
     pub fn new_float_pseudo_store(
@@ -1060,28 +1072,31 @@ impl InstData {
 
     pub fn new_float_move(
         ctx: &mut MachineContext,
-        dst_fmt: FloatMoveFmt,
-        src_fmt: FloatMoveFmt,
+        dst_fmt: FMvFmt,
+        src_fmt: FMvFmt,
         rs: Register,
-    ) -> MachineInst {
-        let rd = ctx.new_virtual_reg(VirtualRegisterKind::FloatingPoint);
-        let data = InstData::FloatMove {
+    ) -> (Register, MachineInst) {
+        let rd = ctx.new_virtual_reg(match dst_fmt {
+            FMvFmt::X => VirtualRegisterKind::General,
+            FMvFmt::S | FMvFmt::D | FMvFmt::H => VirtualRegisterKind::FloatingPoint,
+        });
+        let data = InstData::FMv {
             dst_fmt,
             src_fmt,
             rd,
             rs,
         };
-        ctx.new_inst(data)
+        (rd, ctx.new_inst(data))
     }
 
     pub fn new_float_convert(
         ctx: &mut MachineContext,
-        dst_fmt: FloatConvertFmt,
-        src_fmt: FloatConvertFmt,
+        dst_fmt: FCvtFmt,
+        src_fmt: FCvtFmt,
         rs: Register,
     ) -> MachineInst {
         let rd = ctx.new_virtual_reg(VirtualRegisterKind::FloatingPoint);
-        let data = InstData::FloatConvert {
+        let data = InstData::FCvt {
             dst_fmt,
             src_fmt,
             rd,
@@ -1092,7 +1107,7 @@ impl InstData {
 
     pub fn new_binary(
         ctx: &mut MachineContext,
-        kind: BinaryOpKind,
+        kind: MachineBinaryOp,
         rs1: Register,
         rs2: Register,
     ) -> (Register, MachineInst) {
@@ -1103,7 +1118,7 @@ impl InstData {
 
     pub fn new_binary_imm(
         ctx: &mut MachineContext,
-        kind: BinaryImmOpKind,
+        kind: MachineBinaryImmOp,
         rs1: Register,
         imm: Immediate,
     ) -> (Register, MachineInst) {
@@ -1114,12 +1129,17 @@ impl InstData {
 
     pub fn new_float_binary(
         ctx: &mut MachineContext,
-        kind: FloatBinaryOpKind,
-        fmt: FloatBinaryFmt,
+        kind: MachineFloatBinaryOp,
+        fmt: MachineFloatBinaryFmt,
         rs1: Register,
         rs2: Register,
     ) -> (Register, MachineInst) {
-        let rd = ctx.new_virtual_reg(VirtualRegisterKind::FloatingPoint);
+        let rd = ctx.new_virtual_reg(match kind {
+            MachineFloatBinaryOp::Feq | MachineFloatBinaryOp::Fle | MachineFloatBinaryOp::Flt => {
+                VirtualRegisterKind::General
+            }
+            _ => VirtualRegisterKind::FloatingPoint,
+        });
         let data = InstData::FloatBinary {
             kind,
             fmt,
@@ -1152,8 +1172,8 @@ impl InstData {
 
     pub fn new_float_unary(
         ctx: &mut MachineContext,
-        kind: FloatUnary,
-        fmt: FloatUnaryFmt,
+        kind: MachineFloatUnaryOp,
+        fmt: MachineFloatUnaryFmt,
         rs: Register,
     ) -> MachineInst {
         let rd = ctx.new_virtual_reg(VirtualRegisterKind::FloatingPoint);
@@ -1179,7 +1199,7 @@ impl InstData {
 
     pub fn new_branch(
         ctx: &mut MachineContext,
-        kind: BranchOpKind,
+        kind: MachineBranchOp,
         rs1: Register,
         rs2: Register,
         block: MachineBlock,
@@ -1224,15 +1244,100 @@ impl InstData {
 
     pub fn is_ret(&self) -> bool { matches!(self, InstData::Ret) }
 
-    pub fn is_move(&self) -> bool { matches!(self, InstData::FloatMove { .. }) }
-
-    pub fn is_convert(&self) -> bool { matches!(self, InstData::FloatConvert { .. }) }
+    pub fn is_convert(&self) -> bool { matches!(self, InstData::FCvt { .. }) }
 
     pub fn is_binary(&self) -> bool {
         matches!(self, InstData::Binary { .. } | InstData::BinaryImm { .. })
     }
 
     pub fn is_float_binary(&self) -> bool { matches!(self, InstData::FloatBinary { .. }) }
+
+    /// Build an `addi $rd, $rs, 0`
+    ///
+    /// This is used for block argument, which requires multiple definition of
+    /// the same register, and thus the destination register should be
+    /// assigned.
+    pub fn build_gp_move(ctx: &mut MachineContext, rd: Register, rs: Register) -> MachineInst {
+        let data = InstData::BinaryImm {
+            kind: MachineBinaryImmOp::Addi,
+            rd,
+            rs1: rs,
+            imm: Immediate(0),
+        };
+        ctx.new_inst(data)
+    }
+
+    /// Build an `fsgnj.s $rd, $rs, $rs`
+    ///
+    /// This is used for block argument, which requires multiple definition of
+    /// the same register, and thus the destination register should be
+    /// assigned.
+    pub fn build_fp_move(ctx: &mut MachineContext, rd: Register, rs: Register) -> MachineInst {
+        let data = InstData::FloatBinary {
+            kind: MachineFloatBinaryOp::Fsgnj,
+            fmt: MachineFloatBinaryFmt::S,
+            rd,
+            rs1: rs,
+            rs2: rs,
+        };
+        ctx.new_inst(data)
+    }
+
+    pub fn build_fmv(
+        ctx: &mut MachineContext,
+        dst_fmt: FMvFmt,
+        src_fmt: FMvFmt,
+        rd: Register,
+        rs: Register,
+    ) -> MachineInst {
+        let data = InstData::FMv {
+            dst_fmt,
+            src_fmt,
+            rd,
+            rs,
+        };
+        ctx.new_inst(data)
+    }
+
+    /// Build an load instruction for function argument (entry block arguments)
+    pub fn build_load(
+        ctx: &mut MachineContext,
+        kind: LoadKind,
+        dest: Register,
+        base: Register,
+        offset: Immediate,
+    ) -> MachineInst {
+        let data = InstData::Load {
+            kind,
+            dest,
+            base,
+            offset,
+        };
+        ctx.new_inst(data)
+    }
+
+    /// Build and float load instruction for function argument (entry block
+    /// arguments)
+    pub fn build_float_load(
+        ctx: &mut MachineContext,
+        kind: FloatLoadKind,
+        dest: Register,
+        base: Register,
+        offset: Immediate,
+    ) -> MachineInst {
+        let data = InstData::FloatLoad {
+            kind,
+            dest,
+            base,
+            offset,
+        };
+        ctx.new_inst(data)
+    }
+
+    pub fn build_li(ctx: &mut MachineContext, rd: Register, imm: Immediate) -> MachineInst {
+        let data = InstData::Li { rd, imm };
+        ctx.new_inst(data)
+    }
 }
 
 impl fmt::Display for InstData {
@@ -1283,13 +1388,13 @@ impl fmt::Display for InstData {
                 base,
                 offset,
             } => write!(f, "{} {}, {}({})", kind, value, offset, base)?,
-            InstData::FloatMove {
+            InstData::FMv {
                 dst_fmt,
                 src_fmt,
                 rd,
                 rs,
             } => write!(f, "fmv.{}.{} {}, {}", dst_fmt, src_fmt, rd, rs)?,
-            InstData::FloatConvert {
+            InstData::FCvt {
                 dst_fmt,
                 src_fmt,
                 rd,
@@ -1335,7 +1440,7 @@ impl fmt::Display for InstData {
     }
 }
 
-pub enum FloatConvertFmt {
+pub enum FCvtFmt {
     H,
     S,
     D,
@@ -1345,34 +1450,38 @@ pub enum FloatConvertFmt {
     Lu,
 }
 
-impl fmt::Display for FloatConvertFmt {
+impl fmt::Display for FCvtFmt {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            FloatConvertFmt::H => write!(f, "h"),
-            FloatConvertFmt::S => write!(f, "s"),
-            FloatConvertFmt::D => write!(f, "d"),
-            FloatConvertFmt::W => write!(f, "w"),
-            FloatConvertFmt::Wu => write!(f, "wu"),
-            FloatConvertFmt::L => write!(f, "l"),
-            FloatConvertFmt::Lu => write!(f, "lu"),
+            FCvtFmt::H => write!(f, "h"),
+            FCvtFmt::S => write!(f, "s"),
+            FCvtFmt::D => write!(f, "d"),
+            FCvtFmt::W => write!(f, "w"),
+            FCvtFmt::Wu => write!(f, "wu"),
+            FCvtFmt::L => write!(f, "l"),
+            FCvtFmt::Lu => write!(f, "lu"),
         }
     }
 }
 
-pub enum FloatMoveFmt {
+pub enum FMvFmt {
+    // half floating point
     H,
+    // single floating point
     S,
+    // double floating point
     D,
+    // general purpose register
     X,
 }
 
-impl fmt::Display for FloatMoveFmt {
+impl fmt::Display for FMvFmt {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            FloatMoveFmt::H => write!(f, "h"),
-            FloatMoveFmt::S => write!(f, "s"),
-            FloatMoveFmt::D => write!(f, "d"),
-            FloatMoveFmt::X => write!(f, "x"),
+            FMvFmt::H => write!(f, "h"),
+            FMvFmt::S => write!(f, "s"),
+            FMvFmt::D => write!(f, "d"),
+            FMvFmt::X => write!(f, "x"),
         }
     }
 }
@@ -1506,7 +1615,7 @@ impl fmt::Display for FloatPseudoStoreKind {
     }
 }
 
-pub enum BinaryOpKind {
+pub enum MachineBinaryOp {
     Add,
     Addw,
     Sub,
@@ -1530,47 +1639,51 @@ pub enum BinaryOpKind {
     Div,
     Divw,
     Divu,
+    Divuw,
     Rem,
     Remw,
     Remu,
+    Remuw,
     Rew,
 }
 
-impl fmt::Display for BinaryOpKind {
+impl fmt::Display for MachineBinaryOp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            BinaryOpKind::Add => write!(f, "add"),
-            BinaryOpKind::Addw => write!(f, "addw"),
-            BinaryOpKind::Sub => write!(f, "sub"),
-            BinaryOpKind::Subw => write!(f, "subw"),
-            BinaryOpKind::Sll => write!(f, "sll"),
-            BinaryOpKind::Sllw => write!(f, "sllw"),
-            BinaryOpKind::Srl => write!(f, "srl"),
-            BinaryOpKind::Srlw => write!(f, "srlw"),
-            BinaryOpKind::Sra => write!(f, "sra"),
-            BinaryOpKind::Sraw => write!(f, "sraw"),
-            BinaryOpKind::Xor => write!(f, "xor"),
-            BinaryOpKind::Or => write!(f, "or"),
-            BinaryOpKind::And => write!(f, "and"),
-            BinaryOpKind::Slt => write!(f, "slt"),
-            BinaryOpKind::Sltu => write!(f, "sltu"),
-            BinaryOpKind::Mul => write!(f, "mul"),
-            BinaryOpKind::Mulw => write!(f, "mulw"),
-            BinaryOpKind::Mulh => write!(f, "mulh"),
-            BinaryOpKind::Mulhsu => write!(f, "mulhsu"),
-            BinaryOpKind::Mulhu => write!(f, "mulhu"),
-            BinaryOpKind::Div => write!(f, "div"),
-            BinaryOpKind::Divw => write!(f, "divw"),
-            BinaryOpKind::Divu => write!(f, "divu"),
-            BinaryOpKind::Rem => write!(f, "rem"),
-            BinaryOpKind::Remw => write!(f, "remw"),
-            BinaryOpKind::Remu => write!(f, "remu"),
-            BinaryOpKind::Rew => write!(f, "rew"),
+            MachineBinaryOp::Add => write!(f, "add"),
+            MachineBinaryOp::Addw => write!(f, "addw"),
+            MachineBinaryOp::Sub => write!(f, "sub"),
+            MachineBinaryOp::Subw => write!(f, "subw"),
+            MachineBinaryOp::Sll => write!(f, "sll"),
+            MachineBinaryOp::Sllw => write!(f, "sllw"),
+            MachineBinaryOp::Srl => write!(f, "srl"),
+            MachineBinaryOp::Srlw => write!(f, "srlw"),
+            MachineBinaryOp::Sra => write!(f, "sra"),
+            MachineBinaryOp::Sraw => write!(f, "sraw"),
+            MachineBinaryOp::Xor => write!(f, "xor"),
+            MachineBinaryOp::Or => write!(f, "or"),
+            MachineBinaryOp::And => write!(f, "and"),
+            MachineBinaryOp::Slt => write!(f, "slt"),
+            MachineBinaryOp::Sltu => write!(f, "sltu"),
+            MachineBinaryOp::Mul => write!(f, "mul"),
+            MachineBinaryOp::Mulw => write!(f, "mulw"),
+            MachineBinaryOp::Mulh => write!(f, "mulh"),
+            MachineBinaryOp::Mulhsu => write!(f, "mulhsu"),
+            MachineBinaryOp::Mulhu => write!(f, "mulhu"),
+            MachineBinaryOp::Div => write!(f, "div"),
+            MachineBinaryOp::Divw => write!(f, "divw"),
+            MachineBinaryOp::Divu => write!(f, "divu"),
+            MachineBinaryOp::Divuw => write!(f, "divuw"),
+            MachineBinaryOp::Rem => write!(f, "rem"),
+            MachineBinaryOp::Remw => write!(f, "remw"),
+            MachineBinaryOp::Remu => write!(f, "remu"),
+            MachineBinaryOp::Remuw => write!(f, "remuw"),
+            MachineBinaryOp::Rew => write!(f, "rew"),
         }
     }
 }
 
-pub enum BranchOpKind {
+pub enum MachineBranchOp {
     Beq,
     Bne,
     Blt,
@@ -1579,20 +1692,20 @@ pub enum BranchOpKind {
     Bgeu,
 }
 
-impl fmt::Display for BranchOpKind {
+impl fmt::Display for MachineBranchOp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            BranchOpKind::Beq => write!(f, "beq"),
-            BranchOpKind::Bne => write!(f, "bne"),
-            BranchOpKind::Blt => write!(f, "blt"),
-            BranchOpKind::Bge => write!(f, "bge"),
-            BranchOpKind::Bltu => write!(f, "bltu"),
-            BranchOpKind::Bgeu => write!(f, "bgeu"),
+            MachineBranchOp::Beq => write!(f, "beq"),
+            MachineBranchOp::Bne => write!(f, "bne"),
+            MachineBranchOp::Blt => write!(f, "blt"),
+            MachineBranchOp::Bge => write!(f, "bge"),
+            MachineBranchOp::Bltu => write!(f, "bltu"),
+            MachineBranchOp::Bgeu => write!(f, "bgeu"),
         }
     }
 }
 
-pub enum BinaryImmOpKind {
+pub enum MachineBinaryImmOp {
     Addi,
     Addiw,
     Slli,
@@ -1608,27 +1721,27 @@ pub enum BinaryImmOpKind {
     Sltiu,
 }
 
-impl fmt::Display for BinaryImmOpKind {
+impl fmt::Display for MachineBinaryImmOp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            BinaryImmOpKind::Addi => write!(f, "addi"),
-            BinaryImmOpKind::Addiw => write!(f, "addiw"),
-            BinaryImmOpKind::Slli => write!(f, "slli"),
-            BinaryImmOpKind::Slliw => write!(f, "slliw"),
-            BinaryImmOpKind::Srli => write!(f, "srli"),
-            BinaryImmOpKind::Srliw => write!(f, "srliw"),
-            BinaryImmOpKind::Srai => write!(f, "srai"),
-            BinaryImmOpKind::Sraiw => write!(f, "sraiw"),
-            BinaryImmOpKind::Xori => write!(f, "xori"),
-            BinaryImmOpKind::Ori => write!(f, "ori"),
-            BinaryImmOpKind::Andi => write!(f, "andi"),
-            BinaryImmOpKind::Slti => write!(f, "slti"),
-            BinaryImmOpKind::Sltiu => write!(f, "sltiu"),
+            MachineBinaryImmOp::Addi => write!(f, "addi"),
+            MachineBinaryImmOp::Addiw => write!(f, "addiw"),
+            MachineBinaryImmOp::Slli => write!(f, "slli"),
+            MachineBinaryImmOp::Slliw => write!(f, "slliw"),
+            MachineBinaryImmOp::Srli => write!(f, "srli"),
+            MachineBinaryImmOp::Srliw => write!(f, "srliw"),
+            MachineBinaryImmOp::Srai => write!(f, "srai"),
+            MachineBinaryImmOp::Sraiw => write!(f, "sraiw"),
+            MachineBinaryImmOp::Xori => write!(f, "xori"),
+            MachineBinaryImmOp::Ori => write!(f, "ori"),
+            MachineBinaryImmOp::Andi => write!(f, "andi"),
+            MachineBinaryImmOp::Slti => write!(f, "slti"),
+            MachineBinaryImmOp::Sltiu => write!(f, "sltiu"),
         }
     }
 }
 
-pub enum FloatBinaryOpKind {
+pub enum MachineFloatBinaryOp {
     Fadd,
     Fsub,
     Fmul,
@@ -1643,35 +1756,35 @@ pub enum FloatBinaryOpKind {
     Fle,
 }
 
-impl fmt::Display for FloatBinaryOpKind {
+impl fmt::Display for MachineFloatBinaryOp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            FloatBinaryOpKind::Fadd => write!(f, "fadd"),
-            FloatBinaryOpKind::Fsub => write!(f, "fsub"),
-            FloatBinaryOpKind::Fmul => write!(f, "fmul"),
-            FloatBinaryOpKind::Fdiv => write!(f, "fdiv"),
-            FloatBinaryOpKind::Fsgnj => write!(f, "fsgnj"),
-            FloatBinaryOpKind::Fsgnjn => write!(f, "fsgnjn"),
-            FloatBinaryOpKind::Fsgnjx => write!(f, "fsgnjx"),
-            FloatBinaryOpKind::Fmin => write!(f, "fmin"),
-            FloatBinaryOpKind::Fmax => write!(f, "fmax"),
-            FloatBinaryOpKind::Feq => write!(f, "feq"),
-            FloatBinaryOpKind::Flt => write!(f, "flt"),
-            FloatBinaryOpKind::Fle => write!(f, "fle"),
+            MachineFloatBinaryOp::Fadd => write!(f, "fadd"),
+            MachineFloatBinaryOp::Fsub => write!(f, "fsub"),
+            MachineFloatBinaryOp::Fmul => write!(f, "fmul"),
+            MachineFloatBinaryOp::Fdiv => write!(f, "fdiv"),
+            MachineFloatBinaryOp::Fsgnj => write!(f, "fsgnj"),
+            MachineFloatBinaryOp::Fsgnjn => write!(f, "fsgnjn"),
+            MachineFloatBinaryOp::Fsgnjx => write!(f, "fsgnjx"),
+            MachineFloatBinaryOp::Fmin => write!(f, "fmin"),
+            MachineFloatBinaryOp::Fmax => write!(f, "fmax"),
+            MachineFloatBinaryOp::Feq => write!(f, "feq"),
+            MachineFloatBinaryOp::Flt => write!(f, "flt"),
+            MachineFloatBinaryOp::Fle => write!(f, "fle"),
         }
     }
 }
 
-pub enum FloatBinaryFmt {
+pub enum MachineFloatBinaryFmt {
     S,
     D,
 }
 
-impl fmt::Display for FloatBinaryFmt {
+impl fmt::Display for MachineFloatBinaryFmt {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            FloatBinaryFmt::S => write!(f, "s"),
-            FloatBinaryFmt::D => write!(f, "d"),
+            MachineFloatBinaryFmt::S => write!(f, "s"),
+            MachineFloatBinaryFmt::D => write!(f, "d"),
         }
     }
 }
@@ -1708,30 +1821,30 @@ impl fmt::Display for FloatMulAddFmt {
     }
 }
 
-pub enum FloatUnary {
+pub enum MachineFloatUnaryOp {
     FSqrt,
     FClass,
 }
 
-impl fmt::Display for FloatUnary {
+impl fmt::Display for MachineFloatUnaryOp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            FloatUnary::FSqrt => write!(f, "fsqrt"),
-            FloatUnary::FClass => write!(f, "fclass"),
+            MachineFloatUnaryOp::FSqrt => write!(f, "fsqrt"),
+            MachineFloatUnaryOp::FClass => write!(f, "fclass"),
         }
     }
 }
 
-pub enum FloatUnaryFmt {
+pub enum MachineFloatUnaryFmt {
     S,
     D,
 }
 
-impl fmt::Display for FloatUnaryFmt {
+impl fmt::Display for MachineFloatUnaryFmt {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            FloatUnaryFmt::S => write!(f, "s"),
-            FloatUnaryFmt::D => write!(f, "d"),
+            MachineFloatUnaryFmt::S => write!(f, "s"),
+            MachineFloatUnaryFmt::D => write!(f, "d"),
         }
     }
 }
@@ -1755,15 +1868,15 @@ mod tests {
 
         let v0 = ctx.new_virtual_reg(VirtualRegisterKind::General);
 
-        let inst0 = InstData::new_load(&mut ctx, LoadKind::Word, v0, Immediate(0));
+        let (v1, inst0) = InstData::new_load(&mut ctx, LoadKind::Word, v0, Immediate(0));
         ctx.function_data_mut(&MachineSymbol("main".to_string()))
             .unwrap()
             .layout_mut()
             .append_inst(inst0, bb0)
             .unwrap();
 
-        let (v1, inst1) =
-            InstData::new_binary_imm(&mut ctx, BinaryImmOpKind::Addi, v0, Immediate(1));
+        let (v2, inst1) =
+            InstData::new_binary_imm(&mut ctx, MachineBinaryImmOp::Addi, v0, Immediate(1));
         ctx.function_data_mut(&MachineSymbol("main".to_string()))
             .unwrap()
             .layout_mut()
@@ -1776,7 +1889,7 @@ mod tests {
             .layout_mut()
             .append_block(bb1)
             .unwrap();
-        let (v2, inst2) = InstData::new_binary(&mut ctx, BinaryOpKind::Add, v1, v0);
+        let (v3, inst2) = InstData::new_binary(&mut ctx, MachineBinaryOp::Add, v2, v0);
         ctx.function_data_mut(&MachineSymbol("main".to_string()))
             .unwrap()
             .layout_mut()
