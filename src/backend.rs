@@ -44,15 +44,21 @@ pub enum MachineLayoutOpErr {
 }
 
 impl MachineLayout {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
     /// Get the entry block for the current function.
     ///
     /// The entry block is by default the first block in the layout.
-    pub fn entry_block(&self) -> Option<MachineBlock> { self.blocks.front() }
+    pub fn entry_block(&self) -> Option<MachineBlock> {
+        self.blocks.front()
+    }
 
     /// Get the list of blocks.
-    pub fn blocks(&self) -> &MachineBlockList { &self.blocks }
+    pub fn blocks(&self) -> &MachineBlockList {
+        &self.blocks
+    }
 
     /// Get the parent block of an instruction
     pub fn parent_block(&self, inst: MachineInst) -> Option<MachineBlock> {
@@ -222,16 +228,29 @@ impl MachineLayout {
 
 /// The machine function data.
 pub struct MachineFunctionData {
-    /// The name of he function.
-    name: MachineSymbol,
     /// The layout inside this function.
     layout: MachineLayout,
 }
 
 impl MachineFunctionData {
-    pub fn layout(&self) -> &MachineLayout { &self.layout }
+    pub fn layout(&self) -> &MachineLayout {
+        &self.layout
+    }
 
-    pub fn layout_mut(&mut self) -> &mut MachineLayout { &mut self.layout }
+    pub fn layout_mut(&mut self) -> &mut MachineLayout {
+        &mut self.layout
+    }
+
+    pub fn to_asm(&self, ctx: &MachineContext) -> String {
+        let mut asm = String::new();
+        // go through the blocks
+        for (block_id, block) in self.layout.blocks().into_iter() {
+            // .bb_<id>:
+            asm.push_str(&format!(".bb_{}:\n", block_id.0));
+            asm.push_str(&block.to_asm(ctx));
+        }
+        asm
+    }
 }
 
 /// An instruction node in the list.
@@ -242,13 +261,21 @@ pub struct MachineInstNode {
 }
 
 impl ListNode<MachineInst> for MachineInstNode {
-    fn prev(&self) -> Option<MachineInst> { self.prev }
+    fn prev(&self) -> Option<MachineInst> {
+        self.prev
+    }
 
-    fn next(&self) -> Option<MachineInst> { self.next }
+    fn next(&self) -> Option<MachineInst> {
+        self.next
+    }
 
-    fn set_prev(&mut self, prev: Option<MachineInst>) { self.prev = prev; }
+    fn set_prev(&mut self, prev: Option<MachineInst>) {
+        self.prev = prev;
+    }
 
-    fn set_next(&mut self, next: Option<MachineInst>) { self.next = next; }
+    fn set_next(&mut self, next: Option<MachineInst>) {
+        self.next = next;
+    }
 }
 
 pub type MachineInstList = List<MachineInst, MachineInstNode>;
@@ -265,19 +292,40 @@ pub struct MachineBlockNode {
 pub type MachineBlockList = List<MachineBlock, MachineBlockNode>;
 
 impl MachineBlockNode {
-    pub fn insts(&self) -> &MachineInstList { &self.insts }
+    pub fn insts(&self) -> &MachineInstList {
+        &self.insts
+    }
 
-    pub fn insts_mut(&mut self) -> &mut MachineInstList { &mut self.insts }
+    pub fn insts_mut(&mut self) -> &mut MachineInstList {
+        &mut self.insts
+    }
+
+    pub fn to_asm(&self, ctx: &MachineContext) -> String {
+        let mut asm = String::new();
+        for (inst_id, _) in self.insts.into_iter() {
+            let data = ctx.inst_data(inst_id).unwrap();
+            asm.push_str(&format!("\t{}\n", data));
+        }
+        asm
+    }
 }
 
 impl ListNode<MachineBlock> for MachineBlockNode {
-    fn prev(&self) -> Option<MachineBlock> { self.prev }
+    fn prev(&self) -> Option<MachineBlock> {
+        self.prev
+    }
 
-    fn next(&self) -> Option<MachineBlock> { self.next }
+    fn next(&self) -> Option<MachineBlock> {
+        self.next
+    }
 
-    fn set_prev(&mut self, prev: Option<MachineBlock>) { self.prev = prev; }
+    fn set_prev(&mut self, prev: Option<MachineBlock>) {
+        self.prev = prev;
+    }
 
-    fn set_next(&mut self, next: Option<MachineBlock>) { self.next = next; }
+    fn set_next(&mut self, next: Option<MachineBlock>) {
+        self.next = next;
+    }
 }
 
 #[derive(Default)]
@@ -299,7 +347,9 @@ pub struct MachineContext {
 }
 
 impl MachineContext {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
     /// Create a new virtual register.
     pub fn new_vreg(&mut self) -> Register {
@@ -307,7 +357,9 @@ impl MachineContext {
     }
 
     /// Create a new block.
-    pub fn new_block(&mut self) -> MachineBlock { MachineBlock(self.block_allocator.allocate()) }
+    pub fn new_block(&mut self) -> MachineBlock {
+        MachineBlock(self.block_allocator.allocate())
+    }
 
     /// Create a new instruction.
     fn new_inst(&mut self, data: InstData) -> MachineInst {
@@ -317,7 +369,9 @@ impl MachineContext {
     }
 
     /// Get the instruction data.
-    fn inst_data(&self, inst: MachineInst) -> Option<&InstData> { self.insts.get(&inst) }
+    fn inst_data(&self, inst: MachineInst) -> Option<&InstData> {
+        self.insts.get(&inst)
+    }
 
     /// Get the mutable instruction data.
     fn inst_data_mut(&mut self, inst: MachineInst) -> Option<&mut InstData> {
@@ -340,9 +394,8 @@ impl MachineContext {
     /// Create a new function.
     pub fn new_function(&mut self, name: MachineSymbol) {
         self.functions.insert(
-            name.clone(),
+            name,
             MachineFunctionData {
-                name,
                 layout: MachineLayout::new(),
             },
         );
@@ -357,12 +410,56 @@ impl MachineContext {
 impl fmt::Display for MachineContext {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // .option pic
-        writeln!(f, "\t.option pic\n")?;
+        writeln!(f, "\t.option pic")?;
         // .text
         writeln!(f, "\t.text")?;
-        for (symbol, data) in &self.functions {
-            // writeln!(f, "{}:", data)?;
-            // TODO
+        for (func_name, func_data) in self.functions.iter() {
+            // .global <name>
+            writeln!(f, "\t.global {}", func_name)?;
+            // .align 1
+            writeln!(f, "\t.align 1")?;
+            // .type <name>, @function
+            writeln!(f, "\t.type {}, @function", func_name)?;
+            // <name>:
+            writeln!(f, "{}:", func_name)?;
+            // instructions
+            writeln!(f, "{}", func_data.to_asm(self))?;
+        }
+
+        for (global_name, global_data) in self.globals.iter() {
+            // .type <name>, @object
+            writeln!(f, "\t.type {}, @object", global_name)?;
+            match global_data.kind() {
+                MachineGlobalKind::Bss { size } => {
+                    // .bss
+                    writeln!(f, "\t.bss")?;
+                    // .global <name>
+                    writeln!(f, "\t.global {}", global_name)?;
+                    // .align 2
+                    writeln!(f, "\t.align 2")?;
+                    // <name>:
+                    writeln!(f, "{}:", global_name)?;
+                    // .zero <size>
+                    writeln!(f, "\t.zero {}", size)?;
+                }
+                MachineGlobalKind::Data { data } => {
+                    // .data
+                    writeln!(f, "\t.data")?;
+                    // .global <name>
+                    writeln!(f, "\t.global {}", global_name)?;
+                    // .align 2
+                    writeln!(f, "\t.align 2")?;
+                    // <name>:
+                    writeln!(f, "{}:", global_name)?;
+                    // .byte <data>
+                    write!(f, "\t.byte")?;
+                    for byte in data.iter() {
+                        write!(f, " {}", byte)?;
+                    }
+                    writeln!(f)?;
+                }
+            }
+            writeln!(f)?;
         }
         Ok(())
     }
@@ -526,7 +623,9 @@ impl fmt::Display for RiscvFloatingPointRegister {
 }
 
 impl fmt::Display for VirtualRegister {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "$v{}", self.0) }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "$v{}", self.0)
+    }
 }
 
 pub enum Register {
@@ -557,50 +656,72 @@ impl fmt::Display for Register {
 pub struct Immediate(i128);
 
 impl fmt::Display for Immediate {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
 }
 
 impl From<i128> for Immediate {
-    fn from(value: i128) -> Self { Immediate(value) }
+    fn from(value: i128) -> Self {
+        Immediate(value)
+    }
 }
 
 impl From<u64> for Immediate {
-    fn from(value: u64) -> Self { Immediate(value as i128) }
+    fn from(value: u64) -> Self {
+        Immediate(value as i128)
+    }
 }
 
 impl From<u32> for Immediate {
-    fn from(value: u32) -> Self { Immediate(value as i128) }
+    fn from(value: u32) -> Self {
+        Immediate(value as i128)
+    }
 }
 
 impl From<u16> for Immediate {
-    fn from(value: u16) -> Self { Immediate(value as i128) }
+    fn from(value: u16) -> Self {
+        Immediate(value as i128)
+    }
 }
 
 impl From<u8> for Immediate {
-    fn from(value: u8) -> Self { Immediate(value as i128) }
+    fn from(value: u8) -> Self {
+        Immediate(value as i128)
+    }
 }
 
 impl From<i64> for Immediate {
-    fn from(value: i64) -> Self { Immediate(value as i128) }
+    fn from(value: i64) -> Self {
+        Immediate(value as i128)
+    }
 }
 
 impl From<i32> for Immediate {
-    fn from(value: i32) -> Self { Immediate(value as i128) }
+    fn from(value: i32) -> Self {
+        Immediate(value as i128)
+    }
 }
 
 impl From<i16> for Immediate {
-    fn from(value: i16) -> Self { Immediate(value as i128) }
+    fn from(value: i16) -> Self {
+        Immediate(value as i128)
+    }
 }
 
 impl From<i8> for Immediate {
-    fn from(value: i8) -> Self { Immediate(value as i128) }
+    fn from(value: i8) -> Self {
+        Immediate(value as i128)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct MachineSymbol(String);
 
 impl fmt::Display for MachineSymbol {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
 }
 
 pub struct MachineGlobalData {
@@ -628,11 +749,17 @@ impl MachineGlobalData {
         }
     }
 
-    pub fn align(&self) -> usize { self.align }
+    pub fn align(&self) -> usize {
+        self.align
+    }
 
-    pub fn kind(&self) -> &MachineGlobalKind { &self.kind }
+    pub fn kind(&self) -> &MachineGlobalKind {
+        &self.kind
+    }
 
-    pub fn set_kind(&mut self, kind: MachineGlobalKind) { self.kind = kind; }
+    pub fn set_kind(&mut self, kind: MachineGlobalKind) {
+        self.kind = kind;
+    }
 }
 
 impl From<String> for MachineSymbol {
@@ -1038,21 +1165,33 @@ impl InstData {
         )
     }
 
-    pub fn is_branch(&self) -> bool { matches!(self, InstData::Branch { .. } | InstData::J { .. }) }
+    pub fn is_branch(&self) -> bool {
+        matches!(self, InstData::Branch { .. } | InstData::J { .. })
+    }
 
-    pub fn is_call(&self) -> bool { matches!(self, InstData::Call { .. }) }
+    pub fn is_call(&self) -> bool {
+        matches!(self, InstData::Call { .. })
+    }
 
-    pub fn is_ret(&self) -> bool { matches!(self, InstData::Ret) }
+    pub fn is_ret(&self) -> bool {
+        matches!(self, InstData::Ret)
+    }
 
-    pub fn is_move(&self) -> bool { matches!(self, InstData::FloatMove { .. }) }
+    pub fn is_move(&self) -> bool {
+        matches!(self, InstData::FloatMove { .. })
+    }
 
-    pub fn is_convert(&self) -> bool { matches!(self, InstData::FloatConvert { .. }) }
+    pub fn is_convert(&self) -> bool {
+        matches!(self, InstData::FloatConvert { .. })
+    }
 
     pub fn is_binary(&self) -> bool {
         matches!(self, InstData::Binary { .. } | InstData::BinaryImm { .. })
     }
 
-    pub fn is_float_binary(&self) -> bool { matches!(self, InstData::FloatBinary { .. }) }
+    pub fn is_float_binary(&self) -> bool {
+        matches!(self, InstData::FloatBinary { .. })
+    }
 }
 
 impl fmt::Display for InstData {
@@ -1553,5 +1692,71 @@ impl fmt::Display for FloatUnaryFmt {
             FloatUnaryFmt::S => write!(f, "s"),
             FloatUnaryFmt::D => write!(f, "d"),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_to_asm() {
+        let mut ctx = MachineContext::new();
+        // main func
+        let main_func = MachineSymbol("main".to_string());
+        ctx.new_function(main_func);
+        let bb0 = MachineBlock(0);
+        ctx.function_data_mut(&MachineSymbol("main".to_string()))
+            .unwrap()
+            .layout_mut()
+            .append_block(bb0)
+            .unwrap();
+        let inst0 = InstData::new_load(
+            &mut ctx,
+            LoadKind::Word,
+            Register::Virtual(VirtualRegister(0)),
+            Immediate(0),
+        );
+        ctx.function_data_mut(&MachineSymbol("main".to_string()))
+            .unwrap()
+            .layout_mut()
+            .append_inst(inst0, bb0)
+            .unwrap();
+        let inst1 = InstData::new_binary_imm(
+            &mut ctx,
+            BinaryImmOpKind::Addi,
+            Register::Virtual(VirtualRegister(1)),
+            Register::Virtual(VirtualRegister(0)),
+            Immediate(1),
+        );
+        ctx.function_data_mut(&MachineSymbol("main".to_string()))
+            .unwrap()
+            .layout_mut()
+            .append_inst(inst1, bb0)
+            .unwrap();
+
+        let bb1 = MachineBlock(1);
+        ctx.function_data_mut(&MachineSymbol("main".to_string()))
+            .unwrap()
+            .layout_mut()
+            .append_block(bb1)
+            .unwrap();
+        let inst2 = InstData::new_binary(
+            &mut ctx,
+            BinaryOpKind::Add,
+            Register::Virtual(VirtualRegister(2)),
+            Register::Virtual(VirtualRegister(1)),
+            Register::Virtual(VirtualRegister(0)),
+        );
+        ctx.function_data_mut(&MachineSymbol("main".to_string()))
+            .unwrap()
+            .layout_mut()
+            .append_inst(inst2, bb1)
+            .unwrap();
+
+        // print the ctx
+        println!("{}", ctx);
+
+        assert_eq!(format!("{}", ctx), "\t.option pic\n\t.text\n\t.global main\n\t.align 1\n\t.type main, @function\nmain:\n.bb_0:\n\tlw $v0, 0($v0)\n\taddi $v1, $v0, 1\n.bb_1:\n\tadd $v2, $v1, $v0\n\n");
     }
 }
