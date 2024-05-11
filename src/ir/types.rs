@@ -316,6 +316,20 @@ impl Type {
         }
     }
 
+    pub fn as_function(&self) -> Option<(Vec<Type>, Type)> {
+        match self.kind() {
+            TypeKind::Function(params, ret) => Some((params.clone(), ret.clone())),
+            TypeKind::Identified(name) => {
+                if let Some(ty) = Self::get_identified(name) {
+                    ty.as_function()
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
+
     /// Convert the type to a struct type.
     ///
     /// If the type is not a struct type, return `None`.
