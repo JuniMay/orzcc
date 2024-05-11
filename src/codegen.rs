@@ -2234,7 +2234,40 @@ impl CodegenContext {
                 todo!()
             }
             ValueKind::Return(ret) => {
-                todo!()
+                let val = ret.val();
+                if let Some(val) = val {
+                    let val_data = function_data.dfg().local_value_data(val).unwrap();
+
+                    let reg = if let ValueCodegenResult::Register(reg) = self.get_value(val) {
+                        *reg
+                    } else {
+                        unreachable!();
+                    };
+
+                    if val_data.ty().is_float() {
+                        let fa0 = self
+                            .machine_ctx
+                            .new_fp_reg(RiscvFloatingPointRegister::Fa0);
+                        let mv = InstData::build_fp_move(&mut self.machine_ctx, fa0, reg);
+                        machine_function_layout!(mut self.machine_ctx, &function_name)
+                            .append_inst(mv, self.block_map[&block])
+                            .unwrap();
+                    } else if val_data.ty().is_int() || val_data.ty().is_ptr() {
+                        let a0 = self
+                            .machine_ctx
+                            .new_gp_reg(RiscvGeneralPurposeRegister::A0);
+                        let mv = InstData::build_gp_move(&mut self.machine_ctx, a0, reg);
+                        machine_function_layout!(mut self.machine_ctx, &function_name)
+                            .append_inst(mv, self.block_map[&block])
+                            .unwrap();
+                    } else {
+                        unreachable!()
+                    }
+                }
+                let ret = InstData::new_ret(&mut self.machine_ctx);
+                machine_function_layout!(mut self.machine_ctx, &function_name)
+                    .append_inst(ret, self.block_map[&block])
+                    .unwrap();
             }
             ValueKind::BlockParam
             | ValueKind::Function
