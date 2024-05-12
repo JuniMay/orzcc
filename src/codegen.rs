@@ -8,7 +8,6 @@ use crate::{
         FloatPseudoStoreKind,
         FloatStoreKind,
         Immediate,
-        InstData,
         LoadKind,
         MachineBinaryImmOp,
         MachineBinaryOp,
@@ -19,12 +18,13 @@ use crate::{
         MachineFloatBinaryOp,
         MachineGlobalData,
         MachineInst,
+        MachineInstData,
         MachineSymbol,
         PseudoLoadKind,
         PseudoStoreKind,
         Register,
-        RiscvFloatingPointRegister,
-        RiscvGeneralPurposeRegister,
+        RiscvFpReg,
+        RiscvGpReg,
         StoreKind,
         VirtualRegisterKind,
     },
@@ -32,7 +32,18 @@ use crate::{
         entities::{FunctionKind, ValueKind},
         module::Module,
         types::TypeKind,
-        values::{BinaryOp, Block, CastOp, FCmpCond, Function, ICmpCond, Inst, UnaryOp, Value},
+        values::{
+            Binary,
+            BinaryOp,
+            Block,
+            CastOp,
+            FCmpCond,
+            Function,
+            ICmpCond,
+            Inst,
+            UnaryOp,
+            Value,
+        },
     },
 };
 
@@ -228,10 +239,10 @@ impl CodegenContext {
                     } else {
                         unreachable!();
                     };
-                    let rs = self.machine_ctx.new_fp_reg(
-                        (RiscvFloatingPointRegister::Fa0 as u8 + float_arg_count).into(),
-                    );
-                    let fmv = InstData::build_fp_move(&mut self.machine_ctx, rd, rs);
+                    let rs = self
+                        .machine_ctx
+                        .new_fp_reg((RiscvFpReg::Fa0 as u8 + float_arg_count).into());
+                    let fmv = MachineInstData::build_fp_move(&mut self.machine_ctx, rd, rs);
 
                     machine_function_layout!(mut self.machine_ctx, &function_name)
                         .append_inst(fmv, self.block_map[&entry_block])
@@ -241,19 +252,15 @@ impl CodegenContext {
                 } else {
                     args_passed_by_stack.push(*arg);
                 }
-            } else if ty.is_int() {
+            } else if ty.is_int() || ty.is_ptr() {
                 if integer_arg_count <= 7 {
-                    let rd = if let ValueCodegenResult::Register(rd) = self.get_value(*arg) {
-                        *rd
-                    } else {
-                        unreachable!();
-                    };
+                    let rd = self.get_value_as_register(*arg);
 
-                    let rs = self.machine_ctx.new_gp_reg(
-                        (RiscvGeneralPurposeRegister::A0 as u8 + integer_arg_count).into(),
-                    );
+                    let rs = self
+                        .machine_ctx
+                        .new_gp_reg((RiscvGpReg::A0 as u8 + integer_arg_count).into());
 
-                    let mv = InstData::build_gp_move(&mut self.machine_ctx, rd, rs);
+                    let mv = MachineInstData::build_gp_move(&mut self.machine_ctx, rd, rs);
 
                     machine_function_layout!(mut self.machine_ctx, &function_name)
                         .append_inst(mv, self.block_map[&entry_block])
@@ -269,17 +276,13 @@ impl CodegenContext {
         }
 
         let mut offset = 0;
-        let fp = self.machine_ctx.new_gp_reg(RiscvGeneralPurposeRegister::S0);
+        let fp = self.machine_ctx.new_gp_reg(RiscvGpReg::S0);
         // load the rest argument into the registers.
         // the loaded value might be spilled again, but that is a problem for register
         // allocation.
         for arg in args_passed_by_stack {
             let arg_data = function_data.dfg().local_value_data(arg).unwrap();
-            let rd = if let ValueCodegenResult::Register(rd) = self.get_value(arg) {
-                *rd
-            } else {
-                unreachable!();
-            };
+            let rd = self.get_value_as_register(arg);
 
             if arg_data.ty().is_float() {
                 let kind = match arg_data.ty().bytewidth() {
@@ -287,8 +290,13 @@ impl CodegenContext {
                     8 => FloatLoadKind::Double,
                     _ => unimplemented!(),
                 };
-                let load =
-                    InstData::build_float_load(&mut self.machine_ctx, kind, rd, fp, offset.into());
+                let load = MachineInstData::build_float_load(
+                    &mut self.machine_ctx,
+                    kind,
+                    rd,
+                    fp,
+                    offset.into(),
+                );
                 machine_function_layout!(mut self.machine_ctx, &function_name)
                     .append_inst(load, self.block_map[&entry_block])
                     .unwrap();
@@ -300,7 +308,8 @@ impl CodegenContext {
                     8 => LoadKind::DoubleWord,
                     _ => unimplemented!(),
                 };
-                let load = InstData::build_load(&mut self.machine_ctx, kind, rd, fp, offset.into());
+                let load =
+                    MachineInstData::build_load(&mut self.machine_ctx, kind, rd, fp, offset.into());
                 machine_function_layout!(mut self.machine_ctx, &function_name)
                     .append_inst(load, self.block_map[&entry_block])
                     .unwrap();
@@ -320,6 +329,36 @@ impl CodegenContext {
 
     pub fn get_value(&self, value: Value) -> &ValueCodegenResult {
         self.value_map.get(&value).unwrap()
+    }
+
+    pub fn get_value_as_register(&self, value: Value) -> Register {
+        if let ValueCodegenResult::Register(reg) = self.get_value(value) {
+            *reg
+        } else {
+            panic!("value is not a register");
+        }
+    }
+
+    pub fn get_value_as_symbol(&self, value: Value) -> MachineSymbol {
+        if let ValueCodegenResult::MachineSymbol(symbol) = self.get_value(value) {
+            symbol.clone()
+        } else {
+            panic!("value is not a symbol");
+        }
+    }
+
+    pub fn get_value_as_stack_slot(&self, value: Value) -> (Register, Immediate) {
+        if let ValueCodegenResult::StackSlot { base, offset } = self.get_value(value) {
+            (*base, *offset)
+        } else {
+            panic!("value is not a stack slot");
+        }
+    }
+
+    pub fn append_inst(&mut self, function_name: &MachineSymbol, block: Block, inst: MachineInst) {
+        machine_function_layout!(mut self.machine_ctx, function_name)
+            .append_inst(inst, self.block_map[&block])
+            .unwrap();
     }
 
     pub fn codegen_function_prologue(&mut self, module: &Module, function: Function) { todo!() }
@@ -347,7 +386,7 @@ impl CodegenContext {
                 self.value_map.insert(
                     inst.into(),
                     ValueCodegenResult::StackSlot {
-                        base: self.machine_ctx.new_gp_reg(RiscvGeneralPurposeRegister::S0),
+                        base: self.machine_ctx.new_gp_reg(RiscvGpReg::S0),
                         offset: offset.into(),
                     },
                 );
@@ -358,55 +397,36 @@ impl CodegenContext {
                 let val: Register = function_data
                     .dfg()
                     .with_value_data(store.val(), |data| match data.kind() {
-                        ValueKind::Zero | ValueKind::Undef => self
-                            .machine_ctx
-                            .new_gp_reg(RiscvGeneralPurposeRegister::Zero),
+                        ValueKind::Zero | ValueKind::Undef => {
+                            self.machine_ctx.new_gp_reg(RiscvGpReg::Zero)
+                        }
                         ValueKind::GlobalSlot(_) | ValueKind::Function => {
-                            let codegen_result = self.get_value(store.val());
-                            let symbol =
-                                if let ValueCodegenResult::MachineSymbol(symbol) = codegen_result {
-                                    symbol.clone()
-                                } else {
-                                    unreachable!();
-                                };
-                            let (rd, la) = InstData::new_pseudo_load(
+                            let symbol = self.get_value_as_symbol(store.val());
+                            let (rd, la) = MachineInstData::new_pseudo_load(
                                 &mut self.machine_ctx,
                                 PseudoLoadKind::Address,
                                 symbol,
                             );
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(la, self.block_map[&block])
-                                .unwrap();
+                            self.append_inst(&function_name, block, la);
                             rd
                         }
                         ValueKind::Array(_) | ValueKind::Struct(_) => unimplemented!(),
                         ValueKind::Bytes(bytes) => {
                             let imm = bytes.iter().fold(0, |acc, &byte| (acc << 8) | byte as u64);
-                            let (rd, li) = InstData::new_li(&mut self.machine_ctx, imm.into());
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(li, self.block_map[&block])
-                                .unwrap();
+                            let (rd, li) =
+                                MachineInstData::new_li(&mut self.machine_ctx, imm.into());
+                            self.append_inst(&function_name, block, li);
                             rd
                         }
                         ValueKind::Alloc(_) => {
-                            let codegen_result = self.get_value(store.val());
-                            let (base, offset) =
-                                if let ValueCodegenResult::StackSlot { base, offset } =
-                                    codegen_result
-                                {
-                                    (*base, *offset)
-                                } else {
-                                    unreachable!();
-                                };
-                            let (rd, addi) = InstData::new_binary_imm(
+                            let (base, offset) = self.get_value_as_stack_slot(store.val());
+                            let (rd, addi) = MachineInstData::new_binary_imm(
                                 &mut self.machine_ctx,
                                 MachineBinaryImmOp::Addi,
                                 base,
-                                offset.into(),
+                                offset,
                             );
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(addi, self.block_map[&block])
-                                .unwrap();
+                            self.append_inst(&function_name, block, addi);
                             rd
                         }
                         ValueKind::Store(_)
@@ -439,13 +459,8 @@ impl CodegenContext {
                     .dfg()
                     .with_value_data(store.ptr(), |data| match data.kind() {
                         ValueKind::GlobalSlot(_) => {
-                            let symbol = if let ValueCodegenResult::MachineSymbol(symbol) =
-                                self.get_value(store.ptr())
-                            {
-                                symbol.clone()
-                            } else {
-                                unreachable!();
-                            };
+                            let symbol = self.get_value_as_symbol(store.ptr());
+
                             let rt = self
                                 .machine_ctx
                                 .new_virtual_reg(VirtualRegisterKind::General);
@@ -455,19 +470,20 @@ impl CodegenContext {
                                     4 => FloatPseudoStoreKind::Single,
                                     _ => unimplemented!(),
                                 };
-                                InstData::new_float_pseudo_store(
+                                MachineInstData::new_float_pseudo_store(
                                     &mut self.machine_ctx,
                                     kind,
                                     val,
                                     symbol,
                                     rt,
                                 )
-                            } else if ty.is_int() {
+                            } else if ty.is_int() || ty.is_ptr() {
                                 let kind = match ty.bytewidth() {
                                     4 => PseudoStoreKind::Word,
+                                    8 => PseudoStoreKind::DoubleWord,
                                     _ => unimplemented!(),
                                 };
-                                InstData::new_pseudo_store(
+                                MachineInstData::new_pseudo_store(
                                     &mut self.machine_ctx,
                                     kind,
                                     val,
@@ -478,34 +494,24 @@ impl CodegenContext {
                                 unreachable!()
                             };
 
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(store, self.block_map[&block])
-                                .unwrap();
+                            self.append_inst(&function_name, block, store);
                         }
                         ValueKind::Alloc(_) => {
-                            let (base, offset) =
-                                if let ValueCodegenResult::StackSlot { base, offset } =
-                                    self.get_value(store.ptr())
-                                {
-                                    (*base, *offset)
-                                } else {
-                                    unreachable!();
-                                };
-
+                            let (base, offset) = self.get_value_as_stack_slot(store.ptr());
                             let store = if ty.is_float() {
                                 let kind = match ty.bytewidth() {
                                     4 => FloatStoreKind::Single,
                                     8 => FloatStoreKind::Double,
                                     _ => unimplemented!(),
                                 };
-                                InstData::new_float_store(
+                                MachineInstData::new_float_store(
                                     &mut self.machine_ctx,
                                     kind,
                                     val,
                                     base,
-                                    offset.into(),
+                                    offset,
                                 )
-                            } else if ty.is_int() {
+                            } else if ty.is_int() || ty.is_ptr() {
                                 let kind = match ty.bytewidth() {
                                     1 => StoreKind::Byte,
                                     2 => StoreKind::Half,
@@ -513,29 +519,21 @@ impl CodegenContext {
                                     8 => StoreKind::DoubleWord,
                                     _ => unimplemented!(),
                                 };
-                                InstData::new_store(
+                                MachineInstData::new_store(
                                     &mut self.machine_ctx,
                                     kind,
                                     val,
                                     base,
-                                    offset.into(),
+                                    offset,
                                 )
                             } else {
                                 unreachable!()
                             };
 
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(store, self.block_map[&block])
-                                .unwrap();
+                            self.append_inst(&function_name, block, store);
                         }
                         ValueKind::GetElemPtr(_) => {
-                            let reg = if let ValueCodegenResult::Register(reg) =
-                                self.get_value(store.ptr())
-                            {
-                                *reg
-                            } else {
-                                unreachable!();
-                            };
+                            let reg = self.get_value_as_register(store.ptr());
 
                             let store = if ty.is_float() {
                                 let kind = match ty.bytewidth() {
@@ -543,14 +541,14 @@ impl CodegenContext {
                                     8 => FloatStoreKind::Double,
                                     _ => unimplemented!(),
                                 };
-                                InstData::new_float_store(
+                                MachineInstData::new_float_store(
                                     &mut self.machine_ctx,
                                     kind,
                                     val,
                                     reg,
                                     0.into(),
                                 )
-                            } else if ty.is_int() {
+                            } else if ty.is_int() || ty.is_ptr() {
                                 let kind = match ty.bytewidth() {
                                     1 => StoreKind::Byte,
                                     2 => StoreKind::Half,
@@ -558,14 +556,18 @@ impl CodegenContext {
                                     8 => StoreKind::DoubleWord,
                                     _ => unimplemented!(),
                                 };
-                                InstData::new_store(&mut self.machine_ctx, kind, val, reg, 0.into())
+                                MachineInstData::new_store(
+                                    &mut self.machine_ctx,
+                                    kind,
+                                    val,
+                                    reg,
+                                    0.into(),
+                                )
                             } else {
                                 unreachable!()
                             };
 
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(store, self.block_map[&block])
-                                .unwrap();
+                            self.append_inst(&function_name, block, store);
                         }
                         _ => unimplemented!(),
                     });
@@ -580,13 +582,7 @@ impl CodegenContext {
 
                 module.with_value_data(ptr, |data| match data.kind() {
                     ValueKind::GlobalSlot(_) => {
-                        let symbol = if let ValueCodegenResult::MachineSymbol(symbol) =
-                            self.get_value(ptr)
-                        {
-                            symbol.clone()
-                        } else {
-                            unreachable!();
-                        };
+                        let symbol = self.get_value_as_symbol(ptr);
                         let rt = self
                             .machine_ctx
                             .new_virtual_reg(VirtualRegisterKind::General);
@@ -596,45 +592,42 @@ impl CodegenContext {
                                 4 => FloatPseudoLoadKind::Single,
                                 _ => unimplemented!(),
                             };
-                            InstData::new_float_pseudo_load(&mut self.machine_ctx, kind, symbol, rt)
-                        } else if ty.is_int() {
+                            MachineInstData::new_float_pseudo_load(
+                                &mut self.machine_ctx,
+                                kind,
+                                symbol,
+                                rt,
+                            )
+                        } else if ty.is_int() || ty.is_ptr() {
                             let kind = match ty.bytewidth() {
                                 4 => PseudoLoadKind::Word,
                                 _ => unimplemented!(),
                             };
-                            InstData::new_pseudo_load(&mut self.machine_ctx, kind, symbol)
+                            MachineInstData::new_pseudo_load(&mut self.machine_ctx, kind, symbol)
                         } else {
                             unreachable!()
                         };
 
-                        machine_function_layout!(mut self.machine_ctx, &function_name)
-                            .append_inst(load, self.block_map[&block])
-                            .unwrap();
+                        self.append_inst(&function_name, block, load);
 
                         self.value_map
                             .insert(inst.into(), ValueCodegenResult::Register(rd));
                     }
                     ValueKind::Alloc(_) => {
-                        let (base, offset) = if let ValueCodegenResult::StackSlot { base, offset } =
-                            self.get_value(ptr)
-                        {
-                            (*base, *offset)
-                        } else {
-                            unreachable!();
-                        };
+                        let (base, offset) = self.get_value_as_stack_slot(ptr);
                         let (rd, load) = if ty.is_float() {
                             let kind = match ty.bytewidth() {
                                 4 => FloatLoadKind::Single,
                                 8 => FloatLoadKind::Double,
                                 _ => unimplemented!(),
                             };
-                            InstData::new_float_load(
+                            MachineInstData::new_float_load(
                                 &mut self.machine_ctx,
                                 kind,
                                 base,
-                                offset.into(),
+                                offset,
                             )
-                        } else if ty.is_int() {
+                        } else if ty.is_int() || ty.is_ptr() {
                             let kind = match ty.bytewidth() {
                                 1 => LoadKind::Byte,
                                 2 => LoadKind::Half,
@@ -642,24 +635,18 @@ impl CodegenContext {
                                 8 => LoadKind::DoubleWord,
                                 _ => unimplemented!(),
                             };
-                            InstData::new_load(&mut self.machine_ctx, kind, base, offset.into())
+                            MachineInstData::new_load(&mut self.machine_ctx, kind, base, offset)
                         } else {
                             unreachable!()
                         };
 
-                        machine_function_layout!(mut self.machine_ctx, &function_name)
-                            .append_inst(load, self.block_map[&block])
-                            .unwrap();
+                        self.append_inst(&function_name, block, load);
 
                         self.value_map
                             .insert(inst.into(), ValueCodegenResult::Register(rd));
                     }
                     ValueKind::GetElemPtr(_) => {
-                        let reg = if let ValueCodegenResult::Register(reg) = self.get_value(ptr) {
-                            *reg
-                        } else {
-                            unreachable!();
-                        };
+                        let reg = self.get_value_as_register(ptr);
 
                         let (rd, load) = if ty.is_float() {
                             let kind = match ty.bytewidth() {
@@ -667,8 +654,13 @@ impl CodegenContext {
                                 8 => FloatLoadKind::Double,
                                 _ => unimplemented!(),
                             };
-                            InstData::new_float_load(&mut self.machine_ctx, kind, reg, 0.into())
-                        } else if ty.is_int() {
+                            MachineInstData::new_float_load(
+                                &mut self.machine_ctx,
+                                kind,
+                                reg,
+                                0.into(),
+                            )
+                        } else if ty.is_int() || ty.is_ptr() {
                             let kind = match ty.bytewidth() {
                                 1 => LoadKind::Byte,
                                 2 => LoadKind::Half,
@@ -676,14 +668,12 @@ impl CodegenContext {
                                 8 => LoadKind::DoubleWord,
                                 _ => unimplemented!(),
                             };
-                            InstData::new_load(&mut self.machine_ctx, kind, reg, 0.into())
+                            MachineInstData::new_load(&mut self.machine_ctx, kind, reg, 0.into())
                         } else {
                             unreachable!()
                         };
 
-                        machine_function_layout!(mut self.machine_ctx, &function_name)
-                            .append_inst(load, self.block_map[&block])
-                            .unwrap();
+                        self.append_inst(&function_name, block, load);
 
                         self.value_map
                             .insert(inst.into(), ValueCodegenResult::Register(rd));
@@ -713,47 +703,29 @@ impl CodegenContext {
                         | ValueKind::GetElemPtr(_) => unreachable!(),
                         ValueKind::Zero | ValueKind::Undef => {
                             // fmv $rd, zero
-                            let dst_fmt = match lhs_data.ty().bytewidth() {
-                                2 => FMvFmt::H,
-                                4 => FMvFmt::S,
-                                8 => FMvFmt::D,
-                                _ => unimplemented!(),
-                            };
-                            let zero = self
-                                .machine_ctx
-                                .new_gp_reg(RiscvGeneralPurposeRegister::Zero);
-                            let (rd, fmv) = InstData::new_float_move(
+                            let dst_fmt = FMvFmt::from_byte_width(lhs_data.ty().bytewidth());
+                            let zero = self.machine_ctx.new_gp_reg(RiscvGpReg::Zero);
+                            let (rd, fmv) = MachineInstData::new_float_move(
                                 &mut self.machine_ctx,
                                 dst_fmt,
                                 FMvFmt::X,
                                 zero,
                             );
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(fmv, self.block_map[&block])
-                                .unwrap();
+                            self.append_inst(&function_name, block, fmv);
                             rd
                         }
                         ValueKind::Bytes(bytes) => {
                             let imm: Immediate = bytes.into();
-                            let (rd, li) = InstData::new_li(&mut self.machine_ctx, imm);
-                            let dst_fmt = match lhs_data.ty().bytewidth() {
-                                2 => FMvFmt::H,
-                                4 => FMvFmt::S,
-                                8 => FMvFmt::D,
-                                _ => unimplemented!(),
-                            };
-                            let (rd, fmv) = InstData::new_float_move(
+                            let (rd, li) = MachineInstData::new_li(&mut self.machine_ctx, imm);
+                            let dst_fmt = FMvFmt::from_byte_width(lhs_data.ty().bytewidth());
+                            let (rd, fmv) = MachineInstData::new_float_move(
                                 &mut self.machine_ctx,
                                 dst_fmt,
                                 FMvFmt::X,
                                 rd,
                             );
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(li, self.block_map[&block])
-                                .unwrap();
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(fmv, self.block_map[&block])
-                                .unwrap();
+                            self.append_inst(&function_name, block, li);
+                            self.append_inst(&function_name, block, fmv);
 
                             rd
                         }
@@ -786,47 +758,29 @@ impl CodegenContext {
                         | ValueKind::GetElemPtr(_) => unreachable!(),
                         ValueKind::Zero | ValueKind::Undef => {
                             // fmv $rd, zero
-                            let dst_fmt = match lhs_data.ty().bytewidth() {
-                                2 => FMvFmt::H,
-                                4 => FMvFmt::S,
-                                8 => FMvFmt::D,
-                                _ => unimplemented!(),
-                            };
-                            let zero = self
-                                .machine_ctx
-                                .new_gp_reg(RiscvGeneralPurposeRegister::Zero);
-                            let (rd, fmv) = InstData::new_float_move(
+                            let dst_fmt = FMvFmt::from_byte_width(lhs_data.ty().bytewidth());
+                            let zero = self.machine_ctx.new_gp_reg(RiscvGpReg::Zero);
+                            let (rd, fmv) = MachineInstData::new_float_move(
                                 &mut self.machine_ctx,
                                 dst_fmt,
                                 FMvFmt::X,
                                 zero,
                             );
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(fmv, self.block_map[&block])
-                                .unwrap();
+                            self.append_inst(&function_name, block, fmv);
                             rd
                         }
                         ValueKind::Bytes(bytes) => {
                             let imm: Immediate = bytes.into();
-                            let (rd, li) = InstData::new_li(&mut self.machine_ctx, imm);
-                            let dst_fmt = match lhs_data.ty().bytewidth() {
-                                2 => FMvFmt::H,
-                                4 => FMvFmt::S,
-                                8 => FMvFmt::D,
-                                _ => unimplemented!(),
-                            };
-                            let (rd, fmv) = InstData::new_float_move(
+                            let (rd, li) = MachineInstData::new_li(&mut self.machine_ctx, imm);
+                            let dst_fmt = FMvFmt::from_byte_width(lhs_data.ty().bytewidth());
+                            let (rd, fmv) = MachineInstData::new_float_move(
                                 &mut self.machine_ctx,
                                 dst_fmt,
                                 FMvFmt::X,
                                 rd,
                             );
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(li, self.block_map[&block])
-                                .unwrap();
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(fmv, self.block_map[&block])
-                                .unwrap();
+                            self.append_inst(&function_name, block, li);
+                            self.append_inst(&function_name, block, fmv);
 
                             rd
                         }
@@ -866,24 +820,25 @@ impl CodegenContext {
                         _ => unreachable!(),
                     };
 
-                    let (rd, fbin) =
-                        InstData::new_float_binary(&mut self.machine_ctx, asm_op, fmt, rs1, rs2);
+                    let (rd, fbin) = MachineInstData::new_float_binary(
+                        &mut self.machine_ctx,
+                        asm_op,
+                        fmt,
+                        rs1,
+                        rs2,
+                    );
 
-                    machine_function_layout!(mut self.machine_ctx, &function_name)
-                        .append_inst(fbin, self.block_map[&block])
-                        .unwrap();
+                    self.append_inst(&function_name, block, fbin);
 
                     if let BinaryOp::FCmp(FCmpCond::ONe) = op {
                         // invert the result of `feq`
-                        let (rd, neg) = InstData::new_binary_imm(
+                        let (rd, neg) = MachineInstData::new_binary_imm(
                             &mut self.machine_ctx,
                             MachineBinaryImmOp::Xori,
                             rd,
                             (-1).into(),
                         );
-                        machine_function_layout!(mut self.machine_ctx, &function_name)
-                            .append_inst(neg, self.block_map[&block])
-                            .unwrap();
+                        self.append_inst(&function_name, block, neg);
 
                         self.value_map
                             .insert(inst.into(), ValueCodegenResult::Register(rd));
@@ -913,21 +868,12 @@ impl CodegenContext {
                             if check_itype_imm(imm) {
                                 BinaryOperand::Immediate(imm)
                             } else {
-                                let (rd, li) = InstData::new_li(&mut self.machine_ctx, imm);
-                                machine_function_layout!(mut self.machine_ctx, &function_name)
-                                    .append_inst(li, self.block_map[&block])
-                                    .unwrap();
+                                let (rd, li) = MachineInstData::new_li(&mut self.machine_ctx, imm);
+                                self.append_inst(&function_name, block, li);
                                 BinaryOperand::Register(rd)
                             }
                         }
-                        _ => {
-                            let codegen_result = self.get_value(lhs);
-                            if let ValueCodegenResult::Register(reg) = codegen_result {
-                                BinaryOperand::Register(*reg)
-                            } else {
-                                unreachable!();
-                            }
-                        }
+                        _ => BinaryOperand::Register(self.get_value_as_register(lhs)),
                     };
                     // same as rs1
                     let mut rs2: BinaryOperand = match rhs_data.kind() {
@@ -945,21 +891,12 @@ impl CodegenContext {
                             if check_itype_imm(imm) {
                                 BinaryOperand::Immediate(imm)
                             } else {
-                                let (rd, li) = InstData::new_li(&mut self.machine_ctx, imm);
-                                machine_function_layout!(mut self.machine_ctx, &function_name)
-                                    .append_inst(li, self.block_map[&block])
-                                    .unwrap();
+                                let (rd, li) = MachineInstData::new_li(&mut self.machine_ctx, imm);
+                                self.append_inst(&function_name, block, li);
                                 BinaryOperand::Register(rd)
                             }
                         }
-                        _ => {
-                            let codegen_result = self.get_value(rhs);
-                            if let ValueCodegenResult::Register(reg) = codegen_result {
-                                BinaryOperand::Register(*reg)
-                            } else {
-                                unreachable!();
-                            }
-                        }
+                        _ => BinaryOperand::Register(self.get_value_as_register(rhs)),
                     };
 
                     if let BinaryOperand::Immediate(_) = rs1 {
@@ -971,544 +908,82 @@ impl CodegenContext {
                     if let BinaryOperand::Immediate(imm) = rs1 {
                         // load immediate into register
                         // this should actually be handled with constant folding, but just in case.
-                        let (rd, li) = InstData::new_li(&mut self.machine_ctx, imm);
-                        machine_function_layout!(mut self.machine_ctx, &function_name)
-                            .append_inst(li, self.block_map[&block])
-                            .unwrap();
+                        let (rd, li) = MachineInstData::new_li(&mut self.machine_ctx, imm);
+                        self.append_inst(&function_name, block, li);
                         rs1 = BinaryOperand::Register(rd);
                     }
 
                     match (op, rs1, rs2) {
                         (
-                            BinaryOp::Add,
+                            op @ (BinaryOp::Add
+                            | BinaryOp::Sub
+                            | BinaryOp::Or
+                            | BinaryOp::And
+                            | BinaryOp::Xor
+                            | BinaryOp::Shl
+                            | BinaryOp::LShr
+                            | BinaryOp::AShr),
                             BinaryOperand::Register(rs1),
                             BinaryOperand::Immediate(imm),
                         ) => {
-                            let kind = match lhs_data.ty().bytewidth() {
-                                4 => MachineBinaryImmOp::Addiw,
-                                8 => MachineBinaryImmOp::Addi,
-                                _ => unimplemented!(),
-                            };
-                            let (rd, addi) =
-                                InstData::new_binary_imm(&mut self.machine_ctx, kind, rs1, imm);
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(addi, self.block_map[&block])
-                                .unwrap();
-                            self.value_map
-                                .insert(inst.into(), ValueCodegenResult::Register(rd));
-                        }
-                        (
-                            BinaryOp::Add,
-                            BinaryOperand::Register(rs1),
-                            BinaryOperand::Register(rs2),
-                        ) => {
-                            let kind = match lhs_data.ty().bytewidth() {
-                                4 => MachineBinaryOp::Addw,
-                                8 => MachineBinaryOp::Add,
-                                _ => unimplemented!(),
-                            };
-                            let (rd, add) =
-                                InstData::new_binary(&mut self.machine_ctx, kind, rs1, rs2);
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(add, self.block_map[&block])
-                                .unwrap();
-                            self.value_map
-                                .insert(inst.into(), ValueCodegenResult::Register(rd));
-                        }
-                        (
-                            BinaryOp::Sub,
-                            BinaryOperand::Register(rs1),
-                            BinaryOperand::Immediate(imm),
-                        ) => {
-                            let kind = match lhs_data.ty().bytewidth() {
-                                4 => MachineBinaryImmOp::Addiw,
-                                8 => MachineBinaryImmOp::Addi,
-                                _ => unimplemented!(),
-                            };
-                            let imm = (-imm.0) as i32;
-                            let (rd, addi) = InstData::new_binary_imm(
-                                &mut self.machine_ctx,
-                                kind,
-                                rs1,
-                                imm.into(),
-                            );
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(addi, self.block_map[&block])
-                                .unwrap();
-                            self.value_map
-                                .insert(inst.into(), ValueCodegenResult::Register(rd));
-                        }
-                        (
-                            BinaryOp::Sub,
-                            BinaryOperand::Register(rs1),
-                            BinaryOperand::Register(rs2),
-                        ) => {
-                            let kind = match lhs_data.ty().bytewidth() {
-                                4 => MachineBinaryOp::Subw,
-                                8 => MachineBinaryOp::Sub,
-                                _ => unimplemented!(),
-                            };
-                            let (rd, sub) =
-                                InstData::new_binary(&mut self.machine_ctx, kind, rs1, rs2);
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(sub, self.block_map[&block])
-                                .unwrap();
-                            self.value_map
-                                .insert(inst.into(), ValueCodegenResult::Register(rd));
-                        }
-                        (
-                            BinaryOp::Mul,
-                            BinaryOperand::Register(rs1),
-                            BinaryOperand::Immediate(imm),
-                        ) => {
-                            let (rs2, li) = InstData::new_li(&mut self.machine_ctx, imm);
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(li, self.block_map[&block])
-                                .unwrap();
-
-                            let kind = match lhs_data.ty().bytewidth() {
-                                4 => MachineBinaryOp::Mulw,
-                                8 => MachineBinaryOp::Mul,
-                                _ => unimplemented!(),
-                            };
-
-                            let (rd, mul) =
-                                InstData::new_binary(&mut self.machine_ctx, kind, rs1, rs2);
-
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(mul, self.block_map[&block])
-                                .unwrap();
-
-                            self.value_map
-                                .insert(inst.into(), ValueCodegenResult::Register(rd));
-                        }
-                        (
-                            BinaryOp::Mul,
-                            BinaryOperand::Register(rs1),
-                            BinaryOperand::Register(rs2),
-                        ) => {
-                            let kind = match lhs_data.ty().bytewidth() {
-                                4 => MachineBinaryOp::Mulw,
-                                8 => MachineBinaryOp::Mul,
-                                _ => unimplemented!(),
-                            };
-
-                            let (rd, mul) =
-                                InstData::new_binary(&mut self.machine_ctx, kind, rs1, rs2);
-
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(mul, self.block_map[&block])
-                                .unwrap();
-
-                            self.value_map
-                                .insert(inst.into(), ValueCodegenResult::Register(rd));
-                        }
-                        (
-                            BinaryOp::UDiv,
-                            BinaryOperand::Register(rs1),
-                            BinaryOperand::Immediate(imm),
-                        ) => {
-                            let (rs2, li) = InstData::new_li(&mut self.machine_ctx, imm);
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(li, self.block_map[&block])
-                                .unwrap();
-
-                            let kind = match lhs_data.ty().bytewidth() {
-                                4 => MachineBinaryOp::Divuw,
-                                8 => MachineBinaryOp::Divu,
-                                _ => unimplemented!(),
-                            };
-
-                            let (rd, div) =
-                                InstData::new_binary(&mut self.machine_ctx, kind, rs1, rs2);
-
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(div, self.block_map[&block])
-                                .unwrap();
-
-                            self.value_map
-                                .insert(inst.into(), ValueCodegenResult::Register(rd));
-                        }
-                        (
-                            BinaryOp::UDiv,
-                            BinaryOperand::Register(rs1),
-                            BinaryOperand::Register(rs2),
-                        ) => {
-                            let kind = match lhs_data.ty().bytewidth() {
-                                4 => MachineBinaryOp::Divuw,
-                                8 => MachineBinaryOp::Divu,
-                                _ => unimplemented!(),
-                            };
-
-                            let (rd, div) =
-                                InstData::new_binary(&mut self.machine_ctx, kind, rs1, rs2);
-
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(div, self.block_map[&block])
-                                .unwrap();
-
-                            self.value_map
-                                .insert(inst.into(), ValueCodegenResult::Register(rd));
-                        }
-                        (
-                            BinaryOp::SDiv,
-                            BinaryOperand::Register(rs1),
-                            BinaryOperand::Immediate(imm),
-                        ) => {
-                            let (rs2, li) = InstData::new_li(&mut self.machine_ctx, imm);
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(li, self.block_map[&block])
-                                .unwrap();
-
-                            let kind = match lhs_data.ty().bytewidth() {
-                                4 => MachineBinaryOp::Divw,
-                                8 => MachineBinaryOp::Div,
-                                _ => unimplemented!(),
-                            };
-
-                            let (rd, div) =
-                                InstData::new_binary(&mut self.machine_ctx, kind, rs1, rs2);
-
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(div, self.block_map[&block])
-                                .unwrap();
-
-                            self.value_map
-                                .insert(inst.into(), ValueCodegenResult::Register(rd));
-                        }
-                        (
-                            BinaryOp::SDiv,
-                            BinaryOperand::Register(rs1),
-                            BinaryOperand::Register(rs2),
-                        ) => {
-                            let kind = match lhs_data.ty().bytewidth() {
-                                4 => MachineBinaryOp::Divw,
-                                8 => MachineBinaryOp::Div,
-                                _ => unimplemented!(),
-                            };
-
-                            let (rd, div) =
-                                InstData::new_binary(&mut self.machine_ctx, kind, rs1, rs2);
-
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(div, self.block_map[&block])
-                                .unwrap();
-
-                            self.value_map
-                                .insert(inst.into(), ValueCodegenResult::Register(rd));
-                        }
-                        (
-                            BinaryOp::URem,
-                            BinaryOperand::Register(rs1),
-                            BinaryOperand::Immediate(imm),
-                        ) => {
-                            let (rs2, li) = InstData::new_li(&mut self.machine_ctx, imm);
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(li, self.block_map[&block])
-                                .unwrap();
-
-                            let kind = match lhs_data.ty().bytewidth() {
-                                4 => MachineBinaryOp::Remuw,
-                                8 => MachineBinaryOp::Remu,
-                                _ => unimplemented!(),
-                            };
-
-                            let (rd, rem) =
-                                InstData::new_binary(&mut self.machine_ctx, kind, rs1, rs2);
-
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(rem, self.block_map[&block])
-                                .unwrap();
-
-                            self.value_map
-                                .insert(inst.into(), ValueCodegenResult::Register(rd));
-                        }
-                        (
-                            BinaryOp::URem,
-                            BinaryOperand::Register(rs1),
-                            BinaryOperand::Register(rs2),
-                        ) => {
-                            let kind = match lhs_data.ty().bytewidth() {
-                                4 => MachineBinaryOp::Remuw,
-                                8 => MachineBinaryOp::Remu,
-                                _ => unimplemented!(),
-                            };
-
-                            let (rd, rem) =
-                                InstData::new_binary(&mut self.machine_ctx, kind, rs1, rs2);
-
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(rem, self.block_map[&block])
-                                .unwrap();
-
-                            self.value_map
-                                .insert(inst.into(), ValueCodegenResult::Register(rd));
-                        }
-                        (
-                            BinaryOp::SRem,
-                            BinaryOperand::Register(rs1),
-                            BinaryOperand::Immediate(imm),
-                        ) => {
-                            let (rs2, li) = InstData::new_li(&mut self.machine_ctx, imm);
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(li, self.block_map[&block])
-                                .unwrap();
-
-                            let kind = match lhs_data.ty().bytewidth() {
-                                4 => MachineBinaryOp::Remw,
-                                8 => MachineBinaryOp::Rem,
-                                _ => unimplemented!(),
-                            };
-
-                            let (rd, rem) =
-                                InstData::new_binary(&mut self.machine_ctx, kind, rs1, rs2);
-
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(rem, self.block_map[&block])
-                                .unwrap();
-
-                            self.value_map
-                                .insert(inst.into(), ValueCodegenResult::Register(rd));
-                        }
-                        (
-                            BinaryOp::SRem,
-                            BinaryOperand::Register(rs1),
-                            BinaryOperand::Register(rs2),
-                        ) => {
-                            let kind = match lhs_data.ty().bytewidth() {
-                                4 => MachineBinaryOp::Remw,
-                                8 => MachineBinaryOp::Rem,
-                                _ => unimplemented!(),
-                            };
-
-                            let (rd, rem) =
-                                InstData::new_binary(&mut self.machine_ctx, kind, rs1, rs2);
-
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(rem, self.block_map[&block])
-                                .unwrap();
-
-                            self.value_map
-                                .insert(inst.into(), ValueCodegenResult::Register(rd));
-                        }
-                        (
-                            BinaryOp::And,
-                            BinaryOperand::Register(rs1),
-                            BinaryOperand::Immediate(imm),
-                        ) => {
-                            let (rd, andi) = InstData::new_binary_imm(
-                                &mut self.machine_ctx,
-                                MachineBinaryImmOp::Andi,
+                            self.codegen_binary_imm(
+                                module,
+                                function,
+                                block,
+                                inst,
+                                op,
                                 rs1,
                                 imm,
+                                lhs_data.ty().bytewidth(),
                             );
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(andi, self.block_map[&block])
-                                .unwrap();
-
-                            self.value_map
-                                .insert(inst.into(), ValueCodegenResult::Register(rd));
                         }
                         (
-                            BinaryOp::And,
+                            op @ (BinaryOp::Add
+                            | BinaryOp::Sub
+                            | BinaryOp::Mul
+                            | BinaryOp::UDiv
+                            | BinaryOp::SDiv
+                            | BinaryOp::URem
+                            | BinaryOp::SRem
+                            | BinaryOp::And
+                            | BinaryOp::Or
+                            | BinaryOp::Xor
+                            | BinaryOp::Shl
+                            | BinaryOp::LShr
+                            | BinaryOp::AShr),
                             BinaryOperand::Register(rs1),
                             BinaryOperand::Register(rs2),
                         ) => {
-                            let (rd, and) = InstData::new_binary(
-                                &mut self.machine_ctx,
-                                MachineBinaryOp::And,
+                            self.codegen_bianry_reg(
+                                module,
+                                function,
+                                block,
+                                inst,
+                                op,
                                 rs1,
                                 rs2,
+                                lhs_data.ty().bytewidth(),
                             );
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(and, self.block_map[&block])
-                                .unwrap();
-
-                            self.value_map
-                                .insert(inst.into(), ValueCodegenResult::Register(rd));
                         }
                         (
-                            BinaryOp::Or,
+                            op @ (BinaryOp::Mul
+                            | BinaryOp::UDiv
+                            | BinaryOp::SDiv
+                            | BinaryOp::URem
+                            | BinaryOp::SRem),
                             BinaryOperand::Register(rs1),
                             BinaryOperand::Immediate(imm),
                         ) => {
-                            let (rd, ori) = InstData::new_binary_imm(
-                                &mut self.machine_ctx,
-                                MachineBinaryImmOp::Ori,
+                            self.codegen_binary_imm_li(
+                                module,
+                                function,
+                                block,
+                                inst,
+                                op,
                                 rs1,
                                 imm,
+                                lhs_data.ty().bytewidth(),
                             );
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(ori, self.block_map[&block])
-                                .unwrap();
-
-                            self.value_map
-                                .insert(inst.into(), ValueCodegenResult::Register(rd));
-                        }
-                        (
-                            BinaryOp::Or,
-                            BinaryOperand::Register(rs1),
-                            BinaryOperand::Register(rs2),
-                        ) => {
-                            let (rd, or) = InstData::new_binary(
-                                &mut self.machine_ctx,
-                                MachineBinaryOp::Or,
-                                rs1,
-                                rs2,
-                            );
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(or, self.block_map[&block])
-                                .unwrap();
-
-                            self.value_map
-                                .insert(inst.into(), ValueCodegenResult::Register(rd));
-                        }
-                        (
-                            BinaryOp::Xor,
-                            BinaryOperand::Register(rs1),
-                            BinaryOperand::Immediate(imm),
-                        ) => {
-                            let (rd, xori) = InstData::new_binary_imm(
-                                &mut self.machine_ctx,
-                                MachineBinaryImmOp::Xori,
-                                rs1,
-                                imm,
-                            );
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(xori, self.block_map[&block])
-                                .unwrap();
-
-                            self.value_map
-                                .insert(inst.into(), ValueCodegenResult::Register(rd));
-                        }
-                        (
-                            BinaryOp::Xor,
-                            BinaryOperand::Register(rs1),
-                            BinaryOperand::Register(rs2),
-                        ) => {
-                            let (rd, xor) = InstData::new_binary(
-                                &mut self.machine_ctx,
-                                MachineBinaryOp::Xor,
-                                rs1,
-                                rs2,
-                            );
-
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(xor, self.block_map[&block])
-                                .unwrap();
-
-                            self.value_map
-                                .insert(inst.into(), ValueCodegenResult::Register(rd));
-                        }
-                        (
-                            BinaryOp::Shl,
-                            BinaryOperand::Register(rs1),
-                            BinaryOperand::Immediate(imm),
-                        ) => {
-                            let (rd, slli) = InstData::new_binary_imm(
-                                &mut self.machine_ctx,
-                                MachineBinaryImmOp::Slli,
-                                rs1,
-                                imm,
-                            );
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(slli, self.block_map[&block])
-                                .unwrap();
-
-                            self.value_map
-                                .insert(inst.into(), ValueCodegenResult::Register(rd));
-                        }
-                        (
-                            BinaryOp::Shl,
-                            BinaryOperand::Register(rs1),
-                            BinaryOperand::Register(rs2),
-                        ) => {
-                            let (rd, sll) = InstData::new_binary(
-                                &mut self.machine_ctx,
-                                MachineBinaryOp::Sll,
-                                rs1,
-                                rs2,
-                            );
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(sll, self.block_map[&block])
-                                .unwrap();
-
-                            self.value_map
-                                .insert(inst.into(), ValueCodegenResult::Register(rd));
-                        }
-                        (
-                            BinaryOp::LShr,
-                            BinaryOperand::Register(rs1),
-                            BinaryOperand::Immediate(imm),
-                        ) => {
-                            let (rd, srli) = InstData::new_binary_imm(
-                                &mut self.machine_ctx,
-                                MachineBinaryImmOp::Srli,
-                                rs1,
-                                imm,
-                            );
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(srli, self.block_map[&block])
-                                .unwrap();
-
-                            self.value_map
-                                .insert(inst.into(), ValueCodegenResult::Register(rd));
-                        }
-                        (
-                            BinaryOp::LShr,
-                            BinaryOperand::Register(rs1),
-                            BinaryOperand::Register(rs2),
-                        ) => {
-                            let (rd, srl) = InstData::new_binary(
-                                &mut self.machine_ctx,
-                                MachineBinaryOp::Srl,
-                                rs1,
-                                rs2,
-                            );
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(srl, self.block_map[&block])
-                                .unwrap();
-
-                            self.value_map
-                                .insert(inst.into(), ValueCodegenResult::Register(rd));
-                        }
-                        (
-                            BinaryOp::AShr,
-                            BinaryOperand::Register(rs1),
-                            BinaryOperand::Immediate(imm),
-                        ) => {
-                            let (rd, srai) = InstData::new_binary_imm(
-                                &mut self.machine_ctx,
-                                MachineBinaryImmOp::Srai,
-                                rs1,
-                                imm,
-                            );
-
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(srai, self.block_map[&block])
-                                .unwrap();
-
-                            self.value_map
-                                .insert(inst.into(), ValueCodegenResult::Register(rd));
-                        }
-                        (
-                            BinaryOp::AShr,
-                            BinaryOperand::Register(rs1),
-                            BinaryOperand::Register(rs2),
-                        ) => {
-                            let (rd, sra) = InstData::new_binary(
-                                &mut self.machine_ctx,
-                                MachineBinaryOp::Sra,
-                                rs1,
-                                rs2,
-                            );
-
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(sra, self.block_map[&block])
-                                .unwrap();
-
-                            self.value_map
-                                .insert(inst.into(), ValueCodegenResult::Register(rd));
                         }
                         (
                             BinaryOp::ICmp(cond),
@@ -1522,89 +997,73 @@ impl CodegenContext {
                                     _ => unimplemented!(),
                                 };
                                 let imm = (-imm.0) as i32;
-                                let (rd, addi) = InstData::new_binary_imm(
+                                let (rd, addi) = MachineInstData::new_binary_imm(
                                     &mut self.machine_ctx,
                                     kind,
                                     rs1,
                                     imm.into(),
                                 );
 
-                                machine_function_layout!(mut self.machine_ctx, &function_name)
-                                    .append_inst(addi, self.block_map[&block])
-                                    .unwrap();
+                                self.append_inst(&function_name, block, addi);
 
                                 if let ICmpCond::Eq = cond {
-                                    let (rd, seqz) = InstData::new_binary_imm(
+                                    let (rd, seqz) = MachineInstData::new_binary_imm(
                                         &mut self.machine_ctx,
                                         MachineBinaryImmOp::Sltiu,
                                         rd,
                                         1.into(),
                                     );
-                                    machine_function_layout!(mut self.machine_ctx, &function_name)
-                                        .append_inst(seqz, self.block_map[&block])
-                                        .unwrap();
+                                    self.append_inst(&function_name, block, seqz);
 
                                     self.value_map
                                         .insert(inst.into(), ValueCodegenResult::Register(rd));
                                 } else {
-                                    let zero = self
-                                        .machine_ctx
-                                        .new_gp_reg(RiscvGeneralPurposeRegister::Zero);
-                                    let (rd, snez) = InstData::new_binary(
+                                    let zero = self.machine_ctx.new_gp_reg(RiscvGpReg::Zero);
+                                    let (rd, snez) = MachineInstData::new_binary(
                                         &mut self.machine_ctx,
                                         MachineBinaryOp::Sltu,
                                         zero,
                                         rd,
                                     );
-                                    machine_function_layout!(mut self.machine_ctx, &function_name)
-                                        .append_inst(snez, self.block_map[&block])
-                                        .unwrap();
+                                    self.append_inst(&function_name, block, snez);
 
                                     self.value_map
                                         .insert(inst.into(), ValueCodegenResult::Register(rd));
                                 }
                             }
                             ICmpCond::Slt => {
-                                let (rd, slti) = InstData::new_binary_imm(
+                                let (rd, slti) = MachineInstData::new_binary_imm(
                                     &mut self.machine_ctx,
                                     MachineBinaryImmOp::Slti,
                                     rs1,
                                     imm,
                                 );
-                                machine_function_layout!(mut self.machine_ctx, &function_name)
-                                    .append_inst(slti, self.block_map[&block])
-                                    .unwrap();
+                                self.append_inst(&function_name, block, slti);
                                 self.value_map
                                     .insert(inst.into(), ValueCodegenResult::Register(rd));
                             }
                             ICmpCond::Sle => {
                                 // lhs <= rhs <=> !(lhs > rhs) <=> !(rhs < lhs)
                                 // needs to be loaded into a register
-                                let (rs2, li) = InstData::new_li(&mut self.machine_ctx, imm);
-                                machine_function_layout!(mut self.machine_ctx, &function_name)
-                                    .append_inst(li, self.block_map[&block])
-                                    .unwrap();
+                                let (rs2, li) = MachineInstData::new_li(&mut self.machine_ctx, imm);
+                                self.append_inst(&function_name, block, li);
 
-                                let (rd, slt) = InstData::new_binary(
+                                let (rd, slt) = MachineInstData::new_binary(
                                     &mut self.machine_ctx,
                                     MachineBinaryOp::Slt,
                                     rs2,
                                     rs1,
                                 );
-                                machine_function_layout!(mut self.machine_ctx, &function_name)
-                                    .append_inst(slt, self.block_map[&block])
-                                    .unwrap();
+                                self.append_inst(&function_name, block, slt);
 
-                                let (rd, xori) = InstData::new_binary_imm(
+                                let (rd, xori) = MachineInstData::new_binary_imm(
                                     &mut self.machine_ctx,
                                     MachineBinaryImmOp::Xori,
                                     rd,
                                     (-1).into(),
                                 );
 
-                                machine_function_layout!(mut self.machine_ctx, &function_name)
-                                    .append_inst(xori, self.block_map[&block])
-                                    .unwrap();
+                                self.append_inst(&function_name, block, xori);
 
                                 self.value_map
                                     .insert(inst.into(), ValueCodegenResult::Register(rd));
@@ -1616,82 +1075,68 @@ impl CodegenContext {
                             BinaryOperand::Register(rs2),
                         ) => match cond {
                             ICmpCond::Eq | ICmpCond::Ne => {
-                                let (rd, sub) = InstData::new_binary(
+                                let (rd, sub) = MachineInstData::new_binary(
                                     &mut self.machine_ctx,
                                     MachineBinaryOp::Sub,
                                     rs1,
                                     rs2,
                                 );
 
-                                machine_function_layout!(mut self.machine_ctx, &function_name)
-                                    .append_inst(sub, self.block_map[&block])
-                                    .unwrap();
+                                self.append_inst(&function_name, block, sub);
 
                                 if let ICmpCond::Eq = cond {
-                                    let (rd, seqz) = InstData::new_binary_imm(
+                                    let (rd, seqz) = MachineInstData::new_binary_imm(
                                         &mut self.machine_ctx,
                                         MachineBinaryImmOp::Sltiu,
                                         rd,
                                         1.into(),
                                     );
-                                    machine_function_layout!(mut self.machine_ctx, &function_name)
-                                        .append_inst(seqz, self.block_map[&block])
-                                        .unwrap();
+                                    self.append_inst(&function_name, block, seqz);
 
                                     self.value_map
                                         .insert(inst.into(), ValueCodegenResult::Register(rd));
                                 } else {
-                                    let zero = self
-                                        .machine_ctx
-                                        .new_gp_reg(RiscvGeneralPurposeRegister::Zero);
-                                    let (rd, snez) = InstData::new_binary(
+                                    let zero = self.machine_ctx.new_gp_reg(RiscvGpReg::Zero);
+                                    let (rd, snez) = MachineInstData::new_binary(
                                         &mut self.machine_ctx,
                                         MachineBinaryOp::Sltu,
                                         zero,
                                         rd,
                                     );
-                                    machine_function_layout!(mut self.machine_ctx, &function_name)
-                                        .append_inst(snez, self.block_map[&block])
-                                        .unwrap();
+                                    self.append_inst(&function_name, block, snez);
 
                                     self.value_map
                                         .insert(inst.into(), ValueCodegenResult::Register(rd));
                                 }
                             }
                             ICmpCond::Slt => {
-                                let (rd, slt) = InstData::new_binary(
+                                let (rd, slt) = MachineInstData::new_binary(
                                     &mut self.machine_ctx,
                                     MachineBinaryOp::Slt,
                                     rs1,
                                     rs2,
                                 );
-                                machine_function_layout!(mut self.machine_ctx, &function_name)
-                                    .append_inst(slt, self.block_map[&block])
-                                    .unwrap();
+                                self.append_inst(&function_name, block, slt);
                                 self.value_map
                                     .insert(inst.into(), ValueCodegenResult::Register(rd));
                             }
                             ICmpCond::Sle => {
-                                let (rd, slt) = InstData::new_binary(
+                                let (rd, slt) = MachineInstData::new_binary(
                                     &mut self.machine_ctx,
                                     MachineBinaryOp::Slt,
                                     rs2,
                                     rs1,
                                 );
-                                machine_function_layout!(mut self.machine_ctx, &function_name)
-                                    .append_inst(slt, self.block_map[&block])
-                                    .unwrap();
+                                self.append_inst(&function_name, block, slt);
 
-                                let (rd, xori) = InstData::new_binary_imm(
+                                let (rd, xori) = MachineInstData::new_binary_imm(
                                     &mut self.machine_ctx,
                                     MachineBinaryImmOp::Xori,
                                     rd,
                                     (-1).into(),
                                 );
 
-                                machine_function_layout!(mut self.machine_ctx, &function_name)
-                                    .append_inst(xori, self.block_map[&block])
-                                    .unwrap();
+                                self.append_inst(&function_name, block, xori);
 
                                 self.value_map
                                     .insert(inst.into(), ValueCodegenResult::Register(rd));
@@ -1719,19 +1164,15 @@ impl CodegenContext {
                     | ValueKind::Branch(_)
                     | ValueKind::Return(_) => unreachable!(),
                     ValueKind::Zero | ValueKind::Undef => {
-                        let zero = self
-                            .machine_ctx
-                            .new_gp_reg(RiscvGeneralPurposeRegister::Zero);
+                        let zero = self.machine_ctx.new_gp_reg(RiscvGpReg::Zero);
                         self.value_map
                             .insert(inst.into(), ValueCodegenResult::Register(zero));
                         zero
                     }
                     ValueKind::Bytes(bytes) => {
                         let imm: Immediate = bytes.into();
-                        let (rd, li) = InstData::new_li(&mut self.machine_ctx, imm);
-                        machine_function_layout!(mut self.machine_ctx, &function_name)
-                            .append_inst(li, self.block_map[&block])
-                            .unwrap();
+                        let (rd, li) = MachineInstData::new_li(&mut self.machine_ctx, imm);
+                        self.append_inst(&function_name, block, li);
                         rd
                     }
                     _ => {
@@ -1754,16 +1195,14 @@ impl CodegenContext {
                             _ => unimplemented!(),
                         };
 
-                        let (rd, fmv) = InstData::new_float_move(
+                        let (rd, fmv) = MachineInstData::new_float_move(
                             &mut self.machine_ctx,
                             dst_fmt,
                             FMvFmt::X,
                             operand,
                         );
 
-                        machine_function_layout!(mut self.machine_ctx, &function_name)
-                            .append_inst(fmv, self.block_map[&block])
-                            .unwrap();
+                        self.append_inst(&function_name, block, fmv);
 
                         // fneg => fsgnjn
                         let fmt = match val_data.ty().bytewidth() {
@@ -1772,7 +1211,7 @@ impl CodegenContext {
                             _ => unimplemented!(),
                         };
 
-                        let (rd, fsgnjn) = InstData::new_float_binary(
+                        let (rd, fsgnjn) = MachineInstData::new_float_binary(
                             &mut self.machine_ctx,
                             MachineFloatBinaryOp::Fsgnjn,
                             fmt,
@@ -1780,24 +1219,20 @@ impl CodegenContext {
                             rd,
                         );
 
-                        machine_function_layout!(mut self.machine_ctx, &function_name)
-                            .append_inst(fsgnjn, self.block_map[&block])
-                            .unwrap();
+                        self.append_inst(&function_name, block, fsgnjn);
 
                         self.value_map
                             .insert(inst.into(), ValueCodegenResult::Register(rd));
                     }
                     UnaryOp::Not => {
-                        let (rd, xori) = InstData::new_binary_imm(
+                        let (rd, xori) = MachineInstData::new_binary_imm(
                             &mut self.machine_ctx,
                             MachineBinaryImmOp::Xori,
                             operand,
                             (-1).into(),
                         );
 
-                        machine_function_layout!(mut self.machine_ctx, &function_name)
-                            .append_inst(xori, self.block_map[&block])
-                            .unwrap();
+                        self.append_inst(&function_name, block, xori);
 
                         self.value_map
                             .insert(inst.into(), ValueCodegenResult::Register(rd));
@@ -1805,6 +1240,7 @@ impl CodegenContext {
                 }
             }
             ValueKind::Cast(cast) => {
+                // TODO
                 let op = cast.op();
                 let val = cast.val();
 
@@ -1827,33 +1263,33 @@ impl CodegenContext {
                             8 => FMvFmt::D,
                             _ => unimplemented!(),
                         };
-                        let zero = self
-                            .machine_ctx
-                            .new_gp_reg(RiscvGeneralPurposeRegister::Zero);
-                        let (rd, fmv) =
-                            InstData::new_float_move(&mut self.machine_ctx, fmt, FMvFmt::X, zero);
-                        machine_function_layout!(mut self.machine_ctx, &function_name)
-                            .append_inst(fmv, self.block_map[&block])
-                            .unwrap();
+                        let zero = self.machine_ctx.new_gp_reg(RiscvGpReg::Zero);
+                        let (rd, fmv) = MachineInstData::new_float_move(
+                            &mut self.machine_ctx,
+                            fmt,
+                            FMvFmt::X,
+                            zero,
+                        );
+                        self.append_inst(&function_name, block, fmv);
                         rd
                     }
                     ValueKind::Bytes(bytes) => {
                         let imm: Immediate = bytes.into();
-                        let (rd, li) = InstData::new_li(&mut self.machine_ctx, imm);
+                        let (rd, li) = MachineInstData::new_li(&mut self.machine_ctx, imm);
                         let fmt = match val_data.ty().bytewidth() {
                             2 => FMvFmt::H,
                             4 => FMvFmt::S,
                             8 => FMvFmt::D,
                             _ => unimplemented!(),
                         };
-                        let (rd, fmv) =
-                            InstData::new_float_move(&mut self.machine_ctx, fmt, FMvFmt::X, rd);
-                        machine_function_layout!(mut self.machine_ctx, &function_name)
-                            .append_inst(li, self.block_map[&block])
-                            .unwrap();
-                        machine_function_layout!(mut self.machine_ctx, &function_name)
-                            .append_inst(fmv, self.block_map[&block])
-                            .unwrap();
+                        let (rd, fmv) = MachineInstData::new_float_move(
+                            &mut self.machine_ctx,
+                            fmt,
+                            FMvFmt::X,
+                            rd,
+                        );
+                        self.append_inst(&function_name, block, li);
+                        self.append_inst(&function_name, block, fmv);
                         rd
                     }
                     _ => {
@@ -1879,106 +1315,14 @@ impl CodegenContext {
                 }
             }
             ValueKind::Jump(jump) => {
-                let block = jump.dst();
+                let dst_block = jump.dst();
                 let args = jump.args();
+                let params = function_data.dfg().block_data(dst_block).unwrap().params();
 
-                let params = function_data.dfg().block_data(block).unwrap().params();
+                self.codegen_block_arg_pass(module, function, block, params, args);
 
-                assert_eq!(args.len(), params.len());
-
-                for (arg, param) in args.iter().zip(params.iter()) {
-                    // the register should have been assigned to the block argument.
-                    let rd = if let ValueCodegenResult::Register(reg) = self.get_value(*param) {
-                        *reg
-                    } else {
-                        unreachable!();
-                    };
-                    let arg_data = function_data.dfg().local_value_data(*arg).unwrap();
-                    match arg_data.kind() {
-                        ValueKind::GlobalSlot(_)
-                        | ValueKind::Array(_)
-                        | ValueKind::Struct(_)
-                        | ValueKind::Function
-                        | ValueKind::Store(_)
-                        | ValueKind::Jump(_)
-                        | ValueKind::Branch(_)
-                        | ValueKind::Return(_) => unreachable!(),
-                        ValueKind::Zero | ValueKind::Undef => {
-                            let zero = self
-                                .machine_ctx
-                                .new_gp_reg(RiscvGeneralPurposeRegister::Zero);
-
-                            if arg_data.ty().is_float() {
-                                let dst_fmt = match arg_data.ty().bytewidth() {
-                                    2 => FMvFmt::H,
-                                    4 => FMvFmt::S,
-                                    8 => FMvFmt::D,
-                                    _ => unimplemented!(),
-                                };
-                                let fmv = InstData::build_fmv(
-                                    &mut self.machine_ctx,
-                                    dst_fmt,
-                                    FMvFmt::X,
-                                    rd,
-                                    zero,
-                                );
-                                machine_function_layout!(mut self.machine_ctx, &function_name)
-                                    .append_inst(fmv, self.block_map[&block])
-                                    .unwrap();
-                            } else if arg_data.ty().is_int() || arg_data.ty().is_ptr() {
-                                let mv = InstData::build_gp_move(&mut self.machine_ctx, rd, zero);
-                                machine_function_layout!(mut self.machine_ctx, &function_name)
-                                    .append_inst(mv, self.block_map[&block])
-                                    .unwrap();
-                            } else {
-                                unreachable!()
-                            }
-                        }
-                        ValueKind::Bytes(bytes) => {
-                            let imm: Immediate = bytes.into();
-                            if arg_data.ty().is_float() {
-                                let (tmp, li) = InstData::new_li(&mut self.machine_ctx, imm);
-                                let mv = InstData::build_fp_move(&mut self.machine_ctx, rd, tmp);
-                                machine_function_layout!(mut self.machine_ctx, &function_name)
-                                    .append_inst(li, self.block_map[&block])
-                                    .unwrap();
-                                machine_function_layout!(mut self.machine_ctx, &function_name)
-                                    .append_inst(mv, self.block_map[&block])
-                                    .unwrap();
-                            } else if arg_data.ty().is_int() || arg_data.ty().is_ptr() {
-                                let li = InstData::build_li(&mut self.machine_ctx, rd, imm);
-                                machine_function_layout!(mut self.machine_ctx, &function_name)
-                                    .append_inst(li, self.block_map[&block])
-                                    .unwrap();
-                            } else {
-                                unreachable!()
-                            }
-                        }
-                        _ => {
-                            let codegen_result = self.get_value(*arg);
-                            let rs = if let ValueCodegenResult::Register(reg) = codegen_result {
-                                *reg
-                            } else {
-                                unreachable!();
-                            };
-                            let mv = if arg_data.ty().is_float() {
-                                InstData::build_fp_move(&mut self.machine_ctx, rd, rs)
-                            } else if arg_data.ty().is_int() || arg_data.ty().is_ptr() {
-                                InstData::build_gp_move(&mut self.machine_ctx, rd, rs)
-                            } else {
-                                unreachable!();
-                            };
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(mv, self.block_map[&block])
-                                .unwrap();
-                        }
-                    }
-                }
-
-                let j = InstData::new_j(&mut self.machine_ctx, self.block_map[&block]);
-                machine_function_layout!(mut self.machine_ctx, &function_name)
-                    .append_inst(j, self.block_map[&block])
-                    .unwrap();
+                let j = MachineInstData::new_j(&mut self.machine_ctx, self.block_map[&block]);
+                self.append_inst(&function_name, block, j);
             }
             ValueKind::Branch(branch) => {
                 let cond = branch.cond();
@@ -2000,10 +1344,8 @@ impl CodegenContext {
                     | ValueKind::Undef => unreachable!(),
                     ValueKind::Bytes(bytes) => {
                         let imm: Immediate = bytes.into();
-                        let (rd, li) = InstData::new_li(&mut self.machine_ctx, imm);
-                        machine_function_layout!(mut self.machine_ctx, &function_name)
-                            .append_inst(li, self.block_map[&block])
-                            .unwrap();
+                        let (rd, li) = MachineInstData::new_li(&mut self.machine_ctx, imm);
+                        self.append_inst(&function_name, block, li);
                         rd
                     }
                     _ => {
@@ -2016,107 +1358,13 @@ impl CodegenContext {
                     }
                 };
 
-                // params <- args
                 let params = function_data.dfg().block_data(then_block).unwrap().params();
                 let args = branch.then_args();
-
-                assert_eq!(params.len(), args.len());
-
-                // same as jump
-                for (arg, param) in args.iter().zip(params.iter()) {
-                    // the register should have been assigned to the block argument.
-                    let rd = if let ValueCodegenResult::Register(reg) = self.get_value(*param) {
-                        *reg
-                    } else {
-                        unreachable!();
-                    };
-                    let arg_data = function_data.dfg().local_value_data(*arg).unwrap();
-                    match arg_data.kind() {
-                        ValueKind::GlobalSlot(_)
-                        | ValueKind::Array(_)
-                        | ValueKind::Struct(_)
-                        | ValueKind::Function
-                        | ValueKind::Store(_)
-                        | ValueKind::Jump(_)
-                        | ValueKind::Branch(_)
-                        | ValueKind::Return(_) => unreachable!(),
-                        ValueKind::Zero | ValueKind::Undef => {
-                            let zero = self
-                                .machine_ctx
-                                .new_gp_reg(RiscvGeneralPurposeRegister::Zero);
-
-                            if arg_data.ty().is_float() {
-                                let dst_fmt = match arg_data.ty().bytewidth() {
-                                    2 => FMvFmt::H,
-                                    4 => FMvFmt::S,
-                                    8 => FMvFmt::D,
-                                    _ => unimplemented!(),
-                                };
-                                let fmv = InstData::build_fmv(
-                                    &mut self.machine_ctx,
-                                    dst_fmt,
-                                    FMvFmt::X,
-                                    rd,
-                                    zero,
-                                );
-                                machine_function_layout!(mut self.machine_ctx, &function_name)
-                                    .append_inst(fmv, self.block_map[&block])
-                                    .unwrap();
-                            } else if arg_data.ty().is_int() || arg_data.ty().is_ptr() {
-                                let mv = InstData::build_gp_move(&mut self.machine_ctx, rd, zero);
-                                machine_function_layout!(mut self.machine_ctx, &function_name)
-                                    .append_inst(mv, self.block_map[&block])
-                                    .unwrap();
-                            } else {
-                                unreachable!()
-                            }
-                        }
-                        ValueKind::Bytes(bytes) => {
-                            let imm: Immediate = bytes.into();
-                            if arg_data.ty().is_float() {
-                                let (tmp, li) = InstData::new_li(&mut self.machine_ctx, imm);
-                                let mv = InstData::build_fp_move(&mut self.machine_ctx, rd, tmp);
-                                machine_function_layout!(mut self.machine_ctx, &function_name)
-                                    .append_inst(li, self.block_map[&block])
-                                    .unwrap();
-                                machine_function_layout!(mut self.machine_ctx, &function_name)
-                                    .append_inst(mv, self.block_map[&block])
-                                    .unwrap();
-                            } else if arg_data.ty().is_int() || arg_data.ty().is_ptr() {
-                                let li = InstData::build_li(&mut self.machine_ctx, rd, imm);
-                                machine_function_layout!(mut self.machine_ctx, &function_name)
-                                    .append_inst(li, self.block_map[&block])
-                                    .unwrap();
-                            } else {
-                                unreachable!()
-                            }
-                        }
-                        _ => {
-                            let codegen_result = self.get_value(*arg);
-                            let rs = if let ValueCodegenResult::Register(reg) = codegen_result {
-                                *reg
-                            } else {
-                                unreachable!();
-                            };
-                            let mv = if arg_data.ty().is_float() {
-                                InstData::build_fp_move(&mut self.machine_ctx, rd, rs)
-                            } else if arg_data.ty().is_int() || arg_data.ty().is_ptr() {
-                                InstData::build_gp_move(&mut self.machine_ctx, rd, rs)
-                            } else {
-                                unreachable!();
-                            };
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(mv, self.block_map[&block])
-                                .unwrap();
-                        }
-                    }
-                }
+                self.codegen_block_arg_pass(module, function, block, params, args);
 
                 // bnez $cond, $then_block
-                let zero = self
-                    .machine_ctx
-                    .new_gp_reg(RiscvGeneralPurposeRegister::Zero);
-                let bne = InstData::new_branch(
+                let zero = self.machine_ctx.new_gp_reg(RiscvGpReg::Zero);
+                let bne = MachineInstData::new_branch(
                     &mut self.machine_ctx,
                     MachineBranchOp::Bne,
                     cond_reg,
@@ -2124,110 +1372,15 @@ impl CodegenContext {
                     self.block_map[&then_block],
                 );
 
-                machine_function_layout!(mut self.machine_ctx, &function_name)
-                    .append_inst(bne, self.block_map[&block])
-                    .unwrap();
+                self.append_inst(&function_name, block, bne);
 
-                // params <- args
                 let params = function_data.dfg().block_data(else_block).unwrap().params();
                 let args = branch.else_args();
-
-                assert_eq!(params.len(), args.len());
-
-                for (arg, param) in args.iter().zip(params.iter()) {
-                    // the register should have been assigned to the block argument.
-                    let rd = if let ValueCodegenResult::Register(reg) = self.get_value(*param) {
-                        *reg
-                    } else {
-                        unreachable!();
-                    };
-                    let arg_data = function_data.dfg().local_value_data(*arg).unwrap();
-                    match arg_data.kind() {
-                        ValueKind::GlobalSlot(_)
-                        | ValueKind::Array(_)
-                        | ValueKind::Struct(_)
-                        | ValueKind::Function
-                        | ValueKind::Store(_)
-                        | ValueKind::Jump(_)
-                        | ValueKind::Branch(_)
-                        | ValueKind::Return(_) => unreachable!(),
-                        ValueKind::Zero | ValueKind::Undef => {
-                            let zero = self
-                                .machine_ctx
-                                .new_gp_reg(RiscvGeneralPurposeRegister::Zero);
-
-                            if arg_data.ty().is_float() {
-                                let dst_fmt = match arg_data.ty().bytewidth() {
-                                    2 => FMvFmt::H,
-                                    4 => FMvFmt::S,
-                                    8 => FMvFmt::D,
-                                    _ => unimplemented!(),
-                                };
-                                let fmv = InstData::build_fmv(
-                                    &mut self.machine_ctx,
-                                    dst_fmt,
-                                    FMvFmt::X,
-                                    rd,
-                                    zero,
-                                );
-                                machine_function_layout!(mut self.machine_ctx, &function_name)
-                                    .append_inst(fmv, self.block_map[&block])
-                                    .unwrap();
-                            } else if arg_data.ty().is_int() || arg_data.ty().is_ptr() {
-                                let mv = InstData::build_gp_move(&mut self.machine_ctx, rd, zero);
-                                machine_function_layout!(mut self.machine_ctx, &function_name)
-                                    .append_inst(mv, self.block_map[&block])
-                                    .unwrap();
-                            } else {
-                                unreachable!()
-                            }
-                        }
-                        ValueKind::Bytes(bytes) => {
-                            let imm: Immediate = bytes.into();
-                            if arg_data.ty().is_float() {
-                                let (tmp, li) = InstData::new_li(&mut self.machine_ctx, imm);
-                                let mv = InstData::build_fp_move(&mut self.machine_ctx, rd, tmp);
-                                machine_function_layout!(mut self.machine_ctx, &function_name)
-                                    .append_inst(li, self.block_map[&block])
-                                    .unwrap();
-                                machine_function_layout!(mut self.machine_ctx, &function_name)
-                                    .append_inst(mv, self.block_map[&block])
-                                    .unwrap();
-                            } else if arg_data.ty().is_int() || arg_data.ty().is_ptr() {
-                                let li = InstData::build_li(&mut self.machine_ctx, rd, imm);
-                                machine_function_layout!(mut self.machine_ctx, &function_name)
-                                    .append_inst(li, self.block_map[&block])
-                                    .unwrap();
-                            } else {
-                                unreachable!()
-                            }
-                        }
-                        _ => {
-                            let codegen_result = self.get_value(*arg);
-                            let rs = if let ValueCodegenResult::Register(reg) = codegen_result {
-                                *reg
-                            } else {
-                                unreachable!();
-                            };
-                            let mv = if arg_data.ty().is_float() {
-                                InstData::build_fp_move(&mut self.machine_ctx, rd, rs)
-                            } else if arg_data.ty().is_int() || arg_data.ty().is_ptr() {
-                                InstData::build_gp_move(&mut self.machine_ctx, rd, rs)
-                            } else {
-                                unreachable!();
-                            };
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(mv, self.block_map[&block])
-                                .unwrap();
-                        }
-                    }
-                }
+                self.codegen_block_arg_pass(module, function, block, params, args);
 
                 // j $else_block
-                let j = InstData::new_j(&mut self.machine_ctx, self.block_map[&else_block]);
-                machine_function_layout!(mut self.machine_ctx, &function_name)
-                    .append_inst(j, self.block_map[&block])
-                    .unwrap();
+                let j = MachineInstData::new_j(&mut self.machine_ctx, self.block_map[&else_block]);
+                self.append_inst(&function_name, block, j);
             }
             ValueKind::GetElemPtr(gep) => {
                 let ptr = gep.ptr();
@@ -2238,46 +1391,38 @@ impl CodegenContext {
                         let base = *base;
                         let offset = *offset;
                         if check_itype_imm(offset) {
-                            let (rd, addi) = InstData::new_binary_imm(
+                            let (rd, addi) = MachineInstData::new_binary_imm(
                                 &mut self.machine_ctx,
                                 MachineBinaryImmOp::Addi,
                                 base,
                                 offset,
                             );
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(addi, self.block_map[&block])
-                                .unwrap();
+                            self.append_inst(&function_name, block, addi);
                             rd
                         } else {
                             // li
-                            let (rd, li) = InstData::new_li(&mut self.machine_ctx, offset);
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(li, self.block_map[&block])
-                                .unwrap();
+                            let (rd, li) = MachineInstData::new_li(&mut self.machine_ctx, offset);
+                            self.append_inst(&function_name, block, li);
                             // add
-                            let (rd, add) = InstData::new_binary(
+                            let (rd, add) = MachineInstData::new_binary(
                                 &mut self.machine_ctx,
                                 MachineBinaryOp::Add,
                                 base,
                                 rd,
                             );
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(add, self.block_map[&block])
-                                .unwrap();
+                            self.append_inst(&function_name, block, add);
                             rd
                         }
                     }
                     ValueCodegenResult::MachineSymbol(symbol) => {
                         // la
                         let symbol = symbol.clone();
-                        let (rd, la) = InstData::new_pseudo_load(
+                        let (rd, la) = MachineInstData::new_pseudo_load(
                             &mut self.machine_ctx,
                             PseudoLoadKind::Address,
                             symbol,
                         );
-                        machine_function_layout!(mut self.machine_ctx, &function_name)
-                            .append_inst(la, self.block_map[&block])
-                            .unwrap();
+                        self.append_inst(&function_name, block, la);
                         rd
                     }
                 };
@@ -2310,116 +1455,94 @@ impl CodegenContext {
                             // no need to do anything
                         }
                         ValueKind::Bytes(bytes) => {
-                            let (rd, li) = InstData::new_li(&mut self.machine_ctx, bytes.into());
-                            machine_function_layout!(mut self.machine_ctx, &function_name)
-                                .append_inst(li, self.block_map[&block])
-                                .unwrap();
+                            let (rd, li) =
+                                MachineInstData::new_li(&mut self.machine_ctx, bytes.into());
+                            self.append_inst(&function_name, block, li);
                             match shamt {
                                 Some(shamt) => {
                                     // mul can be reduced to slli
-                                    let (rd, slli) = InstData::new_binary_imm(
+                                    let (rd, slli) = MachineInstData::new_binary_imm(
                                         &mut self.machine_ctx,
                                         MachineBinaryImmOp::Slli,
                                         rd,
                                         shamt.into(),
                                     );
-                                    machine_function_layout!(mut self.machine_ctx, &function_name)
-                                        .append_inst(slli, self.block_map[&block])
-                                        .unwrap();
+                                    self.append_inst(&function_name, block, slli);
                                     // add
-                                    let (rd, add) = InstData::new_binary(
+                                    let (rd, add) = MachineInstData::new_binary(
                                         &mut self.machine_ctx,
                                         MachineBinaryOp::Add,
                                         ptr_reg,
                                         rd,
                                     );
-                                    machine_function_layout!(mut self.machine_ctx, &function_name)
-                                        .append_inst(add, self.block_map[&block])
-                                        .unwrap();
+                                    self.append_inst(&function_name, block, add);
                                     ptr_reg = rd;
                                 }
                                 None => {
                                     // li + mul
-                                    let (rd, li) =
-                                        InstData::new_li(&mut self.machine_ctx, bytewidth.into());
-                                    machine_function_layout!(mut self.machine_ctx, &function_name)
-                                        .append_inst(li, self.block_map[&block])
-                                        .unwrap();
-                                    let (rd, mul) = InstData::new_binary(
+                                    let (rd, li) = MachineInstData::new_li(
+                                        &mut self.machine_ctx,
+                                        bytewidth.into(),
+                                    );
+                                    self.append_inst(&function_name, block, li);
+                                    let (rd, mul) = MachineInstData::new_binary(
                                         &mut self.machine_ctx,
                                         MachineBinaryOp::Mul,
                                         rd,
                                         rd,
                                     );
-                                    machine_function_layout!(mut self.machine_ctx, &function_name)
-                                        .append_inst(mul, self.block_map[&block])
-                                        .unwrap();
+                                    self.append_inst(&function_name, block, mul);
                                     // add
-                                    let (rd, add) = InstData::new_binary(
+                                    let (rd, add) = MachineInstData::new_binary(
                                         &mut self.machine_ctx,
                                         MachineBinaryOp::Add,
                                         ptr_reg,
                                         rd,
                                     );
-                                    machine_function_layout!(mut self.machine_ctx, &function_name)
-                                        .append_inst(add, self.block_map[&block])
-                                        .unwrap();
+                                    self.append_inst(&function_name, block, add);
                                     ptr_reg = rd;
                                 }
                             }
                         }
                         _ => {
-                            let codegen_result = self.get_value(*index);
-                            let rs = if let ValueCodegenResult::Register(reg) = codegen_result {
-                                *reg
-                            } else {
-                                unreachable!();
-                            };
+                            let rs = self.get_value_as_register(*index);
                             match shamt {
                                 Some(shamt) => {
                                     // slli
-                                    let (rs, slli) = InstData::new_binary_imm(
+                                    let (rs, slli) = MachineInstData::new_binary_imm(
                                         &mut self.machine_ctx,
                                         MachineBinaryImmOp::Slli,
                                         rs,
                                         shamt.into(),
                                     );
-                                    machine_function_layout!(mut self.machine_ctx, &function_name)
-                                        .append_inst(slli, self.block_map[&block])
-                                        .unwrap();
+                                    self.append_inst(&function_name, block, slli);
                                     // add
-                                    let (rd, add) = InstData::new_binary(
+                                    let (rd, add) = MachineInstData::new_binary(
                                         &mut self.machine_ctx,
                                         MachineBinaryOp::Add,
                                         ptr_reg,
                                         rs,
                                     );
-                                    machine_function_layout!(mut self.machine_ctx, &function_name)
-                                        .append_inst(add, self.block_map[&block])
-                                        .unwrap();
+                                    self.append_inst(&function_name, block, add);
                                     ptr_reg = rd;
                                 }
                                 None => {
                                     // mul
-                                    let (rs, mul) = InstData::new_binary(
+                                    let (rs, mul) = MachineInstData::new_binary(
                                         &mut self.machine_ctx,
                                         MachineBinaryOp::Mul,
                                         rs,
                                         rs,
                                     );
-                                    machine_function_layout!(mut self.machine_ctx, &function_name)
-                                        .append_inst(mul, self.block_map[&block])
-                                        .unwrap();
+                                    self.append_inst(&function_name, block, mul);
                                     // add
-                                    let (rd, add) = InstData::new_binary(
+                                    let (rd, add) = MachineInstData::new_binary(
                                         &mut self.machine_ctx,
                                         MachineBinaryOp::Add,
                                         ptr_reg,
                                         rs,
                                     );
-                                    machine_function_layout!(mut self.machine_ctx, &function_name)
-                                        .append_inst(add, self.block_map[&block])
-                                        .unwrap();
+                                    self.append_inst(&function_name, block, add);
                                     ptr_reg = rd;
                                 }
                             }
@@ -2438,7 +1561,28 @@ impl CodegenContext {
                     .insert(inst.into(), ValueCodegenResult::Register(ptr_reg));
             }
             ValueKind::Call(call) => {
-                todo!()
+                // TODO
+                let callee = call.callee();
+                let args = call.args();
+
+                let function_data = module.function_data(callee.into()).unwrap();
+                let function_name: MachineSymbol = module.value_name(callee).into();
+
+                let mut gp_reg_count = 0;
+                let mut fp_reg_count = 0;
+
+                for arg in args {
+                    let arg_data = function_data.dfg().local_value_data(*arg).unwrap();
+                    let ty = arg_data.ty();
+
+                    if ty.is_float() {
+                        todo!()
+                    } else if ty.is_int() || ty.is_ptr() {
+                        todo!()
+                    } else {
+                        unreachable!()
+                    }
+                }
             }
             ValueKind::Return(ret) => {
                 let val = ret.val();
@@ -2452,25 +1596,19 @@ impl CodegenContext {
                     };
 
                     if val_data.ty().is_float() {
-                        let fa0 = self.machine_ctx.new_fp_reg(RiscvFloatingPointRegister::Fa0);
-                        let mv = InstData::build_fp_move(&mut self.machine_ctx, fa0, reg);
-                        machine_function_layout!(mut self.machine_ctx, &function_name)
-                            .append_inst(mv, self.block_map[&block])
-                            .unwrap();
+                        let fa0 = self.machine_ctx.new_fp_reg(RiscvFpReg::Fa0);
+                        let mv = MachineInstData::build_fp_move(&mut self.machine_ctx, fa0, reg);
+                        self.append_inst(&function_name, block, mv);
                     } else if val_data.ty().is_int() || val_data.ty().is_ptr() {
-                        let a0 = self.machine_ctx.new_gp_reg(RiscvGeneralPurposeRegister::A0);
-                        let mv = InstData::build_gp_move(&mut self.machine_ctx, a0, reg);
-                        machine_function_layout!(mut self.machine_ctx, &function_name)
-                            .append_inst(mv, self.block_map[&block])
-                            .unwrap();
+                        let a0 = self.machine_ctx.new_gp_reg(RiscvGpReg::A0);
+                        let mv = MachineInstData::build_gp_move(&mut self.machine_ctx, a0, reg);
+                        self.append_inst(&function_name, block, mv);
                     } else {
                         unreachable!()
                     }
                 }
-                let ret = InstData::new_ret(&mut self.machine_ctx);
-                machine_function_layout!(mut self.machine_ctx, &function_name)
-                    .append_inst(ret, self.block_map[&block])
-                    .unwrap();
+                let ret = MachineInstData::new_ret(&mut self.machine_ctx);
+                self.append_inst(&function_name, block, ret);
             }
             ValueKind::BlockParam
             | ValueKind::Function
@@ -2483,6 +1621,211 @@ impl CodegenContext {
         }
 
         todo!()
+    }
+
+    fn codegen_block_arg_pass(
+        &mut self,
+        module: &Module,
+        function: Function,
+        block: Block,
+        params: &[Value],
+        args: &[Value],
+    ) {
+        let function_data = module.function_data(function).unwrap();
+        let function_name = module.value_name(function.into()).into();
+
+        assert_eq!(args.len(), params.len());
+        for (arg, param) in args.iter().zip(params.iter()) {
+            // the register should have been assigned to the block argument.
+            let rd = self.get_value_as_register(*param);
+            let arg_data = function_data.dfg().local_value_data(*arg).unwrap();
+            match arg_data.kind() {
+                ValueKind::GlobalSlot(_)
+                | ValueKind::Array(_)
+                | ValueKind::Struct(_)
+                | ValueKind::Function
+                | ValueKind::Store(_)
+                | ValueKind::Jump(_)
+                | ValueKind::Branch(_)
+                | ValueKind::Return(_) => unreachable!(),
+                ValueKind::Zero | ValueKind::Undef => {
+                    let zero = self.machine_ctx.new_gp_reg(RiscvGpReg::Zero);
+
+                    if arg_data.ty().is_float() {
+                        let dst_fmt = match arg_data.ty().bytewidth() {
+                            2 => FMvFmt::H,
+                            4 => FMvFmt::S,
+                            8 => FMvFmt::D,
+                            _ => unimplemented!(),
+                        };
+                        let fmv = MachineInstData::build_fmv(
+                            &mut self.machine_ctx,
+                            dst_fmt,
+                            FMvFmt::X,
+                            rd,
+                            zero,
+                        );
+                        self.append_inst(&function_name, block, fmv);
+                    } else if arg_data.ty().is_int() || arg_data.ty().is_ptr() {
+                        let mv = MachineInstData::build_gp_move(&mut self.machine_ctx, rd, zero);
+                        self.append_inst(&function_name, block, mv);
+                    } else {
+                        unreachable!()
+                    }
+                }
+                ValueKind::Bytes(bytes) => {
+                    let imm: Immediate = bytes.into();
+                    if arg_data.ty().is_float() {
+                        let (tmp, li) = MachineInstData::new_li(&mut self.machine_ctx, imm);
+                        let mv = MachineInstData::build_fp_move(&mut self.machine_ctx, rd, tmp);
+                        self.append_inst(&function_name, block, li);
+                        self.append_inst(&function_name, block, mv);
+                    } else if arg_data.ty().is_int() || arg_data.ty().is_ptr() {
+                        let li = MachineInstData::build_li(&mut self.machine_ctx, rd, imm);
+                        self.append_inst(&function_name, block, li);
+                    } else {
+                        unreachable!()
+                    }
+                }
+                _ => {
+                    let rs = self.get_value_as_register(*arg);
+                    let mv = if arg_data.ty().is_float() {
+                        MachineInstData::build_fp_move(&mut self.machine_ctx, rd, rs)
+                    } else if arg_data.ty().is_int() || arg_data.ty().is_ptr() {
+                        MachineInstData::build_gp_move(&mut self.machine_ctx, rd, rs)
+                    } else {
+                        unreachable!();
+                    };
+                    self.append_inst(&function_name, block, mv);
+                }
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn codegen_bianry_reg(
+        &mut self,
+        module: &Module,
+        function: Function,
+        block: Block,
+        inst: Inst,
+        op: BinaryOp,
+        lhs: Register,
+        rhs: Register,
+        bytewidth: usize,
+    ) {
+        let function_name = module.value_name(function.into()).into();
+        let op = match (op, bytewidth) {
+            (BinaryOp::Add, 4) => MachineBinaryOp::Addw,
+            (BinaryOp::Add, 8) => MachineBinaryOp::Add,
+            (BinaryOp::Add, _) => unimplemented!(),
+            (BinaryOp::Sub, 4) => MachineBinaryOp::Subw,
+            (BinaryOp::Sub, 8) => MachineBinaryOp::Sub,
+            (BinaryOp::Sub, _) => unimplemented!(),
+            (BinaryOp::Mul, 4) => MachineBinaryOp::Mulw,
+            (BinaryOp::Mul, 8) => MachineBinaryOp::Mul,
+            (BinaryOp::Mul, _) => unimplemented!(),
+            (BinaryOp::UDiv, 4) => MachineBinaryOp::Divuw,
+            (BinaryOp::UDiv, 8) => MachineBinaryOp::Divu,
+            (BinaryOp::UDiv, _) => unimplemented!(),
+            (BinaryOp::SDiv, 4) => MachineBinaryOp::Divw,
+            (BinaryOp::SDiv, 8) => MachineBinaryOp::Div,
+            (BinaryOp::SDiv, _) => unimplemented!(),
+            (BinaryOp::URem, 4) => MachineBinaryOp::Remuw,
+            (BinaryOp::URem, 8) => MachineBinaryOp::Remu,
+            (BinaryOp::URem, _) => unimplemented!(),
+            (BinaryOp::SRem, 4) => MachineBinaryOp::Remw,
+            (BinaryOp::SRem, 8) => MachineBinaryOp::Rem,
+            (BinaryOp::SRem, _) => unimplemented!(),
+            (BinaryOp::And, _) => MachineBinaryOp::And,
+            (BinaryOp::Or, _) => MachineBinaryOp::Or,
+            (BinaryOp::Xor, _) => MachineBinaryOp::Xor,
+            (BinaryOp::Shl, _) => MachineBinaryOp::Sll,
+            (BinaryOp::LShr, _) => MachineBinaryOp::Srl,
+            (BinaryOp::AShr, _) => MachineBinaryOp::Sra,
+            _ => unreachable!(),
+        };
+        let (rd, machine_inst) = MachineInstData::new_binary(&mut self.machine_ctx, op, lhs, rhs);
+        self.append_inst(&function_name, block, machine_inst);
+        self.value_map
+            .insert(inst.into(), ValueCodegenResult::Register(rd));
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn codegen_binary_imm(
+        &mut self,
+        module: &Module,
+        function: Function,
+        block: Block,
+        inst: Inst,
+        op: BinaryOp,
+        lhs: Register,
+        rhs: Immediate,
+        bytewidth: usize,
+    ) {
+        let function_name = module.value_name(function.into()).into();
+        let rhs: Immediate = if let BinaryOp::Sub = op {
+            // using addi to sub, so negate the immediate
+            (-rhs.0).into()
+        } else {
+            rhs.0.into()
+        };
+        let op = match (op, bytewidth) {
+            (BinaryOp::Add | BinaryOp::Sub, 4) => MachineBinaryImmOp::Addiw,
+            (BinaryOp::Add | BinaryOp::Sub, 8) => MachineBinaryImmOp::Addi,
+            (BinaryOp::Add | BinaryOp::Sub, _) => unreachable!(),
+            (BinaryOp::Or, _) => MachineBinaryImmOp::Ori,
+            (BinaryOp::And, _) => MachineBinaryImmOp::Andi,
+            (BinaryOp::Xor, _) => MachineBinaryImmOp::Xori,
+            (BinaryOp::Shl, _) => MachineBinaryImmOp::Slli,
+            (BinaryOp::LShr, _) => MachineBinaryImmOp::Srli,
+            (BinaryOp::AShr, _) => MachineBinaryImmOp::Srai,
+            _ => unreachable!(),
+        };
+        let (rd, machine_inst) =
+            MachineInstData::new_binary_imm(&mut self.machine_ctx, op, lhs, rhs);
+        self.append_inst(&function_name, block, machine_inst);
+        self.value_map
+            .insert(inst.into(), ValueCodegenResult::Register(rd));
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn codegen_binary_imm_li(
+        &mut self,
+        module: &Module,
+        function: Function,
+        block: Block,
+        inst: Inst,
+        op: BinaryOp,
+        lhs: Register,
+        rhs: Immediate,
+        bytewidth: usize,
+    ) {
+        let function_name = module.value_name(function.into()).into();
+        let (rhs, li) = MachineInstData::new_li(&mut self.machine_ctx, rhs);
+        self.append_inst(&function_name, block, li);
+        let op = match (op, bytewidth) {
+            (BinaryOp::Mul, 4) => MachineBinaryOp::Mulw,
+            (BinaryOp::Mul, 8) => MachineBinaryOp::Mul,
+            (BinaryOp::Mul, _) => unimplemented!(),
+            (BinaryOp::UDiv, 4) => MachineBinaryOp::Divuw,
+            (BinaryOp::UDiv, 8) => MachineBinaryOp::Divu,
+            (BinaryOp::UDiv, _) => unimplemented!(),
+            (BinaryOp::SDiv, 4) => MachineBinaryOp::Divw,
+            (BinaryOp::SDiv, 8) => MachineBinaryOp::Div,
+            (BinaryOp::SDiv, _) => unimplemented!(),
+            (BinaryOp::URem, 4) => MachineBinaryOp::Remuw,
+            (BinaryOp::URem, 8) => MachineBinaryOp::Remu,
+            (BinaryOp::URem, _) => unimplemented!(),
+            (BinaryOp::SRem, 4) => MachineBinaryOp::Remw,
+            (BinaryOp::SRem, 8) => MachineBinaryOp::Rem,
+            (BinaryOp::SRem, _) => unimplemented!(),
+            _ => unreachable!(),
+        };
+        let (rd, machine_inst) = MachineInstData::new_binary(&mut self.machine_ctx, op, lhs, rhs);
+        self.append_inst(&function_name, block, machine_inst);
+        self.value_map
+            .insert(inst.into(), ValueCodegenResult::Register(rd));
     }
 }
 

@@ -321,7 +321,7 @@ pub struct MachineContext {
     /// The instructions in the context.
     ///
     /// TODO: This arena-style storage can be reimplemented with a simple [Vec]
-    insts: HashMap<MachineInst, InstData>,
+    insts: HashMap<MachineInst, MachineInstData>,
 }
 
 impl MachineContext {
@@ -335,11 +335,11 @@ impl MachineContext {
         })
     }
 
-    pub fn new_gp_reg(&mut self, kind: RiscvGeneralPurposeRegister) -> Register {
+    pub fn new_gp_reg(&mut self, kind: RiscvGpReg) -> Register {
         Register::General(kind)
     }
 
-    pub fn new_fp_reg(&mut self, kind: RiscvFloatingPointRegister) -> Register {
+    pub fn new_fp_reg(&mut self, kind: RiscvFpReg) -> Register {
         Register::FloatingPoint(kind)
     }
 
@@ -347,17 +347,17 @@ impl MachineContext {
     pub fn new_block(&mut self) -> MachineBlock { MachineBlock(self.block_allocator.allocate()) }
 
     /// Create a new instruction.
-    fn new_inst(&mut self, data: InstData) -> MachineInst {
+    fn new_inst(&mut self, data: MachineInstData) -> MachineInst {
         let inst = MachineInst(self.inst_allocator.allocate());
         self.insts.insert(inst, data);
         inst
     }
 
     /// Get the instruction data.
-    fn inst_data(&self, inst: MachineInst) -> Option<&InstData> { self.insts.get(&inst) }
+    fn inst_data(&self, inst: MachineInst) -> Option<&MachineInstData> { self.insts.get(&inst) }
 
     /// Get the mutable instruction data.
-    fn inst_data_mut(&mut self, inst: MachineInst) -> Option<&mut InstData> {
+    fn inst_data_mut(&mut self, inst: MachineInst) -> Option<&mut MachineInstData> {
         self.insts.get_mut(&inst)
     }
 
@@ -469,7 +469,7 @@ pub struct VirtualRegister {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
-pub enum RiscvGeneralPurposeRegister {
+pub enum RiscvGpReg {
     Zero = 0,
     Ra = 1,
     Sp = 2,
@@ -504,88 +504,88 @@ pub enum RiscvGeneralPurposeRegister {
     T6 = 31,
 }
 
-impl From<u8> for RiscvGeneralPurposeRegister {
+impl From<u8> for RiscvGpReg {
     fn from(val: u8) -> Self {
         match val {
-            0 => RiscvGeneralPurposeRegister::Zero,
-            1 => RiscvGeneralPurposeRegister::Ra,
-            2 => RiscvGeneralPurposeRegister::Sp,
-            3 => RiscvGeneralPurposeRegister::Gp,
-            4 => RiscvGeneralPurposeRegister::Tp,
-            5 => RiscvGeneralPurposeRegister::T0,
-            6 => RiscvGeneralPurposeRegister::T1,
-            7 => RiscvGeneralPurposeRegister::T2,
-            8 => RiscvGeneralPurposeRegister::S0,
-            9 => RiscvGeneralPurposeRegister::S1,
-            10 => RiscvGeneralPurposeRegister::A0,
-            11 => RiscvGeneralPurposeRegister::A1,
-            12 => RiscvGeneralPurposeRegister::A2,
-            13 => RiscvGeneralPurposeRegister::A3,
-            14 => RiscvGeneralPurposeRegister::A4,
-            15 => RiscvGeneralPurposeRegister::A5,
-            16 => RiscvGeneralPurposeRegister::A6,
-            17 => RiscvGeneralPurposeRegister::A7,
-            18 => RiscvGeneralPurposeRegister::S2,
-            19 => RiscvGeneralPurposeRegister::S3,
-            20 => RiscvGeneralPurposeRegister::S4,
-            21 => RiscvGeneralPurposeRegister::S5,
-            22 => RiscvGeneralPurposeRegister::S6,
-            23 => RiscvGeneralPurposeRegister::S7,
-            24 => RiscvGeneralPurposeRegister::S8,
-            25 => RiscvGeneralPurposeRegister::S9,
-            26 => RiscvGeneralPurposeRegister::S10,
-            27 => RiscvGeneralPurposeRegister::S11,
-            28 => RiscvGeneralPurposeRegister::T3,
-            29 => RiscvGeneralPurposeRegister::T4,
-            30 => RiscvGeneralPurposeRegister::T5,
-            31 => RiscvGeneralPurposeRegister::T6,
+            0 => RiscvGpReg::Zero,
+            1 => RiscvGpReg::Ra,
+            2 => RiscvGpReg::Sp,
+            3 => RiscvGpReg::Gp,
+            4 => RiscvGpReg::Tp,
+            5 => RiscvGpReg::T0,
+            6 => RiscvGpReg::T1,
+            7 => RiscvGpReg::T2,
+            8 => RiscvGpReg::S0,
+            9 => RiscvGpReg::S1,
+            10 => RiscvGpReg::A0,
+            11 => RiscvGpReg::A1,
+            12 => RiscvGpReg::A2,
+            13 => RiscvGpReg::A3,
+            14 => RiscvGpReg::A4,
+            15 => RiscvGpReg::A5,
+            16 => RiscvGpReg::A6,
+            17 => RiscvGpReg::A7,
+            18 => RiscvGpReg::S2,
+            19 => RiscvGpReg::S3,
+            20 => RiscvGpReg::S4,
+            21 => RiscvGpReg::S5,
+            22 => RiscvGpReg::S6,
+            23 => RiscvGpReg::S7,
+            24 => RiscvGpReg::S8,
+            25 => RiscvGpReg::S9,
+            26 => RiscvGpReg::S10,
+            27 => RiscvGpReg::S11,
+            28 => RiscvGpReg::T3,
+            29 => RiscvGpReg::T4,
+            30 => RiscvGpReg::T5,
+            31 => RiscvGpReg::T6,
             _ => unreachable!(),
         }
     }
 }
 
-impl fmt::Display for RiscvGeneralPurposeRegister {
+impl fmt::Display for RiscvGpReg {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RiscvGeneralPurposeRegister::Zero => write!(f, "zero"),
-            RiscvGeneralPurposeRegister::Ra => write!(f, "ra"),
-            RiscvGeneralPurposeRegister::Sp => write!(f, "sp"),
-            RiscvGeneralPurposeRegister::Gp => write!(f, "gp"),
-            RiscvGeneralPurposeRegister::Tp => write!(f, "tp"),
-            RiscvGeneralPurposeRegister::T0 => write!(f, "t0"),
-            RiscvGeneralPurposeRegister::T1 => write!(f, "t1"),
-            RiscvGeneralPurposeRegister::T2 => write!(f, "t2"),
-            RiscvGeneralPurposeRegister::S0 => write!(f, "s0"),
-            RiscvGeneralPurposeRegister::S1 => write!(f, "s1"),
-            RiscvGeneralPurposeRegister::A0 => write!(f, "a0"),
-            RiscvGeneralPurposeRegister::A1 => write!(f, "a1"),
-            RiscvGeneralPurposeRegister::A2 => write!(f, "a2"),
-            RiscvGeneralPurposeRegister::A3 => write!(f, "a3"),
-            RiscvGeneralPurposeRegister::A4 => write!(f, "a4"),
-            RiscvGeneralPurposeRegister::A5 => write!(f, "a5"),
-            RiscvGeneralPurposeRegister::A6 => write!(f, "a6"),
-            RiscvGeneralPurposeRegister::A7 => write!(f, "a7"),
-            RiscvGeneralPurposeRegister::S2 => write!(f, "s2"),
-            RiscvGeneralPurposeRegister::S3 => write!(f, "s3"),
-            RiscvGeneralPurposeRegister::S4 => write!(f, "s4"),
-            RiscvGeneralPurposeRegister::S5 => write!(f, "s5"),
-            RiscvGeneralPurposeRegister::S6 => write!(f, "s6"),
-            RiscvGeneralPurposeRegister::S7 => write!(f, "s7"),
-            RiscvGeneralPurposeRegister::S8 => write!(f, "s8"),
-            RiscvGeneralPurposeRegister::S9 => write!(f, "s9"),
-            RiscvGeneralPurposeRegister::S10 => write!(f, "s10"),
-            RiscvGeneralPurposeRegister::S11 => write!(f, "s11"),
-            RiscvGeneralPurposeRegister::T3 => write!(f, "t3"),
-            RiscvGeneralPurposeRegister::T4 => write!(f, "t4"),
-            RiscvGeneralPurposeRegister::T5 => write!(f, "t5"),
-            RiscvGeneralPurposeRegister::T6 => write!(f, "t6"),
+            RiscvGpReg::Zero => write!(f, "zero"),
+            RiscvGpReg::Ra => write!(f, "ra"),
+            RiscvGpReg::Sp => write!(f, "sp"),
+            RiscvGpReg::Gp => write!(f, "gp"),
+            RiscvGpReg::Tp => write!(f, "tp"),
+            RiscvGpReg::T0 => write!(f, "t0"),
+            RiscvGpReg::T1 => write!(f, "t1"),
+            RiscvGpReg::T2 => write!(f, "t2"),
+            RiscvGpReg::S0 => write!(f, "s0"),
+            RiscvGpReg::S1 => write!(f, "s1"),
+            RiscvGpReg::A0 => write!(f, "a0"),
+            RiscvGpReg::A1 => write!(f, "a1"),
+            RiscvGpReg::A2 => write!(f, "a2"),
+            RiscvGpReg::A3 => write!(f, "a3"),
+            RiscvGpReg::A4 => write!(f, "a4"),
+            RiscvGpReg::A5 => write!(f, "a5"),
+            RiscvGpReg::A6 => write!(f, "a6"),
+            RiscvGpReg::A7 => write!(f, "a7"),
+            RiscvGpReg::S2 => write!(f, "s2"),
+            RiscvGpReg::S3 => write!(f, "s3"),
+            RiscvGpReg::S4 => write!(f, "s4"),
+            RiscvGpReg::S5 => write!(f, "s5"),
+            RiscvGpReg::S6 => write!(f, "s6"),
+            RiscvGpReg::S7 => write!(f, "s7"),
+            RiscvGpReg::S8 => write!(f, "s8"),
+            RiscvGpReg::S9 => write!(f, "s9"),
+            RiscvGpReg::S10 => write!(f, "s10"),
+            RiscvGpReg::S11 => write!(f, "s11"),
+            RiscvGpReg::T3 => write!(f, "t3"),
+            RiscvGpReg::T4 => write!(f, "t4"),
+            RiscvGpReg::T5 => write!(f, "t5"),
+            RiscvGpReg::T6 => write!(f, "t6"),
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
-pub enum RiscvFloatingPointRegister {
+pub enum RiscvFpReg {
     Ft0 = 0,
     Ft1 = 1,
     Ft2 = 2,
@@ -620,81 +620,81 @@ pub enum RiscvFloatingPointRegister {
     Ft11 = 31,
 }
 
-impl From<u8> for RiscvFloatingPointRegister {
+impl From<u8> for RiscvFpReg {
     fn from(value: u8) -> Self {
         match value {
-            0 => RiscvFloatingPointRegister::Ft0,
-            1 => RiscvFloatingPointRegister::Ft1,
-            2 => RiscvFloatingPointRegister::Ft2,
-            3 => RiscvFloatingPointRegister::Ft3,
-            4 => RiscvFloatingPointRegister::Ft4,
-            5 => RiscvFloatingPointRegister::Ft5,
-            6 => RiscvFloatingPointRegister::Ft6,
-            7 => RiscvFloatingPointRegister::Ft7,
-            8 => RiscvFloatingPointRegister::Fs0,
-            9 => RiscvFloatingPointRegister::Fs1,
-            10 => RiscvFloatingPointRegister::Fa0,
-            11 => RiscvFloatingPointRegister::Fa1,
-            12 => RiscvFloatingPointRegister::Fa2,
-            13 => RiscvFloatingPointRegister::Fa3,
-            14 => RiscvFloatingPointRegister::Fa4,
-            15 => RiscvFloatingPointRegister::Fa5,
-            16 => RiscvFloatingPointRegister::Fa6,
-            17 => RiscvFloatingPointRegister::Fa7,
-            18 => RiscvFloatingPointRegister::Fs2,
-            19 => RiscvFloatingPointRegister::Fs3,
-            20 => RiscvFloatingPointRegister::Fs4,
-            21 => RiscvFloatingPointRegister::Fs5,
-            22 => RiscvFloatingPointRegister::Fs6,
-            23 => RiscvFloatingPointRegister::Fs7,
-            24 => RiscvFloatingPointRegister::Fs8,
-            25 => RiscvFloatingPointRegister::Fs9,
-            26 => RiscvFloatingPointRegister::Fs10,
-            27 => RiscvFloatingPointRegister::Fs11,
-            28 => RiscvFloatingPointRegister::Ft8,
-            29 => RiscvFloatingPointRegister::Ft9,
-            30 => RiscvFloatingPointRegister::Ft10,
-            31 => RiscvFloatingPointRegister::Ft11,
+            0 => RiscvFpReg::Ft0,
+            1 => RiscvFpReg::Ft1,
+            2 => RiscvFpReg::Ft2,
+            3 => RiscvFpReg::Ft3,
+            4 => RiscvFpReg::Ft4,
+            5 => RiscvFpReg::Ft5,
+            6 => RiscvFpReg::Ft6,
+            7 => RiscvFpReg::Ft7,
+            8 => RiscvFpReg::Fs0,
+            9 => RiscvFpReg::Fs1,
+            10 => RiscvFpReg::Fa0,
+            11 => RiscvFpReg::Fa1,
+            12 => RiscvFpReg::Fa2,
+            13 => RiscvFpReg::Fa3,
+            14 => RiscvFpReg::Fa4,
+            15 => RiscvFpReg::Fa5,
+            16 => RiscvFpReg::Fa6,
+            17 => RiscvFpReg::Fa7,
+            18 => RiscvFpReg::Fs2,
+            19 => RiscvFpReg::Fs3,
+            20 => RiscvFpReg::Fs4,
+            21 => RiscvFpReg::Fs5,
+            22 => RiscvFpReg::Fs6,
+            23 => RiscvFpReg::Fs7,
+            24 => RiscvFpReg::Fs8,
+            25 => RiscvFpReg::Fs9,
+            26 => RiscvFpReg::Fs10,
+            27 => RiscvFpReg::Fs11,
+            28 => RiscvFpReg::Ft8,
+            29 => RiscvFpReg::Ft9,
+            30 => RiscvFpReg::Ft10,
+            31 => RiscvFpReg::Ft11,
             _ => unreachable!(),
         }
     }
 }
 
-impl fmt::Display for RiscvFloatingPointRegister {
+impl fmt::Display for RiscvFpReg {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RiscvFloatingPointRegister::Ft0 => write!(f, "ft0"),
-            RiscvFloatingPointRegister::Ft1 => write!(f, "ft1"),
-            RiscvFloatingPointRegister::Ft2 => write!(f, "ft2"),
-            RiscvFloatingPointRegister::Ft3 => write!(f, "ft3"),
-            RiscvFloatingPointRegister::Ft4 => write!(f, "ft4"),
-            RiscvFloatingPointRegister::Ft5 => write!(f, "ft5"),
-            RiscvFloatingPointRegister::Ft6 => write!(f, "ft6"),
-            RiscvFloatingPointRegister::Ft7 => write!(f, "ft7"),
-            RiscvFloatingPointRegister::Fs0 => write!(f, "fs0"),
-            RiscvFloatingPointRegister::Fs1 => write!(f, "fs1"),
-            RiscvFloatingPointRegister::Fa0 => write!(f, "fa0"),
-            RiscvFloatingPointRegister::Fa1 => write!(f, "fa1"),
-            RiscvFloatingPointRegister::Fa2 => write!(f, "fa2"),
-            RiscvFloatingPointRegister::Fa3 => write!(f, "fa3"),
-            RiscvFloatingPointRegister::Fa4 => write!(f, "fa4"),
-            RiscvFloatingPointRegister::Fa5 => write!(f, "fa5"),
-            RiscvFloatingPointRegister::Fa6 => write!(f, "fa6"),
-            RiscvFloatingPointRegister::Fa7 => write!(f, "fa7"),
-            RiscvFloatingPointRegister::Fs2 => write!(f, "fs2"),
-            RiscvFloatingPointRegister::Fs3 => write!(f, "fs3"),
-            RiscvFloatingPointRegister::Fs4 => write!(f, "fs4"),
-            RiscvFloatingPointRegister::Fs5 => write!(f, "fs5"),
-            RiscvFloatingPointRegister::Fs6 => write!(f, "fs6"),
-            RiscvFloatingPointRegister::Fs7 => write!(f, "fs7"),
-            RiscvFloatingPointRegister::Fs8 => write!(f, "fs8"),
-            RiscvFloatingPointRegister::Fs9 => write!(f, "fs9"),
-            RiscvFloatingPointRegister::Fs10 => write!(f, "fs10"),
-            RiscvFloatingPointRegister::Fs11 => write!(f, "fs11"),
-            RiscvFloatingPointRegister::Ft8 => write!(f, "ft8"),
-            RiscvFloatingPointRegister::Ft9 => write!(f, "ft9"),
-            RiscvFloatingPointRegister::Ft10 => write!(f, "ft10"),
-            RiscvFloatingPointRegister::Ft11 => write!(f, "ft11"),
+            RiscvFpReg::Ft0 => write!(f, "ft0"),
+            RiscvFpReg::Ft1 => write!(f, "ft1"),
+            RiscvFpReg::Ft2 => write!(f, "ft2"),
+            RiscvFpReg::Ft3 => write!(f, "ft3"),
+            RiscvFpReg::Ft4 => write!(f, "ft4"),
+            RiscvFpReg::Ft5 => write!(f, "ft5"),
+            RiscvFpReg::Ft6 => write!(f, "ft6"),
+            RiscvFpReg::Ft7 => write!(f, "ft7"),
+            RiscvFpReg::Fs0 => write!(f, "fs0"),
+            RiscvFpReg::Fs1 => write!(f, "fs1"),
+            RiscvFpReg::Fa0 => write!(f, "fa0"),
+            RiscvFpReg::Fa1 => write!(f, "fa1"),
+            RiscvFpReg::Fa2 => write!(f, "fa2"),
+            RiscvFpReg::Fa3 => write!(f, "fa3"),
+            RiscvFpReg::Fa4 => write!(f, "fa4"),
+            RiscvFpReg::Fa5 => write!(f, "fa5"),
+            RiscvFpReg::Fa6 => write!(f, "fa6"),
+            RiscvFpReg::Fa7 => write!(f, "fa7"),
+            RiscvFpReg::Fs2 => write!(f, "fs2"),
+            RiscvFpReg::Fs3 => write!(f, "fs3"),
+            RiscvFpReg::Fs4 => write!(f, "fs4"),
+            RiscvFpReg::Fs5 => write!(f, "fs5"),
+            RiscvFpReg::Fs6 => write!(f, "fs6"),
+            RiscvFpReg::Fs7 => write!(f, "fs7"),
+            RiscvFpReg::Fs8 => write!(f, "fs8"),
+            RiscvFpReg::Fs9 => write!(f, "fs9"),
+            RiscvFpReg::Fs10 => write!(f, "fs10"),
+            RiscvFpReg::Fs11 => write!(f, "fs11"),
+            RiscvFpReg::Ft8 => write!(f, "ft8"),
+            RiscvFpReg::Ft9 => write!(f, "ft9"),
+            RiscvFpReg::Ft10 => write!(f, "ft10"),
+            RiscvFpReg::Ft11 => write!(f, "ft11"),
         }
     }
 }
@@ -705,8 +705,8 @@ impl fmt::Display for VirtualRegister {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Register {
-    General(RiscvGeneralPurposeRegister),
-    FloatingPoint(RiscvFloatingPointRegister),
+    General(RiscvGpReg),
+    FloatingPoint(RiscvFpReg),
     Virtual(VirtualRegister),
 }
 
@@ -834,7 +834,7 @@ impl From<String> for MachineSymbol {
     }
 }
 
-pub enum InstData {
+pub enum MachineInstData {
     Load {
         kind: LoadKind,
         dest: Register,
@@ -947,7 +947,7 @@ pub enum InstData {
     },
 }
 
-impl InstData {
+impl MachineInstData {
     pub fn new_load(
         ctx: &mut MachineContext,
         kind: LoadKind,
@@ -955,7 +955,7 @@ impl InstData {
         offset: Immediate,
     ) -> (Register, MachineInst) {
         let dest = ctx.new_virtual_reg(VirtualRegisterKind::General);
-        let data = InstData::Load {
+        let data = MachineInstData::Load {
             kind,
             dest,
             base,
@@ -971,7 +971,7 @@ impl InstData {
         offset: Immediate,
     ) -> (Register, MachineInst) {
         let dest = ctx.new_virtual_reg(VirtualRegisterKind::FloatingPoint);
-        let data = InstData::FloatLoad {
+        let data = MachineInstData::FloatLoad {
             kind,
             dest,
             base,
@@ -986,7 +986,7 @@ impl InstData {
         symbol: MachineSymbol,
     ) -> (Register, MachineInst) {
         let dest = ctx.new_virtual_reg(VirtualRegisterKind::General);
-        let data = InstData::PseudoLoad { kind, dest, symbol };
+        let data = MachineInstData::PseudoLoad { kind, dest, symbol };
         (dest, ctx.new_inst(data))
     }
 
@@ -997,7 +997,7 @@ impl InstData {
         symbol: MachineSymbol,
         rt: Register,
     ) -> MachineInst {
-        let data = InstData::PseudoStore {
+        let data = MachineInstData::PseudoStore {
             kind,
             value,
             symbol,
@@ -1013,7 +1013,7 @@ impl InstData {
         rt: Register,
     ) -> (Register, MachineInst) {
         let dest = ctx.new_virtual_reg(VirtualRegisterKind::FloatingPoint);
-        let data = InstData::FloatPseudoLoad {
+        let data = MachineInstData::FloatPseudoLoad {
             kind,
             dest,
             symbol,
@@ -1029,7 +1029,7 @@ impl InstData {
         symbol: MachineSymbol,
         rt: Register,
     ) -> MachineInst {
-        let data = InstData::FloatPseudoStore {
+        let data = MachineInstData::FloatPseudoStore {
             kind,
             value,
             symbol,
@@ -1045,7 +1045,7 @@ impl InstData {
         base: Register,
         offset: Immediate,
     ) -> MachineInst {
-        let data = InstData::Store {
+        let data = MachineInstData::Store {
             kind,
             value,
             base,
@@ -1061,7 +1061,7 @@ impl InstData {
         base: Register,
         offset: Immediate,
     ) -> MachineInst {
-        let data = InstData::FloatStore {
+        let data = MachineInstData::FloatStore {
             kind,
             value,
             base,
@@ -1080,7 +1080,7 @@ impl InstData {
             FMvFmt::X => VirtualRegisterKind::General,
             FMvFmt::S | FMvFmt::D | FMvFmt::H => VirtualRegisterKind::FloatingPoint,
         });
-        let data = InstData::FMv {
+        let data = MachineInstData::FMv {
             dst_fmt,
             src_fmt,
             rd,
@@ -1096,7 +1096,7 @@ impl InstData {
         rs: Register,
     ) -> MachineInst {
         let rd = ctx.new_virtual_reg(VirtualRegisterKind::FloatingPoint);
-        let data = InstData::FCvt {
+        let data = MachineInstData::FCvt {
             dst_fmt,
             src_fmt,
             rd,
@@ -1112,7 +1112,7 @@ impl InstData {
         rs2: Register,
     ) -> (Register, MachineInst) {
         let rd = ctx.new_virtual_reg(VirtualRegisterKind::General);
-        let data = InstData::Binary { kind, rd, rs1, rs2 };
+        let data = MachineInstData::Binary { kind, rd, rs1, rs2 };
         (rd, ctx.new_inst(data))
     }
 
@@ -1123,7 +1123,7 @@ impl InstData {
         imm: Immediate,
     ) -> (Register, MachineInst) {
         let rd = ctx.new_virtual_reg(VirtualRegisterKind::General);
-        let data = InstData::BinaryImm { kind, rd, rs1, imm };
+        let data = MachineInstData::BinaryImm { kind, rd, rs1, imm };
         (rd, ctx.new_inst(data))
     }
 
@@ -1140,7 +1140,7 @@ impl InstData {
             }
             _ => VirtualRegisterKind::FloatingPoint,
         });
-        let data = InstData::FloatBinary {
+        let data = MachineInstData::FloatBinary {
             kind,
             fmt,
             rd,
@@ -1159,7 +1159,7 @@ impl InstData {
         rs3: Register,
     ) -> MachineInst {
         let rd = ctx.new_virtual_reg(VirtualRegisterKind::FloatingPoint);
-        let data = InstData::FloatMulAdd {
+        let data = MachineInstData::FloatMulAdd {
             kind,
             fmt,
             rd,
@@ -1177,23 +1177,23 @@ impl InstData {
         rs: Register,
     ) -> MachineInst {
         let rd = ctx.new_virtual_reg(VirtualRegisterKind::FloatingPoint);
-        let data = InstData::FloatUnary { kind, fmt, rd, rs };
+        let data = MachineInstData::FloatUnary { kind, fmt, rd, rs };
         ctx.new_inst(data)
     }
 
     pub fn new_li(ctx: &mut MachineContext, imm: Immediate) -> (Register, MachineInst) {
         let rd = ctx.new_virtual_reg(VirtualRegisterKind::General);
-        let data = InstData::Li { rd, imm };
+        let data = MachineInstData::Li { rd, imm };
         (rd, ctx.new_inst(data))
     }
 
     pub fn new_ret(ctx: &mut MachineContext) -> MachineInst {
-        let data = InstData::Ret;
+        let data = MachineInstData::Ret;
         ctx.new_inst(data)
     }
 
     pub fn new_call(ctx: &mut MachineContext, symbol: MachineSymbol) -> MachineInst {
-        let data = InstData::Call { symbol };
+        let data = MachineInstData::Call { symbol };
         ctx.new_inst(data)
     }
 
@@ -1204,7 +1204,7 @@ impl InstData {
         rs2: Register,
         block: MachineBlock,
     ) -> MachineInst {
-        let data = InstData::Branch {
+        let data = MachineInstData::Branch {
             kind,
             rs1,
             rs2,
@@ -1214,43 +1214,43 @@ impl InstData {
     }
 
     pub fn new_j(ctx: &mut MachineContext, block: MachineBlock) -> MachineInst {
-        let data = InstData::J { block };
+        let data = MachineInstData::J { block };
         ctx.new_inst(data)
     }
 
     pub fn is_load(&self) -> bool {
         matches!(
             self,
-            InstData::Load { .. }
-                | InstData::FloatLoad { .. }
-                | InstData::PseudoLoad { .. }
-                | InstData::FloatPseudoLoad { .. }
+            MachineInstData::Load { .. }
+                | MachineInstData::FloatLoad { .. }
+                | MachineInstData::PseudoLoad { .. }
+                | MachineInstData::FloatPseudoLoad { .. }
         )
     }
 
     pub fn is_store(&self) -> bool {
         matches!(
             self,
-            InstData::Store { .. }
-                | InstData::FloatStore { .. }
-                | InstData::PseudoStore { .. }
-                | InstData::FloatPseudoStore { .. }
+            MachineInstData::Store { .. }
+                | MachineInstData::FloatStore { .. }
+                | MachineInstData::PseudoStore { .. }
+                | MachineInstData::FloatPseudoStore { .. }
         )
     }
 
-    pub fn is_branch(&self) -> bool { matches!(self, InstData::Branch { .. } | InstData::J { .. }) }
+    pub fn is_branch(&self) -> bool { matches!(self, MachineInstData::Branch { .. } | MachineInstData::J { .. }) }
 
-    pub fn is_call(&self) -> bool { matches!(self, InstData::Call { .. }) }
+    pub fn is_call(&self) -> bool { matches!(self, MachineInstData::Call { .. }) }
 
-    pub fn is_ret(&self) -> bool { matches!(self, InstData::Ret) }
+    pub fn is_ret(&self) -> bool { matches!(self, MachineInstData::Ret) }
 
-    pub fn is_convert(&self) -> bool { matches!(self, InstData::FCvt { .. }) }
+    pub fn is_convert(&self) -> bool { matches!(self, MachineInstData::FCvt { .. }) }
 
     pub fn is_binary(&self) -> bool {
-        matches!(self, InstData::Binary { .. } | InstData::BinaryImm { .. })
+        matches!(self, MachineInstData::Binary { .. } | MachineInstData::BinaryImm { .. })
     }
 
-    pub fn is_float_binary(&self) -> bool { matches!(self, InstData::FloatBinary { .. }) }
+    pub fn is_float_binary(&self) -> bool { matches!(self, MachineInstData::FloatBinary { .. }) }
 
     /// Build an `addi $rd, $rs, 0`
     ///
@@ -1258,7 +1258,7 @@ impl InstData {
     /// the same register, and thus the destination register should be
     /// assigned.
     pub fn build_gp_move(ctx: &mut MachineContext, rd: Register, rs: Register) -> MachineInst {
-        let data = InstData::BinaryImm {
+        let data = MachineInstData::BinaryImm {
             kind: MachineBinaryImmOp::Addi,
             rd,
             rs1: rs,
@@ -1273,7 +1273,7 @@ impl InstData {
     /// the same register, and thus the destination register should be
     /// assigned.
     pub fn build_fp_move(ctx: &mut MachineContext, rd: Register, rs: Register) -> MachineInst {
-        let data = InstData::FloatBinary {
+        let data = MachineInstData::FloatBinary {
             kind: MachineFloatBinaryOp::Fsgnj,
             fmt: MachineFloatBinaryFmt::S,
             rd,
@@ -1290,7 +1290,7 @@ impl InstData {
         rd: Register,
         rs: Register,
     ) -> MachineInst {
-        let data = InstData::FMv {
+        let data = MachineInstData::FMv {
             dst_fmt,
             src_fmt,
             rd,
@@ -1307,7 +1307,7 @@ impl InstData {
         base: Register,
         offset: Immediate,
     ) -> MachineInst {
-        let data = InstData::Load {
+        let data = MachineInstData::Load {
             kind,
             dest,
             base,
@@ -1325,7 +1325,7 @@ impl InstData {
         base: Register,
         offset: Immediate,
     ) -> MachineInst {
-        let data = InstData::FloatLoad {
+        let data = MachineInstData::FloatLoad {
             kind,
             dest,
             base,
@@ -1335,85 +1335,85 @@ impl InstData {
     }
 
     pub fn build_li(ctx: &mut MachineContext, rd: Register, imm: Immediate) -> MachineInst {
-        let data = InstData::Li { rd, imm };
+        let data = MachineInstData::Li { rd, imm };
         ctx.new_inst(data)
     }
 }
 
-impl fmt::Display for InstData {
+impl fmt::Display for MachineInstData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            InstData::Load {
+            MachineInstData::Load {
                 kind,
                 dest,
                 base,
                 offset,
             } => write!(f, "{} {}, {}({})", kind, dest, offset, base)?,
-            InstData::FloatLoad {
+            MachineInstData::FloatLoad {
                 kind,
                 dest,
                 base,
                 offset,
             } => write!(f, "{} {}, {}({})", kind, dest, offset, base)?,
-            InstData::PseudoLoad { kind, dest, symbol } => {
+            MachineInstData::PseudoLoad { kind, dest, symbol } => {
                 write!(f, "{} {}, {}", kind, dest, symbol)?
             }
-            InstData::PseudoStore {
+            MachineInstData::PseudoStore {
                 kind,
                 value,
                 symbol,
                 rt,
             } => write!(f, "{} {}, {}, {}", kind, value, symbol, rt)?,
-            InstData::FloatPseudoLoad {
+            MachineInstData::FloatPseudoLoad {
                 kind,
                 dest,
                 symbol,
                 rt,
             } => write!(f, "{} {}, {}, {}", kind, dest, symbol, rt)?,
-            InstData::FloatPseudoStore {
+            MachineInstData::FloatPseudoStore {
                 kind,
                 value,
                 symbol,
                 rt,
             } => write!(f, "{} {}, {}, {}", kind, value, symbol, rt)?,
-            InstData::Store {
+            MachineInstData::Store {
                 kind,
                 value,
                 base,
                 offset,
             } => write!(f, "{} {}, {}({})", kind, value, offset, base)?,
-            InstData::FloatStore {
+            MachineInstData::FloatStore {
                 kind,
                 value,
                 base,
                 offset,
             } => write!(f, "{} {}, {}({})", kind, value, offset, base)?,
-            InstData::FMv {
+            MachineInstData::FMv {
                 dst_fmt,
                 src_fmt,
                 rd,
                 rs,
             } => write!(f, "fmv.{}.{} {}, {}", dst_fmt, src_fmt, rd, rs)?,
-            InstData::FCvt {
+            MachineInstData::FCvt {
                 dst_fmt,
                 src_fmt,
                 rd,
                 rs,
             } => write!(f, "fcvt.{}.{} {}, {}", dst_fmt, src_fmt, rd, rs)?,
-            InstData::Binary { kind, rd, rs1, rs2 } => {
+            MachineInstData::Binary { kind, rd, rs1, rs2 } => {
                 write!(f, "{} {}, {}, {}", kind, rd, rs1, rs2)?
             }
-            InstData::BinaryImm { kind, rd, rs1, imm } => {
+            MachineInstData::BinaryImm { kind, rd, rs1, imm } => {
                 write!(f, "{} {}, {}, {}", kind, rd, rs1, imm)?
             }
-            InstData::FloatBinary {
+            MachineInstData::FloatBinary {
                 kind,
                 fmt,
                 rd,
                 rs1,
                 rs2,
             } => write!(f, "{}.{} {}, {}, {}", kind, fmt, rd, rs1, rs2)?,
-            InstData::FloatMulAdd {
+            MachineInstData::FloatMulAdd {
                 kind,
                 fmt,
                 rd,
@@ -1421,19 +1421,19 @@ impl fmt::Display for InstData {
                 rs2,
                 rs3,
             } => write!(f, "{}.{} {}, {}, {}, {}", kind, fmt, rd, rs1, rs2, rs3)?,
-            InstData::FloatUnary { kind, fmt, rd, rs } => {
+            MachineInstData::FloatUnary { kind, fmt, rd, rs } => {
                 write!(f, "{}.{} {}, {}", kind, fmt, rd, rs)?
             }
-            InstData::Li { rd, imm } => write!(f, "li {}, {}", rd, imm)?,
-            InstData::Ret => write!(f, "ret")?,
-            InstData::Call { symbol } => write!(f, "call {}", symbol)?,
-            InstData::Branch {
+            MachineInstData::Li { rd, imm } => write!(f, "li {}, {}", rd, imm)?,
+            MachineInstData::Ret => write!(f, "ret")?,
+            MachineInstData::Call { symbol } => write!(f, "call {}", symbol)?,
+            MachineInstData::Branch {
                 kind,
                 rs1,
                 rs2,
                 block,
             } => write!(f, "{} {}, {}, .bb_{}", kind, rs1, rs2, block.0)?,
-            InstData::J { block } => write!(f, "j .bb_{}", block.0)?,
+            MachineInstData::J { block } => write!(f, "j .bb_{}", block.0)?,
         }
 
         Ok(())
@@ -1482,6 +1482,17 @@ impl fmt::Display for FMvFmt {
             FMvFmt::S => write!(f, "s"),
             FMvFmt::D => write!(f, "d"),
             FMvFmt::X => write!(f, "x"),
+        }
+    }
+}
+
+impl FMvFmt {
+    pub fn from_byte_width(width: usize) -> Self {
+        match width {
+            2 => FMvFmt::H,
+            4 => FMvFmt::S,
+            8 => FMvFmt::D,
+            _ => unimplemented!(),
         }
     }
 }
@@ -1579,12 +1590,15 @@ impl fmt::Display for PseudoLoadKind {
 pub enum PseudoStoreKind {
     /// SW
     Word,
+    /// SD
+    DoubleWord,
 }
 
 impl fmt::Display for PseudoStoreKind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             PseudoStoreKind::Word => write!(f, "sw"),
+            PseudoStoreKind::DoubleWord => write!(f, "sd"),
         }
     }
 }
@@ -1868,7 +1882,7 @@ mod tests {
 
         let v0 = ctx.new_virtual_reg(VirtualRegisterKind::General);
 
-        let (v1, inst0) = InstData::new_load(&mut ctx, LoadKind::Word, v0, Immediate(0));
+        let (v1, inst0) = MachineInstData::new_load(&mut ctx, LoadKind::Word, v0, Immediate(0));
         ctx.function_data_mut(&MachineSymbol("main".to_string()))
             .unwrap()
             .layout_mut()
@@ -1876,7 +1890,7 @@ mod tests {
             .unwrap();
 
         let (v2, inst1) =
-            InstData::new_binary_imm(&mut ctx, MachineBinaryImmOp::Addi, v0, Immediate(1));
+            MachineInstData::new_binary_imm(&mut ctx, MachineBinaryImmOp::Addi, v0, Immediate(1));
         ctx.function_data_mut(&MachineSymbol("main".to_string()))
             .unwrap()
             .layout_mut()
@@ -1889,7 +1903,7 @@ mod tests {
             .layout_mut()
             .append_block(bb1)
             .unwrap();
-        let (v3, inst2) = InstData::new_binary(&mut ctx, MachineBinaryOp::Add, v2, v0);
+        let (v3, inst2) = MachineInstData::new_binary(&mut ctx, MachineBinaryOp::Add, v2, v0);
         ctx.function_data_mut(&MachineSymbol("main".to_string()))
             .unwrap()
             .layout_mut()
