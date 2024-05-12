@@ -335,13 +335,9 @@ impl MachineContext {
         })
     }
 
-    pub fn new_gp_reg(&mut self, kind: RiscvGpReg) -> Register {
-        Register::General(kind)
-    }
+    pub fn new_gp_reg(&mut self, kind: RiscvGpReg) -> Register { Register::General(kind) }
 
-    pub fn new_fp_reg(&mut self, kind: RiscvFpReg) -> Register {
-        Register::FloatingPoint(kind)
-    }
+    pub fn new_fp_reg(&mut self, kind: RiscvFpReg) -> Register { Register::FloatingPoint(kind) }
 
     /// Create a new block.
     pub fn new_block(&mut self) -> MachineBlock { MachineBlock(self.block_allocator.allocate()) }
@@ -1238,7 +1234,12 @@ impl MachineInstData {
         )
     }
 
-    pub fn is_branch(&self) -> bool { matches!(self, MachineInstData::Branch { .. } | MachineInstData::J { .. }) }
+    pub fn is_branch(&self) -> bool {
+        matches!(
+            self,
+            MachineInstData::Branch { .. } | MachineInstData::J { .. }
+        )
+    }
 
     pub fn is_call(&self) -> bool { matches!(self, MachineInstData::Call { .. }) }
 
@@ -1247,7 +1248,10 @@ impl MachineInstData {
     pub fn is_convert(&self) -> bool { matches!(self, MachineInstData::FCvt { .. }) }
 
     pub fn is_binary(&self) -> bool {
-        matches!(self, MachineInstData::Binary { .. } | MachineInstData::BinaryImm { .. })
+        matches!(
+            self,
+            MachineInstData::Binary { .. } | MachineInstData::BinaryImm { .. }
+        )
     }
 
     pub fn is_float_binary(&self) -> bool { matches!(self, MachineInstData::FloatBinary { .. }) }

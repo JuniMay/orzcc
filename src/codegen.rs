@@ -32,18 +32,7 @@ use crate::{
         entities::{FunctionKind, ValueKind},
         module::Module,
         types::TypeKind,
-        values::{
-            Binary,
-            BinaryOp,
-            Block,
-            CastOp,
-            FCmpCond,
-            Function,
-            ICmpCond,
-            Inst,
-            UnaryOp,
-            Value,
-        },
+        values::{BinaryOp, Block, CastOp, FCmpCond, Function, ICmpCond, Inst, UnaryOp, Value},
     },
 };
 
@@ -244,9 +233,7 @@ impl CodegenContext {
                         .new_fp_reg((RiscvFpReg::Fa0 as u8 + float_arg_count).into());
                     let fmv = MachineInstData::build_fp_move(&mut self.machine_ctx, rd, rs);
 
-                    machine_function_layout!(mut self.machine_ctx, &function_name)
-                        .append_inst(fmv, self.block_map[&entry_block])
-                        .unwrap();
+                    self.append_inst(&function_name, entry_block, fmv);
 
                     float_arg_count += 1;
                 } else {
@@ -262,9 +249,7 @@ impl CodegenContext {
 
                     let mv = MachineInstData::build_gp_move(&mut self.machine_ctx, rd, rs);
 
-                    machine_function_layout!(mut self.machine_ctx, &function_name)
-                        .append_inst(mv, self.block_map[&entry_block])
-                        .unwrap();
+                    self.append_inst(&function_name, entry_block, mv);
 
                     integer_arg_count += 1;
                 } else {
@@ -297,9 +282,7 @@ impl CodegenContext {
                     fp,
                     offset.into(),
                 );
-                machine_function_layout!(mut self.machine_ctx, &function_name)
-                    .append_inst(load, self.block_map[&entry_block])
-                    .unwrap();
+                self.append_inst(&function_name, entry_block, load)
             } else if arg_data.ty().is_int() || arg_data.ty().is_ptr() {
                 let kind = match arg_data.ty().bytewidth() {
                     1 => LoadKind::Byte,
@@ -310,9 +293,7 @@ impl CodegenContext {
                 };
                 let load =
                     MachineInstData::build_load(&mut self.machine_ctx, kind, rd, fp, offset.into());
-                machine_function_layout!(mut self.machine_ctx, &function_name)
-                    .append_inst(load, self.block_map[&entry_block])
-                    .unwrap();
+                self.append_inst(&function_name, entry_block, load)
             } else {
                 unimplemented!("non-integer, non-float argument");
             }
@@ -1188,12 +1169,7 @@ impl CodegenContext {
                 match op {
                     UnaryOp::FNeg => {
                         // fmv
-                        let dst_fmt = match val_data.ty().bytewidth() {
-                            2 => FMvFmt::H,
-                            4 => FMvFmt::S,
-                            8 => FMvFmt::D,
-                            _ => unimplemented!(),
-                        };
+                        let dst_fmt = FMvFmt::from_byte_width(val_data.ty().bytewidth());
 
                         let (rd, fmv) = MachineInstData::new_float_move(
                             &mut self.machine_ctx,
@@ -1257,12 +1233,7 @@ impl CodegenContext {
                     | ValueKind::Return(_) => unreachable!(),
                     ValueKind::Zero | ValueKind::Undef => {
                         // fmv $rd, zero
-                        let fmt = match val_data.ty().bytewidth() {
-                            2 => FMvFmt::H,
-                            4 => FMvFmt::S,
-                            8 => FMvFmt::D,
-                            _ => unimplemented!(),
-                        };
+                        let fmt = FMvFmt::from_byte_width(val_data.ty().bytewidth());
                         let zero = self.machine_ctx.new_gp_reg(RiscvGpReg::Zero);
                         let (rd, fmv) = MachineInstData::new_float_move(
                             &mut self.machine_ctx,
@@ -1276,12 +1247,7 @@ impl CodegenContext {
                     ValueKind::Bytes(bytes) => {
                         let imm: Immediate = bytes.into();
                         let (rd, li) = MachineInstData::new_li(&mut self.machine_ctx, imm);
-                        let fmt = match val_data.ty().bytewidth() {
-                            2 => FMvFmt::H,
-                            4 => FMvFmt::S,
-                            8 => FMvFmt::D,
-                            _ => unimplemented!(),
-                        };
+                        let fmt = FMvFmt::from_byte_width(val_data.ty().bytewidth());
                         let (rd, fmv) = MachineInstData::new_float_move(
                             &mut self.machine_ctx,
                             fmt,
