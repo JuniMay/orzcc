@@ -696,7 +696,12 @@ impl fmt::Display for RiscvFpReg {
 }
 
 impl fmt::Display for VirtualRegister {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "$v{}", self.id) }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.kind {
+            VirtualRegisterKind::General => write!(f, "$v{}", self.id),
+            VirtualRegisterKind::FloatingPoint => write!(f, "$vf{}", self.id),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

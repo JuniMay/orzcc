@@ -223,11 +223,7 @@ impl CodegenContext {
 
             if ty.is_float() {
                 if float_arg_count <= 7 {
-                    let rd = if let ValueCodegenResult::Register(rd) = self.get_value(*arg) {
-                        *rd
-                    } else {
-                        unreachable!();
-                    };
+                    let rd = self.get_value_as_register(*arg);
                     let rs = self
                         .machine_ctx
                         .new_fp_reg((RiscvFpReg::Fa0 as u8 + float_arg_count).into());
@@ -1156,14 +1152,7 @@ impl CodegenContext {
                         self.append_inst(&function_name, block, li);
                         rd
                     }
-                    _ => {
-                        let codegen_result = self.get_value(val);
-                        if let ValueCodegenResult::Register(reg) = codegen_result {
-                            *reg
-                        } else {
-                            unreachable!();
-                        }
-                    }
+                    _ => self.get_value_as_register(val),
                 };
 
                 match op {
@@ -1258,14 +1247,7 @@ impl CodegenContext {
                         self.append_inst(&function_name, block, fmv);
                         rd
                     }
-                    _ => {
-                        let codegen_result = self.get_value(val);
-                        if let ValueCodegenResult::Register(reg) = codegen_result {
-                            *reg
-                        } else {
-                            unreachable!();
-                        }
-                    }
+                    _ => self.get_value_as_register(val),
                 };
 
                 let this_ty = function_data
@@ -1314,14 +1296,7 @@ impl CodegenContext {
                         self.append_inst(&function_name, block, li);
                         rd
                     }
-                    _ => {
-                        let codegen_result = self.get_value(cond);
-                        if let ValueCodegenResult::Register(reg) = codegen_result {
-                            *reg
-                        } else {
-                            unreachable!();
-                        }
-                    }
+                    _ => self.get_value_as_register(cond),
                 };
 
                 let params = function_data.dfg().block_data(then_block).unwrap().params();
@@ -1555,11 +1530,7 @@ impl CodegenContext {
                 if let Some(val) = val {
                     let val_data = function_data.dfg().local_value_data(val).unwrap();
 
-                    let reg = if let ValueCodegenResult::Register(reg) = self.get_value(val) {
-                        *reg
-                    } else {
-                        unreachable!();
-                    };
+                    let reg = self.get_value_as_register(val);
 
                     if val_data.ty().is_float() {
                         let fa0 = self.machine_ctx.new_fp_reg(RiscvFpReg::Fa0);
