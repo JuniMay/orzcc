@@ -146,7 +146,7 @@ impl MachineLayout {
     }
 
     /// Remove a block from the layout
-    pub(super) fn remove_block(&mut self, block: MachineBlock) -> Result<(), MachineLayoutOpErr> {
+    pub fn remove_block(&mut self, block: MachineBlock) -> Result<(), MachineLayoutOpErr> {
         for (inst, _) in self
             .blocks
             .node(block)
@@ -162,7 +162,7 @@ impl MachineLayout {
             .map_err(|_| MachineLayoutOpErr::BlockNodeNotFound(block))
     }
 
-    pub(super) fn remove_inst(&mut self, inst: MachineInst) -> Result<(), MachineLayoutOpErr> {
+    pub fn remove_inst(&mut self, inst: MachineInst) -> Result<(), MachineLayoutOpErr> {
         let block = self
             .inst_blocks
             .remove(&inst)
@@ -226,6 +226,8 @@ pub struct MachineFunctionData {
     layout: MachineLayout,
     /// The size of the stack frame.
     stack_size: usize,
+    /// The aligned portion of the stack frame.
+    stack_align: Option<usize>,
 }
 
 impl MachineFunctionData {
@@ -246,9 +248,26 @@ impl MachineFunctionData {
 
     pub fn add_stack_size(&mut self, size: usize) { self.stack_size += size; }
 
+    /// Get the unaligned stack size.
     pub fn stack_size(&self) -> usize { self.stack_size }
 
+    /// Shrink the stack size.
     pub fn shrink_stack(&mut self, size: usize) { self.stack_size -= size; }
+
+    /// Calculate the alignment of the stack.
+    pub fn calculate_alignment(&mut self) {
+        // align to 16 bytes
+        let aigned_stack_size = (self.stack_size + 15) & !15;
+        self.stack_align = Some(aigned_stack_size - self.stack_size);
+    }
+
+    /// Get the aligned stack size.
+    pub fn aligned_stack_size(&mut self) -> usize {
+        if self.stack_align.is_none() {
+            self.calculate_alignment();
+        }
+        self.stack_size + self.stack_align.unwrap()
+    }
 }
 
 /// An instruction node in the list.
@@ -350,10 +369,10 @@ impl MachineContext {
     }
 
     /// Get the instruction data.
-    fn inst_data(&self, inst: MachineInst) -> Option<&MachineInstData> { self.insts.get(&inst) }
+    pub fn inst_data(&self, inst: MachineInst) -> Option<&MachineInstData> { self.insts.get(&inst) }
 
     /// Get the mutable instruction data.
-    fn inst_data_mut(&mut self, inst: MachineInst) -> Option<&mut MachineInstData> {
+    pub fn inst_data_mut(&mut self, inst: MachineInst) -> Option<&mut MachineInstData> {
         self.insts.get_mut(&inst)
     }
 
@@ -377,6 +396,7 @@ impl MachineContext {
             MachineFunctionData {
                 layout: MachineLayout::new(),
                 stack_size: 0,
+                stack_align: None,
             },
         );
     }
@@ -716,6 +736,20 @@ impl Register {
         match self {
             Register::Virtual(vreg) => Some(*vreg),
             _ => None,
+        }
+    }
+
+    pub fn is_fp_virtual(&self) -> bool {
+        match self {
+            Register::Virtual(vreg) => matches!(vreg.kind, VirtualRegisterKind::FloatingPoint),
+            _ => false,
+        }
+    }
+
+    pub fn is_gp_virtual(&self) -> bool {
+        match self {
+            Register::Virtual(vreg) => matches!(vreg.kind, VirtualRegisterKind::General),
+            _ => false,
         }
     }
 }
@@ -1347,6 +1381,38 @@ impl MachineInstData {
         let data = MachineInstData::Li { rd, imm };
         ctx.new_inst(data)
     }
+
+    pub fn build_pseudo_load(
+        ctx: &mut MachineContext,
+        kind: PseudoLoadKind,
+        dest: Register,
+        symbol: MachineSymbol,
+    ) -> MachineInst {
+        let data = MachineInstData::PseudoLoad { kind, dest, symbol };
+        ctx.new_inst(data)
+    }
+
+    pub fn build_binary(
+        ctx: &mut MachineContext,
+        kind: MachineBinaryOp,
+        rd: Register,
+        rs1: Register,
+        rs2: Register,
+    ) -> MachineInst {
+        let data = MachineInstData::Binary { kind, rd, rs1, rs2 };
+        ctx.new_inst(data)
+    }
+
+    pub fn build_binary_imm(
+        ctx: &mut MachineContext,
+        kind: MachineBinaryImmOp,
+        rd: Register,
+        rs1: Register,
+        imm: Immediate,
+    ) -> MachineInst {
+        let data = MachineInstData::BinaryImm { kind, rd, rs1, imm };
+        ctx.new_inst(data)
+    }
 }
 
 impl fmt::Display for MachineInstData {
@@ -1891,7 +1957,7 @@ mod tests {
 
         let v0 = ctx.new_virtual_reg(VirtualRegisterKind::General);
 
-        let (v1, inst0) = MachineInstData::new_load(&mut ctx, LoadKind::Word, v0, Immediate(0));
+        let (_v1, inst0) = MachineInstData::new_load(&mut ctx, LoadKind::Word, v0, Immediate(0));
         ctx.function_data_mut(&MachineSymbol("main".to_string()))
             .unwrap()
             .layout_mut()
@@ -1912,7 +1978,7 @@ mod tests {
             .layout_mut()
             .append_block(bb1)
             .unwrap();
-        let (v3, inst2) = MachineInstData::new_binary(&mut ctx, MachineBinaryOp::Add, v2, v0);
+        let (_v3, inst2) = MachineInstData::new_binary(&mut ctx, MachineBinaryOp::Add, v2, v0);
         ctx.function_data_mut(&MachineSymbol("main".to_string()))
             .unwrap()
             .layout_mut()
