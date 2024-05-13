@@ -260,7 +260,7 @@ impl CodegenContext {
         // according to the calling convention, the sp points to the first parameter not
         // passed by register, before use the frame pointer/s0, fp should be
         // saved and assign to the original sp. clang might generate the code
-        // below: 
+        // below:
         // ```
         // addi sp, sp, -(aligned_frame_size)
         // sd ra, (aligned_frame_size - 8)(sp)
@@ -369,16 +369,27 @@ impl CodegenContext {
         match inst_data.kind() {
             ValueKind::Alloc(alloc) => {
                 let bytewidth = alloc.ty().bytewidth();
-                machine_function!(mut self.machine_ctx, &function_name).add_stack_size(bytewidth);
                 let offset =
-                    -(machine_function!(mut self.machine_ctx, &function_name).stack_size() as i128);
+                    machine_function!(mut self.machine_ctx, &function_name).stack_size() as i128;
+                // clang/gcc index local variables by fp/s0, but here just use sp as the base
+                // pointer.
+                //
+                // if we use fp/s0, the offset of local variables will be changed after
+                // the register allocation (beacuse some registers might be saved on the stack)
+                // so we use sp as the base pointer, and the offset is positive. and by doing
+                // so, the fp/s0 can be used to allocate after the argument passing.
+                //
+                // before codegen insts, the stack size should be zero. and when generating the
+                // prologue, the stack frame size should be increased by the number of saved
+                // regsiters and aligned to 16 bytes
                 self.value_map.insert(
                     inst.into(),
                     ValueCodegenResult::StackSlot {
-                        base: self.machine_ctx.new_gp_reg(RiscvGpReg::S0),
+                        base: self.machine_ctx.new_gp_reg(RiscvGpReg::Sp),
                         offset: offset.into(),
                     },
                 );
+                machine_function!(mut self.machine_ctx, &function_name).add_stack_size(bytewidth);
                 // not appending here, this should be handled in the prologue
                 // (and epilogue for deallocation)
             }
@@ -1538,6 +1549,10 @@ impl CodegenContext {
                 let mut fp_reg_count = 0;
                 let mut args_passed_by_stack: Vec<Value> = Vec::new();
 
+                // heuristic: reg passing after the stack pushing, so that the a0~a7 and fa0~fa7
+                // can be used for the stack arguments
+                let mut reg_passing_insts: Vec<MachineInst> = Vec::new();
+
                 for arg in args {
                     function_data.dfg().with_value_data(*arg, |arg_data| {
                         let ty = arg_data.ty();
@@ -1566,7 +1581,7 @@ impl CodegenContext {
                                             FMvFmt::X,
                                             zero,
                                         );
-                                        self.append_inst(&function_name, block, fmv);
+                                        reg_passing_insts.push(fmv);
                                         rd
                                     }
                                     ValueKind::Bytes(bytes) => {
@@ -1575,7 +1590,7 @@ impl CodegenContext {
                                         // li
                                         let (rd, li) =
                                             MachineInstData::new_li(&mut self.machine_ctx, imm);
-                                        self.append_inst(&function_name, block, li);
+                                        reg_passing_insts.push(li);
                                         // fmv
                                         let dst_fmt = FMvFmt::from_byte_width(ty.bytewidth());
                                         let (rd, fmv) = MachineInstData::new_float_move(
@@ -1584,7 +1599,7 @@ impl CodegenContext {
                                             FMvFmt::X,
                                             rd,
                                         );
-                                        self.append_inst(&function_name, block, fmv);
+                                        reg_passing_insts.push(fmv);
                                         rd
                                     }
                                     _ => self.get_value_as_register(*arg),
@@ -1593,7 +1608,7 @@ impl CodegenContext {
 
                                 let mv =
                                     MachineInstData::build_fp_move(&mut self.machine_ctx, fa, rd);
-                                self.append_inst(&function_name, block, mv);
+                                reg_passing_insts.push(mv);
 
                                 fp_reg_count += 1;
                             } else {
@@ -1620,7 +1635,7 @@ impl CodegenContext {
                                             a,
                                             symbol,
                                         );
-                                        self.append_inst(&function_name, block, la);
+                                        reg_passing_insts.push(la);
                                     }
                                     ValueKind::Zero | ValueKind::Undef => {
                                         // mv
@@ -1630,7 +1645,7 @@ impl CodegenContext {
                                             a,
                                             zero,
                                         );
-                                        self.append_inst(&function_name, block, mv);
+                                        reg_passing_insts.push(mv);
                                     }
                                     ValueKind::Bytes(bytes) => {
                                         // load into reg
@@ -1641,7 +1656,7 @@ impl CodegenContext {
                                             a,
                                             imm,
                                         );
-                                        self.append_inst(&function_name, block, li);
+                                        reg_passing_insts.push(li);
                                     }
                                     _ => {
                                         let rs = self.get_value_as_register(*arg);
@@ -1650,7 +1665,7 @@ impl CodegenContext {
                                             a,
                                             rs,
                                         );
-                                        self.append_inst(&function_name, block, mv);
+                                        reg_passing_insts.push(mv);
                                     }
                                 }
 
@@ -1673,7 +1688,21 @@ impl CodegenContext {
                     stack_offset += bytewidth;
                 }
 
+                // align to 16 bytes
+                stack_offset = (stack_offset + 15) & !15;
+                // passing the arguments steps:
+                // 1. tmp <- sp - stack_offset(aligned)
+                // 2. *tmp <- arg#0
+                // 3. *(tmp + sizeof(arg#0)) <- arg#1
+                // ...
+                // final: sp <- tmp
+                // possible optimizations: sw/d arg, offset(sp)
+
                 // TODO: stack arguments
+
+                for inst in reg_passing_insts {
+                    self.append_inst(&function_name, block, inst);
+                }
             }
             ValueKind::Return(ret) => {
                 let val = ret.val();
