@@ -2,3 +2,9 @@ target/
 .vscode/
 
 .DS_Store
+
+/test.asm
+/test.ir
+/test.s
+/test.o
+/test

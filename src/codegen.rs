@@ -78,6 +78,8 @@ impl CodegenContext {
         }
     }
 
+    pub fn finish(self) -> MachineContext { self.machine_ctx }
+
     pub fn codegen(&mut self, module: &Module) {
         for global in module.global_slot_layout() {
             let machine_symbol: MachineSymbol = module.value_name(*global).into();
@@ -112,12 +114,10 @@ impl CodegenContext {
                                                 );
                                             }
                                             ValueKind::Bytes(inner) => {
-                                                assert_eq!(
-                                                    inner.len(),
-                                                    data.ty().bytewidth(),
-                                                    "byte array length mismatch"
-                                                );
-                                                bytes.extend(inner.clone());
+                                                // zero fill inner to match the bytewidth
+                                                for i in 0..data.ty().bytewidth() {
+                                                    bytes.push(inner.get(i).copied().unwrap_or(0));
+                                                }
                                             }
                                             ValueKind::Array(elems) => {
                                                 for elem in elems {
@@ -149,19 +149,24 @@ impl CodegenContext {
                     self.value_map
                         .insert(*global, ValueCodegenResult::MachineSymbol(machine_symbol));
                 } else {
-                    unreachable!("global slot value is not a global slot");
+                    unreachable!("global slot value is not a global slot: {:?}", data.kind());
                 }
             });
         }
 
         for function in module.function_layout() {
             let symbol: MachineSymbol = module.value_name((*function).into()).into();
-
             self.value_map.insert(
                 (*function).into(),
                 ValueCodegenResult::MachineSymbol(symbol.clone()),
             );
+            // insert first to make sure the function symbol is available
+            if let FunctionKind::Definition = module.function_data(*function).unwrap().kind() {
+                self.machine_ctx.new_function(symbol);
+            }
+        }
 
+        for function in module.function_layout() {
             if let FunctionKind::Definition = module.function_data(*function).unwrap().kind() {
                 self.codegen_function(module, *function);
             }
@@ -181,10 +186,9 @@ impl CodegenContext {
         let function_data = module.function_data(function).unwrap();
         let function_name: MachineSymbol = module.value_name(function.into()).into();
 
-        self.machine_ctx.new_function(function_name.clone());
-
         for (block, _) in function_data.layout().blocks() {
             let machine_block = self.machine_ctx.new_block();
+            dbg!(machine_block);
             self.block_map.insert(block, machine_block);
 
             machine_function_layout!(mut self.machine_ctx, &function_name)
@@ -355,6 +359,7 @@ impl CodegenContext {
     }
 
     pub fn append_inst(&mut self, function_name: &MachineSymbol, block: Block, inst: MachineInst) {
+        dbg!(self.machine_ctx.inst_data(inst));
         machine_function_layout!(mut self.machine_ctx, function_name)
             .append_inst(inst, self.block_map[&block])
             .unwrap();
@@ -390,7 +395,7 @@ impl CodegenContext {
             .add_stack_size((saved_regs_num + 1) * 8);
         let aligned_stack_frame_size =
             machine_function!(mut self.machine_ctx, &function_name).aligned_stack_size();
-
+        dbg!(aligned_stack_frame_size);
         // fp is used for parameter passing, later.
         if check_itype_imm(aligned_stack_frame_size.into()) {
             let addi_fp = MachineInstData::build_binary_imm(
@@ -467,7 +472,11 @@ impl CodegenContext {
             } else {
                 unimplemented!("save register of type {:?}", reg);
             }
-            curr_frame_pos -= 8;
+            if curr_frame_pos != 0 {
+                curr_frame_pos -= 8;
+            } else {
+                break;
+            }
         }
         for inst in insts.into_iter().rev() {
             self.prepend_inst(&function_name, entry_block, inst);
@@ -562,7 +571,11 @@ impl CodegenContext {
             } else {
                 unimplemented!("restore register of type {:?}", reg);
             }
-            curr_frame_pos -= 8;
+            if curr_frame_pos != 0 {
+                curr_frame_pos -= 8;
+            } else {
+                break;
+            }
         }
 
         // ret
@@ -1736,7 +1749,7 @@ impl CodegenContext {
                                 }
                                 None => {
                                     // li + mul
-                                    let (rd, li) = MachineInstData::new_li(
+                                    let (bw, li) = MachineInstData::new_li(
                                         &mut self.machine_ctx,
                                         bytewidth.into(),
                                     );
@@ -1744,7 +1757,7 @@ impl CodegenContext {
                                     let (rd, mul) = MachineInstData::new_binary(
                                         &mut self.machine_ctx,
                                         MachineBinaryOp::Mul,
-                                        rd,
+                                        bw,
                                         rd,
                                     );
                                     self.append_inst(&function_name, block, mul);
@@ -1805,11 +1818,13 @@ impl CodegenContext {
                         }
                     }
 
+                    dbg!(&basis_ty);
+
                     basis_ty = match basis_ty.kind() {
                         TypeKind::Array(_, elem_ty) => elem_ty.clone(),
                         TypeKind::Struct(_) => unimplemented!(),
-                        TypeKind::Ptr => unreachable!(), // there is no bound type anymore
-                        _ => unreachable!(),
+                        TypeKind::Ptr => break, // there is no bound type anymore
+                        _ => break,
                     };
                 }
 
@@ -1817,12 +1832,8 @@ impl CodegenContext {
                     .insert(inst.into(), ValueCodegenResult::Register(ptr_reg));
             }
             ValueKind::Call(call) => {
-                // TODO
                 let callee = call.callee();
                 let args = call.args();
-
-                let function_data = module.function_data(callee.into()).unwrap();
-                let function_name: MachineSymbol = module.value_name(callee).into();
 
                 let ret: Value = inst.into();
 
@@ -1979,191 +1990,235 @@ impl CodegenContext {
                 // final: sp <- tmp
                 // possible optimizations: sw/d arg, offset(sp)
 
-                // TODO: stack arguments
-                // sub $tmp, $sp, stack_offset
-                let sp = self.machine_ctx.new_gp_reg(RiscvGpReg::Sp);
-                let (rd, inst) = if check_itype_imm(stack_offset.into()) {
-                    // addi, $dst, sp, -stack_offset
-                    MachineInstData::new_binary_imm(
-                        &mut self.machine_ctx,
-                        MachineBinaryImmOp::Addi,
-                        sp,
-                        (-(stack_offset as i32)).into(),
-                    )
-                } else {
-                    // li, $tmp, stack_offset
-                    let (rd, li) =
-                        MachineInstData::new_li(&mut self.machine_ctx, stack_offset.into());
-                    self.append_inst(&function_name, block, li);
-                    // sub, $dst, sp, $tmp
-                    MachineInstData::new_binary(&mut self.machine_ctx, MachineBinaryOp::Sub, sp, rd)
-                };
-                self.append_inst(&function_name, block, inst);
-
-                let mut curr_offset = 0;
-
-                for arg in args_passed_by_stack.iter() {
-                    function_data.dfg().with_value_data(*arg, |arg_data| {
-                        let bytewidth = arg_data.ty().bytewidth();
-                        let (offset_reg, offset): (_, Immediate) =
-                            if check_itype_imm(curr_offset.into()) {
-                                (rd, curr_offset.into())
-                            } else {
-                                let (imm_reg, li) = MachineInstData::new_li(
-                                    &mut self.machine_ctx,
-                                    curr_offset.into(),
-                                );
-                                self.append_inst(&function_name, block, li);
-                                // add
-                                let (added, add) = MachineInstData::new_binary(
-                                    &mut self.machine_ctx,
-                                    MachineBinaryOp::Add,
-                                    rd,
-                                    imm_reg,
-                                );
-                                self.append_inst(&function_name, block, add);
-                                (added, 0.into())
-                            };
-                        match arg_data.kind() {
-                            ValueKind::GlobalSlot(_)
-                            | ValueKind::Array(_)
-                            | ValueKind::Struct(_)
-                            | ValueKind::Function
-                            | ValueKind::Store(_)
-                            | ValueKind::Jump(_)
-                            | ValueKind::Branch(_)
-                            | ValueKind::Return(_) => unreachable!(),
-                            ValueKind::Zero | ValueKind::Undef => {
-                                // sw/d zero, offset(offset_reg)
-                                let zero = self.machine_ctx.new_gp_reg(RiscvGpReg::Zero);
-                                let kind = match bytewidth {
-                                    1 => StoreKind::Byte,
-                                    2 => StoreKind::Half,
-                                    4 => StoreKind::Word,
-                                    8 => StoreKind::DoubleWord,
-                                    _ => unimplemented!(),
-                                };
-                                let store = MachineInstData::new_store(
-                                    &mut self.machine_ctx,
-                                    kind,
-                                    zero,
-                                    offset_reg,
-                                    offset,
-                                );
-                                self.append_inst(&function_name, block, store);
-                            }
-                            ValueKind::Bytes(bytes) => {
-                                let imm: Immediate = bytes.into();
-                                let (rd, li) = MachineInstData::new_li(&mut self.machine_ctx, imm);
-                                self.append_inst(&function_name, block, li);
-                                if arg_data.ty().is_float() {
-                                    let dst_fmt = match bytewidth {
-                                        2 => FMvFmt::H,
-                                        4 => FMvFmt::S,
-                                        8 => FMvFmt::D,
-                                        _ => unimplemented!(),
-                                    };
-                                    let (rd, fmv) = MachineInstData::new_float_move(
-                                        &mut self.machine_ctx,
-                                        dst_fmt,
-                                        FMvFmt::X,
-                                        rd,
-                                    );
-                                    self.append_inst(&function_name, block, fmv);
-                                    // fsd
-                                    let kind = match bytewidth {
-                                        4 => FloatStoreKind::Single,
-                                        8 => FloatStoreKind::Double,
-                                        _ => unimplemented!(),
-                                    };
-                                    let store = MachineInstData::new_float_store(
-                                        &mut self.machine_ctx,
-                                        kind,
-                                        rd,
-                                        offset_reg,
-                                        offset,
-                                    );
-                                    self.append_inst(&function_name, block, store);
-                                } else {
-                                    // sw/d
-                                    let kind = match bytewidth {
-                                        1 => StoreKind::Byte,
-                                        2 => StoreKind::Half,
-                                        4 => StoreKind::Word,
-                                        8 => StoreKind::DoubleWord,
-                                        _ => unimplemented!(),
-                                    };
-                                    let store = MachineInstData::new_store(
-                                        &mut self.machine_ctx,
-                                        kind,
-                                        rd,
-                                        offset_reg,
-                                        offset,
-                                    );
-                                    self.append_inst(&function_name, block, store);
-                                }
-                            }
-                            ValueKind::BlockParam
-                            | ValueKind::Call(_)
-                            | ValueKind::Unary(_)
-                            | ValueKind::Binary(_)
-                            | ValueKind::Alloc(_)
-                            | ValueKind::GetElemPtr(_)
-                            | ValueKind::Cast(_)
-                            | ValueKind::Load(_) => {
-                                let rs = self.get_value_as_register(*arg);
-                                if arg_data.ty().is_float() {
-                                    // fsd
-                                    let kind = match bytewidth {
-                                        4 => FloatStoreKind::Single,
-                                        8 => FloatStoreKind::Double,
-                                        _ => unimplemented!(),
-                                    };
-                                    let store = MachineInstData::new_float_store(
-                                        &mut self.machine_ctx,
-                                        kind,
-                                        rs,
-                                        offset_reg,
-                                        offset,
-                                    );
-                                    self.append_inst(&function_name, block, store);
-                                } else {
-                                    // sw/d
-                                    let kind = match bytewidth {
-                                        1 => StoreKind::Byte,
-                                        2 => StoreKind::Half,
-                                        4 => StoreKind::Word,
-                                        8 => StoreKind::DoubleWord,
-                                        _ => unimplemented!(),
-                                    };
-                                    let store = MachineInstData::new_store(
-                                        &mut self.machine_ctx,
-                                        kind,
-                                        rs,
-                                        offset_reg,
-                                        offset,
-                                    );
-                                    self.append_inst(&function_name, block, store);
-                                }
-                            }
-                        }
-
-                        curr_offset += bytewidth;
-                    });
-                }
-
-                for inst in reg_passing_insts {
+                if stack_offset != 0 {
+                    // sub $tmp, $sp, stack_offset
+                    let sp = self.machine_ctx.new_gp_reg(RiscvGpReg::Sp);
+                    let (rd, inst) = if check_itype_imm(stack_offset.into()) {
+                        // addi, $dst, sp, -stack_offset
+                        MachineInstData::new_binary_imm(
+                            &mut self.machine_ctx,
+                            MachineBinaryImmOp::Addi,
+                            sp,
+                            (-(stack_offset as i32)).into(),
+                        )
+                    } else {
+                        // li, $tmp, stack_offset
+                        let (rd, li) =
+                            MachineInstData::new_li(&mut self.machine_ctx, stack_offset.into());
+                        self.append_inst(&function_name, block, li);
+                        // sub, $dst, sp, $tmp
+                        MachineInstData::new_binary(
+                            &mut self.machine_ctx,
+                            MachineBinaryOp::Sub,
+                            sp,
+                            rd,
+                        )
+                    };
                     self.append_inst(&function_name, block, inst);
+
+                    let mut curr_offset = 0;
+
+                    for arg in args_passed_by_stack.iter() {
+                        function_data.dfg().with_value_data(*arg, |arg_data| {
+                            let bytewidth = arg_data.ty().bytewidth();
+                            let (offset_reg, offset): (_, Immediate) =
+                                if check_itype_imm(curr_offset.into()) {
+                                    (rd, curr_offset.into())
+                                } else {
+                                    let (imm_reg, li) = MachineInstData::new_li(
+                                        &mut self.machine_ctx,
+                                        curr_offset.into(),
+                                    );
+                                    self.append_inst(&function_name, block, li);
+                                    // add
+                                    let (added, add) = MachineInstData::new_binary(
+                                        &mut self.machine_ctx,
+                                        MachineBinaryOp::Add,
+                                        rd,
+                                        imm_reg,
+                                    );
+                                    self.append_inst(&function_name, block, add);
+                                    (added, 0.into())
+                                };
+                            match arg_data.kind() {
+                                ValueKind::GlobalSlot(_)
+                                | ValueKind::Array(_)
+                                | ValueKind::Struct(_)
+                                | ValueKind::Function
+                                | ValueKind::Store(_)
+                                | ValueKind::Jump(_)
+                                | ValueKind::Branch(_)
+                                | ValueKind::Return(_) => unreachable!(),
+                                ValueKind::Zero | ValueKind::Undef => {
+                                    // sw/d zero, offset(offset_reg)
+                                    let zero = self.machine_ctx.new_gp_reg(RiscvGpReg::Zero);
+                                    let kind = match bytewidth {
+                                        1 => StoreKind::Byte,
+                                        2 => StoreKind::Half,
+                                        4 => StoreKind::Word,
+                                        8 => StoreKind::DoubleWord,
+                                        _ => unimplemented!(),
+                                    };
+                                    let store = MachineInstData::new_store(
+                                        &mut self.machine_ctx,
+                                        kind,
+                                        zero,
+                                        offset_reg,
+                                        offset,
+                                    );
+                                    self.append_inst(&function_name, block, store);
+                                }
+                                ValueKind::Bytes(bytes) => {
+                                    let imm: Immediate = bytes.into();
+                                    let (rd, li) =
+                                        MachineInstData::new_li(&mut self.machine_ctx, imm);
+                                    self.append_inst(&function_name, block, li);
+                                    if arg_data.ty().is_float() {
+                                        let dst_fmt = match bytewidth {
+                                            2 => FMvFmt::H,
+                                            4 => FMvFmt::S,
+                                            8 => FMvFmt::D,
+                                            _ => unimplemented!(),
+                                        };
+                                        let (rd, fmv) = MachineInstData::new_float_move(
+                                            &mut self.machine_ctx,
+                                            dst_fmt,
+                                            FMvFmt::X,
+                                            rd,
+                                        );
+                                        self.append_inst(&function_name, block, fmv);
+                                        // fsd
+                                        let kind = match bytewidth {
+                                            4 => FloatStoreKind::Single,
+                                            8 => FloatStoreKind::Double,
+                                            _ => unimplemented!(),
+                                        };
+                                        let store = MachineInstData::new_float_store(
+                                            &mut self.machine_ctx,
+                                            kind,
+                                            rd,
+                                            offset_reg,
+                                            offset,
+                                        );
+                                        self.append_inst(&function_name, block, store);
+                                    } else {
+                                        // sw/d
+                                        let kind = match bytewidth {
+                                            1 => StoreKind::Byte,
+                                            2 => StoreKind::Half,
+                                            4 => StoreKind::Word,
+                                            8 => StoreKind::DoubleWord,
+                                            _ => unimplemented!(),
+                                        };
+                                        let store = MachineInstData::new_store(
+                                            &mut self.machine_ctx,
+                                            kind,
+                                            rd,
+                                            offset_reg,
+                                            offset,
+                                        );
+                                        self.append_inst(&function_name, block, store);
+                                    }
+                                }
+                                ValueKind::BlockParam
+                                | ValueKind::Call(_)
+                                | ValueKind::Unary(_)
+                                | ValueKind::Binary(_)
+                                | ValueKind::Alloc(_)
+                                | ValueKind::GetElemPtr(_)
+                                | ValueKind::Cast(_)
+                                | ValueKind::Load(_) => {
+                                    let rs = self.get_value_as_register(*arg);
+                                    if arg_data.ty().is_float() {
+                                        // fsd
+                                        let kind = match bytewidth {
+                                            4 => FloatStoreKind::Single,
+                                            8 => FloatStoreKind::Double,
+                                            _ => unimplemented!(),
+                                        };
+                                        let store = MachineInstData::new_float_store(
+                                            &mut self.machine_ctx,
+                                            kind,
+                                            rs,
+                                            offset_reg,
+                                            offset,
+                                        );
+                                        self.append_inst(&function_name, block, store);
+                                    } else {
+                                        // sw/d
+                                        let kind = match bytewidth {
+                                            1 => StoreKind::Byte,
+                                            2 => StoreKind::Half,
+                                            4 => StoreKind::Word,
+                                            8 => StoreKind::DoubleWord,
+                                            _ => unimplemented!(),
+                                        };
+                                        let store = MachineInstData::new_store(
+                                            &mut self.machine_ctx,
+                                            kind,
+                                            rs,
+                                            offset_reg,
+                                            offset,
+                                        );
+                                        self.append_inst(&function_name, block, store);
+                                    }
+                                }
+                            }
+
+                            curr_offset += bytewidth;
+                        });
+                    }
+
+                    for inst in reg_passing_insts {
+                        self.append_inst(&function_name, block, inst);
+                    }
+
+                    // sp <- tmp
+                    let mv = MachineInstData::build_gp_move(&mut self.machine_ctx, sp, rd);
+                    self.append_inst(&function_name, block, mv);
+                } else {
+                    // no stack arguments
+                    for inst in reg_passing_insts {
+                        self.append_inst(&function_name, block, inst);
+                    }
                 }
-
-                // sp <- tmp
-                let mv = MachineInstData::build_gp_move(&mut self.machine_ctx, sp, rd);
-                self.append_inst(&function_name, block, mv);
-
                 // call
+                // XXX: function pointer is not supported.
                 let callee_symbol = self.get_value_as_symbol(callee);
                 let call = MachineInstData::new_call(&mut self.machine_ctx, callee_symbol);
                 self.append_inst(&function_name, block, call);
+
+                // recover the stack
+                if stack_offset != 0 {
+                    if check_itype_imm(stack_offset.into()) {
+                        // addi sp, sp, stack_offset
+                        let sp = self.machine_ctx.new_gp_reg(RiscvGpReg::Sp);
+                        let addi = MachineInstData::build_binary_imm(
+                            &mut self.machine_ctx,
+                            MachineBinaryImmOp::Addi,
+                            sp,
+                            sp,
+                            stack_offset.into(),
+                        );
+
+                        self.append_inst(&function_name, block, addi);
+                    } else {
+                        // li
+                        let (rd, li) =
+                            MachineInstData::new_li(&mut self.machine_ctx, stack_offset.into());
+                        self.append_inst(&function_name, block, li);
+                        // add
+                        let sp = self.machine_ctx.new_gp_reg(RiscvGpReg::Sp);
+                        let add = MachineInstData::build_binary(
+                            &mut self.machine_ctx,
+                            MachineBinaryOp::Add,
+                            sp,
+                            sp,
+                            rd,
+                        );
+                        self.append_inst(&function_name, block, add);
+                    }
+                }
 
                 // return value
                 let ret_ty = function_data.dfg().local_value_data(ret).unwrap().ty();
@@ -2200,19 +2255,70 @@ impl CodegenContext {
                 if let Some(val) = val {
                     let val_data = function_data.dfg().local_value_data(val).unwrap();
 
-                    let reg = self.get_value_as_register(val);
-
-                    if val_data.ty().is_float() {
-                        let fa0 = self.machine_ctx.new_fp_reg(RiscvFpReg::Fa0);
-                        let mv = MachineInstData::build_fp_move(&mut self.machine_ctx, fa0, reg);
-                        self.append_inst(&function_name, block, mv);
-                    } else if val_data.ty().is_int() || val_data.ty().is_ptr() {
-                        let a0 = self.machine_ctx.new_gp_reg(RiscvGpReg::A0);
-                        let mv = MachineInstData::build_gp_move(&mut self.machine_ctx, a0, reg);
-                        self.append_inst(&function_name, block, mv);
-                    } else {
-                        unreachable!()
-                    }
+                    // let reg = self.get_value_as_register(val);
+                    match val_data.kind() {
+                        ValueKind::GlobalSlot(_)
+                        | ValueKind::Array(_)
+                        | ValueKind::Struct(_)
+                        | ValueKind::Function
+                        | ValueKind::Store(_)
+                        | ValueKind::Jump(_)
+                        | ValueKind::Branch(_)
+                        | ValueKind::Return(_) => unreachable!(),
+                        ValueKind::Zero | ValueKind::Undef => {
+                            let zero = self.machine_ctx.new_gp_reg(RiscvGpReg::Zero);
+                            if val_data.ty().is_float() {
+                                let fa0 = self.machine_ctx.new_fp_reg(RiscvFpReg::Fa0);
+                                let fmv = MachineInstData::build_fp_move(
+                                    &mut self.machine_ctx,
+                                    fa0,
+                                    zero,
+                                );
+                                self.append_inst(&function_name, block, fmv);
+                            } else if val_data.ty().is_int() || val_data.ty().is_ptr() {
+                                let a0 = self.machine_ctx.new_gp_reg(RiscvGpReg::A0);
+                                let mv =
+                                    MachineInstData::build_gp_move(&mut self.machine_ctx, a0, zero);
+                                self.append_inst(&function_name, block, mv);
+                            } else {
+                                unreachable!()
+                            }
+                        }
+                        ValueKind::Bytes(bytes) => {
+                            if val_data.ty().is_float() {
+                                let imm: Immediate = bytes.into();
+                                let (rd, li) = MachineInstData::new_li(&mut self.machine_ctx, imm);
+                                self.append_inst(&function_name, block, li);
+                                let fa0 = self.machine_ctx.new_fp_reg(RiscvFpReg::Fa0);
+                                let fmv =
+                                    MachineInstData::build_fp_move(&mut self.machine_ctx, fa0, rd);
+                                self.append_inst(&function_name, block, fmv);
+                            } else if val_data.ty().is_int() || val_data.ty().is_ptr() {
+                                let imm: Immediate = bytes.into();
+                                let a0 = self.machine_ctx.new_gp_reg(RiscvGpReg::A0);
+                                let li = MachineInstData::build_li(&mut self.machine_ctx, a0, imm);
+                                self.append_inst(&function_name, block, li);
+                            } else {
+                                unreachable!()
+                            }
+                        }
+                        _ => {
+                            let reg = self.get_value_as_register(val);
+                            if val_data.ty().is_float() {
+                                let fa0 = self.machine_ctx.new_fp_reg(RiscvFpReg::Fa0);
+                                let mv =
+                                    MachineInstData::build_fp_move(&mut self.machine_ctx, fa0, reg);
+                                self.append_inst(&function_name, block, mv);
+                            } else if val_data.ty().is_int() || val_data.ty().is_ptr() {
+                                let a0 = self.machine_ctx.new_gp_reg(RiscvGpReg::A0);
+                                let mv =
+                                    MachineInstData::build_gp_move(&mut self.machine_ctx, a0, reg);
+                                self.append_inst(&function_name, block, mv);
+                            } else {
+                                unreachable!()
+                            }
+                        }
+                    };
                 }
                 // ret will be handled by the function epilogue
             }

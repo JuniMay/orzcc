@@ -9,7 +9,7 @@ use thiserror::Error;
 
 use super::{
     builders::{GlobalBuilder, LocalBuilder},
-    entities::{BlockData, FunctionData, ValueData},
+    entities::{BlockData, FunctionData, ValueData, ValueKind},
     types::Type,
     values::{Block, Function, Value},
     GLOBAL_PREFIX,
@@ -293,13 +293,18 @@ impl Module {
         self.functions.get_mut(&function)
     }
 
-    /// Get the value data of a global value.
+    /// Add the value data of a global value.
     ///
-    /// This will also add the slot into the layout.
+    /// If this is a global slot, the value will also be added to the layout.
     pub(super) fn add_global_slot(&mut self, data: ValueData) -> Value {
+        if let ValueKind::Function = data.kind() {
+            panic!("function should be added using `add_function` method.");
+        }
         let value = Value::new(self.allocate_id());
+        if let ValueKind::GlobalSlot(_) = data.kind() {
+            self.global_slot_layout.push(value);
+        }
         self.globals.borrow_mut().insert(value, data);
-        self.global_slot_layout.push(value);
         value
     }
 

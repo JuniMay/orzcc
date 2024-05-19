@@ -1,5 +1,6 @@
 use clap::{Arg, Command};
 use orzcc::{
+    codegen::CodegenContext,
     collections::diagnostic::{Diagnostic, Level},
     ir::{
         exec::debugger::Debugger,
@@ -33,6 +34,8 @@ struct DbgCommand {
 struct OptCommand {
     file: String,
     passes: Vec<String>,
+    emit_ir: Option<String>,
+    emit_asm: Option<String>,
 }
 
 struct FrontendCommand {
@@ -61,11 +64,20 @@ fn main() {
             for pass in cmd.passes {
                 PassManager::run_transformation(&pass, &mut module, 32);
             }
-            let mut buf = std::io::BufWriter::new(Vec::new());
-            let mut printer = Printer::new(&mut buf);
-            printer.run_on_module(&module).unwrap();
-            let s = String::from_utf8(buf.into_inner().unwrap()).unwrap();
-            println!("{}", s);
+            if let Some(emit_ir) = cmd.emit_ir {
+                let mut buf = std::io::BufWriter::new(Vec::new());
+                let mut printer = Printer::new(&mut buf);
+                printer.run_on_module(&module).unwrap();
+                std::fs::write(emit_ir, buf.get_ref()).unwrap();
+            }
+            if let Some(emit_asm) = cmd.emit_asm {
+                let mut codegen_ctx = CodegenContext::new();
+                codegen_ctx.codegen(&module);
+                codegen_ctx.codegen_rest(&module);
+                let machine_ctx = codegen_ctx.finish();
+                let asm = machine_ctx.to_string();
+                std::fs::write(emit_asm, asm).unwrap();
+            }
         }
         CliCommand::Frontend(cmd) => {
             println!("TODO FOR FRONTEND");
@@ -100,6 +112,18 @@ fn cli() -> Command {
                         .long("file")
                         .required(true)
                         .help("The IR file to optimize"),
+                )
+                .arg(
+                    Arg::new("emit-ir")
+                        .short('i')
+                        .long("emit-ir")
+                        .help("Emit the optimized IR to file"),
+                )
+                .arg(
+                    Arg::new("emit-asm")
+                        .short('a')
+                        .long("emit-asm")
+                        .help("Emit the optimized IR to assembly file"),
                 )
                 .args(PassManager::get_cli_args()),
         )
@@ -147,7 +171,15 @@ fn parse_args() -> CliCommand {
                 }
             }
 
-            CliCommand::Opt(OptCommand { file, passes })
+            let emit_ir = args.get_one::<String>("emit-ir").cloned();
+            let emit_asm = args.get_one::<String>("emit-asm").cloned();
+
+            CliCommand::Opt(OptCommand {
+                file,
+                passes,
+                emit_ir,
+                emit_asm,
+            })
         }
         Some(("frontend", args)) => {
             let file = args.get_one::<String>("file").unwrap().clone();

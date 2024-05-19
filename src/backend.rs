@@ -484,9 +484,8 @@ impl fmt::Display for MachineContext {
                     // <name>:
                     writeln!(f, "{}:", global_name)?;
                     // .byte <data>
-                    write!(f, "\t.byte")?;
                     for byte in data.iter() {
-                        write!(f, " {}", byte)?;
+                        writeln!(f, "\t.byte {}", byte)?;
                     }
                     writeln!(f)?;
                 }
@@ -899,12 +898,18 @@ impl MachineGlobalData {
 
 impl From<String> for MachineSymbol {
     fn from(name: String) -> Self {
-        // TODO: check the name, the global names in IR starts with `@`, the validity
+        // remove leading '@'
+        let name = if let Some(striped) = name.strip_prefix('@') {
+            striped
+        } else {
+            &name
+        };
         // needs to be checked.
-        MachineSymbol(name)
+        MachineSymbol(name.to_string())
     }
 }
 
+#[derive(Debug)]
 pub enum MachineInstData {
     Load {
         kind: LoadKind,
@@ -1551,6 +1556,7 @@ impl fmt::Display for MachineInstData {
     }
 }
 
+#[derive(Debug)]
 pub enum FCvtFmt {
     H,
     S,
@@ -1575,6 +1581,7 @@ impl fmt::Display for FCvtFmt {
     }
 }
 
+#[derive(Debug)]
 pub enum FMvFmt {
     // half floating point
     H,
@@ -1608,6 +1615,7 @@ impl FMvFmt {
     }
 }
 
+#[derive(Debug)]
 pub enum LoadKind {
     Byte,
     Half,
@@ -1632,6 +1640,7 @@ impl fmt::Display for LoadKind {
     }
 }
 
+#[derive(Debug)]
 pub enum StoreKind {
     Byte,
     Half,
@@ -1650,6 +1659,7 @@ impl fmt::Display for StoreKind {
     }
 }
 
+#[derive(Debug)]
 pub enum FloatStoreKind {
     /// Fsw
     Single,
@@ -1666,6 +1676,7 @@ impl fmt::Display for FloatStoreKind {
     }
 }
 
+#[derive(Debug)]
 pub enum FloatLoadKind {
     /// Flw
     Single,
@@ -1682,6 +1693,7 @@ impl fmt::Display for FloatLoadKind {
     }
 }
 
+#[derive(Debug)]
 pub enum PseudoLoadKind {
     /// LA
     Address,
@@ -1698,6 +1710,7 @@ impl fmt::Display for PseudoLoadKind {
     }
 }
 
+#[derive(Debug)]
 pub enum PseudoStoreKind {
     /// SW
     Word,
@@ -1714,6 +1727,7 @@ impl fmt::Display for PseudoStoreKind {
     }
 }
 
+#[derive(Debug)]
 pub enum FloatPseudoLoadKind {
     /// FLW
     Single,
@@ -1727,6 +1741,7 @@ impl fmt::Display for FloatPseudoLoadKind {
     }
 }
 
+#[derive(Debug)]
 pub enum FloatPseudoStoreKind {
     /// FSW
     Single,
@@ -1740,6 +1755,7 @@ impl fmt::Display for FloatPseudoStoreKind {
     }
 }
 
+#[derive(Debug)]
 pub enum MachineBinaryOp {
     Add,
     Addw,
@@ -1808,6 +1824,7 @@ impl fmt::Display for MachineBinaryOp {
     }
 }
 
+#[derive(Debug)]
 pub enum MachineBranchOp {
     Beq,
     Bne,
@@ -1830,6 +1847,7 @@ impl fmt::Display for MachineBranchOp {
     }
 }
 
+#[derive(Debug)]
 pub enum MachineBinaryImmOp {
     Addi,
     Addiw,
@@ -1866,6 +1884,7 @@ impl fmt::Display for MachineBinaryImmOp {
     }
 }
 
+#[derive(Debug)]
 pub enum MachineFloatBinaryOp {
     Fadd,
     Fsub,
@@ -1900,6 +1919,7 @@ impl fmt::Display for MachineFloatBinaryOp {
     }
 }
 
+#[derive(Debug)]
 pub enum MachineFloatBinaryFmt {
     S,
     D,
@@ -1914,6 +1934,7 @@ impl fmt::Display for MachineFloatBinaryFmt {
     }
 }
 
+#[derive(Debug)]
 pub enum FloatMulAdd {
     Fmadd,
     Fmsub,
@@ -1932,6 +1953,7 @@ impl fmt::Display for FloatMulAdd {
     }
 }
 
+#[derive(Debug)]
 pub enum FloatMulAddFmt {
     S,
     D,
@@ -1946,6 +1968,7 @@ impl fmt::Display for FloatMulAddFmt {
     }
 }
 
+#[derive(Debug)]
 pub enum MachineFloatUnaryOp {
     FSqrt,
     FClass,
@@ -1960,6 +1983,7 @@ impl fmt::Display for MachineFloatUnaryOp {
     }
 }
 
+#[derive(Debug)]
 pub enum MachineFloatUnaryFmt {
     S,
     D,
