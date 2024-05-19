@@ -95,6 +95,9 @@ impl Layout {
     /// The entry block is by default the first block in the layout.
     pub fn entry_block(&self) -> Option<Block> { self.blocks.front() }
 
+    /// Get the last block as the exit block.
+    pub fn exit_block(&self) -> Option<Block> { self.blocks.back() }
+
     /// Get the list of blocks.
     pub fn blocks(&self) -> &BlockList { &self.blocks }
 
@@ -174,6 +177,22 @@ impl Layout {
             .ok_or(LayoutOpErr::BlockNodeNotFound(block))?
             .insts_mut()
             .append(inst)
+            .map_err(|_| LayoutOpErr::InstDuplicated(inst))?;
+
+        self.inst_blocks.insert(inst, block);
+
+        Ok(())
+    }
+
+    pub fn prepend_inst(&mut self, inst: Inst, block: Block) -> Result<(), LayoutOpErr> {
+        if self.inst_blocks.contains_key(&inst) {
+            return Err(LayoutOpErr::InstDuplicated(inst));
+        }
+        self.blocks
+            .node_mut(block)
+            .ok_or(LayoutOpErr::BlockNodeNotFound(block))?
+            .insts_mut()
+            .prepend(inst)
             .map_err(|_| LayoutOpErr::InstDuplicated(inst))?;
 
         self.inst_blocks.insert(inst, block);
