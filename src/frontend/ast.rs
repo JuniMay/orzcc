@@ -2,7 +2,7 @@ use std::fmt;
 
 use crate::{
     ir::types::{Type, TypeKind},
-    irgen::SymbolTableStack,
+    irgen::{SymbolEntry, SymbolTableStack},
 };
 
 #[derive(Debug, Clone)]
@@ -406,6 +406,8 @@ impl Expr {
 impl Expr {
     pub fn canonialize_init_list(&mut self, ty: Type, symtable: &SymbolTableStack) {
         if let ExprKind::InitList(ref mut vals) = self.kind {
+            dbg!(&ty);
+            dbg!(&vals);
             let (length, sub_ty) = ty.as_array().unwrap();
             let leaf_ty = ty.get_array_leaf();
 
@@ -413,11 +415,18 @@ impl Expr {
                 // type check/coercion for the elements
                 let mut new_vals = Vec::new();
                 for val in vals.drain(..) {
-                    // type check the leaf val
                     let val = val.type_check(Some(leaf_ty.clone()), symtable);
                     new_vals.push(val);
                 }
+                if new_vals.len() < length {
+                    for _ in new_vals.len()..length {
+                        let zeros = ComptimeVal::new_zeros(leaf_ty.clone());
+                        let expr = Expr::new_const(zeros);
+                        new_vals.push(expr);
+                    }
+                }
                 *vals = new_vals;
+                self.ty = Some(ty);
                 return;
             }
 
@@ -434,7 +443,7 @@ impl Expr {
                         val.canonialize_init_list(sub_ty.clone(), symtable);
                         new_init_list.push(val);
                     }
-                } else if val.ty() == ty {
+                } else {
                     elem_init_list.push(val);
                     if elem_init_list.len() == elem_total_len {
                         let mut init_list = Expr::new_init_list(elem_init_list);
@@ -489,7 +498,8 @@ impl Expr {
                         lhs = Box::new(Expr::new_coercion(lhs, Type::i32_()));
                     }
                     (TypeKind::Int(1), TypeKind::Float) => {
-                        lhs = Box::new(Expr::new_coercion(lhs, Type::float()));
+                        let tmp = Expr::new_coercion(lhs, Type::i32_());
+                        lhs = Box::new(Expr::new_coercion(Box::new(tmp), Type::float()));
                     }
                     (TypeKind::Int(32), TypeKind::Int(1)) => {
                         rhs = Box::new(Expr::new_coercion(rhs, Type::i32_()));
@@ -498,12 +508,19 @@ impl Expr {
                         lhs = Box::new(Expr::new_coercion(lhs, Type::float()));
                     }
                     (TypeKind::Float, TypeKind::Int(1)) => {
-                        rhs = Box::new(Expr::new_coercion(rhs, Type::i32_()));
+                        // lhs != 0
+                        let mut zero = Expr::new_const(ComptimeVal::Int(0));
+                        zero.ty = Some(Type::float());
+                        lhs = Box::new(Expr::new_binary(BinaryOp::Ne, lhs, Box::new(zero)));
                     }
                     (TypeKind::Float, TypeKind::Int(32)) => {
                         rhs = Box::new(Expr::new_coercion(rhs, Type::i32_()));
                     }
-                    _ => unimplemented!(),
+                    _ => {
+                        if lhs_ty != rhs_ty {
+                            panic!("unsupported type coercion: {:?} -> {:?}", lhs_ty, rhs_ty);
+                        }
+                    }
                 }
 
                 let mut expr = Expr::new_binary(op, lhs, rhs);
@@ -534,11 +551,11 @@ impl Expr {
                         // try to coerce the result
                         match (expr.ty().kind(), ty.kind()) {
                             (TypeKind::Int(1), TypeKind::Int(32)) => {
-                                let tmp = Expr::new_coercion(Box::new(expr), Type::i32_());
-                                expr = Expr::new_coercion(Box::new(tmp), Type::i32_());
+                                expr = Expr::new_coercion(Box::new(expr), Type::i32_());
                             }
                             (TypeKind::Int(1), TypeKind::Float) => {
-                                expr = Expr::new_coercion(Box::new(expr), Type::float());
+                                let tmp = Expr::new_coercion(Box::new(expr), Type::i32_());
+                                expr = Expr::new_coercion(Box::new(tmp), Type::float());
                             }
                             (TypeKind::Int(32), TypeKind::Int(1)) => {
                                 expr = Expr::new_coercion(Box::new(expr), Type::i32_());
@@ -564,7 +581,7 @@ impl Expr {
                 expr
             }
             ExprKind::Coercion(_) => {
-                unreachable!()
+                unreachable!("type check after coercion")
             }
             ExprKind::FuncCall(call) => {
                 let callee = call.ident;
@@ -674,7 +691,7 @@ impl Expr {
                 }
             }
             ExprKind::FuncCall(_) => {
-                // function call cannot be folded
+                // function call cannot be folded in sysy.
                 None
             }
             ExprKind::LVal(lval) => {
@@ -754,6 +771,29 @@ impl CompUnit {
         for item in self.item.iter_mut() {
             item.type_check(&mut symtable);
         }
+        // TODO: sysy library functions
+        // TODO: array dim coercion
+        let entry = SymbolEntry {
+            ty: Type::function(vec![], Type::i32_()),
+            comptime_val: None,
+            ir_value: None,
+        };
+        symtable.insert("getint".to_string(), entry);
+
+        let entry = SymbolEntry {
+            ty: Type::function(vec![], Type::i32_()),
+            comptime_val: None,
+            ir_value: None,
+        };
+        symtable.insert("getch".to_string(), entry);
+        
+        let entry = SymbolEntry {
+            ty: Type::function(vec![], Type::float()),
+            comptime_val: None,
+            ir_value: None,
+        };
+        symtable.insert("getfloat".to_string(), entry);
+        
         symtable.exit_scope();
     }
 }
@@ -770,7 +810,124 @@ impl CompUnitItem {
                 }
             },
             CompUnitItem::FuncDef(func_def) => {
-                todo!()
+                symtable.enter_scope();
+                for param in func_def.params.iter() {
+                    // symbol table for function parameters
+                    let ty = param.ty.clone();
+                    let entry = SymbolEntry {
+                        ty,
+                        comptime_val: None,
+                        ir_value: None,
+                    };
+                    symtable.insert(param.ident.clone(), entry);
+                }
+
+                let ty = Type::function(
+                    func_def
+                        .params
+                        .iter()
+                        .map(|param| param.ty.clone())
+                        .collect(),
+                    func_def.ret_ty.clone(),
+                );
+                let entry = SymbolEntry {
+                    ty,
+                    comptime_val: None,
+                    ir_value: None,
+                };
+                symtable.insert(func_def.ident.clone(), entry);
+                func_def.block.type_check(symtable);
+                symtable.exit_scope();
+            }
+        }
+    }
+}
+
+impl Block {
+    pub fn type_check(&mut self, symtable: &mut SymbolTableStack) {
+        symtable.enter_scope();
+        let mut new_items = Vec::new();
+        for item in self.blockitem.drain(..) {
+            let item = match item {
+                BlockItem::Decl(decl) => match decl {
+                    Decl::ConstDecl(mut decl) => {
+                        decl.type_check(symtable);
+                        BlockItem::Decl(Decl::ConstDecl(decl))
+                    }
+                    Decl::VarDecl(mut decl) => {
+                        decl.type_check(symtable);
+                        BlockItem::Decl(Decl::VarDecl(decl))
+                    }
+                },
+                BlockItem::Stmt(stmt) => {
+                    let stmt = stmt.type_check(symtable);
+                    BlockItem::Stmt(stmt)
+                }
+            };
+            new_items.push(item);
+        }
+        self.blockitem = new_items;
+        symtable.exit_scope();
+    }
+}
+
+impl Stmt {
+    pub fn type_check(self, symtable: &mut SymbolTableStack) -> Self {
+        match self {
+            Stmt::Assign(lval, expr) => {
+                let entry = symtable.lookup(&lval.ident).unwrap();
+
+                // type check indices
+                let indices = lval
+                    .indices
+                    .into_iter()
+                    .map(|index| index.type_check(Some(Type::i32_()), symtable))
+                    .collect::<Vec<_>>();
+
+                let mut ty = entry.ty.clone();
+                if !indices.is_empty() {
+                    // peel off the array type
+                    for _ in 0..indices.len() {
+                        ty = ty.as_array().unwrap().1.clone();
+                    }
+                }
+                let lval = LVal {
+                    ident: lval.ident,
+                    indices,
+                };
+                let expr = expr.type_check(Some(ty), symtable);
+                Stmt::Assign(lval, expr)
+            }
+            Stmt::ExprStmt(mut expr_stmt) => {
+                let expr = expr_stmt
+                    .expr
+                    .take()
+                    .map(|expr| expr.type_check(None, symtable));
+                expr_stmt.expr = expr;
+                Stmt::ExprStmt(expr_stmt)
+            }
+            Stmt::Block(mut block) => {
+                block.type_check(symtable);
+                Stmt::Block(block)
+            }
+            Stmt::Break => Stmt::Break,
+            Stmt::Continue => Stmt::Continue,
+            Stmt::Return(mut ret) => {
+                let expr = ret.expr.take().map(|expr| expr.type_check(None, symtable));
+                ret.expr = expr;
+                // XXX: for return, type coercion might be needed when generating IR.
+                Stmt::Return(ret)
+            }
+            Stmt::If(cond, then_block, else_block) => {
+                let cond = cond.type_check(Some(Type::i1()), symtable);
+                let then_block = then_block.type_check(symtable);
+                let else_block = else_block.map(|block| block.type_check(symtable));
+                Stmt::If(cond, Box::new(then_block), else_block.map(Box::new))
+            }
+            Stmt::While(cond, block) => {
+                let cond = cond.type_check(Some(Type::i1()), symtable);
+                let block = block.type_check(symtable);
+                Stmt::While(cond, Box::new(block))
             }
         }
     }
@@ -778,16 +935,29 @@ impl CompUnitItem {
 
 impl ConstDecl {
     pub fn type_check(&mut self, symtable: &mut SymbolTableStack) {
-        for def in self.defs.iter_mut() {
+        let mut new_defs = Vec::new();
+        for mut def in self.defs.drain(..) {
             // fold the shapes
-            let shape = def
+            let mut shape = def
                 .shape
                 .drain(..)
-                .map(|expr| expr.try_fold(symtable).expect("non-constant dim").as_int());
+                .map(|expr| expr.try_fold(symtable).expect("non-constant dim").as_int())
+                .collect::<Vec<_>>();
 
-            // def.init = def.init.type_check(symtable);
+            let mut ty = self.ty.clone();
+            for dim in shape.iter().rev() {
+                ty = Type::array(*dim as usize, ty);
+            }
+            // let folded = def.init.try_fold(symtable).expect("non-constant init");
+            // let expr = Expr::new_const(folded.clone());
+            // def.init = expr.type_check(Some(ty.clone()), symtable);
+
+            def.init = def.init.type_check(Some(ty.clone()), symtable);
+            let folded = def.init.try_fold(symtable).expect("non-constant init");
+            def.init = Expr::new_const(folded.clone());
 
             def.shape = shape
+                .drain(..)
                 .map(ComptimeVal::new_int)
                 .map(Expr::new_const)
                 .map(|mut e| {
@@ -795,10 +965,62 @@ impl ConstDecl {
                     e
                 })
                 .collect::<Vec<_>>();
+            let entry = SymbolEntry {
+                ty,
+                comptime_val: Some(folded),
+                ir_value: None,
+            };
+            symtable.insert(def.ident.clone(), entry);
+            new_defs.push(def);
         }
+        self.defs = new_defs;
     }
 }
 
 impl VarDecl {
-    pub fn type_check(&mut self, symtable: &mut SymbolTableStack) { todo!() }
+    pub fn type_check(&mut self, symtable: &mut SymbolTableStack) {
+        let mut new_defs = Vec::new();
+        for mut def in self.defs.drain(..) {
+            // fold the shapes
+            let mut shape = def
+                .shape
+                .drain(..)
+                .map(|expr| expr.try_fold(symtable).expect("non-constant dim").as_int())
+                .collect::<Vec<_>>();
+
+            let mut ty = self.ty.clone();
+            for dim in shape.iter().rev() {
+                ty = Type::array(*dim as usize, ty);
+            }
+
+            // just type check, no folding here
+            let init = def
+                .init
+                .map(|init| init.type_check(Some(ty.clone()), symtable))
+                .unwrap_or_else(|| {
+                    let zeros = ComptimeVal::new_zeros(ty.clone());
+                    Expr::new_const(zeros)
+                });
+
+            def.init = Some(init);
+            def.shape = shape
+                .drain(..)
+                .map(ComptimeVal::new_int)
+                .map(Expr::new_const)
+                .map(|mut e| {
+                    e.ty = Some(Type::i32_());
+                    e
+                })
+                .collect::<Vec<_>>();
+
+            let entry = SymbolEntry {
+                ty,
+                comptime_val: None,
+                ir_value: None,
+            };
+            symtable.insert(def.ident.clone(), entry);
+            new_defs.push(def);
+        }
+        self.defs = new_defs;
+    }
 }

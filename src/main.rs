@@ -83,9 +83,10 @@ fn main() {
         }
         CliCommand::Frontend(cmd) => {
             let src = std::fs::read_to_string(&cmd.file).unwrap();
-            let ast = sysyparser::CompUnitParser::new()
+            let mut ast = sysyparser::CompUnitParser::new()
                 .parse(src.as_str())
                 .unwrap();
+            ast.type_check();
             if let Some(emit_ast) = cmd.emit_ast {
                 let ast_str = format!("{:#?}", ast);
                 std::fs::write(emit_ast, ast_str).unwrap();
