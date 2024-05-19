@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    frontend::{CompUnit, CompUnitItem, ComptimeVal, Decl, FuncDef},
+    frontend::{Block, BlockItem, CompUnit, CompUnitItem, ComptimeVal, Decl, FuncDef, Stmt},
     ir::{module::Module, types::Type, values::Value},
 };
 
@@ -46,6 +46,7 @@ impl SymbolTableStack {
 
 pub struct IrGenContext {
     pub module: Module,
+    pub symtable: SymbolTableStack,
 }
 
 pub trait IrGen {
@@ -66,21 +67,44 @@ impl IrGen for Decl {
 }
 
 impl IrGen for FuncDef {
-    fn irgen(&self, ctx: &mut IrGenContext) { todo!() }
+    fn irgen(&self, ctx: &mut IrGenContext) {
+        // TODO: create an ir function.
+        todo!()
+    }
 }
 
+impl IrGen for Block {
+    fn irgen(&self, ctx: &mut IrGenContext) {
+        ctx.symtable.enter_scope();
+        for item in self.blockitem.iter() {
+            match item {
+                BlockItem::Decl(decl) => decl.irgen(ctx),
+                BlockItem::Stmt(stmt) => stmt.irgen(ctx),
+            }
+        }
+        ctx.symtable.exit_scope();
+    }
+}
 
+impl IrGen for Stmt {
+    fn irgen(&self, ctx: &mut IrGenContext) { todo!() }
+}
 
 impl IrGenContext {
     pub fn new(module_name: impl Into<String>) -> Self {
         let module = Module::new(module_name.into());
-        Self { module }
+        Self {
+            module,
+            symtable: SymbolTableStack::default(),
+        }
     }
 
     pub fn irgen(&mut self, compunit: CompUnit) {
+        self.symtable.enter_scope();
         for item in compunit.item.iter() {
             item.irgen(self);
         }
+        self.symtable.exit_scope();
     }
 
     /// Finish the irgen process and return the module.

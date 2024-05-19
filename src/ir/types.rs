@@ -320,6 +320,14 @@ impl Type {
         }
     }
 
+    pub fn get_array_leaf(&self) -> Type {
+        let mut ty = self.clone();
+        while let Some((_, inner)) = ty.as_array() {
+            ty = inner;
+        }
+        ty
+    }
+
     pub fn as_function(&self) -> Option<(Vec<Type>, Type)> {
         match self.kind() {
             TypeKind::Function(params, ret) => Some((params.clone(), ret.clone())),

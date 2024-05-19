@@ -2,10 +2,9 @@
 //!
 //! This module contains the implementation of the straighten pass.
 
-use thiserror::Error;
 use std::collections::HashMap;
 
-
+use thiserror::Error;
 
 use super::{
     control_flow_analysis::ControlFlowAnalysis,
@@ -16,7 +15,7 @@ use super::{
     TransformationPass,
 };
 use crate::ir::{
-    entities::{FunctionData,FunctionKind},
+    entities::{FunctionData, FunctionKind},
     module::Module,
     passes::{LocalPass, LocalPassMut},
     values::{Block, Function, Inst},
@@ -45,7 +44,7 @@ impl LocalPassMut for Straighten {
         let mut cfa = ControlFlowAnalysis {};
         let cfg = cfa.run_on_function(_function, data).unwrap();
         let mut changed = false;
-    
+
         let exit_block = data.layout().exit_block().unwrap();
 
         let mut to_merge_blockpairs: Vec<BlockPair> = Vec::new();
@@ -59,9 +58,9 @@ impl LocalPassMut for Straighten {
         // iter all blocks
         for (block, _block_node) in data.layout().blocks() {
             if block == exit_block {
-                continue; 
-            }          
-            
+                continue;
+            }
+
             if let Some(visited) = block_visited.get_mut(&block) {
                 if *visited {
                     continue;
@@ -70,7 +69,7 @@ impl LocalPassMut for Straighten {
 
             let succs = cfg.succs(&block);
             let succs_len = succs.as_ref().map_or(0, |v| v.len());
-    
+
             // if curr block have only one succ
             if succs_len == 1 {
                 let succ_block = cfg.succs(&block).unwrap().first().unwrap();
@@ -79,10 +78,13 @@ impl LocalPassMut for Straighten {
                 // if the succ block have only one pred, then merge
                 // ...A -> B ...
                 if succ_preds_len == 1 {
-                    if let Some(visited) = block_visited.get_mut(&succ_block) {
+                    if let Some(visited) = block_visited.get_mut(succ_block) {
                         *visited = true;
                     }
-                    let pair = BlockPair { block1: block, block2: *succ_block };
+                    let pair = BlockPair {
+                        block1: block,
+                        block2: *succ_block,
+                    };
                     to_merge_blockpairs.push(pair);
                 }
             }
@@ -100,22 +102,23 @@ impl LocalPassMut for Straighten {
                 } else {
                     panic!("can not find branch inst - straighten");
                 }
-                
+
                 // append succ_bb's instructions to curr_bb
-                let instructions: Vec<Inst> = data.layout()
+                let instructions: Vec<Inst> = data
+                    .layout()
                     .blocks()
                     .node(pair.block2)
                     .unwrap()
                     .insts()
                     .into_iter()
-                    .map(|(inst, _)| inst.clone()) 
+                    .map(|(inst, _)| inst)
                     .collect();
 
                 for inst in instructions {
                     let _ = data.layout_mut().remove_inst(inst);
                     let _ = data.layout_mut().append_inst(inst, pair.block1);
                 }
-                
+
                 // remove succ_bb
                 data.remove_block(pair.block2);
 
@@ -124,7 +127,6 @@ impl LocalPassMut for Straighten {
         }
         Ok(((), changed))
     }
-    
 }
 
 impl GlobalPassMut for Straighten {
@@ -135,12 +137,12 @@ impl GlobalPassMut for Straighten {
         let mut changed = false;
         for function in functions {
             let function_data = module.function_data_mut(function).unwrap();
-            
+
             if let FunctionKind::Declaration = *function_data.kind() {
-                continue; 
+                continue;
             }
             if let FunctionKind::Intrinsic = *function_data.kind() {
-                continue; 
+                continue;
             }
             let (_, local_changed) = self.run_on_function(function, function_data).unwrap();
             changed = changed || local_changed;
@@ -154,7 +156,7 @@ impl Straighten {
     pub fn register() {
         let pass = Box::new(Straighten {});
         let canonic = Box::new(ControlFlowCanonicalization {});
-        PassManager::register_transformation(STRAIGHTEN, pass, vec![]);
+        PassManager::register_transformation(STRAIGHTEN, pass, vec![canonic]);
     }
 }
 
@@ -200,8 +202,8 @@ mod test {
         let mut module = parser.parse().unwrap().into_ir("test".into()).unwrap();
 
         Straighten::register();
-        let iter =
-            PassManager::run_transformation(STRAIGHTEN, &mut module, 2);
+        let iter = PassManager::run_transformation(STRAIGHTEN, &mut module, 4321);
+        assert_eq!(iter, 3);
         print(&module);
     }
 }

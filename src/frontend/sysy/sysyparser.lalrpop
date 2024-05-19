@@ -1,4 +1,5 @@
 use crate::frontend::ast::*;
+use crate::ir::types::Type;
 
 grammar;
 
@@ -27,10 +28,10 @@ pub Decl: Decl = {
 }
 
 // BasicType -> 'void' | 'int' | 'float'
-pub BasicType: BasicType = {
-  "void" => BasicType::Void,
-  "int" => BasicType::Int,
-  "float" => BasicType::Float
+pub BasicType: Type = {
+  "void" => Type::void(),
+  "int" => Type::i32_(),
+  "float" => Type::float(),
 }
 
 // ConstDecl -> 'const' BasicType ConstDef { ',' ConstDef } ';'
@@ -53,9 +54,9 @@ pub ConstInitVal: Expr = {
   <c: ConstExp> => c,
   "{" <ci: ConstInitVal> <mut v: ("," <ConstInitVal>)*> "}" => {
     v.insert(0, ci);
-    Expr::InitList(v)
+    Expr::new_init_list(v)
   },
-  "{" "}" => Expr::InitList(Vec::new())
+  "{" "}" => Expr::new_init_list(Vec::new())
 }
 
 // VarDecl -> BasicType VarDef { ',' VarDef } ';'
@@ -78,9 +79,9 @@ pub InitVal: Expr = {
   <e: Exp> => e,
   "{" <iv: InitVal> <mut v: ("," <InitVal>)* > "}" => {
     v.insert(0, iv);
-    Expr::InitList(v)
+    Expr::new_init_list(v)
   },
-  "{" "}" => Expr::InitList(Vec::new())
+  "{" "}" => Expr::new_init_list(Vec::new())
 }
 
 // FuncDef -> BasicType Ident '(' [FuncFParams] ')' Block
@@ -167,8 +168,8 @@ pub LVal: LVal = <ident: Ident> <indices: ("[" <Exp> "]")*> => LVal { <> };
 // PrimaryExp -> '(' Exp ')' | LVal | Number
 pub PrimaryExp: Expr = {
   "(" <Exp> ")" => <>,
-  LVal => Expr::LVal(<>),
-  Number => Expr::Const(<>),
+  LVal => Expr::new_lval(<>),
+  Number => Expr::new_const(<>),
 }
 
 Int: i32 = {
@@ -194,39 +195,39 @@ pub Number: ComptimeVal = {
 // UnaryExp -> PrimaryExp | Ident '(' [FuncRParams] ')' | UnaryOp UnaryExp
 pub UnaryExp: Expr = {
   PrimaryExp => <>,
-  <start: @L> <i: Ident> <end: @R> "(" ")" => Expr::FuncCall(
+  <start: @L> <i: Ident> <end: @R> "(" ")" => Expr::new_func_call(
     FuncCall { 
       ident:i,
-      exp: Vec::new(),
+      args: Vec::new(),
       span: Span { start, end }
     }
   ),
-  <start: @L> <i: Ident> <end: @R> "(" <e: Exp> <mut exp: ("," <Exp>)*> ")" => {
-    exp.insert(0, e);
-    Expr::FuncCall(
+  <start: @L> <i: Ident> <end: @R> "(" <e: Exp> <mut args: ("," <Exp>)*> ")" => {
+    args.insert(0, e);
+    Expr::new_func_call(
       FuncCall { 
         ident:i,
-        exp,
+        args,
         span: Span { start, end }
       }
     )
   },
   "+" <UnaryExp> => <>,
-  "-" <expr: UnaryExp> => Expr::Unary(UnaryOp::Neg, Box::new(expr)),
-  "!" <expr: UnaryExp> => Expr::Unary(UnaryOp::Not, Box::new(expr)),
+  "-" <expr: UnaryExp> => Expr::new_unary(UnaryOp::Neg, Box::new(expr)),
+  "!" <expr: UnaryExp> => Expr::new_unary(UnaryOp::Not, Box::new(expr)),
 }
 
 // MulExp -> UnaryExp | MulExp ('*' | '/' | '%') UnaryExp
 pub MulExp: Expr = {
   UnaryExp => <>,
   <lhs: MulExp> "*" <rhs: UnaryExp> => {
-    Expr::Binary(BinaryOp::Mul, Box::new(lhs), Box::new(rhs))
+    Expr::new_binary(BinaryOp::Mul, Box::new(lhs), Box::new(rhs))
   },
   <lhs: MulExp> "/" <rhs: UnaryExp> => {
-    Expr::Binary(BinaryOp::Div, Box::new(lhs), Box::new(rhs))
+    Expr::new_binary(BinaryOp::Div, Box::new(lhs), Box::new(rhs))
   },
   <lhs: MulExp> "%" <rhs: UnaryExp> => {
-    Expr::Binary(BinaryOp::Mod, Box::new(lhs), Box::new(rhs))
+    Expr::new_binary(BinaryOp::Mod, Box::new(lhs), Box::new(rhs))
   },
 }
 
@@ -234,10 +235,10 @@ pub MulExp: Expr = {
 pub AddExp: Expr = {
   MulExp => <>,
   <lhs: AddExp> "+" <rhs: MulExp> => {
-    Expr::Binary(BinaryOp::Add, Box::new(lhs), Box::new(rhs))
+    Expr::new_binary(BinaryOp::Add, Box::new(lhs), Box::new(rhs))
   },
   <lhs: AddExp> "-" <rhs: MulExp> => {
-    Expr::Binary(BinaryOp::Sub, Box::new(lhs), Box::new(rhs))
+    Expr::new_binary(BinaryOp::Sub, Box::new(lhs), Box::new(rhs))
   },
 }
 
@@ -245,16 +246,16 @@ pub AddExp: Expr = {
 pub RelExp: Expr = {
   AddExp => <>,
   <lhs: RelExp> "<" <rhs: AddExp> => {
-    Expr::Binary(BinaryOp::Lt, Box::new(lhs), Box::new(rhs))
+    Expr::new_binary(BinaryOp::Lt, Box::new(lhs), Box::new(rhs))
   },
   <lhs: RelExp> ">" <rhs: AddExp> => {
-    Expr::Binary(BinaryOp::Gt, Box::new(lhs), Box::new(rhs))
+    Expr::new_binary(BinaryOp::Gt, Box::new(lhs), Box::new(rhs))
   },
   <lhs: RelExp> "<=" <rhs: AddExp> => {
-    Expr::Binary(BinaryOp::Le, Box::new(lhs), Box::new(rhs))
+    Expr::new_binary(BinaryOp::Le, Box::new(lhs), Box::new(rhs))
   },
   <lhs: RelExp> ">=" <rhs: AddExp> => {
-    Expr::Binary(BinaryOp::Ge, Box::new(lhs), Box::new(rhs))
+    Expr::new_binary(BinaryOp::Ge, Box::new(lhs), Box::new(rhs))
   },
 }
 
@@ -262,18 +263,18 @@ pub RelExp: Expr = {
 pub EqExp: Expr = {
   RelExp => <>,
   <lhs: EqExp> "==" <rhs: RelExp> => {
-    Expr::Binary(BinaryOp::Eq, Box::new(lhs), Box::new(rhs))
+    Expr::new_binary(BinaryOp::Eq, Box::new(lhs), Box::new(rhs))
   },
   <lhs: EqExp> "!=" <rhs: RelExp> => {
-    Expr::Binary(BinaryOp::Ne, Box::new(lhs), Box::new(rhs))
+    Expr::new_binary(BinaryOp::Ne, Box::new(lhs), Box::new(rhs))
   },
 }
 
 // LAndExp -> EqExp | LAndExp '&&' EqExp
 LAndExp: Expr = {
   EqExp => <>,
-  <le: LAndExp> "&&" <ee: EqExp> => {
-    Expr::Binary(BinaryOp::LogicalAnd, Box::new(le), Box::new(ee))
+  <lhs: LAndExp> "&&" <rhs: EqExp> => {
+    Expr::new_binary(BinaryOp::LogicalAnd, Box::new(lhs), Box::new(rhs))
   },
 }
 
@@ -281,7 +282,7 @@ LAndExp: Expr = {
 LOrExp: Expr = {
   LAndExp => <>,
   <lhs: LOrExp> "||" <rhs: LAndExp> => {
-    Expr::Binary(BinaryOp::LogicalOr, Box::new(lhs), Box::new(rhs))
+    Expr::new_binary(BinaryOp::LogicalOr, Box::new(lhs), Box::new(rhs))
   },
 }
 
