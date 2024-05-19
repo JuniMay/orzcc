@@ -1,100 +1,248 @@
 use std::fmt;
 
-pub fn off2lineno(content: &str, offset: usize) -> usize {
+use crate::ir::types::Type;
+
+#[derive(Debug)]
+pub enum ComptimeVal {
+    Bool(bool),
+    Int(i32),
+    Float(f32),
+    List(Vec<ComptimeVal>),
+    Zeros(Type),
+}
+
+impl ComptimeVal {
+    pub fn new_bool(val: bool) -> Self { ComptimeVal::Bool(val) }
+
+    pub fn new_int(val: i32) -> Self { ComptimeVal::Int(val) }
+
+    pub fn new_float(val: f32) -> Self { ComptimeVal::Float(val) }
+
+    pub fn new_list(val: Vec<ComptimeVal>) -> Self { ComptimeVal::List(val) }
+
+    pub fn new_zeros(ty: Type) -> Self {
+        if ty.is_i1() {
+            ComptimeVal::Bool(false)
+        } else if ty.is_i32() {
+            ComptimeVal::Int(0)
+        } else if ty.is_float() {
+            ComptimeVal::Float(0.0)
+        } else if ty.as_array().is_some() {
+            ComptimeVal::Zeros(ty)
+        } else {
+            panic!("unsupported type")
+        }
+    }
+
+    pub fn get_type(&self) -> Type {
+        match self {
+            ComptimeVal::Bool(_) => Type::i1(),
+            ComptimeVal::Int(_) => Type::i32_(),
+            ComptimeVal::Float(_) => Type::float(),
+            ComptimeVal::List(val) => {
+                let ty = val[0].get_type();
+                Type::array(val.len(), ty)
+            }
+            ComptimeVal::Zeros(ty) => ty.clone(),
+        }
+    }
+
+    pub fn logical_and(&self, other: &Self) -> Self {
+        match (self, other) {
+            (ComptimeVal::Bool(a), ComptimeVal::Bool(b)) => ComptimeVal::Bool(*a && *b),
+            _ => panic!("unsupported operation"),
+        }
+    }
+
+    pub fn logical_or(&self, other: &Self) -> Self {
+        match (self, other) {
+            (ComptimeVal::Bool(a), ComptimeVal::Bool(b)) => ComptimeVal::Bool(*a || *b),
+            _ => panic!("unsupported operation"),
+        }
+    }
+}
+
+impl PartialEq for ComptimeVal {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (ComptimeVal::Bool(a), ComptimeVal::Bool(b)) => a == b,
+            (ComptimeVal::Int(a), ComptimeVal::Int(b)) => a == b,
+            (ComptimeVal::Float(a), ComptimeVal::Float(b)) => a == b,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for ComptimeVal {}
+
+impl PartialOrd for ComptimeVal {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        match (self, other) {
+            (ComptimeVal::Int(a), ComptimeVal::Int(b)) => a.partial_cmp(b),
+            (ComptimeVal::Float(a), ComptimeVal::Float(b)) => a.partial_cmp(b),
+            _ => None,
+        }
+    }
+}
+
+impl std::ops::Neg for ComptimeVal {
+    type Output = Self;
+
+    fn neg(self) -> Self {
+        match self {
+            ComptimeVal::Int(a) => ComptimeVal::Int(-a),
+            ComptimeVal::Float(a) => ComptimeVal::Float(-a),
+            _ => panic!("unsupported operation"),
+        }
+    }
+}
+
+impl std::ops::Not for ComptimeVal {
+    type Output = Self;
+
+    fn not(self) -> Self {
+        match self {
+            ComptimeVal::Bool(a) => ComptimeVal::Bool(!a),
+            _ => panic!("unsupported operation"),
+        }
+    }
+}
+
+impl std::ops::Add for ComptimeVal {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        match (self, other) {
+            (ComptimeVal::Int(a), ComptimeVal::Int(b)) => ComptimeVal::Int(a + b),
+            (ComptimeVal::Float(a), ComptimeVal::Float(b)) => ComptimeVal::Float(a + b),
+            _ => panic!("unsupported operation"),
+        }
+    }
+}
+
+impl std::ops::Sub for ComptimeVal {
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self {
+        match (self, other) {
+            (ComptimeVal::Int(a), ComptimeVal::Int(b)) => ComptimeVal::Int(a - b),
+            (ComptimeVal::Float(a), ComptimeVal::Float(b)) => ComptimeVal::Float(a - b),
+            _ => panic!("unsupported operation"),
+        }
+    }
+}
+
+impl std::ops::Mul for ComptimeVal {
+    type Output = Self;
+
+    fn mul(self, other: Self) -> Self {
+        match (self, other) {
+            (ComptimeVal::Int(a), ComptimeVal::Int(b)) => ComptimeVal::Int(a * b),
+            (ComptimeVal::Float(a), ComptimeVal::Float(b)) => ComptimeVal::Float(a * b),
+            _ => panic!("unsupported operation"),
+        }
+    }
+}
+
+impl std::ops::Div for ComptimeVal {
+    type Output = Self;
+
+    fn div(self, other: Self) -> Self {
+        match (self, other) {
+            (ComptimeVal::Int(a), ComptimeVal::Int(b)) => ComptimeVal::Int(a / b),
+            (ComptimeVal::Float(a), ComptimeVal::Float(b)) => ComptimeVal::Float(a / b),
+            _ => panic!("unsupported operation"),
+        }
+    }
+}
+
+impl std::ops::Rem for ComptimeVal {
+    type Output = Self;
+
+    fn rem(self, other: Self) -> Self {
+        match (self, other) {
+            (ComptimeVal::Int(a), ComptimeVal::Int(b)) => ComptimeVal::Int(a % b),
+            (ComptimeVal::Float(a), ComptimeVal::Float(b)) => ComptimeVal::Float(a % b),
+            _ => panic!("unsupported operation"),
+        }
+    }
+}
+
+pub fn offset2lineno(content: &str, offset: usize) -> usize {
     content[..offset].matches('\n').count() + 1
 }
 
-pub struct SourcePos {
+pub struct Span {
     pub start: usize,
     pub end: usize,
 }
 
-impl fmt::Display for SourcePos {
+impl fmt::Display for Span {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}:{}", self.start, self.end)
     }
 }
 
-impl fmt::Debug for SourcePos {
+impl fmt::Debug for Span {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}:{}", self.start, self.end)
     }
 }
 
-// CompUnit -> { CompUnitItem }
+/// CompUnit -> { CompUnitItem }
 #[derive(Debug)]
 pub struct CompUnit {
     pub item: Vec<CompUnitItem>,
 }
 
-// CompUnitItem -> Decl | FuncDef
+/// CompUnitItem -> Decl | FuncDef
 #[derive(Debug)]
 pub enum CompUnitItem {
     Decl(Decl),
     FuncDef(FuncDef),
 }
 
-// Decl -> ConstDecl | VarDecl
 #[derive(Debug)]
 pub enum Decl {
     ConstDecl(ConstDecl),
     VarDecl(VarDecl),
 }
 
-// ConstDecl -> 'const' BasicType ConstDef { ',' ConstDef } ';'
 #[derive(Debug)]
 pub struct ConstDecl {
-    pub basictype: BasicType,
-    pub constdef: Vec<ConstDef>,
+    pub ty: BasicType,
+    pub defs: Vec<ConstDef>,
 }
 
-// ConstDef -> Ident { '[' ConstExp ']' } '=' ConstInitVal
 #[derive(Debug)]
 pub struct ConstDef {
     pub ident: String,
-    pub constexp: Vec<ConstExp>,
-    pub constinitval: ConstInitVal,
+    pub shape: Vec<Expr>,
+    pub init: Expr,
 }
 
-// ConstInitVal -> ConstExp | '{' [ ConstInitVal { ',' ConstInitVal } ] '}'
-#[derive(Debug)]
-pub enum ConstInitVal {
-    ConstExp(ConstExp),
-    ConstInitVal(Vec<ConstInitVal>),
-}
-
-// VarDecl -> BasicType VarDef { ',' VarDef } ';'
 #[derive(Debug)]
 pub struct VarDecl {
-    pub basictype: BasicType,
-    pub vardef: Vec<VarDef>,
+    pub ty: BasicType,
+    pub defs: Vec<VarDef>,
 }
 
-// VarDef -> Ident { '[' ConstExp ']' } | Ident { '[' ConstExp ']' } '=' InitVal
+
 #[derive(Debug)]
 pub struct VarDef {
     pub ident: String,
-    pub constexp: Vec<ConstExp>,
-    pub initval: Option<InitVal>,
+    pub shape: Vec<Expr>,
+    pub init: Option<Expr>,
 }
 
-// InitVal -> Exp | '{' [ InitVal { ',' InitVal } ] '}'
-#[derive(Debug)]
-pub enum InitVal {
-    Exp(Exp),
-    InitVal(Vec<InitVal>),
-}
-
-// FuncDef -> BasicType Ident '(' [FuncFParams] ')' Block
 #[derive(Debug)]
 pub struct FuncDef {
-    pub basictype: BasicType,
+    pub ret_ty: BasicType,
     pub ident: String,
-    pub funcfparams: FuncFParams,
+    pub params: Vec<FuncFParam>,
     pub block: Block,
 }
 
-// BasicType -> 'void' | 'int' | 'float'
 #[derive(Debug)]
 pub enum BasicType {
     Void,
@@ -102,45 +250,32 @@ pub enum BasicType {
     Float,
 }
 
-// FuncFParams -> FuncFParam { ',' FuncFParam }
-#[derive(Debug)]
-pub struct FuncFParams {
-    pub funcfparam: Vec<FuncFParam>,
-}
-
-// FuncFParam -> BasicType Ident ['[' ']' { '[' Exp ']' }]
 #[derive(Debug)]
 pub struct FuncFParam {
-    pub basictype: BasicType,
+    pub ty: BasicType,
     pub ident: String,
-    pub exp: Option<Vec<Exp>>,
+    pub indices: Option<Vec<Expr>>,
 }
 
-// Block -> '{' { BlockItem } '}'
 #[derive(Debug)]
 pub struct Block {
     pub blockitem: Vec<BlockItem>,
 }
 
-// BlockItem -> Decl | Stmt
+
 #[derive(Debug)]
 pub enum BlockItem {
     Decl(Decl),
     Stmt(Stmt),
 }
 
-// Stmt -> LVal '=' Exp ';' | [Exp] ';' | Block
-//       | 'if' '( Cond ')' Stmt [ 'else' Stmt ]
-//       | 'while' '(' Cond ')' Stmt
-//       | 'break' ';' | 'continue' ';'
-//       | 'return' [Exp] ';'
 #[derive(Debug)]
 pub enum Stmt {
-    Assign(LVal, Exp),
-    ExpStmt(ExpStmt),
+    Assign(LVal, Expr),
+    ExprStmt(ExprStmt),
     Block(Block),
-    If(Cond, Box<Stmt>, Option<Box<Stmt>>),
-    While(Cond, Box<Stmt>),
+    If(Expr, Box<Stmt>, Option<Box<Stmt>>),
+    While(Expr, Box<Stmt>),
     Break,
     Continue,
     Return(Return),
@@ -148,147 +283,59 @@ pub enum Stmt {
 
 #[derive(Debug)]
 pub struct Return {
-    pub exp: Option<Exp>,
+    pub expr: Option<Expr>,
 }
 
-/// ExpStmt -> Exp ';'
+
 #[derive(Debug)]
-pub struct ExpStmt {
-    pub exp: Option<Exp>,
+pub struct ExprStmt {
+    pub expr: Option<Expr>,
 }
 
-// Exp -> AddExp
-#[derive(Debug)]
-pub struct Exp {
-    pub addexp: AddExp,
-}
-
-// Cond -> LOrExp
-#[derive(Debug)]
-pub struct Cond {
-    pub lorexp: LOrExp,
-}
-
-// LVal -> Ident {'[' Exp ']'}
 #[derive(Debug)]
 pub struct LVal {
     pub ident: String,
-    pub exp: Vec<Exp>,
+    pub indices: Vec<Expr>,
 }
 
-// PrimaryExp -> '(' Exp ')' | LVal | Number
-#[derive(Debug)]
-pub enum PrimaryExp {
-    Exp(Box<Exp>),
-    LVal(LVal),
-    Number(Number),
-}
-
-// Number -> IntConst | floatConst
-#[derive(Debug)]
-pub enum Number {
-    IntConst(i32),
-    FloatConst(f32),
-}
-
-// UnaryExp -> PrimaryExp | Ident '(' [FuncRParams] ')' | UnaryOp
-#[derive(Debug)]
-pub enum UnaryExp {
-    PrimaryExp(PrimaryExp),
-    FuncCall(FuncCall),
-    UnaryOp(UnaryOp, Box<UnaryExp>),
-}
-
-// UnaryOp -> '+' | '−' | '!'
+/// UnaryOp -> '+' | '−' | '!'
 #[derive(Debug)]
 pub enum UnaryOp {
     Neg,
     Not,
 }
 
-// FuncRParams -> Exp { ',' Exp }
+/// FuncRParams -> Expr { ',' Expr }
 #[derive(Debug)]
 pub struct FuncCall {
     pub ident: String,
-    pub exp: Vec<Exp>,
-    pub pos: SourcePos,
+    pub exp: Vec<Expr>,
+    pub span: Span,
 }
 
-// MulExp -> UnaryExp | MulExp ('*' | '/' | '%') UnaryExp
 #[derive(Debug)]
-pub enum MulExp {
-    UnaryExp(UnaryExp),
-    MulUExp(Box<MulExp>, MulOp, UnaryExp),
-}
-
-// MulOp -> '*' | '/' | '%'
-#[derive(Debug)]
-pub enum MulOp {
+pub enum BinaryOp {
+    Add,
+    Sub,
     Mul,
     Div,
     Mod,
-}
-
-// AddExp -> MulExp | AddExp ('+' | '−') MulExp
-#[derive(Debug)]
-pub enum AddExp {
-    MulExp(MulExp),
-    AddMExp(Box<AddExp>, AddOp, MulExp),
-}
-
-// AddOp -> '+' | '−'
-#[derive(Debug)]
-pub enum AddOp {
-    Add,
-    Sub,
-}
-
-// RelExp -> AddExp | RelExp ('<' | '>' | '<=' | '>=') AddExp
-#[derive(Debug)]
-pub enum RelExp {
-    AddExp(AddExp),
-    RelAExp(Box<RelExp>, RelOp, AddExp),
-}
-
-// RelOp -> '<' | '>' | '<=' | '>='
-#[derive(Debug)]
-pub enum RelOp {
     Lt,
     Gt,
     Le,
     Ge,
-}
-
-// EqExp -> RelExp | EqExp ('==' | '!=') RelExp
-#[derive(Debug)]
-pub enum EqExp {
-    RelExp(RelExp),
-    EqRExp(Box<EqExp>, EqOp, RelExp),
-}
-
-// EqOp -> '==' | '!='
-#[derive(Debug)]
-pub enum EqOp {
     Eq,
     Ne,
+    LogicalAnd,
+    LogicalOr,
 }
 
-// LAndExp -> EqExp | LAndExp '&&' EqExp
 #[derive(Debug)]
-pub enum LAndExp {
-    EqExp(EqExp),
-    LAndEExp(Box<LAndExp>, EqExp),
-}
-
-// LOrExp -> LAndExp | LOrExp '||' LAndExp
-#[derive(Debug)]
-pub enum LOrExp {
-    LAndExp(LAndExp),
-    LOrLExp(Box<LOrExp>, LAndExp),
-}
-
-// ConstExp -> AddExp
-#[derive(Debug)]
-pub struct ConstExp {
-    pub addexp: AddExp,
+pub enum Expr {
+    Const(ComptimeVal),
+    Binary(BinaryOp, Box<Expr>, Box<Expr>),
+    Unary(UnaryOp, Box<Expr>),
+    FuncCall(FuncCall),
+    LVal(LVal),
+    InitList(Vec<Expr>),
 }

@@ -254,6 +254,10 @@ impl Type {
         }
     }
 
+    pub fn is_i32(&self) -> bool { self == &Type::i32_() }
+
+    pub fn is_i1(&self) -> bool { self == &Type::i1() }
+
     pub fn is_numeric(&self) -> bool { self.is_int() || self.is_float() }
 
     pub fn is_ptr(&self) -> bool {
