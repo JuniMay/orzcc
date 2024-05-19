@@ -1,5 +1,4 @@
 use crate::frontend::ast::*;
-//use hexponent::FloatLiteral;
 
 grammar;
 
@@ -10,159 +9,162 @@ match {
   _
 }
 
-// Compilation unit CompUnit → [ CompUnit ] ( Decl | FuncDef )
+// CompUnit -> [ CompUnit ] ( Decl | FuncDef )
 pub CompUnit: CompUnit = {
   <item: (CompUnitItem)*> => CompUnit { <> }
 }
 
-// Compilation unit item CompUnitItem → Decl | FuncDef
+// CompUnitItem -> Decl | FuncDef
 pub CompUnitItem: CompUnitItem = {
-  <d:Decl> => CompUnitItem::Decl(d),
-  <f:FuncDef> => CompUnitItem::FuncDef(f)
+  <d: Decl> => CompUnitItem::Decl(d),
+  <f: FuncDef> => CompUnitItem::FuncDef(f)
 }
 
-// Declaration Decl → ConstDecl | VarDecl
+// Decl -> ConstDecl | VarDecl
 pub Decl: Decl = {
-  <d:ConstDecl> => Decl::ConstDecl(d),
-  <v:VarDecl> => Decl::VarDecl(v)
+  <d: ConstDecl> => Decl::ConstDecl(d),
+  <v: VarDecl> => Decl::VarDecl(v)
 }
 
-// Type BasicType → 'void' | 'int' | 'float'
+// BasicType -> 'void' | 'int' | 'float'
 pub BasicType: BasicType = {
   "void" => BasicType::Void,
   "int" => BasicType::Int,
   "float" => BasicType::Float
 }
 
-// Constant declaration ConstDecl → 'const' BasicType ConstDef { ',' ConstDef } ';'
+// ConstDecl -> 'const' BasicType ConstDef { ',' ConstDef } ';'
 pub ConstDecl: ConstDecl = {
-  "const" <t:BasicType> <c:ConstDef> <mut v:("," <ConstDef>)*> ";" => {
+  "const" <t: BasicType> <c: ConstDef> <mut v: ("," <ConstDef>)*> ";" => {
     v.insert(0, c); 
     ConstDecl { basictype: t, constdef: v } 
   }
 }
 
-// Constant definition ConstDef → Ident { '[' ConstExp ']' } '=' ConstInitVal
+// ConstDef -> Ident { '[' ConstExp ']' } '=' ConstInitVal
 pub ConstDef: ConstDef = {
-  <i:Ident> <v:("[" <ConstExp> "]" )* > "=" <c:ConstInitVal> => {
+  <i: Ident> <v: ("[" <ConstExp> "]" )* > "=" <c: ConstInitVal> => {
     ConstDef { ident: i, constexp: v, constinitval: c }
   }
 }
 
-// Constant value ConstInitVal → ConstExp | '{' [ ConstInitVal { ',' ConstInitVal } ] '}'
+// ConstInitVal -> ConstExp | '{' [ ConstInitVal { ',' ConstInitVal } ] '}'
 pub ConstInitVal: ConstInitVal = {
-  <c:ConstExp> => ConstInitVal::ConstExp(c),
-  "{" <ci:ConstInitVal> <mut v:("," <ConstInitVal>)*> "}" => {
+  <c: ConstExp> => ConstInitVal::ConstExp(c),
+  "{" <ci: ConstInitVal> <mut v: ("," <ConstInitVal>)*> "}" => {
     v.insert(0, ci);
     ConstInitVal::ConstInitVal(v)
   },
   "{" "}" => ConstInitVal::ConstInitVal(Vec::new())
 }
 
-// Variable declaration VarDecl → BasicType VarDef { ',' VarDef } ';'
+// VarDecl -> BasicType VarDef { ',' VarDef } ';'
 pub VarDecl: VarDecl = {
-  <t:BasicType> <vd:VarDef> <mut v:("," <VarDef>)*> ";" => {
+  <t: BasicType> <vd: VarDef> <mut v: ("," <VarDef>)* > ";" => {
     v.insert(0, vd); 
     VarDecl { basictype: t, vardef: v } 
   }
 }
 
-// Variable definition VarDef → Ident { '[' ConstExp ']' } | Ident { '[' ConstExp ']' } '=' InitVal
+// VarDef -> Ident { '[' ConstExp ']' } | Ident { '[' ConstExp ']' } '=' InitVal
 pub VarDef: VarDef = {
-  <i:Ident> <v:("[" <ConstExp> "]" )* > <ini: ("=" <InitVal>)?> => {
+  <i: Ident> <v:("[" <ConstExp> "]" )* > <ini: ("=" <InitVal>)?> => {
     VarDef { ident: i, constexp: v, initval: ini }
   }
 }
 
-// Variable initial value InitVal → Exp | '{' [ InitVal { ',' InitVal } ] '}'
+// InitVal -> Exp | '{' [ InitVal { ',' InitVal } ] '}'
 pub InitVal: InitVal = {
-  <e:Exp> => InitVal::Exp(e),
-  "{" <iv:InitVal> <mut v:("," <InitVal>)*> "}" => {
+  <e: Exp> => InitVal::Exp(e),
+  "{" <iv: InitVal> <mut v: ("," <InitVal>)* > "}" => {
     v.insert(0, iv);
     InitVal::InitVal(v)
   },
   "{" "}" => InitVal::InitVal(Vec::new())
 }
 
-// Function definition FuncDef → BasicType Ident '(' [FuncFParams] ')' Block
-pub FuncDef: FuncDef={
-  <t:BasicType> <i:Ident> "(" ")" <b:Block> => {
+// FuncDef -> BasicType Ident '(' [FuncFParams] ')' Block
+pub FuncDef: FuncDef = {
+  <t: BasicType> <i: Ident> "(" ")" <b: Block> => {
     FuncDef{ basictype: t, ident: i, funcfparams: FuncFParams { funcfparam: vec![] }, block: b }
   },
-  <t:BasicType> <i:Ident> "(" <fps:FuncFParams> ")" <b:Block> => {
+  <t: BasicType> <i: Ident> "(" <fps: FuncFParams> ")" <b: Block> => {
     FuncDef{ basictype: t, ident: i, funcfparams: fps, block: b }
   },
 }
 
-// Function formal parameter table FuncFParams → FuncFParam { ',' FuncFParam }
-pub FuncFParams: FuncFParams={
-  <fp:FuncFParam> <mut v:("," <FuncFParam>)*> => {
+// FuncFParams -> FuncFParam { ',' FuncFParam }
+pub FuncFParams: FuncFParams = {
+  <fp: FuncFParam> <mut v: ("," <FuncFParam>)*> => {
     v.insert(0, fp);
     FuncFParams { funcfparam:v }
   }
 }
 
-// Function formal parameter FuncFParam → BasicType Ident ['[' ']' { '[' Exp ']' }]
-pub FuncFParam: FuncFParam={
-  <basictype:BasicType> <ident:Ident> <exp: ("[" "]" <("[" <Exp> "]")*>)?> => {
+// FuncFParam -> BasicType Ident ['[' ']' { '[' Exp ']' }]
+pub FuncFParam: FuncFParam = {
+  <basictype: BasicType> <ident: Ident> <exp: ("[" "]" <("[" <Exp> "]")*>)?> => {
     FuncFParam { <> }
   },
 }
 
-// Statement block Block → '{' { BlockItem } '}'
+// Block -> '{' { BlockItem } '}'
 Block: Block = "{" <blockitem: (BlockItem)*> "}" => Block { <> };
 
 
-// Statement block item BlockItem → Decl | Stmt
+// BlockItem -> Decl | Stmt
 pub BlockItem: BlockItem = {
   Decl => BlockItem::Decl(<>),
   Stmt => BlockItem::Stmt(<>),
 }
 
-// Statement Stmt → LVal '=' Exp ';' | [Exp] ';' | Block
-//             | 'if' '( Cond ')' Stmt [ 'else' Stmt ]
-//             | 'while' '(' Cond ')' Stmt
-//             | 'break' ';' | 'continue' ';'
-//             | 'return' [Exp] ';'
-// Need to handle else hanging problem
-pub Stmt: Stmt={
+// Stmt -> LVal '=' Exp ';' 
+//       | [Exp] ';' 
+//       | Block
+//       | 'if' '( Cond ')' Stmt [ 'else' Stmt ]
+//       | 'while' '(' Cond ')' Stmt
+//       | 'break' ';' 
+//       | 'continue' ';'
+//       | 'return' [Exp] ';'
+// reference: https://github.com/pku-minic/kira-rs/blob/master/src/sysy.lalrpop
+pub Stmt: Stmt = {
   MStmt => <>,
   OStmt => <>,
 }
 
 pub MStmt: Stmt = {
-  <lval:LVal> "=" <exp:Exp> ";" => Stmt::Assign(lval, exp),
-  <exp:(Exp)?> ";" => Stmt::ExpSt(ExpSt{<>}),
-  <b:Block> => Stmt::Block(b),
-  "if" "(" <c:Cond> ")" <s1:MStmt> "else" <s2:MStmt> => {
+  <lval: LVal> "=" <exp: Exp> ";" => Stmt::Assign(lval, exp),
+  <exp: (Exp)?> ";" => Stmt::ExpStmt(ExpStmt{<>}),
+  <b: Block> => Stmt::Block(b),
+  "if" "(" <c: Cond> ")" <s1: MStmt> "else" <s2: MStmt> => {
     Stmt::If(c, Box::new(s1), Some(Box::new(s2)))
   },
-  "while" "(" <c:Cond> ")" <s:MStmt> => Stmt::While(c, Box::new(s)),
+  "while" "(" <c: Cond> ")" <s: MStmt> => Stmt::While(c, Box::new(s)),
   "break;" => Stmt::Break,
   "continue;" => Stmt::Continue,
   "return" <e:(Exp)?> ";" => Stmt::Return(Return{exp:e}),
 }
 
 pub OStmt: Stmt = {
-  "if" "(" <c:Cond> ")" <s1: Stmt> => {
+  "if" "(" <c: Cond> ")" <s1: Stmt> => {
     Stmt::If(c, Box::new(s1), None)
   },
-  "if" "(" <c:Cond> ")" <s1: MStmt> "else" <s2: OStmt> => {
+  "if" "(" <c: Cond> ")" <s1: MStmt> "else" <s2: OStmt> => {
     Stmt::If(c, Box::new(s1), Some(Box::new(s2)))
   },
-  "while" "(" <c:Cond> ")" <s:OStmt> => Stmt::While(c, Box::new(s)),
+  "while" "(" <c: Cond> ")" <s: OStmt> => Stmt::While(c, Box::new(s)),
 }
 
-// Expression Exp → AddExp 
-pub Exp: Exp = <addexp:AddExp> => Exp{<>};
+// Exp -> AddExp 
+pub Exp: Exp = <addexp: AddExp> => Exp{<>};
 
-// Conditional expression Cond → LOrExp
-pub Cond: Cond = <lorexp:LOrExp> => Cond{<>};
+// Cond -> LOrExp
+pub Cond: Cond = <lorexp: LOrExp> => Cond{<>};
 
-// Left value expression LVal → Ident {'[' Exp ']'}
+// LVal -> Ident {'[' Exp ']'}
 pub LVal: LVal = <ident: Ident> <exp: ("[" <Exp> "]")*> => LVal { <> };
 
-// Basic expression PrimaryExp → '(' Exp ')' | LVal | Number
+// PrimaryExp -> '(' Exp ')' | LVal | Number
 pub PrimaryExp: PrimaryExp = {
   "(" <Exp> ")" => PrimaryExp::Exp(Box::new(<>)),
   LVal => PrimaryExp::LVal(<>),
@@ -183,17 +185,23 @@ Float: f32 = {
     },
 }
 
-// value Number → IntConst | floatConst
+// Number -> IntConst | floatConst
 pub Number: Number = {
-  <n:Int> => Number::IntConst(n),
-  <f:Float> => Number::FloatConst(f),
+  <n: Int> => Number::IntConst(n),
+  <f: Float> => Number::FloatConst(f),
 }
 
-// Unary expression UnaryExp → PrimaryExp | Ident '(' [FuncRParams] ')' | UnaryOp UnaryExp
+// UnaryExp -> PrimaryExp | Ident '(' [FuncRParams] ')' | UnaryOp UnaryExp
 pub UnaryExp: UnaryExp = {
   PrimaryExp => UnaryExp::PrimaryExp(<>),
-  <start:@L> <i: Ident> <end:@R> "(" ")" => UnaryExp::FuncCall(FuncCall { ident:i, exp: Vec::new(),  pos: SourcePos { start, end }}),
-  <start:@L> <i: Ident> <end:@R> "(" <e: Exp> <mut exp: ("," <Exp>)*> ")" => {
+  <start: @L> <i: Ident> <end: @R> "(" ")" => UnaryExp::FuncCall(
+    FuncCall { 
+      ident:i,
+      exp: Vec::new(),
+      pos: SourcePos { start, end }
+    }
+  ),
+  <start: @L> <i: Ident> <end: @R> "(" <e: Exp> <mut exp: ("," <Exp>)*> ")" => {
     exp.insert(0, e);
     UnaryExp::FuncCall(FuncCall { ident:i, exp, pos: SourcePos { start, end }})
   },
@@ -202,7 +210,7 @@ pub UnaryExp: UnaryExp = {
   "!" <uexp: UnaryExp> => UnaryExp::UnaryOp(UnaryOp::Not, Box::new(uexp)),
 }
 
-// Multiplication and division modulus expression MulExp → UnaryExp | MulExp ('*' | '/' | '%') UnaryExp
+// MulExp -> UnaryExp | MulExp ('*' | '/' | '%') UnaryExp
 pub MulExp: MulExp = {
   UnaryExp => MulExp::UnaryExp(<>),
   <me: MulExp> "*" <ue: UnaryExp> => {
@@ -216,7 +224,7 @@ pub MulExp: MulExp = {
   },
 }
 
-// Addition and subtraction expression AddExp → MulExp | AddExp ('+' | '−') MulExp
+// AddExp -> MulExp | AddExp ('+' | '−') MulExp
 pub AddExp: AddExp = {
   MulExp => AddExp::MulExp(<>),
   <ae: AddExp> "+" <me: MulExp> => {
@@ -227,7 +235,7 @@ pub AddExp: AddExp = {
   },
 }
 
-// Relational expression RelExp → AddExp | RelExp ('<' | '>' | '<=' | '>=') AddExp
+// RelExp -> AddExp | RelExp ('<' | '>' | '<=' | '>=') AddExp
 pub RelExp: RelExp = {
   AddExp => RelExp::AddExp(<>),
   <re: RelExp> "<" <ae: AddExp> => {
@@ -244,7 +252,7 @@ pub RelExp: RelExp = {
   },
 }
 
-// Equality expression EqExp → RelExp | EqExp ('==' | '!=') RelExp
+// EqExp -> RelExp | EqExp ('==' | '!=') RelExp
 pub EqExp: EqExp = {
   RelExp => EqExp::RelExp(<>),
   <ee: EqExp> "==" <re: RelExp> => {
@@ -255,7 +263,7 @@ pub EqExp: EqExp = {
   },
 }
 
-// Logical AND expression LAndExp → EqExp | LAndExp '&&' EqExp
+// LAndExp -> EqExp | LAndExp '&&' EqExp
 LAndExp: LAndExp = {
   EqExp => LAndExp::EqExp(<>),
   <le: LAndExp> "&&" <ee: EqExp> => {
@@ -263,7 +271,7 @@ LAndExp: LAndExp = {
   },
 }
 
-// Logical OR expression LOrExp → LAndExp | LOrExp '||' LAndExp
+// LOrExp -> LAndExp | LOrExp '||' LAndExp
 LOrExp: LOrExp = {
   LAndExp => LOrExp::LAndExp(<>),
   <loe: LOrExp> "||" <lae: LAndExp> => {
@@ -271,7 +279,7 @@ LOrExp: LOrExp = {
   },
 }
 
-// Constant expression ConstExp → AddExp
-pub ConstExp: ConstExp = <addexp:AddExp> => ConstExp{<>};
+// ConstExp -> AddExp
+pub ConstExp: ConstExp = <addexp: AddExp> => ConstExp{<>};
 
 Ident: String = r"[_a-zA-Z][_a-zA-Z0-9]*" => <>.to_string();

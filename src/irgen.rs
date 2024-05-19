@@ -11,7 +11,7 @@ impl IrGenContext {
         Self { compunit, module }
     }
 
-    pub fn irgen(&mut self) { todo!() }
+    pub fn irgen(&mut self) {}
 
     /// Finish the irgen process and return the module.
     pub fn finish(self) -> Module { self.module }

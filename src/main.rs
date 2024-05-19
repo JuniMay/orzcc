@@ -2,6 +2,7 @@ use clap::{Arg, Command};
 use orzcc::{
     codegen::CodegenContext,
     collections::diagnostic::{Diagnostic, Level},
+    frontend::sysy::sysyparser,
     ir::{
         exec::debugger::Debugger,
         frontend::{
@@ -40,6 +41,7 @@ struct OptCommand {
 
 struct FrontendCommand {
     file: String,
+    emit_ast: Option<String>,
 }
 
 fn main() {
@@ -80,8 +82,14 @@ fn main() {
             }
         }
         CliCommand::Frontend(cmd) => {
-            println!("TODO FOR FRONTEND");
-            todo!();
+            let src = std::fs::read_to_string(&cmd.file).unwrap();
+            let ast = sysyparser::CompUnitParser::new()
+                .parse(src.as_str())
+                .unwrap();
+            if let Some(emit_ast) = cmd.emit_ast {
+                let ast_str = format!("{:#?}", ast);
+                std::fs::write(emit_ast, ast_str).unwrap();
+            }
         }
     }
 }
@@ -136,6 +144,12 @@ fn cli() -> Command {
                         .long("file")
                         .required(true)
                         .help("The Sysy code file to compile into Orzir"),
+                )
+                .arg(
+                    Arg::new("emit-ast")
+                        .short('a')
+                        .long("emit-ast")
+                        .help("Emit the AST to file"),
                 ),
         )
 }
@@ -183,7 +197,8 @@ fn parse_args() -> CliCommand {
         }
         Some(("frontend", args)) => {
             let file = args.get_one::<String>("file").unwrap().clone();
-            CliCommand::Frontend(FrontendCommand { file })
+            let emit_ast = args.get_one::<String>("emit-ast").cloned();
+            CliCommand::Frontend(FrontendCommand { file, emit_ast })
         }
         _ => {
             cli().print_help().unwrap();
