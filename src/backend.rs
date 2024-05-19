@@ -1129,7 +1129,7 @@ impl MachineInstData {
         dst_fmt: FCvtFmt,
         src_fmt: FCvtFmt,
         rs: Register,
-    ) -> MachineInst {
+    ) -> (Register, MachineInst) {
         let rd = ctx.new_virtual_reg(VirtualRegisterKind::FloatingPoint);
         let data = MachineInstData::FCvt {
             dst_fmt,
@@ -1137,7 +1137,7 @@ impl MachineInstData {
             rd,
             rs,
         };
-        ctx.new_inst(data)
+        (rd, ctx.new_inst(data))
     }
 
     pub fn new_binary(

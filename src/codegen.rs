@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     backend::{
+        FCvtFmt,
         FMvFmt,
         FloatLoadKind,
         FloatPseudoLoadKind,
@@ -1245,6 +1246,13 @@ impl CodegenContext {
 
                 let val_data = function_data.dfg().local_value_data(val).unwrap();
 
+                // converting zero to anything is still zero, so we can just return zero
+                if let ValueKind::Zero | ValueKind::Undef = val_data.kind() {
+                    let zero = self.machine_ctx.new_gp_reg(RiscvGpReg::Zero);
+                    self.value_map
+                        .insert(inst.into(), ValueCodegenResult::Register(zero));
+                }
+
                 let rs = match val_data.kind() {
                     ValueKind::GlobalSlot(_)
                     | ValueKind::Array(_)
@@ -1253,45 +1261,109 @@ impl CodegenContext {
                     | ValueKind::Store(_)
                     | ValueKind::Jump(_)
                     | ValueKind::Branch(_)
-                    | ValueKind::Return(_) => unreachable!(),
+                    | ValueKind::Return(_)
+                    | ValueKind::Alloc(_) => unreachable!(),
                     ValueKind::Zero | ValueKind::Undef => {
-                        // fmv $rd, zero
-                        let fmt = FMvFmt::from_byte_width(val_data.ty().bytewidth());
                         let zero = self.machine_ctx.new_gp_reg(RiscvGpReg::Zero);
-                        let (rd, fmv) = MachineInstData::new_float_move(
-                            &mut self.machine_ctx,
-                            fmt,
-                            FMvFmt::X,
-                            zero,
-                        );
-                        self.append_inst(&function_name, block, fmv);
-                        rd
+                        self.value_map
+                            .insert(inst.into(), ValueCodegenResult::Register(zero));
+                        zero
                     }
                     ValueKind::Bytes(bytes) => {
                         let imm: Immediate = bytes.into();
-                        let (rd, li) = MachineInstData::new_li(&mut self.machine_ctx, imm);
-                        let fmt = FMvFmt::from_byte_width(val_data.ty().bytewidth());
-                        let (rd, fmv) = MachineInstData::new_float_move(
-                            &mut self.machine_ctx,
-                            fmt,
-                            FMvFmt::X,
-                            rd,
-                        );
-                        self.append_inst(&function_name, block, li);
-                        self.append_inst(&function_name, block, fmv);
-                        rd
+                        match val_data.ty() {
+                            ty if ty.is_int() => {
+                                let (rd, li) = MachineInstData::new_li(&mut self.machine_ctx, imm);
+                                self.append_inst(&function_name, block, li);
+                                rd
+                            }
+                            ty if ty.is_float() => {
+                                // li and fmv
+                                let (rd, li) = MachineInstData::new_li(&mut self.machine_ctx, imm);
+                                self.append_inst(&function_name, block, li);
+
+                                let dst_fmt = FMvFmt::from_byte_width(val_data.ty().bytewidth());
+                                let (rd, fmv) = MachineInstData::new_float_move(
+                                    &mut self.machine_ctx,
+                                    dst_fmt,
+                                    FMvFmt::X,
+                                    rd,
+                                );
+                                self.append_inst(&function_name, block, fmv);
+                                rd
+                            }
+                            _ => unimplemented!(),
+                        }
                     }
                     _ => self.get_value_as_register(val),
                 };
 
-                let this_ty = function_data
-                    .dfg()
-                    .local_value_data(inst.into())
-                    .unwrap()
-                    .ty();
                 match op {
+                    CastOp::ZExt => {
+                        // make sure its int
+                        assert!(val_data.ty().is_int());
+                        // addi $rd, $rs, 0
+                        let (rd, addi) = MachineInstData::new_binary_imm(
+                            &mut self.machine_ctx,
+                            MachineBinaryImmOp::Addi,
+                            rs,
+                            0.into(),
+                        );
+                        self.append_inst(&function_name, block, addi);
+                        self.value_map
+                            .insert(inst.into(), ValueCodegenResult::Register(rd));
+                    }
                     CastOp::FpToSI => {
-                        // TODO
+                        // make sure its float
+                        assert!(val_data.ty().is_float());
+                        // make sure result is int
+                        assert!(inst_data.ty().is_int());
+                        // fcvt.[w/l].[s/d] $rd, $rs
+                        let fmt = match val_data.ty().bytewidth() {
+                            4 => FCvtFmt::W,
+                            8 => FCvtFmt::L,
+                            _ => unimplemented!(),
+                        };
+                        let dst_fmt = match inst_data.ty().bytewidth() {
+                            4 => FCvtFmt::S,
+                            8 => FCvtFmt::D,
+                            _ => unimplemented!(),
+                        };
+                        let (rd, fcvt) = MachineInstData::new_float_convert(
+                            &mut self.machine_ctx,
+                            fmt,
+                            dst_fmt,
+                            rs,
+                        );
+                        self.append_inst(&function_name, block, fcvt);
+                        self.value_map
+                            .insert(inst.into(), ValueCodegenResult::Register(rd));
+                    }
+                    CastOp::SIToFp => {
+                        // make sure its int
+                        assert!(val_data.ty().is_int());
+                        // make sure result is float
+                        assert!(inst_data.ty().is_float());
+                        // fcvt.[s/d].[w/l] $rd, $rs
+                        let fmt = match val_data.ty().bytewidth() {
+                            4 => FCvtFmt::W,
+                            8 => FCvtFmt::L,
+                            _ => unimplemented!(),
+                        };
+                        let dst_fmt = match inst_data.ty().bytewidth() {
+                            4 => FCvtFmt::S,
+                            8 => FCvtFmt::D,
+                            _ => unimplemented!(),
+                        };
+                        let (rd, fcvt) = MachineInstData::new_float_convert(
+                            &mut self.machine_ctx,
+                            fmt,
+                            dst_fmt,
+                            rs,
+                        );
+                        self.append_inst(&function_name, block, fcvt);
+                        self.value_map
+                            .insert(inst.into(), ValueCodegenResult::Register(rd));
                     }
                     _ => unimplemented!(),
                 }
