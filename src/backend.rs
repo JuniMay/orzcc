@@ -1,3 +1,5 @@
+pub mod passes;
+
 use core::fmt;
 use std::collections::{HashMap, HashSet};
 
@@ -115,6 +117,10 @@ impl MachineLayout {
     /// Get the exit/last instruction of a block
     pub fn exit_inst_of_block(&self, block: MachineBlock) -> Option<MachineInst> {
         self.blocks.node(block).and_then(|node| node.insts().back())
+    }
+
+    pub fn insts_of_block(&self, block: MachineBlock) -> Option<&MachineInstList> {
+        self.blocks.node(block).map(|node| node.insts())
     }
 
     /// Append a block to the layout

@@ -75,6 +75,7 @@ fn main() {
             if let Some(emit_asm) = cmd.emit_asm {
                 let mut codegen_ctx = CodegenContext::new();
                 codegen_ctx.codegen(&module);
+                // do register allocation here
                 codegen_ctx.codegen_rest(&module);
                 let machine_ctx = codegen_ctx.finish();
                 let asm = machine_ctx.to_string();

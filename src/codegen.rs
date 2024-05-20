@@ -44,7 +44,7 @@ pub enum ValueCodegenResult {
 }
 
 pub struct CodegenContext {
-    machine_ctx: MachineContext,
+    pub machine_ctx: MachineContext,
 
     value_map: HashMap<Value, ValueCodegenResult>,
     block_map: HashMap<Block, MachineBlock>,
@@ -1597,7 +1597,7 @@ impl CodegenContext {
 
                 self.codegen_block_arg_pass(module, function, block, params, args);
 
-                let j = MachineInstData::new_j(&mut self.machine_ctx, self.block_map[&block]);
+                let j = MachineInstData::new_j(&mut self.machine_ctx, self.block_map[&dst_block]);
                 self.append_inst(&function_name, block, j);
             }
             ValueKind::Branch(branch) => {
