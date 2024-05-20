@@ -34,6 +34,16 @@ impl SymbolTableStack {
             .insert(name.into(), entry);
     }
 
+    pub fn insert_upper(&mut self, name: impl Into<String>, entry: SymbolEntry, upper: usize) {
+        self.stack
+            .iter_mut()
+            .rev()
+            .nth(upper)
+            .unwrap()
+            .entries
+            .insert(name.into(), entry);
+    }
+
     pub fn lookup(&self, name: &str) -> Option<&SymbolEntry> {
         for table in self.stack.iter().rev() {
             if let Some(entry) = table.entries.get(name) {

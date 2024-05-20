@@ -394,6 +394,11 @@ impl Expr {
     }
 
     pub fn new_coercion(expr: Box<Expr>, to: Type) -> Self {
+        if let Some(from) = expr.ty.as_ref() {
+            if from == &to {
+                return *expr;
+            }
+        }
         Expr {
             kind: ExprKind::Coercion(expr),
             ty: Some(to),
@@ -586,6 +591,7 @@ impl Expr {
             ExprKind::FuncCall(call) => {
                 let callee = call.ident;
 
+                dbg!(&callee);
                 let entry = symtable.lookup(&callee).unwrap();
                 let (param_tys, ret_ty) = entry.ty.clone().as_function().unwrap();
 
@@ -630,6 +636,28 @@ impl Expr {
                 }
                 let mut expr = Expr::new_lval(LVal { ident, indices });
                 expr.ty = Some(ty);
+
+                if let Some(ty) = expect {
+                    if ty.is_float() || ty.is_int() {
+                        // try to coerce the result
+                        match ty.kind() {
+                            TypeKind::Int(1) => {
+                                expr = Expr::new_coercion(Box::new(expr), Type::i1());
+                            }
+                            TypeKind::Int(32) => {
+                                expr = Expr::new_coercion(Box::new(expr), Type::i32_());
+                            }
+                            TypeKind::Float => {
+                                expr = Expr::new_coercion(Box::new(expr), Type::float());
+                            }
+                            _ => panic!("unsupported type coercion"),
+                        }
+                        expr.ty = Some(ty);
+                    } else {
+                        // for expected array type, do nothing
+                    }
+                }
+
                 expr
             }
             ExprKind::Unary(op, expr) => {
@@ -768,32 +796,90 @@ impl CompUnit {
     pub fn type_check(&mut self) {
         let mut symtable = SymbolTableStack::default();
         symtable.enter_scope();
-        for item in self.item.iter_mut() {
-            item.type_check(&mut symtable);
-        }
-        // TODO: sysy library functions
-        // TODO: array dim coercion
+        // getters
         let entry = SymbolEntry {
             ty: Type::function(vec![], Type::i32_()),
             comptime_val: None,
             ir_value: None,
         };
-        symtable.insert("getint".to_string(), entry);
+        symtable.insert("getint", entry);
 
         let entry = SymbolEntry {
             ty: Type::function(vec![], Type::i32_()),
             comptime_val: None,
             ir_value: None,
         };
-        symtable.insert("getch".to_string(), entry);
-        
+        symtable.insert("getch", entry);
+
         let entry = SymbolEntry {
             ty: Type::function(vec![], Type::float()),
             comptime_val: None,
             ir_value: None,
         };
-        symtable.insert("getfloat".to_string(), entry);
-        
+        symtable.insert("getfloat", entry);
+
+        let entry = SymbolEntry {
+            ty: Type::function(vec![Type::array(usize::MAX, Type::i32_())], Type::i32_()),
+            comptime_val: None,
+            ir_value: None,
+        };
+        symtable.insert("getarray", entry);
+
+        let entry = SymbolEntry {
+            ty: Type::function(vec![Type::array(usize::MAX, Type::float())], Type::i32_()),
+            comptime_val: None,
+            ir_value: None,
+        };
+        symtable.insert("getfarray", entry);
+
+        // putters
+        let entry = SymbolEntry {
+            ty: Type::function(vec![Type::i32_()], Type::void()),
+            comptime_val: None,
+            ir_value: None,
+        };
+        symtable.insert("putint", entry);
+
+        let entry = SymbolEntry {
+            ty: Type::function(vec![Type::i32_()], Type::void()),
+            comptime_val: None,
+            ir_value: None,
+        };
+        symtable.insert("putch", entry);
+
+        let entry = SymbolEntry {
+            ty: Type::function(vec![Type::float()], Type::void()),
+            comptime_val: None,
+            ir_value: None,
+        };
+        symtable.insert("putfloat", entry);
+
+        let entry = SymbolEntry {
+            ty: Type::function(
+                vec![Type::i32_(), Type::array(usize::MAX, Type::i32_())],
+                Type::void(),
+            ),
+            comptime_val: None,
+            ir_value: None,
+        };
+        symtable.insert("putarray", entry);
+
+        let entry = SymbolEntry {
+            ty: Type::function(
+                vec![Type::i32_(), Type::array(usize::MAX, Type::float())],
+                Type::void(),
+            ),
+            comptime_val: None,
+            ir_value: None,
+        };
+        symtable.insert("putfarray", entry);
+
+        // TODO: timers in sysy lib.
+
+        for item in self.item.iter_mut() {
+            item.type_check(&mut symtable);
+        }
+
         symtable.exit_scope();
     }
 }
@@ -811,9 +897,23 @@ impl CompUnitItem {
             },
             CompUnitItem::FuncDef(func_def) => {
                 symtable.enter_scope();
+                let mut param_tys = Vec::new();
                 for param in func_def.params.iter() {
                     // symbol table for function parameters
-                    let ty = param.ty.clone();
+                    let ty = if let Some(indices) = &param.indices {
+                        let ty = param.ty.clone();
+                        let mut ty = ty;
+                        for dim in indices.iter().rev() {
+                            let dim = dim.try_fold(symtable).expect("non-constant dim");
+                            ty = Type::array(dim.as_int() as usize, ty);
+                        }
+                        // the first `[]` array is not in the indices
+                        ty = Type::array(usize::MAX, ty);
+                        ty
+                    } else {
+                        param.ty.clone()
+                    };
+                    param_tys.push(ty.clone());
                     let entry = SymbolEntry {
                         ty,
                         comptime_val: None,
@@ -822,21 +922,16 @@ impl CompUnitItem {
                     symtable.insert(param.ident.clone(), entry);
                 }
 
-                let ty = Type::function(
-                    func_def
-                        .params
-                        .iter()
-                        .map(|param| param.ty.clone())
-                        .collect(),
-                    func_def.ret_ty.clone(),
-                );
+                let ty = Type::function(param_tys, func_def.ret_ty.clone());
+                dbg!(ty.clone());
                 let entry = SymbolEntry {
                     ty,
                     comptime_val: None,
                     ir_value: None,
                 };
-                symtable.insert(func_def.ident.clone(), entry);
+                symtable.insert_upper(func_def.ident.clone(), entry, 1);
                 func_def.block.type_check(symtable);
+
                 symtable.exit_scope();
             }
         }
@@ -885,6 +980,8 @@ impl Stmt {
                     .collect::<Vec<_>>();
 
                 let mut ty = entry.ty.clone();
+                dbg!(&indices);
+                dbg!(ty.clone());
                 if !indices.is_empty() {
                     // peel off the array type
                     for _ in 0..indices.len() {
@@ -948,10 +1045,6 @@ impl ConstDecl {
             for dim in shape.iter().rev() {
                 ty = Type::array(*dim as usize, ty);
             }
-            // let folded = def.init.try_fold(symtable).expect("non-constant init");
-            // let expr = Expr::new_const(folded.clone());
-            // def.init = expr.type_check(Some(ty.clone()), symtable);
-
             def.init = def.init.type_check(Some(ty.clone()), symtable);
             let folded = def.init.try_fold(symtable).expect("non-constant init");
             def.init = Expr::new_const(folded.clone());
