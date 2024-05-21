@@ -11,6 +11,7 @@ use super::{MachineFunctionData, MachineContext};
 
 pub mod liveness_analysis;
 pub mod control_flow_analysis;
+pub mod block_defsue_analysis;
 
 pub trait GlobalPass {
     type Ok;
