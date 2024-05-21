@@ -29,6 +29,7 @@ where
 {
     list: &'a List<K, N>,
     curr: Option<K>,
+    tail: Option<K>,
 }
 
 impl<'a, K, N> Iterator for Iter<'a, K, N>
@@ -42,6 +43,19 @@ where
         let curr = self.curr?;
         let node = self.list.nodes.get(&curr).unwrap();
         self.curr = node.next();
+        Some((curr, node))
+    }
+}
+
+impl<'a, K, N> DoubleEndedIterator for Iter<'a, K, N>
+where
+    K: Copy + Eq + Hash,
+    N: ListNode<K>,
+{
+    fn next_back(&mut self) -> Option<Self::Item> {
+        let curr = self.tail?;
+        let node = self.list.nodes.get(&curr).unwrap();
+        self.tail = node.prev();
         Some((curr, node))
     }
 }
@@ -84,6 +98,7 @@ where
         Iter {
             list: self,
             curr: self.head,
+            tail: self.tail,
         }
     }
 }
@@ -232,6 +247,8 @@ where
 
         Ok(())
     }
+
+    pub fn iter(&self) -> Iter<K, N> { self.into_iter() }
 }
 
 #[cfg(test)]
@@ -381,5 +398,24 @@ mod test {
         list.extend(1..=5);
         assert_eq!(list.front(), Some(1));
         assert_eq!(list.back(), Some(5));
+    }
+
+    #[test]
+    fn test_list_reverse() {
+        let mut list = List::<usize, TestNode>::default();
+        list.extend(1..=5);
+        assert_eq!(list.front(), Some(1));
+        assert_eq!(list.back(), Some(5));
+
+
+        for i in list.into_iter().rev() {
+            println!("{:?}", i);
+        }
+
+        let mut iter = list.into_iter();
+        for i in (1..=5).rev() {
+            let (key, _) = iter.next_back().unwrap();
+            assert_eq!(key, i);
+        }
     }
 }
