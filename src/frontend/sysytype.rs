@@ -27,7 +27,7 @@ pub enum SyTypeKind {
     ///
     /// Array is a type that represents a fixed number of elements of the same
     /// type.    
-    Array(usize, SyType),
+    Array(Option<usize>, SyType),
     /// Function
     ///
     /// Function is a type that takes a list of types and returns a type.
@@ -40,7 +40,13 @@ impl fmt::Display for SyTypeKind {
             SyTypeKind::Void => write!(f, "void"),
             SyTypeKind::Int(bits) => write!(f, "i{}", bits),
             SyTypeKind::Float => write!(f, "float"),
-            SyTypeKind::Array(size, ty) => write!(f, "[{}; {}]", ty, size),
+            SyTypeKind::Array(size, ty) => {
+                let size_str = match size {
+                    Some(s) => s.to_string(),
+                    None => "_".to_string(), // use _ to represent unknown size
+                };
+                write!(f, "[{}; {}]", ty, size_str)
+            }
             SyTypeKind::Function(params, ret) => {
                 write!(
                     f,
@@ -99,7 +105,8 @@ impl SyType {
 
     pub fn float() -> SyType { SyType::make(SyTypeKind::Float) }
 
-    pub fn array(size: usize, ty: SyType) -> SyType { SyType::make(SyTypeKind::Array(size, ty)) }
+    pub fn array(size: Option<usize>, ty: SyType) -> SyType { SyType::make(SyTypeKind::Array(size, ty)) }
+
 
     pub fn function(params: Vec<SyType>, ret: SyType) -> SyType {
         SyType::make(SyTypeKind::Function(params, ret))
@@ -114,31 +121,34 @@ impl SyType {
         });
     }
 
-    pub fn bytewidth(&self) -> usize {
-        Self::DATA_LAYOUT.with(|data_layout| {
-            let data_layout = data_layout.borrow();
-            match self.kind() {
-                SyTypeKind::Void => 0,
-                SyTypeKind::Int(bits) => cmp::max(1, bits / 8),
-                SyTypeKind::Float => 4,
-                SyTypeKind::Array(size, ty) => size * ty.bytewidth(),
-                SyTypeKind::Function(_, _) => data_layout.pointer_size,
-            }
-        })
-    }
-
-    pub fn bitwidth(&self) -> usize {
+    pub fn bytewidth(&self) -> Option<usize> {
         match self.kind() {
-            SyTypeKind::Void => 0,
-            SyTypeKind::Int(bits) => *bits,
-            SyTypeKind::Float => 32,
-            SyTypeKind::Array(size, ty) => size * ty.bitwidth(),
-            SyTypeKind::Function(_, _) => Self::DATA_LAYOUT.with(|data_layout| {
+            SyTypeKind::Void => Some(0),
+            SyTypeKind::Int(bits) => Some(cmp::max(1, bits / 8)),
+            SyTypeKind::Float => Some(4),
+            SyTypeKind::Array(Some(size), ty) => Some(size * ty.bytewidth()?),
+            SyTypeKind::Array(None, _) => None,
+            SyTypeKind::Function(_, _) => Some(Self::DATA_LAYOUT.with(|data_layout| {
                 let data_layout = data_layout.borrow();
-                data_layout.pointer_size * 8
-            }),
+                data_layout.pointer_size
+            })),
         }
     }
+    
+    pub fn bitwidth(&self) -> Option<usize> {
+        match self.kind() {
+            SyTypeKind::Void => Some(0),
+            SyTypeKind::Int(bits) => Some(*bits),
+            SyTypeKind::Float => Some(32),
+            SyTypeKind::Array(Some(size), ty) => Some(size * ty.bitwidth()?),
+            SyTypeKind::Array(None, _) => None,
+            SyTypeKind::Function(_, _) => Some(Self::DATA_LAYOUT.with(|data_layout| {
+                let data_layout = data_layout.borrow();
+                data_layout.pointer_size * 8
+            })),
+        }
+    }
+    
 
     pub fn is_int(&self) -> bool {
         matches!(self.kind(), SyTypeKind::Int(_))
@@ -166,12 +176,12 @@ impl SyType {
         self.is_numeric() || self.is_aggregate()
     }
 
-    pub fn as_array(&self) -> Option<(usize, SyType)> {
+    pub fn as_array(&self) -> Option<(Option<usize>, SyType)> {
         match self.kind() {
-            SyTypeKind::Array(size, ty) => Some((*size, ty.clone())),
+            SyTypeKind::Array(size, ty) => Some((size.clone(), ty.clone())),
             _ => None,
         }
-    }
+    }    
 
     pub fn get_array_leaf(&self) -> SyType {
         let mut ty = self.clone();
@@ -218,13 +228,13 @@ mod test {
         assert!(!SyType::i32_().is_float());
 
         assert_eq!(
-            SyType::array(10, SyType::int(32)),
-            SyType::array(10, SyType::int(32))
+            SyType::array(Some(10), SyType::int(32)),
+            SyType::array(Some(10), SyType::int(32))
         );
         assert_ne!(SyType::int(32), SyType::int(64));
         assert_ne!(
-            SyType::array(10, SyType::int(32)),
-            SyType::array(20, SyType::int(32))
+            SyType::array(Some(10), SyType::int(32)),
+            SyType::array(Some(20), SyType::int(32))
         );
         assert_eq!(SyType::void(), SyType::void());
         assert_eq!(SyType::float(), SyType::float());
@@ -241,7 +251,7 @@ mod test {
     #[test]
     fn test_display() {
         assert_eq!(format!("{}", SyType::int(32)), "i32");
-        let ty = SyType::array(10, SyType::int(32));
+        let ty = SyType::array(Some(10), SyType::int(32));
         assert_eq!(format!("{}", ty), "[i32; 10]");
         assert_eq!(format!("{}", SyType::void()), "void");
         assert_eq!(format!("{}", SyType::float()), "float");
@@ -255,17 +265,17 @@ mod test {
 
     #[test]
     fn test_size() {
-        assert_eq!(SyType::void().bytewidth(), 0);
-        assert_eq!(SyType::int(1).bytewidth(), 1);
-        assert_eq!(SyType::int(32).bytewidth(), 4);
-        assert_eq!(SyType::int(64).bytewidth(), 8);
-        assert_eq!(SyType::float().bytewidth(), 4);
-        assert_eq!(SyType::array(10, SyType::int(32)).bytewidth(), 40);
+        assert_eq!(SyType::void().bytewidth(), Some(0));
+        assert_eq!(SyType::int(1).bytewidth(), Some(1));
+        assert_eq!(SyType::int(32).bytewidth(), Some(4));
+        assert_eq!(SyType::int(64).bytewidth(), Some(8));
+        assert_eq!(SyType::float().bytewidth(), Some(4));
+        assert_eq!(SyType::array(Some(10), SyType::int(32)).bytewidth(), Some(40));
         let ty = SyType::function(vec![], SyType::void());
-        assert_eq!(ty.bytewidth(), 8);
+        assert_eq!(ty.bytewidth(), Some(8));
         let ty = SyType::function(vec![SyType::int(32)], SyType::void());
-        assert_eq!(ty.bytewidth(), 8);
+        assert_eq!(ty.bytewidth(), Some(8));
         let ty = SyType::function(vec![SyType::int(32), SyType::int(64)], SyType::void());
-        assert_eq!(ty.bytewidth(), 8);
+        assert_eq!(ty.bytewidth(), Some(8));
     }
 }

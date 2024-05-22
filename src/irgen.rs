@@ -6,7 +6,7 @@ use crate::{
 };
 
 pub struct SymbolEntry {
-    pub ty: Type,
+    pub ty: SyType,
     pub comptime_val: Option<ComptimeVal>,
     pub ir_value: Option<Value>,
 }
@@ -107,7 +107,7 @@ impl IrGen for Stmt {
 
             },
             Stmt::Block(block) => {
-
+                block.irgen(ctx);
             },
             Stmt::If(cond_expr, then_stmt, else_stmt) => {
 
@@ -146,6 +146,28 @@ impl IrGenContext {
         self.symtable.exit_scope();
     }
 
+
+    pub fn irgen_expr(&self){
+        todo!()
+    }
+
+    pub fn irgen_type(&self, ty: &SyType) -> Type {
+        match &ty.kind() {
+            SyTypeKind::Void => Type::void(),
+            SyTypeKind::Int(bits) => Type::int(*bits), 
+            SyTypeKind::Float => Type::float(),
+            SyTypeKind::Array(Some(len), inner_ty) => Type::array(*len, self.irgen_type(inner_ty)),
+            SyTypeKind::Array(None, _inner_ty) => Type::ptr(),
+            SyTypeKind::Function(param_tys, ret_ty) => {
+                let mut param_ir_types = Vec::new();
+                for param_ty in param_tys {
+                    param_ir_types.push(self.irgen_type(param_ty));
+                }
+                Type::function(param_ir_types, self.irgen_type(ret_ty))
+            }
+        }
+    }
+    
     /// Finish the irgen process and return the module.
     pub fn finish(self) -> Module { self.module }
 }

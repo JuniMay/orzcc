@@ -1,9 +1,6 @@
 use std::fmt;
-
-use crate::{
-    ir::types::{Type, TypeKind},
-    irgen::{SymbolEntry, SymbolTableStack},
-};
+use super::{SyType, SyTypeKind};
+use crate::irgen::{SymbolEntry, SymbolTableStack};
 
 #[derive(Debug, Clone)]
 pub enum ComptimeVal {
@@ -11,7 +8,7 @@ pub enum ComptimeVal {
     Int(i32),
     Float(f32),
     List(Vec<ComptimeVal>),
-    Zeros(Type),
+    Zeros(SyType),
 }
 
 impl ComptimeVal {
@@ -31,7 +28,7 @@ impl ComptimeVal {
 
     pub fn new_list(val: Vec<ComptimeVal>) -> Self { ComptimeVal::List(val) }
 
-    pub fn new_zeros(ty: Type) -> Self {
+    pub fn new_zeros(ty: SyType) -> Self {
         if ty.is_i1() {
             ComptimeVal::Bool(false)
         } else if ty.is_i32() {
@@ -45,14 +42,14 @@ impl ComptimeVal {
         }
     }
 
-    pub fn get_type(&self) -> Type {
+    pub fn get_type(&self) -> SyType {
         match self {
-            ComptimeVal::Bool(_) => Type::i1(),
-            ComptimeVal::Int(_) => Type::i32_(),
-            ComptimeVal::Float(_) => Type::float(),
+            ComptimeVal::Bool(_) => SyType::i1(),
+            ComptimeVal::Int(_) => SyType::i32_(),
+            ComptimeVal::Float(_) => SyType::float(),
             ComptimeVal::List(val) => {
                 let ty = val[0].get_type();
-                Type::array(val.len(), ty)
+                SyType::array(Some(val.len()), ty)
             }
             ComptimeVal::Zeros(ty) => ty.clone(),
         }
@@ -221,7 +218,7 @@ pub enum Decl {
 
 #[derive(Debug)]
 pub struct ConstDecl {
-    pub ty: Type,
+    pub ty: SyType,
     pub defs: Vec<ConstDef>,
 }
 
@@ -234,7 +231,7 @@ pub struct ConstDef {
 
 #[derive(Debug)]
 pub struct VarDecl {
-    pub ty: Type,
+    pub ty: SyType,
     pub defs: Vec<VarDef>,
 }
 
@@ -247,7 +244,7 @@ pub struct VarDef {
 
 #[derive(Debug)]
 pub struct FuncDef {
-    pub ret_ty: Type,
+    pub ret_ty: SyType,
     pub ident: String,
     pub params: Vec<FuncFParam>,
     pub block: Block,
@@ -255,7 +252,7 @@ pub struct FuncDef {
 
 #[derive(Debug)]
 pub struct FuncFParam {
-    pub ty: Type,
+    pub ty: SyType,
     pub ident: String,
     pub indices: Option<Vec<Expr>>,
 }
@@ -346,7 +343,7 @@ pub enum ExprKind {
 #[derive(Debug)]
 pub struct Expr {
     pub kind: ExprKind,
-    pub ty: Option<Type>,
+    pub ty: Option<SyType>,
 }
 
 impl Expr {
@@ -393,7 +390,7 @@ impl Expr {
         }
     }
 
-    pub fn new_coercion(expr: Box<Expr>, to: Type) -> Self {
+    pub fn new_coercion(expr: Box<Expr>, to: SyType) -> Self {
         if let Some(from) = expr.ty.as_ref() {
             if from == &to {
                 return *expr;
@@ -405,15 +402,16 @@ impl Expr {
         }
     }
 
-    pub fn ty(&self) -> Type { self.ty.as_ref().unwrap().clone() }
+    pub fn ty(&self) -> SyType { self.ty.as_ref().unwrap().clone() }
 }
 
 impl Expr {
-    pub fn canonialize_init_list(&mut self, ty: Type, symtable: &SymbolTableStack) {
+    pub fn canonialize_init_list(&mut self, ty: SyType, symtable: &SymbolTableStack) {
         if let ExprKind::InitList(ref mut vals) = self.kind {
             dbg!(&ty);
             dbg!(&vals);
             let (length, sub_ty) = ty.as_array().unwrap();
+            let length = length.unwrap();
             let leaf_ty = ty.get_array_leaf();
 
             if leaf_ty == sub_ty {
@@ -438,7 +436,7 @@ impl Expr {
             let mut elem_init_list = Vec::new();
             let mut new_init_list = Vec::new();
 
-            let elem_total_len = sub_ty.bytewidth() / leaf_ty.bytewidth();
+            let elem_total_len = sub_ty.bytewidth().unwrap() / leaf_ty.bytewidth().unwrap();
 
             for mut val in vals.drain(..) {
                 if let ExprKind::InitList(_) = val.kind {
@@ -481,7 +479,7 @@ impl Expr {
         }
     }
 
-    pub fn type_check(mut self, expect: Option<Type>, symtable: &SymbolTableStack) -> Self {
+    pub fn type_check(mut self, expect: Option<SyType>, symtable: &SymbolTableStack) -> Self {
         if self.ty.is_some() {
             return self;
         }
@@ -499,27 +497,27 @@ impl Expr {
                 let rhs_ty = rhs.ty();
 
                 match (lhs_ty.kind(), rhs_ty.kind()) {
-                    (TypeKind::Int(1), TypeKind::Int(32)) => {
-                        lhs = Box::new(Expr::new_coercion(lhs, Type::i32_()));
+                    (SyTypeKind::Int(1), SyTypeKind::Int(32)) => {
+                        lhs = Box::new(Expr::new_coercion(lhs, SyType::i32_()));
                     }
-                    (TypeKind::Int(1), TypeKind::Float) => {
-                        let tmp = Expr::new_coercion(lhs, Type::i32_());
-                        lhs = Box::new(Expr::new_coercion(Box::new(tmp), Type::float()));
+                    (SyTypeKind::Int(1), SyTypeKind::Float) => {
+                        let tmp = Expr::new_coercion(lhs, SyType::i32_());
+                        lhs = Box::new(Expr::new_coercion(Box::new(tmp), SyType::float()));
                     }
-                    (TypeKind::Int(32), TypeKind::Int(1)) => {
-                        rhs = Box::new(Expr::new_coercion(rhs, Type::i32_()));
+                    (SyTypeKind::Int(32), SyTypeKind::Int(1)) => {
+                        rhs = Box::new(Expr::new_coercion(rhs, SyType::i32_()));
                     }
-                    (TypeKind::Int(32), TypeKind::Float) => {
-                        lhs = Box::new(Expr::new_coercion(lhs, Type::float()));
+                    (SyTypeKind::Int(32), SyTypeKind::Float) => {
+                        lhs = Box::new(Expr::new_coercion(lhs, SyType::float()));
                     }
-                    (TypeKind::Float, TypeKind::Int(1)) => {
+                    (SyTypeKind::Float, SyTypeKind::Int(1)) => {
                         // lhs != 0
                         let mut zero = Expr::new_const(ComptimeVal::Int(0));
-                        zero.ty = Some(Type::float());
+                        zero.ty = Some(SyType::float());
                         lhs = Box::new(Expr::new_binary(BinaryOp::Ne, lhs, Box::new(zero)));
                     }
-                    (TypeKind::Float, TypeKind::Int(32)) => {
-                        rhs = Box::new(Expr::new_coercion(rhs, Type::i32_()));
+                    (SyTypeKind::Float, SyTypeKind::Int(32)) => {
+                        rhs = Box::new(Expr::new_coercion(rhs, SyType::i32_()));
                     }
                     _ => {
                         if lhs_ty != rhs_ty {
@@ -544,10 +542,10 @@ impl Expr {
                     | BinaryOp::Ge
                     | BinaryOp::Eq
                     | BinaryOp::Ne => {
-                        expr.ty = Some(Type::i1());
+                        expr.ty = Some(SyType::i1());
                     }
                     BinaryOp::LogicalAnd | BinaryOp::LogicalOr => {
-                        expr.ty = Some(Type::i1());
+                        expr.ty = Some(SyType::i1());
                     }
                 }
 
@@ -555,26 +553,26 @@ impl Expr {
                     if ty != expr.ty() {
                         // try to coerce the result
                         match (expr.ty().kind(), ty.kind()) {
-                            (TypeKind::Int(1), TypeKind::Int(32)) => {
-                                expr = Expr::new_coercion(Box::new(expr), Type::i32_());
+                            (SyTypeKind::Int(1), SyTypeKind::Int(32)) => {
+                                expr = Expr::new_coercion(Box::new(expr), SyType::i32_());
                             }
-                            (TypeKind::Int(1), TypeKind::Float) => {
-                                let tmp = Expr::new_coercion(Box::new(expr), Type::i32_());
-                                expr = Expr::new_coercion(Box::new(tmp), Type::float());
+                            (SyTypeKind::Int(1), SyTypeKind::Float) => {
+                                let tmp = Expr::new_coercion(Box::new(expr), SyType::i32_());
+                                expr = Expr::new_coercion(Box::new(tmp), SyType::float());
                             }
-                            (TypeKind::Int(32), TypeKind::Int(1)) => {
-                                expr = Expr::new_coercion(Box::new(expr), Type::i32_());
+                            (SyTypeKind::Int(32), SyTypeKind::Int(1)) => {
+                                expr = Expr::new_coercion(Box::new(expr), SyType::i32_());
                             }
-                            (TypeKind::Int(32), TypeKind::Float) => {
-                                expr = Expr::new_coercion(Box::new(expr), Type::float());
+                            (SyTypeKind::Int(32), SyTypeKind::Float) => {
+                                expr = Expr::new_coercion(Box::new(expr), SyType::float());
                             }
-                            (TypeKind::Float, TypeKind::Int(32)) => {
-                                expr = Expr::new_coercion(Box::new(expr), Type::i32_());
+                            (SyTypeKind::Float, SyTypeKind::Int(32)) => {
+                                expr = Expr::new_coercion(Box::new(expr), SyType::i32_());
                             }
-                            (TypeKind::Float, TypeKind::Int(1)) => {
+                            (SyTypeKind::Float, SyTypeKind::Int(1)) => {
                                 // expr != 0
                                 let mut zero = Expr::new_const(ComptimeVal::Int(0));
-                                zero.ty = Some(Type::float());
+                                zero.ty = Some(SyType::float());
                                 expr =
                                     Expr::new_binary(BinaryOp::Ne, Box::new(expr), Box::new(zero));
                             }
@@ -624,7 +622,7 @@ impl Expr {
                 let indices: Vec<Expr> = lval
                     .indices
                     .into_iter()
-                    .map(|index| index.type_check(Some(Type::i32_()), symtable))
+                    .map(|index| index.type_check(Some(SyType::i32_()), symtable))
                     .collect();
 
                 let mut ty = entry.ty.clone();
@@ -641,14 +639,14 @@ impl Expr {
                     if ty.is_float() || ty.is_int() {
                         // try to coerce the result
                         match ty.kind() {
-                            TypeKind::Int(1) => {
-                                expr = Expr::new_coercion(Box::new(expr), Type::i1());
+                            SyTypeKind::Int(1) => {
+                                expr = Expr::new_coercion(Box::new(expr), SyType::i1());
                             }
-                            TypeKind::Int(32) => {
-                                expr = Expr::new_coercion(Box::new(expr), Type::i32_());
+                            SyTypeKind::Int(32) => {
+                                expr = Expr::new_coercion(Box::new(expr), SyType::i32_());
                             }
-                            TypeKind::Float => {
-                                expr = Expr::new_coercion(Box::new(expr), Type::float());
+                            SyTypeKind::Float => {
+                                expr = Expr::new_coercion(Box::new(expr), SyType::float());
                             }
                             _ => panic!("unsupported type coercion"),
                         }
@@ -761,14 +759,14 @@ impl Expr {
             ExprKind::Coercion(expr) => {
                 let expr = expr.try_fold(symtable)?;
                 match self.ty.as_ref().unwrap().kind() {
-                    TypeKind::Int(1) => {
+                    SyTypeKind::Int(1) => {
                         let expr = match expr {
                             ComptimeVal::Bool(val) => val as i32,
                             _ => panic!("unsupported type coercion"),
                         };
                         Some(ComptimeVal::Int(expr))
                     }
-                    TypeKind::Int(32) => {
+                    SyTypeKind::Int(32) => {
                         let expr = match expr {
                             ComptimeVal::Int(val) => val,
                             ComptimeVal::Float(val) => val as i32,
@@ -776,7 +774,7 @@ impl Expr {
                         };
                         Some(ComptimeVal::Int(expr))
                     }
-                    TypeKind::Float => {
+                    SyTypeKind::Float => {
                         let expr = match expr {
                             ComptimeVal::Bool(val) => val as i32 as f32,
                             ComptimeVal::Int(val) => val as f32,
@@ -798,35 +796,35 @@ impl CompUnit {
         symtable.enter_scope();
         // getters
         let entry = SymbolEntry {
-            ty: Type::function(vec![], Type::i32_()),
+            ty: SyType::function(vec![], SyType::i32_()),
             comptime_val: None,
             ir_value: None,
         };
         symtable.insert("getint", entry);
 
         let entry = SymbolEntry {
-            ty: Type::function(vec![], Type::i32_()),
+            ty: SyType::function(vec![], SyType::i32_()),
             comptime_val: None,
             ir_value: None,
         };
         symtable.insert("getch", entry);
 
         let entry = SymbolEntry {
-            ty: Type::function(vec![], Type::float()),
+            ty: SyType::function(vec![], SyType::float()),
             comptime_val: None,
             ir_value: None,
         };
         symtable.insert("getfloat", entry);
 
         let entry = SymbolEntry {
-            ty: Type::function(vec![Type::array(usize::MAX, Type::i32_())], Type::i32_()),
+            ty: SyType::function(vec![SyType::array(Some(usize::MAX), SyType::i32_())], SyType::i32_()),
             comptime_val: None,
             ir_value: None,
         };
         symtable.insert("getarray", entry);
 
         let entry = SymbolEntry {
-            ty: Type::function(vec![Type::array(usize::MAX, Type::float())], Type::i32_()),
+            ty: SyType::function(vec![SyType::array(Some(usize::MAX), SyType::float())], SyType::i32_()),
             comptime_val: None,
             ir_value: None,
         };
@@ -834,30 +832,30 @@ impl CompUnit {
 
         // putters
         let entry = SymbolEntry {
-            ty: Type::function(vec![Type::i32_()], Type::void()),
+            ty: SyType::function(vec![SyType::i32_()], SyType::void()),
             comptime_val: None,
             ir_value: None,
         };
         symtable.insert("putint", entry);
 
         let entry = SymbolEntry {
-            ty: Type::function(vec![Type::i32_()], Type::void()),
+            ty: SyType::function(vec![SyType::i32_()], SyType::void()),
             comptime_val: None,
             ir_value: None,
         };
         symtable.insert("putch", entry);
 
         let entry = SymbolEntry {
-            ty: Type::function(vec![Type::float()], Type::void()),
+            ty: SyType::function(vec![SyType::float()], SyType::void()),
             comptime_val: None,
             ir_value: None,
         };
         symtable.insert("putfloat", entry);
 
         let entry = SymbolEntry {
-            ty: Type::function(
-                vec![Type::i32_(), Type::array(usize::MAX, Type::i32_())],
-                Type::void(),
+            ty: SyType::function(
+                vec![SyType::i32_(), SyType::array(Some(usize::MAX), SyType::i32_())],
+                SyType::void(),
             ),
             comptime_val: None,
             ir_value: None,
@@ -865,9 +863,9 @@ impl CompUnit {
         symtable.insert("putarray", entry);
 
         let entry = SymbolEntry {
-            ty: Type::function(
-                vec![Type::i32_(), Type::array(usize::MAX, Type::float())],
-                Type::void(),
+            ty: SyType::function(
+                vec![SyType::i32_(), SyType::array(Some(usize::MAX), SyType::float())],
+                SyType::void(),
             ),
             comptime_val: None,
             ir_value: None,
@@ -876,14 +874,14 @@ impl CompUnit {
 
         // timer in sysy library
         let entry = SymbolEntry {
-            ty: Type::function(vec![Type::i32_()], Type::void()),
+            ty: SyType::function(vec![SyType::i32_()], SyType::void()),
             comptime_val: None,
             ir_value: None,
         };
         symtable.insert("_sysy_starttime", entry);
 
         let entry = SymbolEntry {
-            ty: Type::function(vec![Type::i32_()], Type::void()),
+            ty: SyType::function(vec![SyType::i32_()], SyType::void()),
             comptime_val: None,
             ir_value: None,
         };
@@ -919,10 +917,10 @@ impl CompUnitItem {
                         let mut ty = ty;
                         for dim in indices.iter().rev() {
                             let dim = dim.try_fold(symtable).expect("non-constant dim");
-                            ty = Type::array(dim.as_int() as usize, ty);
+                            ty = SyType::array(Some(dim.as_int() as usize), ty);
                         }
                         // the first `[]` array is not in the indices
-                        ty = Type::array(usize::MAX, ty);
+                        ty = SyType::array(Some(usize::MAX), ty);
                         ty
                     } else {
                         param.ty.clone()
@@ -936,7 +934,7 @@ impl CompUnitItem {
                     symtable.insert(param.ident.clone(), entry);
                 }
 
-                let ty = Type::function(param_tys, func_def.ret_ty.clone());
+                let ty = SyType::function(param_tys, func_def.ret_ty.clone());
                 dbg!(ty.clone());
                 let entry = SymbolEntry {
                     ty,
@@ -990,7 +988,7 @@ impl Stmt {
                 let indices = lval
                     .indices
                     .into_iter()
-                    .map(|index| index.type_check(Some(Type::i32_()), symtable))
+                    .map(|index| index.type_check(Some(SyType::i32_()), symtable))
                     .collect::<Vec<_>>();
 
                 let mut ty = entry.ty.clone();
@@ -1030,13 +1028,13 @@ impl Stmt {
                 Stmt::Return(ret)
             }
             Stmt::If(cond, then_block, else_block) => {
-                let cond = cond.type_check(Some(Type::i1()), symtable);
+                let cond = cond.type_check(Some(SyType::i1()), symtable);
                 let then_block = then_block.type_check(symtable);
                 let else_block = else_block.map(|block| block.type_check(symtable));
                 Stmt::If(cond, Box::new(then_block), else_block.map(Box::new))
             }
             Stmt::While(cond, block) => {
-                let cond = cond.type_check(Some(Type::i1()), symtable);
+                let cond = cond.type_check(Some(SyType::i1()), symtable);
                 let block = block.type_check(symtable);
                 Stmt::While(cond, Box::new(block))
             }
@@ -1057,7 +1055,7 @@ impl ConstDecl {
 
             let mut ty = self.ty.clone();
             for dim in shape.iter().rev() {
-                ty = Type::array(*dim as usize, ty);
+                ty = SyType::array(Some(*dim as usize), ty);
             }
             def.init = def.init.type_check(Some(ty.clone()), symtable);
             let folded = def.init.try_fold(symtable).expect("non-constant init");
@@ -1068,7 +1066,7 @@ impl ConstDecl {
                 .map(ComptimeVal::new_int)
                 .map(Expr::new_const)
                 .map(|mut e| {
-                    e.ty = Some(Type::i32_());
+                    e.ty = Some(SyType::i32_());
                     e
                 })
                 .collect::<Vec<_>>();
@@ -1097,7 +1095,7 @@ impl VarDecl {
 
             let mut ty = self.ty.clone();
             for dim in shape.iter().rev() {
-                ty = Type::array(*dim as usize, ty);
+                ty = SyType::array(Some(*dim as usize), ty);
             }
 
             // just type check, no folding here
@@ -1115,7 +1113,7 @@ impl VarDecl {
                 .map(ComptimeVal::new_int)
                 .map(Expr::new_const)
                 .map(|mut e| {
-                    e.ty = Some(Type::i32_());
+                    e.ty = Some(SyType::i32_());
                     e
                 })
                 .collect::<Vec<_>>();
