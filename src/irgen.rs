@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    frontend::{Block, BlockItem, CompUnit, CompUnitItem, ComptimeVal, Decl, FuncDef, Stmt},
+    frontend::{Block, BlockItem, CompUnit, CompUnitItem, ComptimeVal, Decl, FuncDef, Stmt, SyType, SyTypeKind},
     ir::{module::Module, types::Type, values::Value},
 };
 
@@ -97,7 +97,36 @@ impl IrGen for Block {
 }
 
 impl IrGen for Stmt {
-    fn irgen(&self, ctx: &mut IrGenContext) { todo!() }
+    fn irgen(&self, ctx: &mut IrGenContext) { 
+        ctx.symtable.enter_scope();
+        match self {
+            Stmt::Assign(lval, expr) => {
+
+            },
+            Stmt::ExprStmt(expr_stmt) => {
+
+            },
+            Stmt::Block(block) => {
+
+            },
+            Stmt::If(cond_expr, then_stmt, else_stmt) => {
+
+            },
+            Stmt::While(cond_expr, loop_stmt) => {
+
+            },
+            Stmt::Break => {
+
+            },
+            Stmt::Continue => {
+
+            },
+            Stmt::Return(return_stmt) => {
+
+            },
+        }
+        ctx.symtable.exit_scope();
+    }
 }
 
 impl IrGenContext {
