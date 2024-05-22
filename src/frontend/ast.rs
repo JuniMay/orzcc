@@ -598,7 +598,7 @@ impl Expr {
                 let args = call
                     .args
                     .into_iter()
-                    .zip(param_tys.into_iter())
+                    .zip(param_tys)
                     .map(|(arg, param_ty)| arg.type_check(Some(param_ty), symtable))
                     .collect();
 
@@ -874,7 +874,21 @@ impl CompUnit {
         };
         symtable.insert("putfarray", entry);
 
-        // TODO: timers in sysy lib.
+        // timer in sysy library
+        let entry = SymbolEntry {
+            ty: Type::function(vec![Type::i32_()], Type::void()),
+            comptime_val: None,
+            ir_value: None,
+        };
+        symtable.insert("_sysy_starttime", entry);
+
+        let entry = SymbolEntry {
+            ty: Type::function(vec![Type::i32_()], Type::void()),
+            comptime_val: None,
+            ir_value: None,
+        };
+        symtable.insert("_sysy_stoptime", entry);
+
 
         for item in self.item.iter_mut() {
             item.type_check(&mut symtable);

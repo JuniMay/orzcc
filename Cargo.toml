@@ -14,3 +14,4 @@ clap = "=4.2.0"
 thiserror = "=1.0.40"
 hexponent = {version = "0.2", default-features = false}
 lalrpop-util = { version = "0.19.9", features = ["lexer"] }
+regex = "1.10.4"

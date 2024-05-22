@@ -2,7 +2,7 @@ use clap::{Arg, Command};
 use orzcc::{
     codegen::CodegenContext,
     collections::diagnostic::{Diagnostic, Level},
-    frontend::sysy::sysyparser,
+    frontend::sysy::{self, preprocess, sysyparser},
     ir::{
         exec::debugger::Debugger,
         frontend::{
@@ -83,7 +83,8 @@ fn main() {
             }
         }
         CliCommand::Frontend(cmd) => {
-            let src = std::fs::read_to_string(&cmd.file).unwrap();
+            let mut src = std::fs::read_to_string(&cmd.file).unwrap();
+            src = preprocess(&src);
             let mut ast = sysyparser::CompUnitParser::new()
                 .parse(src.as_str())
                 .unwrap();
