@@ -1,5 +1,4 @@
-use crate::frontend::ast::*;
-use crate::ir::types::Type;
+use crate::frontend::{ast::*, types::*};
 
 grammar;
 
@@ -28,10 +27,10 @@ pub Decl: Decl = {
 }
 
 // BasicType -> 'void' | 'int' | 'float'
-pub BasicType: Type = {
-  "void" => Type::void(),
-  "int" => Type::i32_(),
-  "float" => Type::float(),
+pub BasicType: SysyType = {
+  "void" => SysyType::void(),
+  "int" => SysyType::int(),
+  "float" => SysyType::float(),
 }
 
 // ConstDecl -> 'const' BasicType ConstDef { ',' ConstDef } ';'

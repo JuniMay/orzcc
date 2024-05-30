@@ -407,7 +407,6 @@ mod test {
         assert_eq!(list.front(), Some(1));
         assert_eq!(list.back(), Some(5));
 
-
         for i in list.into_iter().rev() {
             println!("{:?}", i);
         }

@@ -52,22 +52,13 @@ fn _replace_stoptime(line: &str, lineno: usize) -> String {
     result
 }
 
-fn _replace_lineno_start(lineno: usize) -> String {
-    format!("_sysy_starttime({})", lineno)
-}
+fn _replace_lineno_start(lineno: usize) -> String { format!("_sysy_starttime({})", lineno) }
 
-fn _replace_lineno_stop(lineno: usize) -> String {
-    format!("_sysy_stoptime({})", lineno)
-}
+fn _replace_lineno_stop(lineno: usize) -> String { format!("_sysy_stoptime({})", lineno) }
 
-fn _copy_until_index(s: &str, index: usize) -> String {
-    s[..index].to_string()
-}
+fn _copy_until_index(s: &str, index: usize) -> String { s[..index].to_string() }
 
-fn _copy_from_index(s: &str, index: usize) -> String {
-    s[index..].to_string()
-}
-
+fn _copy_from_index(s: &str, index: usize) -> String { s[index..].to_string() }
 
 #[cfg(test)]
 mod test {

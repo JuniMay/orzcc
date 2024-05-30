@@ -4,7 +4,14 @@ use thiserror::Error;
 
 use super::{LocalPass, PassError, PassResult};
 use crate::backend::{
-    MachineBlock, MachineContext, MachineFunctionData, MachineInstData, MachineSymbol, Register, RiscvFpReg, RiscvGpReg
+    MachineBlock,
+    MachineContext,
+    MachineFunctionData,
+    MachineInstData,
+    MachineSymbol,
+    Register,
+    RiscvFpReg,
+    RiscvGpReg,
 };
 
 const ARGUMENT_REGISTERS: [Register; 16] = [
@@ -33,7 +40,6 @@ const RETURN_REGISTERS: [Register; 5] = [
     Register::FloatingPoint(RiscvFpReg::Fa0),
     Register::FloatingPoint(RiscvFpReg::Fa1),
 ];
-
 
 #[derive(Debug, Clone, Default)]
 pub struct BlockDefUse {
@@ -168,7 +174,17 @@ impl LocalPass for DefUseAnalysis {
 mod test {
     use std::io::Cursor;
 
-    use crate::{backend::{passes::{block_defsue_analysis::DefUseAnalysis, LocalPass}, MachineSymbol}, codegen::{self, CodegenContext}, ir::{frontend::parser::Parser, passes::{control_flow_canonicalization::ControlFlowCanonicalization, PassManager}}};
+    use crate::{
+        backend::{
+            passes::{block_defsue_analysis::DefUseAnalysis, LocalPass},
+            MachineSymbol,
+        },
+        codegen::{self, CodegenContext},
+        ir::{
+            frontend::parser::Parser,
+            passes::{control_flow_canonicalization::ControlFlowCanonicalization, PassManager},
+        },
+    };
 
     #[test]
     fn test_cfa() {
@@ -192,7 +208,7 @@ mod test {
         let mut buf = Cursor::new(ir);
         let mut parser = Parser::new(&mut buf);
         let mut module = parser.parse().unwrap().into_ir("test".into()).unwrap();
-        
+
         let mut codegen_ctx = CodegenContext::new();
         codegen_ctx.codegen(&module);
 
@@ -200,7 +216,11 @@ mod test {
 
         let mut dua = DefUseAnalysis {};
 
-        let func = codegen_ctx.machine_ctx.functions.get(&MachineSymbol("check_positive".to_string())).unwrap();
+        let func = codegen_ctx
+            .machine_ctx
+            .functions
+            .get(&MachineSymbol("check_positive".to_string()))
+            .unwrap();
         let block_defuse = dua.run_on_function(&codegen_ctx.machine_ctx, func).unwrap();
 
         println!("{:#?}", block_defuse);

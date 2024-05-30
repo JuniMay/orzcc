@@ -8,8 +8,8 @@
 
 pub mod ast;
 pub mod sysy;
-pub mod sysytype;
+pub mod types;
 
 pub use ast::*;
 pub use sysy::sysyparser::*;
-pub use sysytype::*;
+pub use types::*;

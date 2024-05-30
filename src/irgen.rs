@@ -1,14 +1,35 @@
 use std::collections::HashMap;
 
 use crate::{
-    frontend::{Block, BlockItem, CompUnit, CompUnitItem, ComptimeVal, Decl, FuncDef, Stmt, SyType, SyTypeKind},
+    frontend::{
+        Block,
+        BlockItem,
+        CompUnit,
+        CompUnitItem,
+        ComptimeVal,
+        Decl,
+        FuncDef,
+        Stmt,
+        SysyType,
+        SysyTypeKind,
+    },
     ir::{module::Module, types::Type, values::Value},
 };
 
 pub struct SymbolEntry {
-    pub ty: SyType,
+    pub ty: SysyType,
     pub comptime_val: Option<ComptimeVal>,
     pub ir_value: Option<Value>,
+}
+
+impl SymbolEntry {
+    pub fn from_ty(ty: SysyType) -> Self {
+        Self {
+            ty,
+            comptime_val: None,
+            ir_value: None,
+        }
+    }
 }
 
 #[derive(Default)]
@@ -34,6 +55,7 @@ impl SymbolTableStack {
             .insert(name.into(), entry);
     }
 
+    /// Insert the symbol entry into the upper scope.
     pub fn insert_upper(&mut self, name: impl Into<String>, entry: SymbolEntry, upper: usize) {
         self.stack
             .iter_mut()
@@ -51,6 +73,57 @@ impl SymbolTableStack {
             }
         }
         None
+    }
+
+    /// Register the SysY standard library functions.
+    pub fn register_sysylib(&mut self) {
+        // check if this is the top level scope
+        assert_eq!(self.stack.len(), 1);
+
+        let getint = SymbolEntry::from_ty(SysyType::function(vec![], SysyType::int()));
+        let getch = SymbolEntry::from_ty(SysyType::function(vec![], SysyType::int()));
+        let getfloat = SymbolEntry::from_ty(SysyType::function(vec![], SysyType::float()));
+        let getarray = SymbolEntry::from_ty(SysyType::function(
+            vec![SysyType::array(None, SysyType::int())],
+            SysyType::int(),
+        ));
+        let getfarray = SymbolEntry::from_ty(SysyType::function(
+            vec![SysyType::array(None, SysyType::float())],
+            SysyType::int(),
+        ));
+        let putint =
+            SymbolEntry::from_ty(SysyType::function(vec![SysyType::int()], SysyType::void()));
+        let putch =
+            SymbolEntry::from_ty(SysyType::function(vec![SysyType::int()], SysyType::void()));
+        let putfloat = SymbolEntry::from_ty(SysyType::function(
+            vec![SysyType::float()],
+            SysyType::void(),
+        ));
+        let putarray = SymbolEntry::from_ty(SysyType::function(
+            vec![SysyType::int(), SysyType::array(None, SysyType::int())],
+            SysyType::void(),
+        ));
+        let putfarray = SymbolEntry::from_ty(SysyType::function(
+            vec![SysyType::int(), SysyType::array(None, SysyType::float())],
+            SysyType::void(),
+        ));
+        let starttime =
+            SymbolEntry::from_ty(SysyType::function(vec![SysyType::int()], SysyType::void()));
+        let stoptime =
+            SymbolEntry::from_ty(SysyType::function(vec![SysyType::int()], SysyType::void()));
+
+        self.insert("getint", getint);
+        self.insert("getch", getch);
+        self.insert("getfloat", getfloat);
+        self.insert("getarray", getarray);
+        self.insert("getfarray", getfarray);
+        self.insert("putint", putint);
+        self.insert("putch", putch);
+        self.insert("putfloat", putfloat);
+        self.insert("putarray", putarray);
+        self.insert("putfarray", putfarray);
+        self.insert("_sysy_starttime", starttime);
+        self.insert("_sysy_stoptime", stoptime);
     }
 }
 
@@ -97,33 +170,19 @@ impl IrGen for Block {
 }
 
 impl IrGen for Stmt {
-    fn irgen(&self, ctx: &mut IrGenContext) { 
+    fn irgen(&self, ctx: &mut IrGenContext) {
         ctx.symtable.enter_scope();
         match self {
-            Stmt::Assign(lval, expr) => {
-
-            },
-            Stmt::ExprStmt(expr_stmt) => {
-
-            },
+            Stmt::Assign(lval, expr) => {}
+            Stmt::ExprStmt(expr_stmt) => {}
             Stmt::Block(block) => {
                 block.irgen(ctx);
-            },
-            Stmt::If(cond_expr, then_stmt, else_stmt) => {
-
-            },
-            Stmt::While(cond_expr, loop_stmt) => {
-
-            },
-            Stmt::Break => {
-
-            },
-            Stmt::Continue => {
-
-            },
-            Stmt::Return(return_stmt) => {
-
-            },
+            }
+            Stmt::If(cond_expr, then_stmt, else_stmt) => {}
+            Stmt::While(cond_expr, loop_stmt) => {}
+            Stmt::Break => {}
+            Stmt::Continue => {}
+            Stmt::Return(return_stmt) => {}
         }
         ctx.symtable.exit_scope();
     }
@@ -146,19 +205,19 @@ impl IrGenContext {
         self.symtable.exit_scope();
     }
 
+    pub fn irgen_expr(&self) { todo!() }
 
-    pub fn irgen_expr(&self){
-        todo!()
-    }
-
-    pub fn irgen_type(&self, ty: &SyType) -> Type {
+    pub fn irgen_type(&self, ty: &SysyType) -> Type {
         match &ty.kind() {
-            SyTypeKind::Void => Type::void(),
-            SyTypeKind::Int(bits) => Type::int(*bits), 
-            SyTypeKind::Float => Type::float(),
-            SyTypeKind::Array(Some(len), inner_ty) => Type::array(*len, self.irgen_type(inner_ty)),
-            SyTypeKind::Array(None, _inner_ty) => Type::ptr(),
-            SyTypeKind::Function(param_tys, ret_ty) => {
+            SysyTypeKind::Void => Type::void(),
+            SysyTypeKind::Int => Type::int(32),
+            SysyTypeKind::Bool => Type::int(1),
+            SysyTypeKind::Float => Type::float(),
+            SysyTypeKind::Array(Some(len), inner_ty) => {
+                Type::array(*len, self.irgen_type(inner_ty))
+            }
+            SysyTypeKind::Array(None, _inner_ty) => Type::ptr(),
+            SysyTypeKind::Function(param_tys, ret_ty) => {
                 let mut param_ir_types = Vec::new();
                 for param_ty in param_tys {
                     param_ir_types.push(self.irgen_type(param_ty));
@@ -167,7 +226,7 @@ impl IrGenContext {
             }
         }
     }
-    
+
     /// Finish the irgen process and return the module.
     pub fn finish(self) -> Module { self.module }
 }

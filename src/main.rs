@@ -2,7 +2,7 @@ use clap::{Arg, Command};
 use orzcc::{
     codegen::CodegenContext,
     collections::diagnostic::{Diagnostic, Level},
-    frontend::sysy::{self, preprocess, sysyparser},
+    frontend::sysy::{preprocess, sysyparser},
     ir::{
         exec::debugger::Debugger,
         frontend::{
@@ -89,6 +89,7 @@ fn main() {
                 .parse(src.as_str())
                 .unwrap();
             ast.type_check();
+            println!("type check done");
             if let Some(emit_ast) = cmd.emit_ast {
                 let ast_str = format!("{:#?}", ast);
                 std::fs::write(emit_ast, ast_str).unwrap();

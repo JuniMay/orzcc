@@ -7,11 +7,11 @@ use std::{
 
 use thiserror::Error;
 
-use super::{MachineFunctionData, MachineContext};
+use super::{MachineContext, MachineFunctionData};
 
-pub mod liveness_analysis;
-pub mod control_flow_analysis;
 pub mod block_defsue_analysis;
+pub mod control_flow_analysis;
+pub mod liveness_analysis;
 
 pub trait GlobalPass {
     type Ok;
@@ -22,7 +22,11 @@ pub trait GlobalPass {
 pub trait LocalPass {
     type Ok;
 
-    fn run_on_function(&mut self, context: &MachineContext, function_data: &MachineFunctionData) -> PassResult<Self::Ok>;
+    fn run_on_function(
+        &mut self,
+        context: &MachineContext,
+        function_data: &MachineFunctionData,
+    ) -> PassResult<Self::Ok>;
 }
 
 pub trait LocalPassMut {
@@ -30,7 +34,11 @@ pub trait LocalPassMut {
 
     /// Run the pass on function, return the payload and whether the program has
     /// changed.
-    fn run_on_function(&mut self, context: &MachineContext, function_data: &mut MachineFunctionData) -> PassResult<(Self::Ok, bool)>;
+    fn run_on_function(
+        &mut self,
+        context: &MachineContext,
+        function_data: &mut MachineFunctionData,
+    ) -> PassResult<(Self::Ok, bool)>;
 }
 
 pub trait GlobalPassMut {

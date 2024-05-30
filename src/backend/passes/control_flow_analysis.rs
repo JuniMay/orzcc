@@ -7,9 +7,8 @@ use std::collections::HashMap;
 
 use thiserror::Error;
 
-use crate::backend::{MachineBlock, MachineContext, MachineFunctionData, MachineInstData};
-
 use super::{LocalPass, PassError, PassResult};
+use crate::backend::{MachineBlock, MachineContext, MachineFunctionData, MachineInstData};
 
 #[derive(Debug, Clone, Default)]
 pub struct ControlFlowGraph {
@@ -20,19 +19,23 @@ pub struct ControlFlowGraph {
 impl ControlFlowGraph {
     pub fn new() -> Self { Self::default() }
 
-    pub fn succs(&self, block: &MachineBlock) -> Option<&Vec<MachineBlock>> { self.succs.get(block) }
+    pub fn succs(&self, block: &MachineBlock) -> Option<&Vec<MachineBlock>> {
+        self.succs.get(block)
+    }
 
-    pub fn preds(&self, block: &MachineBlock) -> Option<&Vec<MachineBlock>> { self.preds.get(block) }
+    pub fn preds(&self, block: &MachineBlock) -> Option<&Vec<MachineBlock>> {
+        self.preds.get(block)
+    }
 
     pub fn to_mermaid(&self) -> String {
         let mut result = String::from("graph TD;\n");
-        
+
         for (block, succs) in &self.succs {
             for succ in succs {
                 result.push_str(&format!("    {} --> {};\n", block.0, succ.0));
             }
         }
-        
+
         result
     }
 }
@@ -105,7 +108,14 @@ mod test {
     use std::io::Cursor;
 
     use super::ControlFlowAnalysis;
-    use crate::{backend::{passes::LocalPass, MachineSymbol}, codegen::{self, CodegenContext}, ir::{frontend::parser::Parser, passes::{control_flow_canonicalization::ControlFlowCanonicalization, PassManager}}};
+    use crate::{
+        backend::{passes::LocalPass, MachineSymbol},
+        codegen::{self, CodegenContext},
+        ir::{
+            frontend::parser::Parser,
+            passes::{control_flow_canonicalization::ControlFlowCanonicalization, PassManager},
+        },
+    };
 
     #[test]
     fn test_cfa() {
@@ -129,11 +139,12 @@ mod test {
         let mut buf = Cursor::new(ir);
         let mut parser = Parser::new(&mut buf);
         let mut module = parser.parse().unwrap().into_ir("test".into()).unwrap();
-        
+
         let mut codegen_ctx = CodegenContext::new();
 
         // ControlFlowCanonicalization::register();
-        // let iter = PassManager::run_transformation("control-flow-canonicalization", &mut module, 1234);
+        // let iter = PassManager::run_transformation("control-flow-canonicalization",
+        // &mut module, 1234);
 
         codegen_ctx.codegen(&module);
 
@@ -141,11 +152,14 @@ mod test {
 
         let mut cfa = ControlFlowAnalysis {};
 
-        let func = codegen_ctx.machine_ctx.functions.get(&MachineSymbol("check_positive".to_string())).unwrap();
+        let func = codegen_ctx
+            .machine_ctx
+            .functions
+            .get(&MachineSymbol("check_positive".to_string()))
+            .unwrap();
         let cfg = cfa.run_on_function(&codegen_ctx.machine_ctx, func).unwrap();
 
         println!("{:}", cfg.to_mermaid());
-
     }
 
     #[test]
@@ -174,11 +188,12 @@ mod test {
         let mut buf = Cursor::new(ir);
         let mut parser = Parser::new(&mut buf);
         let mut module = parser.parse().unwrap().into_ir("test".into()).unwrap();
-        
+
         let mut codegen_ctx = CodegenContext::new();
 
         // ControlFlowCanonicalization::register();
-        // let iter = PassManager::run_transformation("control-flow-canonicalization", &mut module, 1234);
+        // let iter = PassManager::run_transformation("control-flow-canonicalization",
+        // &mut module, 1234);
 
         codegen_ctx.codegen(&module);
 
@@ -186,10 +201,13 @@ mod test {
 
         let mut cfa = ControlFlowAnalysis {};
 
-        let func = codegen_ctx.machine_ctx.functions.get(&MachineSymbol("nestedBlocks".to_string())).unwrap();
+        let func = codegen_ctx
+            .machine_ctx
+            .functions
+            .get(&MachineSymbol("nestedBlocks".to_string()))
+            .unwrap();
         let cfg = cfa.run_on_function(&codegen_ctx.machine_ctx, func).unwrap();
 
         println!("{:}", cfg.to_mermaid());
-
     }
 }
