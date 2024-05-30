@@ -8,12 +8,20 @@ use crate::{
         CompUnitItem,
         ComptimeVal,
         Decl,
+        Expr,
+        ExprKind,
+        FuncCall,
         FuncDef,
         Stmt,
         SysyType,
         SysyTypeKind,
     },
-    ir::{builders::BuildGlobalValue, module::Module, types::Type, values::Value},
+    ir::{
+        builders::{BuildAggregateConstant, BuildGlobalValue, BuildNonAggregateConstant},
+        module::Module,
+        types::Type,
+        values::{Function, Value},
+    },
 };
 
 pub struct SymbolEntry {
@@ -130,6 +138,8 @@ impl SymbolTableStack {
 pub struct IrGenContext {
     pub module: Module,
     pub symtable: SymbolTableStack,
+    pub curr_function: Option<Function>,
+    pub curr_block: Option<Block>,
 }
 
 pub trait IrGen {
@@ -225,6 +235,11 @@ impl IrGen for Stmt {
         ctx.symtable.exit_scope();
     }
 }
+macro_rules! dfg_mut {
+    ($module:expr, $function:expr) => {
+        $module.function_data_mut($function).unwrap().dfg_mut()
+    };
+}
 
 impl IrGenContext {
     pub fn new(module_name: impl Into<String>) -> Self {
@@ -232,6 +247,8 @@ impl IrGenContext {
         Self {
             module,
             symtable: SymbolTableStack::default(),
+            curr_function: None,
+            curr_block: None,
         }
     }
 
@@ -243,7 +260,106 @@ impl IrGenContext {
         self.symtable.exit_scope();
     }
 
-    pub fn irgen_expr(&self) { todo!() }
+    /// Generate local comp-time value.
+    ///
+    /// The global comp-time value should be directly generated.
+    pub fn irgen_local_comptime_val(&mut self, val: &ComptimeVal) -> Value {
+        match val {
+            ComptimeVal::Bool(val) => dfg_mut!(self.module, self.curr_function.unwrap())
+                .builder()
+                .bytes(Type::i1(), vec![*val as u8])
+                .unwrap(),
+            ComptimeVal::Int(val) => dfg_mut!(self.module, self.curr_function.unwrap())
+                .builder()
+                .bytes(Type::i32_(), val.to_le_bytes().to_vec())
+                .unwrap(),
+            ComptimeVal::Float(val) => dfg_mut!(self.module, self.curr_function.unwrap())
+                .builder()
+                .bytes(Type::float(), val.to_le_bytes().to_vec())
+                .unwrap(),
+            ComptimeVal::List(_) => {
+                unreachable!()
+            }
+            ComptimeVal::Zeros(ty) => {
+                let ir_ty = self.irgen_type(ty);
+                dfg_mut!(self.module, self.curr_function.unwrap())
+                    .builder()
+                    .zero(ir_ty)
+                    .unwrap()
+            }
+        }
+    }
+
+    /// Generate local expression.
+    pub fn irgen_local_expr(&mut self, expr: Expr) -> Value {
+        let ty = expr.ty;
+
+        match expr.kind {
+            ExprKind::Const(comptime_val) => self.irgen_local_comptime_val(&comptime_val),
+            ExprKind::Binary(op, lhs, rhs) => {
+                todo!()
+            }
+            ExprKind::Unary(op, expr) => {
+                todo!()
+            }
+            ExprKind::LVal(lval) => {
+                todo!()
+            }
+            ExprKind::Coercion(expr) => {
+                todo!()
+            }
+            ExprKind::FuncCall(FuncCall { ident, args, .. }) => {
+                todo!()
+            }
+            ExprKind::InitList(_) => unreachable!(),
+        }
+    }
+
+    /// Generate global comp-time value.
+    pub fn irgen_global_comptime_val(&mut self, val: &ComptimeVal) -> Value {
+        match val {
+            ComptimeVal::Bool(val) => self
+                .module
+                .builder()
+                .bytes(Type::i1(), vec![*val as u8])
+                .unwrap(),
+            ComptimeVal::Int(val) => self
+                .module
+                .builder()
+                .bytes(Type::i32_(), val.to_le_bytes().to_vec())
+                .unwrap(),
+            ComptimeVal::Float(val) => self
+                .module
+                .builder()
+                .bytes(Type::float(), val.to_le_bytes().to_vec())
+                .unwrap(),
+            ComptimeVal::List(vals) => {
+                let ir_vals = vals
+                    .iter()
+                    .map(|val| self.irgen_global_comptime_val(val))
+                    .collect::<Vec<_>>();
+                // get the types of the values
+                let elem_ty = self
+                    .module
+                    .with_value_data(ir_vals[0], |data| data.ty())
+                    .unwrap();
+                let len = ir_vals.len();
+                let ir_ty = Type::array(len, elem_ty);
+                self.module.builder().array(ir_ty, ir_vals).unwrap()
+            }
+            ComptimeVal::Zeros(ty) => {
+                let ir_ty = self.irgen_type(ty);
+                self.module.builder().zero(ir_ty).unwrap()
+            }
+        }
+    }
+
+    pub fn irgen_global_expr(&mut self, expr: Expr) -> Value {
+        match expr.kind {
+            ExprKind::Const(comptime_val) => self.irgen_global_comptime_val(&comptime_val),
+            _ => unreachable!(),
+        }
+    }
 
     pub fn irgen_type(&self, ty: &SysyType) -> Type {
         match &ty.kind() {

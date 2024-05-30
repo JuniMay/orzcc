@@ -345,7 +345,9 @@ impl Module {
         value: impl Into<Value>,
         name: impl Into<String>,
     ) -> Result<(), NameAllocErr> {
-        self.name_allocator.borrow_mut().assign(value.into(), name.into())
+        self.name_allocator
+            .borrow_mut()
+            .assign(value.into(), name.into())
     }
 
     /// Get a global [`Value`] indexer by its name.
