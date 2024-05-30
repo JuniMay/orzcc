@@ -92,13 +92,13 @@ impl Ast {
                     let ty = decl.ty.clone();
                     let function = ctx.module.builder().function_decl(ty)?;
                     ctx.module
-                        .assign_name(function.into(), name)
+                        .assign_name(function, name)
                         .map_err(|_| SemanticError::NameDuplicated(item.span))?;
                 }
                 AstNodeKind::FunctionDef(ref def) => {
                     let function = ctx.module.builder().function_def(def.ty.clone())?;
                     ctx.module
-                        .assign_name(function.into(), def.name.clone())
+                        .assign_name(function, def.name.clone())
                         .map_err(|_| SemanticError::NameDuplicated(item.span))?;
                 }
                 _ => unreachable!(),

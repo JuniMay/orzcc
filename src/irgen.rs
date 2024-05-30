@@ -13,7 +13,7 @@ use crate::{
         SysyType,
         SysyTypeKind,
     },
-    ir::{module::Module, types::Type, values::Value},
+    ir::{builders::BuildGlobalValue, module::Module, types::Type, values::Value},
 };
 
 pub struct SymbolEntry {
@@ -136,12 +136,50 @@ pub trait IrGen {
     fn irgen(&self, ctx: &mut IrGenContext);
 }
 
+impl CompUnitItem {
+    /// Generate the function declaration for the SysY standard library
+    /// functions.
+    fn irgen_sysylib(&self, ctx: &mut IrGenContext) {
+        ctx.symtable.register_sysylib();
+        let sysylib_names = [
+            "getint",
+            "getch",
+            "getfloat",
+            "getarray",
+            "getfarray",
+            "putint",
+            "putch",
+            "putfloat",
+            "putarray",
+            "putfarray",
+            "_sysy_starttime",
+            "_sysy_stoptime",
+        ];
+
+        for name in sysylib_names.iter() {
+            let entry = ctx.symtable.lookup(name).unwrap();
+            let ty = ctx.irgen_type(&entry.ty);
+            let func = ctx
+                .module
+                .builder()
+                .function_decl(ty)
+                .expect("failed to create function");
+            ctx.module
+                .assign_name(func, *name)
+                .expect("failed to assign name");
+        }
+    }
+}
+
 impl IrGen for CompUnitItem {
     fn irgen(&self, ctx: &mut IrGenContext) {
+        ctx.symtable.enter_scope();
+        self.irgen_sysylib(ctx);
         match self {
             CompUnitItem::Decl(decl) => decl.irgen(ctx),
             CompUnitItem::FuncDef(func_def) => func_def.irgen(ctx),
         }
+        ctx.symtable.exit_scope();
     }
 }
 

@@ -340,8 +340,12 @@ impl Module {
     pub fn value_name(&self, value: Value) -> String { self.name_allocator.borrow_mut().get(value) }
 
     /// Assign a name to a global value.
-    pub fn assign_name(&mut self, value: Value, name: String) -> Result<(), NameAllocErr> {
-        self.name_allocator.borrow_mut().assign(value, name)
+    pub fn assign_name(
+        &mut self,
+        value: impl Into<Value>,
+        name: impl Into<String>,
+    ) -> Result<(), NameAllocErr> {
+        self.name_allocator.borrow_mut().assign(value.into(), name.into())
     }
 
     /// Get a global [`Value`] indexer by its name.
