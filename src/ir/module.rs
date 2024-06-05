@@ -170,7 +170,8 @@ impl DataFlowGraph {
             .assign(value, name.into())
     }
 
-    /// Assign a name to a block.
+    /// Assign a name to a block, there will be a suffix id if the name is
+    /// duplicated.
     pub fn assign_block_name(
         &self,
         block: Block,

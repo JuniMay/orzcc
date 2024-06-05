@@ -200,6 +200,16 @@ macro_rules! curr_layout_mut {
     };
 }
 
+macro_rules! curr_layout {
+    ($ctx:expr) => {
+        &$ctx
+            .module
+            .function_data_mut($ctx.curr_function.unwrap())
+            .unwrap()
+            .layout
+    };
+}
+
 // macro_rules! layout {
 //     ($module:expr, $function:expr) => {
 //         &$module.function_data_mut($function).unwrap().layout
@@ -685,8 +695,11 @@ impl IrGen for Stmt {
             Stmt::Block(block) => {
                 block.irgen(ctx);
             }
-            Stmt::If(cond_expr, then_stmt, else_stmt) => {}
+            Stmt::If(cond_expr, then_stmt, else_stmt) => {
+                todo!()
+            }
             Stmt::While(cond_expr, loop_stmt) => {
+                // the entry block of the loop
                 let entry_block = dfg_mut!(ctx.module, ctx.curr_function.unwrap())
                     .builder()
                     .block(Vec::new())
@@ -694,17 +707,23 @@ impl IrGen for Stmt {
                 curr_dfg!(ctx)
                     .assign_block_name(entry_block, "loop_entry")
                     .unwrap();
+                // the exit block of the loop
                 let exit_block = dfg_mut!(ctx.module, ctx.curr_function.unwrap())
                     .builder()
                     .block(Vec::new())
                     .unwrap();
                 curr_layout_mut!(ctx).append_block(entry_block).unwrap();
-
+                // maintain the loop information
                 ctx.loop_entry_stack.push(entry_block);
                 ctx.loop_exit_stack.push(exit_block);
 
+                // set the current block to the entry block.
                 ctx.curr_block = Some(entry_block);
+                // XXX: the short-circuiting is implemented in the expression. Because the
+                // logical operations in SysY only appears in while/if conditions.
                 let cond = ctx.irgen_local_expr(cond_expr);
+
+                // the loop body.
                 let body_block = dfg_mut!(ctx.module, ctx.curr_function.unwrap())
                     .builder()
                     .block(Vec::new())
@@ -712,34 +731,64 @@ impl IrGen for Stmt {
                 curr_dfg!(ctx)
                     .assign_block_name(body_block, "loop_body")
                     .unwrap();
-                let tail_block = dfg_mut!(ctx.module, ctx.curr_function.unwrap())
-                    .builder()
-                    .block(Vec::new())
-                    .unwrap();
-                curr_dfg!(ctx)
-                    .assign_block_name(tail_block, "loop_tail")
-                    .unwrap();
 
+                // the branch instruction to jump to the body block or the exit block.
                 let br = dfg_mut!(ctx.module, ctx.curr_function.unwrap())
                     .builder()
                     .branch(cond, body_block, exit_block, Vec::new(), Vec::new())
                     .unwrap();
+                // the branch is appended to the `curr_block` because when generating the
+                // `cond`, short-circuiting might introduce multiple blocks.
                 curr_layout_mut!(ctx)
-                    .append_inst(br.into(), entry_block)
+                    .append_inst(br.into(), ctx.curr_block.unwrap())
                     .unwrap();
+
                 curr_layout_mut!(ctx).append_block(body_block).unwrap();
                 ctx.curr_block = Some(body_block);
+                // now generate the loop body.
                 loop_stmt.irgen(ctx);
 
-                curr_layout_mut!(ctx).append_block(tail_block).unwrap();
-                let jmp_back = dfg_mut!(ctx.module, ctx.curr_function.unwrap())
-                    .builder()
-                    .jump(entry_block, Vec::new())
-                    .unwrap();
-                curr_layout_mut!(ctx)
-                    .append_inst(jmp_back.into(), tail_block)
-                    .unwrap();
+                // the current block, this could be the body block or the exit block of inner
+                // loops. As the `curr_block` is set to be the exit block, so
+                // just add everyting to the `curr_block`.
+                let curr_block = ctx.curr_block.unwrap();
+
+                let terminator = curr_layout!(ctx).exit_inst_of_block(curr_block);
+                if let Some(terminator) = terminator {
+                    // check if this is actually a terminator
+                    if curr_dfg!(ctx)
+                        .local_value_data(terminator.into())
+                        .unwrap()
+                        .kind()
+                        .is_terminator()
+                    {
+                        // do nothing
+                    } else {
+                        // there are no jumping back instruction in the loop body, so we need to
+                        // manually append the jump back instruction.
+                        let jmp_back = dfg_mut!(ctx.module, ctx.curr_function.unwrap())
+                            .builder()
+                            .jump(entry_block, Vec::new())
+                            .unwrap();
+                        curr_layout_mut!(ctx)
+                            .append_inst(jmp_back.into(), curr_block)
+                            .unwrap();
+                    }
+                } else {
+                    // there are no jumping back instruction in the loop body, so we need to
+                    // manually append the jump back instruction.
+                    let jmp_back = dfg_mut!(ctx.module, ctx.curr_function.unwrap())
+                        .builder()
+                        .jump(entry_block, Vec::new())
+                        .unwrap();
+                    curr_layout_mut!(ctx)
+                        .append_inst(jmp_back.into(), curr_block)
+                        .unwrap();
+                }
+
                 curr_layout_mut!(ctx).append_block(exit_block).unwrap();
+                // set the current block to be the exit block, so that the following statements
+                // of the parent block can be correctly appended.
                 ctx.curr_block = Some(exit_block);
 
                 ctx.loop_entry_stack.pop();
