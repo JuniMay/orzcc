@@ -1443,17 +1443,56 @@ impl CodegenContext {
                             .insert(inst.into(), ValueCodegenResult::Register(rd));
                     }
                     UnaryOp::Not => {
-                        let (rd, xori) = MachineInstData::new_binary_imm(
-                            &mut self.machine_ctx,
-                            MachineBinaryImmOp::Xori,
-                            operand,
-                            (-1).into(),
-                        );
+                        let bitwidth = val_data.ty().bitwidth();
+                        // - bitwidth <= 11: exactly the number of 1s.
+                        // - bitwidth >= 12: signext will lead to all 1s, so a correction is needed
 
-                        self.append_inst(&function_name, block, xori);
+                        let mask = (1 << bitwidth) - 1;
 
-                        self.value_map
-                            .insert(inst.into(), ValueCodegenResult::Register(rd));
+                        match bitwidth {
+                            0..=11 => {
+                                let (rd, xori) = MachineInstData::new_binary_imm(
+                                    &mut self.machine_ctx,
+                                    MachineBinaryImmOp::Xori,
+                                    operand,
+                                    mask.into(),
+                                );
+
+                                self.append_inst(&function_name, block, xori);
+
+                                self.value_map
+                                    .insert(inst.into(), ValueCodegenResult::Register(rd));
+                            }
+                            12.. => {
+                                // XXX: not sure if this is the optimal solution, but in the IR
+                                // generated from SysY, only i1 will be used in Not, so the compiler
+                                // should not reach here.
+                                let (rd, xori) = MachineInstData::new_binary_imm(
+                                    &mut self.machine_ctx,
+                                    MachineBinaryImmOp::Xori,
+                                    operand,
+                                    (-1).into(),
+                                );
+
+                                self.append_inst(&function_name, block, xori);
+
+                                // li + and
+                                let (mask, li) =
+                                    MachineInstData::new_li(&mut self.machine_ctx, mask.into());
+                                self.append_inst(&function_name, block, li);
+
+                                let (rd, and) = MachineInstData::new_binary(
+                                    &mut self.machine_ctx,
+                                    MachineBinaryOp::And,
+                                    rd,
+                                    mask,
+                                );
+                                self.append_inst(&function_name, block, and);
+
+                                self.value_map
+                                    .insert(inst.into(), ValueCodegenResult::Register(rd));
+                            }
+                        }
                     }
                 }
             }

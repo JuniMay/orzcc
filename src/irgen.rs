@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     frontend::{
+        BinaryOp,
         Block,
         BlockItem,
         CompUnit,
@@ -15,6 +16,7 @@ use crate::{
         Stmt,
         SysyType,
         SysyTypeKind,
+        UnaryOp,
     },
     ir::{
         self,
@@ -180,6 +182,16 @@ macro_rules! curr_dfg {
         &$ctx
             .module
             .function_data($ctx.curr_function.unwrap())
+            .unwrap()
+            .dfg
+    };
+}
+
+macro_rules! curr_dfg_mut {
+    ($ctx:expr) => {
+        &mut $ctx
+            .module
+            .function_data_mut($ctx.curr_function.unwrap())
             .unwrap()
             .dfg
     };
@@ -679,10 +691,7 @@ impl IrGen for Stmt {
             Stmt::Assign(lval, expr) => {
                 let slot = ctx.symtable.lookup(&lval.ident).unwrap().ir_value.unwrap();
                 let val = ctx.irgen_local_expr(expr);
-                let store = dfg_mut!(ctx.module, ctx.curr_function.unwrap())
-                    .builder()
-                    .store(val, slot)
-                    .unwrap();
+                let store = curr_dfg_mut!(ctx).builder().store(val, slot).unwrap();
                 curr_layout_mut!(ctx)
                     .append_inst(store.into(), ctx.curr_block.unwrap())
                     .unwrap();
@@ -696,23 +705,79 @@ impl IrGen for Stmt {
                 block.irgen(ctx);
             }
             Stmt::If(cond_expr, then_stmt, else_stmt) => {
-                todo!()
+                let entry_block = curr_dfg_mut!(ctx).builder().block(Vec::new()).unwrap();
+                curr_dfg!(ctx).assign_block_name(entry_block, "if").unwrap();
+                curr_layout_mut!(ctx).append_block(entry_block).unwrap();
+                ctx.curr_block = Some(entry_block);
+                let cond = ctx.irgen_local_expr(cond_expr);
+
+                let then_block = curr_dfg_mut!(ctx).builder().block(Vec::new()).unwrap();
+                curr_dfg!(ctx)
+                    .assign_block_name(then_block, "then")
+                    .unwrap();
+
+                let else_block = curr_dfg_mut!(ctx).builder().block(Vec::new()).unwrap();
+                curr_dfg!(ctx)
+                    .assign_block_name(else_block, "else")
+                    .unwrap();
+
+                // branch, append to the `curr_block` to handle the short-circuiting.
+                let br = curr_dfg_mut!(ctx)
+                    .builder()
+                    .branch(cond, then_block, else_block, Vec::new(), Vec::new())
+                    .unwrap();
+                curr_layout_mut!(ctx)
+                    .append_inst(br.into(), ctx.curr_block.unwrap())
+                    .unwrap();
+
+                let exit_block = curr_dfg_mut!(ctx).builder().block(Vec::new()).unwrap();
+                curr_dfg!(ctx)
+                    .assign_block_name(exit_block, "exit")
+                    .unwrap();
+
+                // then block
+                curr_layout_mut!(ctx).append_block(then_block).unwrap();
+                ctx.curr_block = Some(then_block);
+                then_stmt.irgen(ctx);
+                // jump to exit block and add to `curr_block`
+                let jmp = curr_dfg_mut!(ctx)
+                    .builder()
+                    .jump(exit_block, Vec::new())
+                    .unwrap();
+                curr_layout_mut!(ctx)
+                    .append_inst(jmp.into(), ctx.curr_block.unwrap())
+                    .unwrap();
+
+                // else block
+                curr_layout_mut!(ctx).append_block(else_block).unwrap();
+                ctx.curr_block = Some(else_block);
+                if let Some(else_stmt) = else_stmt {
+                    else_stmt.irgen(ctx);
+                }
+                // jump to exit block and add to `curr_block`
+                let jmp = curr_dfg_mut!(ctx)
+                    .builder()
+                    .jump(exit_block, Vec::new())
+                    .unwrap();
+                curr_layout_mut!(ctx)
+                    .append_inst(jmp.into(), ctx.curr_block.unwrap())
+                    .unwrap();
+
+                // exit block
+                curr_layout_mut!(ctx).append_block(exit_block).unwrap();
+                // set the current block to be the exit block, so that the following statements
+                // of the parent block can be correctly appended.
+                ctx.curr_block = Some(exit_block);
             }
             Stmt::While(cond_expr, loop_stmt) => {
                 // the entry block of the loop
-                let entry_block = dfg_mut!(ctx.module, ctx.curr_function.unwrap())
-                    .builder()
-                    .block(Vec::new())
-                    .unwrap();
+                let entry_block = curr_dfg_mut!(ctx).builder().block(Vec::new()).unwrap();
                 curr_dfg!(ctx)
                     .assign_block_name(entry_block, "loop_entry")
                     .unwrap();
-                // the exit block of the loop
-                let exit_block = dfg_mut!(ctx.module, ctx.curr_function.unwrap())
-                    .builder()
-                    .block(Vec::new())
-                    .unwrap();
                 curr_layout_mut!(ctx).append_block(entry_block).unwrap();
+                // the exit block of the loop
+                let exit_block = curr_dfg_mut!(ctx).builder().block(Vec::new()).unwrap();
                 // maintain the loop information
                 ctx.loop_entry_stack.push(entry_block);
                 ctx.loop_exit_stack.push(exit_block);
@@ -724,16 +789,13 @@ impl IrGen for Stmt {
                 let cond = ctx.irgen_local_expr(cond_expr);
 
                 // the loop body.
-                let body_block = dfg_mut!(ctx.module, ctx.curr_function.unwrap())
-                    .builder()
-                    .block(Vec::new())
-                    .unwrap();
+                let body_block = curr_dfg_mut!(ctx).builder().block(Vec::new()).unwrap();
                 curr_dfg!(ctx)
                     .assign_block_name(body_block, "loop_body")
                     .unwrap();
 
                 // the branch instruction to jump to the body block or the exit block.
-                let br = dfg_mut!(ctx.module, ctx.curr_function.unwrap())
+                let br = curr_dfg_mut!(ctx)
                     .builder()
                     .branch(cond, body_block, exit_block, Vec::new(), Vec::new())
                     .unwrap();
@@ -766,7 +828,7 @@ impl IrGen for Stmt {
                     } else {
                         // there are no jumping back instruction in the loop body, so we need to
                         // manually append the jump back instruction.
-                        let jmp_back = dfg_mut!(ctx.module, ctx.curr_function.unwrap())
+                        let jmp_back = curr_dfg_mut!(ctx)
                             .builder()
                             .jump(entry_block, Vec::new())
                             .unwrap();
@@ -777,7 +839,7 @@ impl IrGen for Stmt {
                 } else {
                     // there are no jumping back instruction in the loop body, so we need to
                     // manually append the jump back instruction.
-                    let jmp_back = dfg_mut!(ctx.module, ctx.curr_function.unwrap())
+                    let jmp_back = curr_dfg_mut!(ctx)
                         .builder()
                         .jump(entry_block, Vec::new())
                         .unwrap();
@@ -796,20 +858,14 @@ impl IrGen for Stmt {
             }
             Stmt::Break => {
                 let dst = ctx.loop_exit_stack.last().unwrap();
-                let jmp = dfg_mut!(ctx.module, ctx.curr_function.unwrap())
-                    .builder()
-                    .jump(*dst, Vec::new())
-                    .unwrap();
+                let jmp = curr_dfg_mut!(ctx).builder().jump(*dst, Vec::new()).unwrap();
                 curr_layout_mut!(ctx)
                     .append_inst(jmp.into(), ctx.curr_block.unwrap())
                     .unwrap();
             }
             Stmt::Continue => {
                 let dst = ctx.loop_entry_stack.last().unwrap();
-                let jmp = dfg_mut!(ctx.module, ctx.curr_function.unwrap())
-                    .builder()
-                    .jump(*dst, Vec::new())
-                    .unwrap();
+                let jmp = curr_dfg_mut!(ctx).builder().jump(*dst, Vec::new()).unwrap();
                 curr_layout_mut!(ctx)
                     .append_inst(jmp.into(), ctx.curr_block.unwrap())
                     .unwrap();
@@ -817,7 +873,7 @@ impl IrGen for Stmt {
             Stmt::Return(return_stmt) => {
                 if let Some(ref expr) = return_stmt.expr {
                     let val = ctx.irgen_local_expr(expr);
-                    let store = dfg_mut!(ctx.module, ctx.curr_function.unwrap())
+                    let store = curr_dfg_mut!(ctx)
                         .builder()
                         .store(val, ctx.curr_ret_slot.unwrap())
                         .unwrap();
@@ -826,7 +882,7 @@ impl IrGen for Stmt {
                         .unwrap();
                 }
                 // jump to return block.
-                let jmp = dfg_mut!(ctx.module, ctx.curr_function.unwrap())
+                let jmp = curr_dfg_mut!(ctx)
                     .builder()
                     .jump(ctx.curr_ret_block.unwrap(), Vec::new())
                     .unwrap();
@@ -915,15 +971,15 @@ impl IrGenContext {
     /// The global comp-time value should be directly generated.
     pub fn irgen_local_comptime_val(&mut self, val: &ComptimeVal) -> Value {
         match val {
-            ComptimeVal::Bool(val) => dfg_mut!(self.module, self.curr_function.unwrap())
+            ComptimeVal::Bool(val) => curr_dfg_mut!(self)
                 .builder()
                 .bytes(Type::i1(), vec![*val as u8])
                 .unwrap(),
-            ComptimeVal::Int(val) => dfg_mut!(self.module, self.curr_function.unwrap())
+            ComptimeVal::Int(val) => curr_dfg_mut!(self)
                 .builder()
                 .bytes(Type::i32_(), val.to_le_bytes().to_vec())
                 .unwrap(),
-            ComptimeVal::Float(val) => dfg_mut!(self.module, self.curr_function.unwrap())
+            ComptimeVal::Float(val) => curr_dfg_mut!(self)
                 .builder()
                 .bytes(Type::float(), val.to_le_bytes().to_vec())
                 .unwrap(),
@@ -932,10 +988,7 @@ impl IrGenContext {
             }
             ComptimeVal::Zeros(ty) => {
                 let ir_ty = Self::irgen_type(ty);
-                dfg_mut!(self.module, self.curr_function.unwrap())
-                    .builder()
-                    .zero(ir_ty)
-                    .unwrap()
+                curr_dfg_mut!(self).builder().zero(ir_ty).unwrap()
             }
         }
     }
@@ -947,10 +1000,285 @@ impl IrGenContext {
         match &expr.kind {
             ExprKind::Const(comptime_val) => self.irgen_local_comptime_val(comptime_val),
             ExprKind::Binary(op, lhs, rhs) => {
-                todo!()
+                let curr_block = self.curr_block.unwrap();
+                match op {
+                    BinaryOp::Add
+                    | BinaryOp::Sub
+                    | BinaryOp::Mul
+                    | BinaryOp::Div
+                    | BinaryOp::Mod
+                    | BinaryOp::Lt
+                    | BinaryOp::Gt
+                    | BinaryOp::Le
+                    | BinaryOp::Ge
+                    | BinaryOp::Eq
+                    | BinaryOp::Ne => {
+                        let is_float = lhs.ty().is_float();
+                        let lhs = self.irgen_local_expr(lhs);
+                        let rhs = self.irgen_local_expr(rhs);
+
+                        match op {
+                            BinaryOp::Add => {
+                                let add = curr_dfg_mut!(self)
+                                    .builder()
+                                    .binary(
+                                        if is_float {
+                                            ir::values::BinaryOp::FAdd
+                                        } else {
+                                            ir::values::BinaryOp::Add
+                                        },
+                                        lhs,
+                                        rhs,
+                                    )
+                                    .unwrap();
+                                curr_layout_mut!(self)
+                                    .append_inst(add.into(), curr_block)
+                                    .unwrap();
+                                add
+                            }
+                            BinaryOp::Sub => {
+                                let sub = curr_dfg_mut!(self)
+                                    .builder()
+                                    .binary(
+                                        if is_float {
+                                            ir::values::BinaryOp::FSub
+                                        } else {
+                                            ir::values::BinaryOp::Sub
+                                        },
+                                        lhs,
+                                        rhs,
+                                    )
+                                    .unwrap();
+                                curr_layout_mut!(self)
+                                    .append_inst(sub.into(), curr_block)
+                                    .unwrap();
+                                sub
+                            }
+                            BinaryOp::Mul => {
+                                let mul = curr_dfg_mut!(self)
+                                    .builder()
+                                    .binary(
+                                        if is_float {
+                                            ir::values::BinaryOp::FMul
+                                        } else {
+                                            ir::values::BinaryOp::Mul
+                                        },
+                                        lhs,
+                                        rhs,
+                                    )
+                                    .unwrap();
+                                curr_layout_mut!(self)
+                                    .append_inst(mul.into(), curr_block)
+                                    .unwrap();
+                                mul
+                            }
+                            BinaryOp::Div => {
+                                let div = curr_dfg_mut!(self)
+                                    .builder()
+                                    .binary(
+                                        if is_float {
+                                            ir::values::BinaryOp::FDiv
+                                        } else {
+                                            ir::values::BinaryOp::SDiv
+                                        },
+                                        lhs,
+                                        rhs,
+                                    )
+                                    .unwrap();
+                                curr_layout_mut!(self)
+                                    .append_inst(div.into(), curr_block)
+                                    .unwrap();
+                                div
+                            }
+                            BinaryOp::Mod => {
+                                let rem = curr_dfg_mut!(self)
+                                    .builder()
+                                    .binary(
+                                        if is_float {
+                                            ir::values::BinaryOp::FRem
+                                        } else {
+                                            ir::values::BinaryOp::SRem
+                                        },
+                                        lhs,
+                                        rhs,
+                                    )
+                                    .unwrap();
+                                curr_layout_mut!(self)
+                                    .append_inst(rem.into(), curr_block)
+                                    .unwrap();
+                                rem
+                            }
+                            BinaryOp::Lt => {
+                                let icmp = curr_dfg_mut!(self)
+                                    .builder()
+                                    .binary(
+                                        if is_float {
+                                            ir::values::BinaryOp::FCmp(ir::values::FCmpCond::OLt)
+                                        } else {
+                                            ir::values::BinaryOp::ICmp(ir::values::ICmpCond::Slt)
+                                        },
+                                        lhs,
+                                        rhs,
+                                    )
+                                    .unwrap();
+                                curr_layout_mut!(self)
+                                    .append_inst(icmp.into(), curr_block)
+                                    .unwrap();
+                                icmp
+                            }
+                            BinaryOp::Gt => {
+                                let icmp = curr_dfg_mut!(self)
+                                    .builder()
+                                    .binary(
+                                        if is_float {
+                                            ir::values::BinaryOp::FCmp(ir::values::FCmpCond::OLt)
+                                        } else {
+                                            ir::values::BinaryOp::ICmp(ir::values::ICmpCond::Slt)
+                                        },
+                                        rhs,
+                                        lhs,
+                                    )
+                                    .unwrap();
+                                curr_layout_mut!(self)
+                                    .append_inst(icmp.into(), curr_block)
+                                    .unwrap();
+                                icmp
+                            }
+                            BinaryOp::Le => {
+                                let icmp = curr_dfg_mut!(self)
+                                    .builder()
+                                    .binary(
+                                        if is_float {
+                                            ir::values::BinaryOp::FCmp(ir::values::FCmpCond::OLe)
+                                        } else {
+                                            ir::values::BinaryOp::ICmp(ir::values::ICmpCond::Sle)
+                                        },
+                                        lhs,
+                                        rhs,
+                                    )
+                                    .unwrap();
+                                curr_layout_mut!(self)
+                                    .append_inst(icmp.into(), curr_block)
+                                    .unwrap();
+                                icmp
+                            }
+                            BinaryOp::Ge => {
+                                let icmp = curr_dfg_mut!(self)
+                                    .builder()
+                                    .binary(
+                                        if is_float {
+                                            ir::values::BinaryOp::FCmp(ir::values::FCmpCond::OLe)
+                                        } else {
+                                            ir::values::BinaryOp::ICmp(ir::values::ICmpCond::Sle)
+                                        },
+                                        rhs,
+                                        lhs,
+                                    )
+                                    .unwrap();
+                                curr_layout_mut!(self)
+                                    .append_inst(icmp.into(), curr_block)
+                                    .unwrap();
+                                icmp
+                            }
+                            BinaryOp::Eq => {
+                                let icmp = curr_dfg_mut!(self)
+                                    .builder()
+                                    .binary(
+                                        if is_float {
+                                            ir::values::BinaryOp::FCmp(ir::values::FCmpCond::OEq)
+                                        } else {
+                                            ir::values::BinaryOp::ICmp(ir::values::ICmpCond::Eq)
+                                        },
+                                        lhs,
+                                        rhs,
+                                    )
+                                    .unwrap();
+                                curr_layout_mut!(self)
+                                    .append_inst(icmp.into(), curr_block)
+                                    .unwrap();
+                                icmp
+                            }
+                            BinaryOp::Ne => {
+                                let icmp = curr_dfg_mut!(self)
+                                    .builder()
+                                    .binary(
+                                        if is_float {
+                                            ir::values::BinaryOp::FCmp(ir::values::FCmpCond::OEq)
+                                        } else {
+                                            ir::values::BinaryOp::ICmp(ir::values::ICmpCond::Eq)
+                                        },
+                                        lhs,
+                                        rhs,
+                                    )
+                                    .unwrap();
+                                curr_layout_mut!(self)
+                                    .append_inst(icmp.into(), curr_block)
+                                    .unwrap();
+                                let not = curr_dfg_mut!(self)
+                                    .builder()
+                                    .unary(ir::values::UnaryOp::Not, icmp)
+                                    .unwrap();
+                                curr_layout_mut!(self)
+                                    .append_inst(not.into(), curr_block)
+                                    .unwrap();
+                                not
+                            }
+                            BinaryOp::LogicalAnd | BinaryOp::LogicalOr => unreachable!(),
+                        }
+                    }
+                    BinaryOp::LogicalAnd | BinaryOp::LogicalOr => {
+                        // TODO: short-circuiting
+                        unimplemented!()
+                    }
+                }
             }
             ExprKind::Unary(op, expr) => {
-                todo!()
+                let is_float = expr.ty().is_float();
+                match op {
+                    UnaryOp::Neg => {
+                        let operand = self.irgen_local_expr(expr);
+                        if is_float {
+                            // fneg
+                            let fneg = curr_dfg_mut!(self)
+                                .builder()
+                                .unary(ir::values::UnaryOp::FNeg, operand)
+                                .unwrap();
+                            curr_layout_mut!(self)
+                                .append_inst(fneg.into(), self.curr_block.unwrap())
+                                .unwrap();
+                            fneg
+                        } else {
+                            // 0 - operand
+                            let zero = curr_dfg_mut!(self)
+                                .builder()
+                                .zero(Self::irgen_type(expr.ty.as_ref().unwrap()))
+                                .unwrap();
+                            let sub = curr_dfg_mut!(self)
+                                .builder()
+                                .binary(ir::values::BinaryOp::Sub, zero, operand)
+                                .unwrap();
+                            curr_layout_mut!(self)
+                                .append_inst(sub.into(), self.curr_block.unwrap())
+                                .unwrap();
+                            sub
+                        }
+                    }
+                    UnaryOp::LogicalNot => {
+                        // XXX: short-circuiting is done by logical-binaries, so here just negate
+                        // the value.
+                        assert!(expr.ty().is_bool());
+                        let operand = self.irgen_local_expr(expr);
+                        // because the type is i1, so the not is the same as xor with 1.
+                        let not = curr_dfg_mut!(self)
+                            .builder()
+                            .unary(ir::values::UnaryOp::Not, operand)
+                            .unwrap();
+                        curr_layout_mut!(self)
+                            .append_inst(not.into(), self.curr_block.unwrap())
+                            .unwrap();
+                        not
+                    }
+                }
             }
             ExprKind::LVal(lval) => {
                 // load, require ty and slot
@@ -976,12 +1304,12 @@ impl IrGenContext {
 
                 if shape.is_empty() {
                     // non-array
-                    let load = dfg_mut!(self.module, self.curr_function.unwrap())
+                    let load = curr_dfg_mut!(self)
                         .builder()
                         .load(innermost_ty, slot)
                         .unwrap();
                     let curr_block = self.curr_block.unwrap();
-                    layout_mut!(self.module, self.curr_function.unwrap())
+                    curr_layout_mut!(self)
                         .append_inst(load.into(), curr_block)
                         .unwrap();
                     load
@@ -992,21 +1320,21 @@ impl IrGenContext {
                         let index = self.irgen_local_expr(index);
                         ir_indices.push(index);
                     }
-                    let gep = dfg_mut!(self.module, self.curr_function.unwrap())
+                    let gep = curr_dfg_mut!(self)
                         .builder()
                         .getelemptr(slot, bound_ty, ir_indices)
                         .unwrap();
                     let curr_block = self.curr_block.unwrap();
-                    layout_mut!(self.module, self.curr_function.unwrap())
+                    curr_layout_mut!(self)
                         .append_inst(gep.into(), curr_block)
                         .unwrap();
                     // load
-                    let load = dfg_mut!(self.module, self.curr_function.unwrap())
+                    let load = curr_dfg_mut!(self)
                         .builder()
                         .load(innermost_ty, gep)
                         .unwrap();
                     let curr_block = self.curr_block.unwrap();
-                    layout_mut!(self.module, self.curr_function.unwrap())
+                    curr_layout_mut!(self)
                         .append_inst(load.into(), curr_block)
                         .unwrap();
                     load
@@ -1017,12 +1345,12 @@ impl IrGenContext {
                         let index = self.irgen_local_expr(index);
                         ir_indices.push(index);
                     }
-                    let gep = dfg_mut!(self.module, self.curr_function.unwrap())
+                    let gep = curr_dfg_mut!(self)
                         .builder()
                         .getelemptr(slot, bound_ty, ir_indices)
                         .unwrap();
                     let curr_block = self.curr_block.unwrap();
-                    layout_mut!(self.module, self.curr_function.unwrap())
+                    curr_layout_mut!(self)
                         .append_inst(gep.into(), curr_block)
                         .unwrap();
                     gep
@@ -1033,7 +1361,7 @@ impl IrGenContext {
                     (SysyTypeKind::Bool, SysyTypeKind::Int) => {
                         // zeroext
                         let val = self.irgen_local_expr(expr);
-                        let zext = dfg_mut!(self.module, self.curr_function.unwrap())
+                        let zext = curr_dfg_mut!(self)
                             .builder()
                             .cast(ir::values::CastOp::ZExt, Self::irgen_type(ty), val)
                             .unwrap();
@@ -1042,11 +1370,11 @@ impl IrGenContext {
                     (SysyTypeKind::Int, SysyTypeKind::Bool) => {
                         // icmp ne 0
                         let val = self.irgen_local_expr(expr);
-                        let zero = dfg_mut!(self.module, self.curr_function.unwrap())
+                        let zero = curr_dfg_mut!(self)
                             .builder()
                             .zero(Self::irgen_type(expr.ty.as_ref().unwrap()))
                             .unwrap();
-                        let icmp = dfg_mut!(self.module, self.curr_function.unwrap())
+                        let icmp = curr_dfg_mut!(self)
                             .builder()
                             .binary(
                                 ir::values::BinaryOp::ICmp(ir::values::ICmpCond::Ne),
@@ -1059,7 +1387,7 @@ impl IrGenContext {
                     (SysyTypeKind::Int, SysyTypeKind::Float) => {
                         // sitofp
                         let val = self.irgen_local_expr(expr);
-                        let sitofp = dfg_mut!(self.module, self.curr_function.unwrap())
+                        let sitofp = curr_dfg_mut!(self)
                             .builder()
                             .cast(ir::values::CastOp::SIToFp, Self::irgen_type(ty), val)
                             .unwrap();
@@ -1068,7 +1396,7 @@ impl IrGenContext {
                     (SysyTypeKind::Float, SysyTypeKind::Int) => {
                         // fptosi
                         let val = self.irgen_local_expr(expr);
-                        let fptosi = dfg_mut!(self.module, self.curr_function.unwrap())
+                        let fptosi = curr_dfg_mut!(self)
                             .builder()
                             .cast(ir::values::CastOp::FpToSI, Self::irgen_type(ty), val)
                             .unwrap();
@@ -1077,11 +1405,11 @@ impl IrGenContext {
                     (SysyTypeKind::Float, SysyTypeKind::Bool) => {
                         // fcmp oeq 0.0
                         let val = self.irgen_local_expr(expr);
-                        let zero = dfg_mut!(self.module, self.curr_function.unwrap())
+                        let zero = curr_dfg_mut!(self)
                             .builder()
                             .zero(Self::irgen_type(expr.ty.as_ref().unwrap()))
                             .unwrap();
-                        let fcmp = dfg_mut!(self.module, self.curr_function.unwrap())
+                        let fcmp = curr_dfg_mut!(self)
                             .builder()
                             .binary(
                                 ir::values::BinaryOp::FCmp(ir::values::FCmpCond::OEq),
@@ -1094,7 +1422,7 @@ impl IrGenContext {
                     (SysyTypeKind::Array(_, _), SysyTypeKind::Array(_, _)) => {
                         // bitcast
                         let val = self.irgen_local_expr(expr);
-                        let bitcast = dfg_mut!(self.module, self.curr_function.unwrap())
+                        let bitcast = curr_dfg_mut!(self)
                             .builder()
                             .cast(ir::values::CastOp::Bitcast, Self::irgen_type(ty), val)
                             .unwrap();
@@ -1103,7 +1431,7 @@ impl IrGenContext {
                     _ => unreachable!(),
                 };
 
-                layout_mut!(self.module, self.curr_function.unwrap())
+                curr_layout_mut!(self)
                     .append_inst(val.into(), self.curr_block.unwrap())
                     .unwrap();
                 val
@@ -1117,12 +1445,12 @@ impl IrGenContext {
                     .iter()
                     .map(|arg| self.irgen_local_expr(arg))
                     .collect::<Vec<_>>();
-                let call = dfg_mut!(self.module, self.curr_function.unwrap())
+                let call = curr_dfg_mut!(self)
                     .builder()
                     .call(Self::irgen_type(&ret_ty), func, args)
                     .unwrap();
                 let curr_block = self.curr_block.unwrap();
-                layout_mut!(self.module, self.curr_function.unwrap())
+                curr_layout_mut!(self)
                     .append_inst(call.into(), curr_block)
                     .unwrap();
                 call

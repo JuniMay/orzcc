@@ -307,7 +307,7 @@ pub struct LVal {
 #[derive(Debug)]
 pub enum UnaryOp {
     Neg,
-    Not,
+    LogicalNot,
 }
 
 /// FuncRParams -> Expr { ',' Expr }
@@ -618,7 +618,7 @@ impl Expr {
                             panic!("unsupported type for negation");
                         }
                     }
-                    UnaryOp::Not => {
+                    UnaryOp::LogicalNot => {
                         let ty = expr.ty();
                         if ty.is_bool() {
                             ty
@@ -694,7 +694,7 @@ impl Expr {
 
                 match op {
                     UnaryOp::Neg => Some(-expr),
-                    UnaryOp::Not => Some(!expr),
+                    UnaryOp::LogicalNot => Some(!expr),
                 }
             }
             ExprKind::FuncCall(_) => {
