@@ -178,7 +178,7 @@ impl DataFlowGraph {
     ) -> Result<(), NameAllocErr> {
         self.block_name_allocator
             .borrow_mut()
-            .assign(block, name.into())
+            .assign_autoinc(block, name.into())
     }
 
     /// Get the block data of a block.
@@ -466,6 +466,29 @@ where
 
         if self.map.contains_rev(&name) {
             return Err(NameAllocErr::NameDuplicated);
+        }
+
+        self.map.insert(key, name);
+
+        Ok(())
+    }
+
+    /// Manually assign a name for the key, add suffix id if duplicated.
+    pub fn assign_autoinc(&mut self, key: T, name: String) -> Result<(), NameAllocErr> {
+        if self.map.contains_fwd(&key) {
+            return Err(NameAllocErr::KeyDuplicated);
+        }
+
+        let mut name = if name.starts_with(self.prefix) {
+            name
+        } else {
+            format!("{}{}", self.prefix, name)
+        };
+
+        let mut local_counter = 0;
+        while self.map.contains_rev(&name) {
+            name = format!("{}_{}", name, local_counter);
+            local_counter += 1;
         }
 
         self.map.insert(key, name);

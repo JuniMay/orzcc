@@ -159,6 +159,8 @@ pub struct IrGenContext {
     pub curr_block: Option<ir::values::Block>,
     pub curr_ret_slot: Option<Value>,
     pub curr_ret_block: Option<ir::values::Block>,
+    pub loop_entry_stack: Vec<ir::values::Block>,
+    pub loop_exit_stack: Vec<ir::values::Block>,
 }
 
 macro_rules! dfg_mut {
@@ -173,11 +175,36 @@ macro_rules! dfg {
     };
 }
 
+macro_rules! curr_dfg {
+    ($ctx:expr) => {
+        &$ctx
+            .module
+            .function_data($ctx.curr_function.unwrap())
+            .unwrap()
+            .dfg
+    };
+}
+
 macro_rules! layout_mut {
     ($module:expr, $function:expr) => {
         &mut $module.function_data_mut($function).unwrap().layout
     };
 }
+macro_rules! curr_layout_mut {
+    ($ctx:expr) => {
+        &mut $ctx
+            .module
+            .function_data_mut($ctx.curr_function.unwrap())
+            .unwrap()
+            .layout
+    };
+}
+
+// macro_rules! layout {
+//     ($module:expr, $function:expr) => {
+//         &$module.function_data_mut($function).unwrap().layout
+//     };
+// }
 
 macro_rules! entry_block {
     ($module:expr, $function:expr) => {
@@ -646,7 +673,7 @@ impl IrGen for Stmt {
                     .builder()
                     .store(val, slot)
                     .unwrap();
-                layout_mut!(ctx.module, ctx.curr_function.unwrap())
+                curr_layout_mut!(ctx)
                     .append_inst(store.into(), ctx.curr_block.unwrap())
                     .unwrap();
             }
@@ -659,9 +686,85 @@ impl IrGen for Stmt {
                 block.irgen(ctx);
             }
             Stmt::If(cond_expr, then_stmt, else_stmt) => {}
-            Stmt::While(cond_expr, loop_stmt) => {}
-            Stmt::Break => {}
-            Stmt::Continue => {}
+            Stmt::While(cond_expr, loop_stmt) => {
+                let entry_block = dfg_mut!(ctx.module, ctx.curr_function.unwrap())
+                    .builder()
+                    .block(Vec::new())
+                    .unwrap();
+                curr_dfg!(ctx)
+                    .assign_block_name(entry_block, "loop_entry")
+                    .unwrap();
+                let exit_block = dfg_mut!(ctx.module, ctx.curr_function.unwrap())
+                    .builder()
+                    .block(Vec::new())
+                    .unwrap();
+                curr_layout_mut!(ctx).append_block(entry_block).unwrap();
+
+                ctx.loop_entry_stack.push(entry_block);
+                ctx.loop_exit_stack.push(exit_block);
+
+                ctx.curr_block = Some(entry_block);
+                let cond = ctx.irgen_local_expr(cond_expr);
+                let body_block = dfg_mut!(ctx.module, ctx.curr_function.unwrap())
+                    .builder()
+                    .block(Vec::new())
+                    .unwrap();
+                curr_dfg!(ctx)
+                    .assign_block_name(body_block, "loop_body")
+                    .unwrap();
+                let tail_block = dfg_mut!(ctx.module, ctx.curr_function.unwrap())
+                    .builder()
+                    .block(Vec::new())
+                    .unwrap();
+                curr_dfg!(ctx)
+                    .assign_block_name(tail_block, "loop_tail")
+                    .unwrap();
+
+                let br = dfg_mut!(ctx.module, ctx.curr_function.unwrap())
+                    .builder()
+                    .branch(cond, body_block, exit_block, Vec::new(), Vec::new())
+                    .unwrap();
+                curr_layout_mut!(ctx)
+                    .append_inst(br.into(), entry_block)
+                    .unwrap();
+                curr_layout_mut!(ctx).append_block(body_block).unwrap();
+                ctx.curr_block = Some(body_block);
+                loop_stmt.irgen(ctx);
+
+                curr_layout_mut!(ctx).append_block(tail_block).unwrap();
+                let jmp_back = dfg_mut!(ctx.module, ctx.curr_function.unwrap())
+                    .builder()
+                    .jump(entry_block, Vec::new())
+                    .unwrap();
+                curr_layout_mut!(ctx)
+                    .append_inst(jmp_back.into(), tail_block)
+                    .unwrap();
+                curr_layout_mut!(ctx).append_block(exit_block).unwrap();
+                ctx.curr_block = Some(exit_block);
+
+                ctx.loop_entry_stack.pop();
+                ctx.loop_exit_stack.pop();
+            }
+            Stmt::Break => {
+                let dst = ctx.loop_exit_stack.last().unwrap();
+                let jmp = dfg_mut!(ctx.module, ctx.curr_function.unwrap())
+                    .builder()
+                    .jump(*dst, Vec::new())
+                    .unwrap();
+                curr_layout_mut!(ctx)
+                    .append_inst(jmp.into(), ctx.curr_block.unwrap())
+                    .unwrap();
+            }
+            Stmt::Continue => {
+                let dst = ctx.loop_entry_stack.last().unwrap();
+                let jmp = dfg_mut!(ctx.module, ctx.curr_function.unwrap())
+                    .builder()
+                    .jump(*dst, Vec::new())
+                    .unwrap();
+                curr_layout_mut!(ctx)
+                    .append_inst(jmp.into(), ctx.curr_block.unwrap())
+                    .unwrap();
+            }
             Stmt::Return(return_stmt) => {
                 if let Some(ref expr) = return_stmt.expr {
                     let val = ctx.irgen_local_expr(expr);
@@ -669,7 +772,7 @@ impl IrGen for Stmt {
                         .builder()
                         .store(val, ctx.curr_ret_slot.unwrap())
                         .unwrap();
-                    layout_mut!(ctx.module, ctx.curr_function.unwrap())
+                    curr_layout_mut!(ctx)
                         .append_inst(store.into(), ctx.curr_block.unwrap())
                         .unwrap();
                 }
@@ -678,7 +781,7 @@ impl IrGen for Stmt {
                     .builder()
                     .jump(ctx.curr_ret_block.unwrap(), Vec::new())
                     .unwrap();
-                layout_mut!(ctx.module, ctx.curr_function.unwrap())
+                curr_layout_mut!(ctx)
                     .append_inst(jmp.into(), ctx.curr_block.unwrap())
                     .unwrap();
             }
@@ -697,6 +800,8 @@ impl IrGenContext {
             curr_block: None,
             curr_ret_slot: None,
             curr_ret_block: None,
+            loop_entry_stack: Vec::new(),
+            loop_exit_stack: Vec::new(),
         }
     }
 
