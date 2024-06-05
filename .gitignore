@@ -10,3 +10,4 @@ target/
 /test.o
 /test
 /test.ast
+/test.sy

@@ -65,6 +65,16 @@ impl ComptimeVal {
             _ => panic!("unsupported operation"),
         }
     }
+
+    pub fn is_zero(&self) -> bool {
+        match self {
+            ComptimeVal::Bool(val) => !val,
+            ComptimeVal::Int(val) => *val == 0,
+            ComptimeVal::Float(val) => *val == 0.0,
+            ComptimeVal::List(val) => val.iter().all(|val| val.is_zero()),
+            ComptimeVal::Zeros(_) => true,
+        }
+    }
 }
 
 impl PartialEq for ComptimeVal {

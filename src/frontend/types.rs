@@ -130,7 +130,7 @@ impl SysyType {
 
     pub fn is_function(&self) -> bool { matches!(self.kind(), SysyTypeKind::Function(_, _)) }
 
-    pub fn is_zero_initializable(&self) -> bool { self.is_numeric() || self.is_aggregate() }
+    pub fn is_zero_initializable(&self) -> bool { self.is_numeric() || self.is_array() }
 
     pub fn as_array(&self) -> Option<(Option<usize>, SysyType)> {
         match self.kind() {
@@ -154,7 +154,7 @@ impl SysyType {
         }
     }
 
-    pub fn is_aggregate(&self) -> bool { self.as_array().is_some() }
+    pub fn is_array(&self) -> bool { self.as_array().is_some() }
 }
 
 impl hash::Hash for SysyType {

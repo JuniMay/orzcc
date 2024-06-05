@@ -19,6 +19,7 @@ use orzcc::{
             PassManager,
         },
     },
+    irgen::IrGenContext,
 };
 
 enum CliCommand {
@@ -42,6 +43,7 @@ struct OptCommand {
 struct FrontendCommand {
     file: String,
     emit_ast: Option<String>,
+    emit_ir: Option<String>,
 }
 
 fn main() {
@@ -70,7 +72,8 @@ fn main() {
                 let mut buf = std::io::BufWriter::new(Vec::new());
                 let mut printer = Printer::new(&mut buf);
                 printer.run_on_module(&module).unwrap();
-                std::fs::write(emit_ir, buf.get_ref()).unwrap();
+                let s = String::from_utf8(buf.into_inner().unwrap()).unwrap();
+                std::fs::write(emit_ir, s).unwrap();
             }
             if let Some(emit_asm) = cmd.emit_asm {
                 let mut codegen_ctx = CodegenContext::new();
@@ -93,6 +96,16 @@ fn main() {
             if let Some(emit_ast) = cmd.emit_ast {
                 let ast_str = format!("{:#?}", ast);
                 std::fs::write(emit_ast, ast_str).unwrap();
+            }
+            if let Some(emit_ir) = cmd.emit_ir {
+                let mut ctx = IrGenContext::new(cmd.file);
+                ctx.irgen(ast);
+                let ir = ctx.finish();
+                let mut buf = std::io::BufWriter::new(Vec::new());
+                let mut printer = Printer::new(&mut buf);
+                printer.run_on_module(&ir).unwrap();
+                let s = String::from_utf8(buf.into_inner().unwrap()).unwrap();
+                std::fs::write(emit_ir, s).unwrap();
             }
         }
     }
@@ -154,6 +167,12 @@ fn cli() -> Command {
                         .short('a')
                         .long("emit-ast")
                         .help("Emit the AST to file"),
+                )
+                .arg(
+                    Arg::new("emit-ir")
+                        .short('i')
+                        .long("emit-ir")
+                        .help("Emit the IR to file"),
                 ),
         )
 }
@@ -202,7 +221,12 @@ fn parse_args() -> CliCommand {
         Some(("frontend", args)) => {
             let file = args.get_one::<String>("file").unwrap().clone();
             let emit_ast = args.get_one::<String>("emit-ast").cloned();
-            CliCommand::Frontend(FrontendCommand { file, emit_ast })
+            let emit_ir = args.get_one::<String>("emit-ir").cloned();
+            CliCommand::Frontend(FrontendCommand {
+                file,
+                emit_ast,
+                emit_ir,
+            })
         }
         _ => {
             cli().print_help().unwrap();
@@ -215,6 +239,8 @@ fn parse_orzir(path: &str) -> Option<Module> {
     let mut file = std::fs::File::open(path).unwrap();
     let mut parser = Parser::new(&mut file);
     let result = parser.parse();
+
+    dbg!(&result);
 
     if let Err(e) = result {
         // source code in the file
@@ -249,6 +275,7 @@ fn parse_orzir(path: &str) -> Option<Module> {
     }
 
     let result = result.unwrap().into_ir(path.to_string());
+
     if let Err(ref e) = result {
         let s = std::fs::read_to_string(path).unwrap();
         use SemanticError::*;

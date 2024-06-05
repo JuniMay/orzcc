@@ -59,12 +59,13 @@ where
         }
 
         writeln!(self.buf)?;
-        writeln!(self.buf, "func {}{} {{", function_name, data.ty())?;
 
         if let FunctionKind::Declaration = data.kind() {
+            writeln!(self.buf, "decl {}{}", function_name, data.ty())?;
             return Ok(());
         }
 
+        writeln!(self.buf, "func {}{} {{", function_name, data.ty())?;
         let dfg = data.dfg();
         let layout = data.layout();
 

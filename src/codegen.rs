@@ -546,8 +546,8 @@ impl CodegenContext {
                     sp,
                     t2,
                 );
-                self.append_inst(&function_name, exit_block, add);
                 self.append_inst(&function_name, exit_block, li);
+                self.append_inst(&function_name, exit_block, add);
                 (t2, 0.into())
             };
             if reg.is_gp() {
@@ -1712,6 +1712,7 @@ impl CodegenContext {
 
                     match index_data.kind() {
                         ValueKind::GlobalSlot(_)
+                        | ValueKind::Alloc(_)
                         | ValueKind::Array(_)
                         | ValueKind::Struct(_)
                         | ValueKind::Function
@@ -1856,6 +1857,7 @@ impl CodegenContext {
                                     .new_fp_reg((RiscvFpReg::Fa0 as u8 + fp_reg_count).into());
                                 let rd = match arg_data.kind() {
                                     ValueKind::GlobalSlot(_)
+                                    | ValueKind::Alloc(_)
                                     | ValueKind::Array(_)
                                     | ValueKind::Struct(_)
                                     | ValueKind::Function
@@ -1949,6 +1951,37 @@ impl CodegenContext {
                                             imm,
                                         );
                                         reg_passing_insts.push(li);
+                                    }
+                                    ValueKind::Alloc(_) => {
+                                        let (rs, offset) = self.get_value_as_stack_slot(*arg);
+                                        if check_itype_imm(offset) {
+                                            // addi
+                                            let addi = MachineInstData::build_binary_imm(
+                                                &mut self.machine_ctx,
+                                                MachineBinaryImmOp::Addi,
+                                                a,
+                                                rs,
+                                                offset,
+                                            );
+                                            reg_passing_insts.push(addi);
+                                        } else {
+                                            // li
+                                            let li = MachineInstData::build_li(
+                                                &mut self.machine_ctx,
+                                                a,
+                                                offset,
+                                            );
+                                            reg_passing_insts.push(li);
+                                            // add
+                                            let add = MachineInstData::build_binary(
+                                                &mut self.machine_ctx,
+                                                MachineBinaryOp::Add,
+                                                a,
+                                                a,
+                                                rs,
+                                            );
+                                            reg_passing_insts.push(add);
+                                        }
                                     }
                                     _ => {
                                         let rs = self.get_value_as_register(*arg);
@@ -2124,7 +2157,6 @@ impl CodegenContext {
                                 | ValueKind::Call(_)
                                 | ValueKind::Unary(_)
                                 | ValueKind::Binary(_)
-                                | ValueKind::Alloc(_)
                                 | ValueKind::GetElemPtr(_)
                                 | ValueKind::Cast(_)
                                 | ValueKind::Load(_) => {
@@ -2157,6 +2189,60 @@ impl CodegenContext {
                                             &mut self.machine_ctx,
                                             kind,
                                             rs,
+                                            offset_reg,
+                                            offset,
+                                        );
+                                        self.append_inst(&function_name, block, store);
+                                    }
+                                }
+                                ValueKind::Alloc(_) => {
+                                    let (rs, offset) = self.get_value_as_stack_slot(*arg);
+                                    if check_itype_imm(offset) {
+                                        // addi
+                                        let (rd, addi) = MachineInstData::new_binary_imm(
+                                            &mut self.machine_ctx,
+                                            MachineBinaryImmOp::Addi,
+                                            rs,
+                                            offset,
+                                        );
+                                        self.append_inst(&function_name, block, addi);
+                                        // sd
+                                        let kind = match bytewidth {
+                                            4 => StoreKind::Word,
+                                            8 => StoreKind::DoubleWord,
+                                            _ => unimplemented!(),
+                                        };
+                                        let store = MachineInstData::new_store(
+                                            &mut self.machine_ctx,
+                                            kind,
+                                            rd,
+                                            offset_reg,
+                                            offset,
+                                        );
+                                        self.append_inst(&function_name, block, store);
+                                    } else {
+                                        // li
+                                        let (rd, li) =
+                                            MachineInstData::new_li(&mut self.machine_ctx, offset);
+                                        self.append_inst(&function_name, block, li);
+                                        // add
+                                        let (rd, add) = MachineInstData::new_binary(
+                                            &mut self.machine_ctx,
+                                            MachineBinaryOp::Add,
+                                            rs,
+                                            rd,
+                                        );
+                                        self.append_inst(&function_name, block, add);
+                                        // sd
+                                        let kind = match bytewidth {
+                                            4 => StoreKind::Word,
+                                            8 => StoreKind::DoubleWord,
+                                            _ => unimplemented!(),
+                                        };
+                                        let store = MachineInstData::new_store(
+                                            &mut self.machine_ctx,
+                                            kind,
+                                            rd,
                                             offset_reg,
                                             offset,
                                         );
@@ -2258,6 +2344,7 @@ impl CodegenContext {
                     // let reg = self.get_value_as_register(val);
                     match val_data.kind() {
                         ValueKind::GlobalSlot(_)
+                        | ValueKind::Alloc(_)
                         | ValueKind::Array(_)
                         | ValueKind::Struct(_)
                         | ValueKind::Function
@@ -2367,6 +2454,33 @@ impl CodegenContext {
                             symbol,
                         );
                         self.append_inst(&function_name, block, la);
+                    }
+                    ValueKind::Alloc(_) => {
+                        let (rs, offset) = self.get_value_as_stack_slot(*arg);
+                        if check_itype_imm(offset) {
+                            // addi
+                            let addi = MachineInstData::build_binary_imm(
+                                &mut self.machine_ctx,
+                                MachineBinaryImmOp::Addi,
+                                rd,
+                                rs,
+                                offset,
+                            );
+                            self.append_inst(&function_name, block, addi);
+                        } else {
+                            // li
+                            let li = MachineInstData::build_li(&mut self.machine_ctx, rd, offset);
+                            self.append_inst(&function_name, block, li);
+                            // add
+                            let add = MachineInstData::build_binary(
+                                &mut self.machine_ctx,
+                                MachineBinaryOp::Add,
+                                rd,
+                                rd,
+                                rs,
+                            );
+                            self.append_inst(&function_name, block, add);
+                        }
                     }
                     ValueKind::Zero | ValueKind::Undef => {
                         let zero = self.machine_ctx.new_gp_reg(RiscvGpReg::Zero);
