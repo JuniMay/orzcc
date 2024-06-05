@@ -45,18 +45,18 @@ impl LocalPassMut for Straighten {
         let cfg = cfa.run_on_function(_function, data).unwrap();
         let mut changed = false;
 
-        let exit_block = data.layout().exit_block().unwrap();
+        let exit_block = data.layout.exit_block().unwrap();
 
         let mut to_merge_blockpairs: Vec<BlockPair> = Vec::new();
 
         // bool token use for block merging
         let mut block_visited: HashMap<Block, bool> = HashMap::new();
-        for (block, _block_node) in data.layout().blocks() {
+        for (block, _block_node) in data.layout.blocks() {
             block_visited.insert(block, false);
         }
 
         // iter all blocks
-        for (block, _block_node) in data.layout().blocks() {
+        for (block, _block_node) in data.layout.blocks() {
             if block == exit_block {
                 continue;
             }
@@ -97,15 +97,15 @@ impl LocalPassMut for Straighten {
             // merge the block couple
             for pair in to_merge_blockpairs {
                 // remove branch inst
-                if let Some(branch_inst) = data.layout().exit_inst_of_block(pair.block1) {
-                    let _ = data.layout_mut().remove_inst(branch_inst);
+                if let Some(branch_inst) = data.layout.exit_inst_of_block(pair.block1) {
+                    let _ = data.layout.remove_inst(branch_inst);
                 } else {
                     panic!("can not find branch inst - straighten");
                 }
 
                 // append succ_bb's instructions to curr_bb
                 let instructions: Vec<Inst> = data
-                    .layout()
+                    .layout
                     .blocks()
                     .node(pair.block2)
                     .unwrap()
@@ -115,8 +115,8 @@ impl LocalPassMut for Straighten {
                     .collect();
 
                 for inst in instructions {
-                    let _ = data.layout_mut().remove_inst(inst);
-                    let _ = data.layout_mut().append_inst(inst, pair.block1);
+                    let _ = data.layout.remove_inst(inst);
+                    let _ = data.layout.append_inst(inst, pair.block1);
                 }
 
                 // remove succ_bb

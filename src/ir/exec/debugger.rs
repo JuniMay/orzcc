@@ -209,8 +209,8 @@ impl<'a> Debugger<'a> {
                 .ok_or_else(|| ExecError::FunctionNotFound((*function).into()))?;
             let function_name = self.module.value_name((*function).into());
 
-            let dfg = function_data.dfg();
-            let layout = function_data.layout();
+            let dfg = &function_data.dfg;
+            let layout = &function_data.layout;
 
             if let FunctionKind::Definition = function_data.kind() {
                 println!(
@@ -297,7 +297,7 @@ impl<'a> Debugger<'a> {
             .ok_or_else(|| ExecError::FunctionNotFound(function.into()))?;
         let function_name = self.module.value_name(function.into());
 
-        let dfg = function_data.dfg();
+        let dfg = &function_data.dfg;
 
         if let Some(value) = value {
             let vreg = self.vm.read_vreg(value);
@@ -421,7 +421,7 @@ impl<'a> Debugger<'a> {
                                     .unwrap_or_else(|| self.vm.curr_function().into())
                                     .into(),
                             )
-                            .and_then(|data| data.dfg().get_local_value_by_name(&name))
+                            .and_then(|data| data.dfg.get_local_value_by_name(&name))
                     });
 
                     let function = function.map(|f| f.into());
@@ -444,7 +444,7 @@ impl<'a> Debugger<'a> {
                                     .unwrap_or_else(|| self.vm.curr_function().into())
                                     .into(),
                             )
-                            .and_then(|data| data.dfg().get_local_value_by_name(&name))
+                            .and_then(|data| data.dfg.get_local_value_by_name(&name))
                     });
 
                     let function = function.map(|f| f.into());

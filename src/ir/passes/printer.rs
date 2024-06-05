@@ -66,8 +66,8 @@ where
         }
 
         writeln!(self.buf, "func {}{} {{", function_name, data.ty())?;
-        let dfg = data.dfg();
-        let layout = data.layout();
+        let dfg = &data.dfg;
+        let layout = &data.layout;
 
         for (block, node) in layout.blocks().into_iter() {
             let block_data = dfg.block_data(block).unwrap();

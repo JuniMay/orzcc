@@ -488,7 +488,7 @@ impl Expr {
         if self.ty.is_some() {
             return self;
         }
-        match self.kind {
+        let mut expr = match self.kind {
             ExprKind::Const(_) => {
                 // constant should have a type
                 unreachable!()
@@ -554,39 +554,6 @@ impl Expr {
                         expr.ty = Some(SysyType::bool());
                     }
                 }
-
-                if let Some(ty) = expect {
-                    if ty != expr.ty() {
-                        // try to coerce the result
-                        match (expr.ty().kind(), ty.kind()) {
-                            (SysyTypeKind::Bool, SysyTypeKind::Int) => {
-                                expr = Expr::new_coercion(Box::new(expr), SysyType::int());
-                            }
-                            (SysyTypeKind::Bool, SysyTypeKind::Float) => {
-                                let tmp = Expr::new_coercion(Box::new(expr), SysyType::int());
-                                expr = Expr::new_coercion(Box::new(tmp), SysyType::float());
-                            }
-                            (SysyTypeKind::Int, SysyTypeKind::Bool) => {
-                                expr = Expr::new_coercion(Box::new(expr), SysyType::int());
-                            }
-                            (SysyTypeKind::Int, SysyTypeKind::Float) => {
-                                expr = Expr::new_coercion(Box::new(expr), SysyType::float());
-                            }
-                            (SysyTypeKind::Float, SysyTypeKind::Int) => {
-                                expr = Expr::new_coercion(Box::new(expr), SysyType::int());
-                            }
-                            (SysyTypeKind::Float, SysyTypeKind::Bool) => {
-                                // expr != 0
-                                let mut zero = Expr::new_const(ComptimeVal::Int(0));
-                                zero.ty = Some(SysyType::float());
-                                expr =
-                                    Expr::new_binary(BinaryOp::Ne, Box::new(expr), Box::new(zero));
-                            }
-                            _ => panic!("unsupported type coercion"),
-                        }
-                        expr.ty = Some(ty);
-                    }
-                }
                 expr
             }
             ExprKind::Coercion(_) => {
@@ -615,7 +582,7 @@ impl Expr {
             }
             ExprKind::InitList(_) => {
                 // for initialization list, the elements and types should be handled separately
-                self.canonialize_init_list(expect.unwrap(), symtable);
+                self.canonialize_init_list(expect.clone().unwrap(), symtable);
                 self
             }
             ExprKind::LVal(lval) => {
@@ -638,36 +605,6 @@ impl Expr {
                 }
                 let mut expr = Expr::new_lval(LVal { ident, indices });
                 expr.ty = Some(ty);
-
-                if let Some(ty) = expect {
-                    if ty.is_float() || ty.is_int() {
-                        // try to coerce the result
-                        // if the types are the same, the `new_coercion` will return the original
-                        // expr
-                        match ty.kind() {
-                            SysyTypeKind::Bool => {
-                                expr = Expr::new_coercion(Box::new(expr), SysyType::bool());
-                            }
-                            SysyTypeKind::Int => {
-                                expr = Expr::new_coercion(Box::new(expr), SysyType::int());
-                            }
-                            SysyTypeKind::Float => {
-                                expr = Expr::new_coercion(Box::new(expr), SysyType::float());
-                            }
-                            _ => panic!("unsupported type coercion"),
-                        }
-                        expr.ty = Some(ty);
-                    } else if ty != expr.ty() {
-                        if let SysyTypeKind::Array(Some(_), _) = ty.kind() {
-                            // invalid coercion, the length should be the same
-                            panic!("unsupported type coercion");
-                        } else {
-                            // coerce to arbitrary length array
-                            // in IR, no code will be generated for this coercion (ptr -> ptr)
-                            expr = Expr::new_coercion(Box::new(expr), ty);
-                        }
-                    }
-                }
                 expr
             }
             ExprKind::Unary(op, expr) => {
@@ -694,7 +631,39 @@ impl Expr {
                 expr.ty = Some(ty);
                 expr
             }
+        };
+
+        if let Some(ty) = expect {
+            if ty.is_float() || ty.is_int() {
+                // try to coerce the result
+                // if the types are the same, the `new_coercion` will return the original
+                // expr
+                match ty.kind() {
+                    SysyTypeKind::Bool => {
+                        expr = Expr::new_coercion(Box::new(expr), SysyType::bool());
+                    }
+                    SysyTypeKind::Int => {
+                        expr = Expr::new_coercion(Box::new(expr), SysyType::int());
+                    }
+                    SysyTypeKind::Float => {
+                        expr = Expr::new_coercion(Box::new(expr), SysyType::float());
+                    }
+                    _ => panic!("unsupported type coercion"),
+                }
+                expr.ty = Some(ty);
+            } else if ty != expr.ty() {
+                if let SysyTypeKind::Array(Some(_), _) = ty.kind() {
+                    // invalid coercion, the length should be the same
+                    panic!("unsupported type coercion");
+                } else {
+                    // coerce to arbitrary length array
+                    // in IR, a bitcast will be used to coerce the array
+                    expr = Expr::new_coercion(Box::new(expr), ty);
+                }
+            }
         }
+
+        expr
     }
 
     pub fn try_fold(&self, symtable: &SymbolTableStack) -> Option<ComptimeVal> {

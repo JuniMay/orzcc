@@ -291,11 +291,11 @@ impl<'a> VirtualMachine<'a> {
                 .unwrap_or_else(|| Err(ExecError::ValueNotFound((*function).into())))?;
 
             // allocate vreg for values
-            let dfg = self
+            let dfg = &self
                 .module
                 .function_data(*function)
                 .ok_or_else(|| ExecError::FunctionNotFound((*function).into()))?
-                .dfg();
+                .dfg;
 
             for (value, data) in dfg.values() {
                 self.alloc_vreg(*value);
@@ -317,11 +317,11 @@ impl<'a> VirtualMachine<'a> {
 
         self.curr_function = entry_function;
 
-        let layout = self
+        let layout = &self
             .module
             .function_data(self.curr_function)
             .ok_or_else(|| ExecError::FunctionNotFound(self.curr_function.into()))?
-            .layout();
+            .layout;
 
         self.curr_inst = layout.entry_inst().expect("entry inst should exist");
         Ok(())
@@ -340,16 +340,16 @@ impl<'a> VirtualMachine<'a> {
     }
 
     pub fn step(&mut self) -> ExecResult<()> {
-        let dfg = self
+        let dfg = &self
             .module
             .function_data(self.curr_function)
             .ok_or_else(|| ExecError::FunctionNotFound(self.curr_function.into()))?
-            .dfg();
-        let layout = self
+            .dfg;
+        let layout = &self
             .module
             .function_data(self.curr_function)
             .ok_or_else(|| ExecError::FunctionNotFound(self.curr_function.into()))?
-            .layout();
+            .layout;
 
         let value_data = dfg
             .local_value_data(self.curr_inst.into())
@@ -666,11 +666,11 @@ impl<'a> VirtualMachine<'a> {
                     .expect("callee should exist");
 
                 let entry_block = callee_data
-                    .layout()
+                    .layout
                     .entry_block()
                     .expect("entry block should exist in the layout");
                 let entry_block_data = callee_data
-                    .dfg()
+                    .dfg
                     .block_data(entry_block)
                     .expect("entry block should exist in the dfg");
                 let params = entry_block_data.params();
@@ -688,7 +688,7 @@ impl<'a> VirtualMachine<'a> {
 
                 next_function = callee.into();
                 next_inst = callee_data
-                    .layout()
+                    .layout
                     .blocks()
                     .node(entry_block)
                     .expect("block should exist")
@@ -703,7 +703,7 @@ impl<'a> VirtualMachine<'a> {
                     .module
                     .function_data(self.curr_function)
                     .unwrap()
-                    .dfg()
+                    .dfg
                     .with_value_data(ptr, |data| match data.kind() {
                         ValueKind::GlobalSlot(_slot) => {
                             *self.addrs.get_fwd(&ptr).expect("addr should exist")
@@ -1009,7 +1009,7 @@ impl<'a> VirtualMachine<'a> {
                         self.stack.pop().unwrap()
                     };
 
-                    let layout = self.module.function_data(caller).unwrap().layout();
+                    let layout = &self.module.function_data(caller).unwrap().layout;
                     next_inst = layout.next_inst(prev.into());
                     next_function = caller;
                 }

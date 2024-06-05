@@ -186,7 +186,7 @@ impl CodegenContext {
         let function_data = module.function_data(function).unwrap();
         let function_name: MachineSymbol = module.value_name(function.into()).into();
 
-        for (block, _) in function_data.layout().blocks() {
+        for (block, _) in function_data.layout.blocks() {
             let machine_block = self.machine_ctx.new_block();
             dbg!(machine_block);
             self.block_map.insert(block, machine_block);
@@ -198,10 +198,10 @@ impl CodegenContext {
 
         // assign register for all block arguments for argument passing in branch/jump
         // instructions.
-        for block in function_data.layout().blocks() {
-            let block_args = function_data.dfg().block_data(block.0).unwrap().params();
+        for block in function_data.layout.blocks() {
+            let block_args = function_data.dfg.block_data(block.0).unwrap().params();
             for arg in block_args {
-                let arg_data = function_data.dfg().local_value_data(*arg).unwrap();
+                let arg_data = function_data.dfg.local_value_data(*arg).unwrap();
 
                 if arg_data.ty().is_float() {
                     let reg = self
@@ -219,20 +219,16 @@ impl CodegenContext {
             }
         }
 
-        let entry_block = function_data.layout().entry_block().unwrap();
+        let entry_block = function_data.layout.entry_block().unwrap();
 
-        let block_args = function_data
-            .dfg()
-            .block_data(entry_block)
-            .unwrap()
-            .params();
+        let block_args = function_data.dfg.block_data(entry_block).unwrap().params();
 
         let mut integer_arg_count = 0;
         let mut float_arg_count = 0;
         let mut args_passed_by_stack = Vec::new();
 
         for arg in block_args {
-            let value_data = function_data.dfg().local_value_data(*arg).unwrap();
+            let value_data = function_data.dfg.local_value_data(*arg).unwrap();
             let ty = value_data.ty();
 
             if ty.is_float() {
@@ -288,7 +284,7 @@ impl CodegenContext {
         // the loaded value might be spilled again, but that is a problem for register
         // allocation.
         for arg in args_passed_by_stack {
-            let arg_data = function_data.dfg().local_value_data(arg).unwrap();
+            let arg_data = function_data.dfg.local_value_data(arg).unwrap();
             let rd = self.get_value_as_register(arg);
 
             if arg_data.ty().is_float() {
@@ -323,7 +319,7 @@ impl CodegenContext {
             offset += 8;
         }
 
-        for (block, block_node) in function_data.layout().blocks() {
+        for (block, block_node) in function_data.layout.blocks() {
             for (inst, _inst_node) in block_node.insts() {
                 self.codegen_inst(module, inst, function, block);
             }
@@ -374,7 +370,7 @@ impl CodegenContext {
     pub fn codegen_function_prologue(&mut self, module: &Module, function: Function) {
         let function_data = module.function_data(function).unwrap();
 
-        let entry_block = function_data.layout().entry_block().unwrap();
+        let entry_block = function_data.layout.entry_block().unwrap();
 
         let function_name = self.get_value_as_symbol(function.into());
 
@@ -512,7 +508,7 @@ impl CodegenContext {
     pub fn codegen_function_epilogue(&mut self, module: &Module, function: Function) {
         let function_data = module.function_data(function).unwrap();
 
-        let exit_block = function_data.layout().exit_block().unwrap();
+        let exit_block = function_data.layout.exit_block().unwrap();
 
         let function_name = self.get_value_as_symbol(function.into());
 
@@ -587,7 +583,7 @@ impl CodegenContext {
         let function_data = module.function_data(function).unwrap();
         let function_name: MachineSymbol = module.value_name(function.into()).into();
 
-        let inst_data = function_data.dfg().local_value_data(inst.into()).unwrap();
+        let inst_data = function_data.dfg.local_value_data(inst.into()).unwrap();
 
         match inst_data.kind() {
             ValueKind::Alloc(alloc) => {
@@ -618,7 +614,7 @@ impl CodegenContext {
             }
             ValueKind::Store(store) => {
                 let val: Register = function_data
-                    .dfg()
+                    .dfg
                     .with_value_data(store.val(), |data| match data.kind() {
                         ValueKind::Zero | ValueKind::Undef => {
                             self.machine_ctx.new_gp_reg(RiscvGpReg::Zero)
@@ -674,12 +670,12 @@ impl CodegenContext {
                     .unwrap();
 
                 let ty = function_data
-                    .dfg()
+                    .dfg
                     .with_value_data(store.ptr(), |data| data.ty())
                     .unwrap();
 
                 function_data
-                    .dfg()
+                    .dfg
                     .with_value_data(store.ptr(), |data| match data.kind() {
                         ValueKind::GlobalSlot(_) => {
                             let symbol = self.get_value_as_symbol(store.ptr());
@@ -798,13 +794,13 @@ impl CodegenContext {
             ValueKind::Load(load) => {
                 let ptr = load.ptr();
                 let ty = function_data
-                    .dfg()
+                    .dfg
                     .local_value_data(inst.into())
                     .unwrap()
                     .ty();
 
                 function_data
-                    .dfg()
+                    .dfg
                     .with_value_data(ptr, |data| match data.kind() {
                         ValueKind::GlobalSlot(_) => {
                             let symbol = self.get_value_as_symbol(ptr);
@@ -920,8 +916,8 @@ impl CodegenContext {
                 let rhs = binary.rhs();
                 let op = binary.op();
 
-                let lhs_data = function_data.dfg().local_value_data(lhs).unwrap();
-                let rhs_data = function_data.dfg().local_value_data(rhs).unwrap();
+                let lhs_data = function_data.dfg.local_value_data(lhs).unwrap();
+                let rhs_data = function_data.dfg.local_value_data(rhs).unwrap();
 
                 if lhs_data.ty().is_float() && rhs_data.ty().is_float() {
                     let rs1 = match lhs_data.kind() {
@@ -1386,7 +1382,7 @@ impl CodegenContext {
                 let op = unary.op();
                 let val = unary.val();
 
-                let val_data = function_data.dfg().local_value_data(val).unwrap();
+                let val_data = function_data.dfg.local_value_data(val).unwrap();
 
                 let operand = match val_data.kind() {
                     ValueKind::Alloc(_)
@@ -1466,7 +1462,7 @@ impl CodegenContext {
                 let op = cast.op();
                 let val = cast.val();
 
-                let val_data = function_data.dfg().local_value_data(val).unwrap();
+                let val_data = function_data.dfg.local_value_data(val).unwrap();
 
                 // converting zero to anything is still zero, so we can just return zero
                 if let ValueKind::Zero | ValueKind::Undef = val_data.kind() {
@@ -1587,13 +1583,18 @@ impl CodegenContext {
                         self.value_map
                             .insert(inst.into(), ValueCodegenResult::Register(rd));
                     }
+                    CastOp::Bitcast => {
+                        // just return the register
+                        self.value_map
+                            .insert(inst.into(), ValueCodegenResult::Register(rs));
+                    }
                     _ => unimplemented!(),
                 }
             }
             ValueKind::Jump(jump) => {
                 let dst_block = jump.dst();
                 let args = jump.args();
-                let params = function_data.dfg().block_data(dst_block).unwrap().params();
+                let params = function_data.dfg.block_data(dst_block).unwrap().params();
 
                 self.codegen_block_arg_pass(module, function, block, params, args);
 
@@ -1605,7 +1606,7 @@ impl CodegenContext {
                 let then_block = branch.then_dst();
                 let else_block = branch.else_dst();
 
-                let cond_data = function_data.dfg().local_value_data(cond).unwrap();
+                let cond_data = function_data.dfg.local_value_data(cond).unwrap();
 
                 let cond_reg = match cond_data.kind() {
                     ValueKind::GlobalSlot(_)
@@ -1627,7 +1628,7 @@ impl CodegenContext {
                     _ => self.get_value_as_register(cond),
                 };
 
-                let params = function_data.dfg().block_data(then_block).unwrap().params();
+                let params = function_data.dfg.block_data(then_block).unwrap().params();
                 let args = branch.then_args();
                 self.codegen_block_arg_pass(module, function, block, params, args);
 
@@ -1643,7 +1644,7 @@ impl CodegenContext {
 
                 self.append_inst(&function_name, block, bne);
 
-                let params = function_data.dfg().block_data(else_block).unwrap().params();
+                let params = function_data.dfg.block_data(else_block).unwrap().params();
                 let args = branch.else_args();
                 self.codegen_block_arg_pass(module, function, block, params, args);
 
@@ -1702,7 +1703,7 @@ impl CodegenContext {
 
                 for index in indices {
                     let bytewidth = basis_ty.bytewidth();
-                    let index_data = function_data.dfg().local_value_data(*index).unwrap();
+                    let index_data = function_data.dfg.local_value_data(*index).unwrap();
 
                     let shamt = if bytewidth.is_power_of_two() {
                         Some(bytewidth.trailing_zeros())
@@ -1847,7 +1848,7 @@ impl CodegenContext {
                 let mut reg_passing_insts: Vec<MachineInst> = Vec::new();
 
                 for arg in args {
-                    function_data.dfg().with_value_data(*arg, |arg_data| {
+                    function_data.dfg.with_value_data(*arg, |arg_data| {
                         let ty = arg_data.ty();
 
                         if ty.is_float() {
@@ -2007,7 +2008,7 @@ impl CodegenContext {
                 let mut stack_offset = 0usize;
                 for arg in args_passed_by_stack.iter() {
                     let bytewidth = function_data
-                        .dfg()
+                        .dfg
                         .with_value_data(*arg, |arg_data| arg_data.ty().bytewidth())
                         .unwrap();
                     stack_offset += bytewidth;
@@ -2052,7 +2053,7 @@ impl CodegenContext {
                     let mut curr_offset = 0;
 
                     for arg in args_passed_by_stack.iter() {
-                        function_data.dfg().with_value_data(*arg, |arg_data| {
+                        function_data.dfg.with_value_data(*arg, |arg_data| {
                             let bytewidth = arg_data.ty().bytewidth();
                             let (offset_reg, offset): (_, Immediate) =
                                 if check_itype_imm(curr_offset.into()) {
@@ -2307,7 +2308,7 @@ impl CodegenContext {
                 }
 
                 // return value
-                let ret_ty = function_data.dfg().local_value_data(ret).unwrap().ty();
+                let ret_ty = function_data.dfg.local_value_data(ret).unwrap().ty();
 
                 if ret_ty.is_void() {
                     // do nothing
@@ -2339,7 +2340,7 @@ impl CodegenContext {
             ValueKind::Return(ret) => {
                 let val = ret.val();
                 if let Some(val) = val {
-                    let val_data = function_data.dfg().local_value_data(val).unwrap();
+                    let val_data = function_data.dfg.local_value_data(val).unwrap();
 
                     // let reg = self.get_value_as_register(val);
                     match val_data.kind() {
@@ -2435,7 +2436,7 @@ impl CodegenContext {
         for (arg, param) in args.iter().zip(params.iter()) {
             // the register should have been assigned to the block argument.
             let rd = self.get_value_as_register(*param);
-            function_data.dfg().with_value_data(*arg, |arg_data| {
+            function_data.dfg.with_value_data(*arg, |arg_data| {
                 match arg_data.kind() {
                     ValueKind::Array(_)
                     | ValueKind::Struct(_)

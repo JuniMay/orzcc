@@ -175,17 +175,17 @@ mod test {
 
     #[test]
     fn test_display() {
-        assert_eq!(format!("{}", SysyType::int()), "i32");
+        assert_eq!(format!("{}", SysyType::int()), "int");
         let ty = SysyType::array(Some(10), SysyType::int());
-        assert_eq!(format!("{}", ty), "[i32; 10]");
+        assert_eq!(format!("{}", ty), "[int; 10]");
         assert_eq!(format!("{}", SysyType::void()), "void");
         assert_eq!(format!("{}", SysyType::float()), "float");
         let ty = SysyType::function(vec![], SysyType::void());
         assert_eq!(format!("{}", ty), "() -> void");
         let ty = SysyType::function(vec![SysyType::int()], SysyType::void());
-        assert_eq!(format!("{}", ty), "(i16) -> void");
+        assert_eq!(format!("{}", ty), "(int) -> void");
         let ty = SysyType::function(vec![SysyType::int(), SysyType::int()], SysyType::void());
-        assert_eq!(format!("{}", ty), "(i16, i32) -> void");
+        assert_eq!(format!("{}", ty), "(int, int) -> void");
     }
 
     #[test]
@@ -193,7 +193,6 @@ mod test {
         assert_eq!(SysyType::void().bytewidth(), 0);
         assert_eq!(SysyType::bool().bytewidth(), 1);
         assert_eq!(SysyType::int().bytewidth(), 4);
-        assert_eq!(SysyType::int().bytewidth(), 8);
         assert_eq!(SysyType::float().bytewidth(), 4);
         assert_eq!(SysyType::array(Some(10), SysyType::int()).bytewidth(), 40);
     }

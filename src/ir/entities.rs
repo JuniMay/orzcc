@@ -52,9 +52,13 @@ pub struct FunctionData {
     /// The kind of the function
     kind: FunctionKind,
     /// Data flow graph
-    dfg: DataFlowGraph,
+    ///
+    /// This is public to allow split-borrowing with the layout field.
+    pub dfg: DataFlowGraph,
     /// Layout in the function
-    layout: Layout,
+    ///
+    /// This is public to allow split-borrowing with the dfg field.
+    pub layout: Layout,
 }
 
 impl FunctionData {
@@ -79,14 +83,6 @@ impl FunctionData {
     pub fn ty(&self) -> &Type { &self.ty }
 
     pub fn kind(&self) -> &FunctionKind { &self.kind }
-
-    pub fn dfg(&self) -> &DataFlowGraph { &self.dfg }
-
-    pub fn dfg_mut(&mut self) -> &mut DataFlowGraph { &mut self.dfg }
-
-    pub fn layout(&self) -> &Layout { &self.layout }
-
-    pub fn layout_mut(&mut self) -> &mut Layout { &mut self.layout }
 
     pub fn remove_inst(&mut self, inst: Inst) -> Option<ValueData> {
         self.layout.remove_inst(inst).unwrap();

@@ -100,7 +100,7 @@
 //! };
 //!
 //! // Firstly, create a module:
-//! let mut module = Module::new("module_name".to_string());
+//! let mut module = Module::new("module_name");
 //!
 //! // Then build global values with the global builder:
 //!
@@ -123,25 +123,25 @@
 //!
 //! // example: build an entry block, and since there is a parameter of the function, we need to
 //! // add the parameter to the block.
-//! let param = function_data.dfg_mut().builder().block_param(Type::i32_()).unwrap();
-//! let entry = function_data.dfg_mut().builder().block(vec![param]).unwrap();
+//! let param = function_data.dfg.builder().block_param(Type::i32_()).unwrap();
+//! let entry = function_data.dfg.builder().block(vec![param]).unwrap();
 //!
 //! // example: allocate a stack slot.
-//! let inst = function_data.dfg_mut().builder().alloc(Type::i32_()).unwrap();
+//! let inst = function_data.dfg.builder().alloc(Type::i32_()).unwrap();
 //!
 //! // next, we need to add the inst to the block in the function layout.
-//! function_data.layout_mut().append_block(entry).unwrap();
-//! function_data.layout_mut().append_inst(inst.into(), entry).unwrap();
+//! function_data.layout.append_block(entry).unwrap();
+//! function_data.layout.append_inst(inst.into(), entry).unwrap();
 //!
 //! // After the structural construction, we can assign names to the values and blocks:
 //!
 //! // layout is just a linear description of components, all metadata is stored in the dfg.
-//! function_data.dfg_mut().assign_local_value_name(param, "%param".to_string()).unwrap();
-//! function_data.dfg_mut().assign_block_name(entry, "^entry".to_string()).unwrap();
+//! function_data.dfg.assign_local_value_name(param, "%param").unwrap();
+//! function_data.dfg.assign_block_name(entry, "^entry").unwrap();
 //!
-//! module.assign_name(var, "@var_name".to_string()).unwrap();
-//! module.assign_name(const_, "@const_name".to_string()).unwrap();
-//! module.assign_name(function.into(), "@function_name".to_string()).unwrap();
+//! module.assign_name(var, "@var_name").unwrap();
+//! module.assign_name(const_, "@const_name").unwrap();
+//! module.assign_name(function, "@function_name").unwrap();
 //! ```
 //!
 //! ---
@@ -182,7 +182,7 @@ mod tests {
 
     #[test]
     fn test_properties() {
-        let module = Module::new("module_name".to_string());
+        let module = Module::new("module_name");
         assert_eq!(module.name(), "module_name");
     }
 }

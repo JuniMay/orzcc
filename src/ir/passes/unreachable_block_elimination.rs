@@ -42,7 +42,7 @@ impl LocalPassMut for UnreachableBlockElimination {
         let mut reachable_blocks: HashSet<Block> = HashSet::new();
         let mut queue: VecDeque<Block> = VecDeque::new();
 
-        let entry_block = data.layout().entry_block().unwrap();
+        let entry_block = data.layout.entry_block().unwrap();
 
         queue.push_back(entry_block);
         reachable_blocks.insert(entry_block);
@@ -61,7 +61,7 @@ impl LocalPassMut for UnreachableBlockElimination {
         }
 
         let mut unreachable_blocks: Vec<Block> = Vec::new();
-        for (block, _block_node) in data.layout().blocks() {
+        for (block, _block_node) in data.layout.blocks() {
             if !reachable_blocks.contains(&block) {
                 unreachable_blocks.push(block);
             }

@@ -50,8 +50,8 @@ impl LocalPassMut for ControlFlowCanonicalization {
         let mut insts_to_remove = Vec::new();
         let mut blocks_to_add_jump = Vec::new();
 
-        let dfg = data.dfg();
-        let layout = data.layout();
+        let dfg = &data.dfg;
+        let layout = &data.layout;
 
         let mut changed = false;
 
@@ -89,8 +89,8 @@ impl LocalPassMut for ControlFlowCanonicalization {
         }
 
         for (block, next_block) in blocks_to_add_jump {
-            let jump = data.dfg_mut().builder().jump(next_block, vec![]).unwrap();
-            data.layout_mut().append_inst(jump.into(), block).unwrap();
+            let jump = data.dfg.builder().jump(next_block, vec![]).unwrap();
+            data.layout.append_inst(jump.into(), block).unwrap();
             changed = true;
         }
 
@@ -150,8 +150,8 @@ mod test {
 
         let valid = true;
 
-        let dfg = function_data.dfg();
-        let layout = function_data.layout();
+        let dfg = &function_data.dfg;
+        let layout = &function_data.layout;
 
         for (_block, block_node) in layout.blocks() {
             let mut has_terminator = false;

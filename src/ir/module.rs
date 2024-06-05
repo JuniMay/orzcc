@@ -160,13 +160,25 @@ impl DataFlowGraph {
     }
 
     /// Assign a name to a local value.
-    pub fn assign_local_value_name(&self, value: Value, name: String) -> Result<(), NameAllocErr> {
-        self.value_name_allocator.borrow_mut().assign(value, name)
+    pub fn assign_local_value_name(
+        &self,
+        value: Value,
+        name: impl Into<String>,
+    ) -> Result<(), NameAllocErr> {
+        self.value_name_allocator
+            .borrow_mut()
+            .assign(value, name.into())
     }
 
     /// Assign a name to a block.
-    pub fn assign_block_name(&self, block: Block, name: String) -> Result<(), NameAllocErr> {
-        self.block_name_allocator.borrow_mut().assign(block, name)
+    pub fn assign_block_name(
+        &self,
+        block: Block,
+        name: impl Into<String>,
+    ) -> Result<(), NameAllocErr> {
+        self.block_name_allocator
+            .borrow_mut()
+            .assign(block, name.into())
     }
 
     /// Get the block data of a block.
@@ -240,14 +252,14 @@ pub struct Module {
 }
 
 impl Module {
-    pub fn new(name: String) -> Self {
+    pub fn new(name: impl Into<String>) -> Self {
         let globals = Rc::new(RefCell::new(HashMap::new()));
         let functions = HashMap::new();
         let id_allocator = Rc::new(RefCell::new(IdAllocator::new()));
         let name_allocator = Rc::new(RefCell::new(NameAllocator::new(GLOBAL_PREFIX)));
 
         Self {
-            name,
+            name: name.into(),
             globals,
             global_slot_layout: Vec::new(),
             functions,
@@ -325,7 +337,7 @@ impl Module {
         let weak_id_allocator = Rc::downgrade(&self.id_allocator);
         let weak_name_allocator = Rc::downgrade(&self.name_allocator);
 
-        let dfg = self.function_data_mut(function.into()).unwrap().dfg_mut();
+        let dfg = &mut self.function_data_mut(function.into()).unwrap().dfg;
 
         dfg.globals = weak_globals;
         dfg.id_allocator = weak_id_allocator;

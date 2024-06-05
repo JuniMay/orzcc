@@ -51,19 +51,19 @@ impl AstLoweringContext {
 
 macro_rules! dfg_mut {
     ($module:expr, $function:expr) => {
-        $module.function_data_mut($function).unwrap().dfg_mut()
+        &mut $module.function_data_mut($function).unwrap().dfg
     };
 }
 
 macro_rules! dfg {
     ($module:expr, $function:expr) => {
-        $module.function_data($function).unwrap().dfg()
+        &$module.function_data($function).unwrap().dfg
     };
 }
 
 macro_rules! layout_mut {
     ($module:expr, $function:expr) => {
-        $module.function_data_mut($function).unwrap().layout_mut()
+        &mut $module.function_data_mut($function).unwrap().layout
     };
 }
 
@@ -228,7 +228,7 @@ impl Ast {
                             _ => unreachable!(),
                         };
 
-                        let block = dfg_mut!(ctx.module, function)
+                        let block = dfg!(ctx.module, function)
                             .get_block_by_name(&name)
                             .ok_or(SemanticError::BlockNameNotFound(ast_inst.operands[0].span))?;
 
@@ -258,13 +258,17 @@ impl Ast {
                             }
                             _ => unreachable!(),
                         };
-                        let then_block = dfg_mut!(ctx.module, function)
+                        let then_block = dfg!(ctx.module, function)
                             .get_block_by_name(&then_name)
-                            .ok_or(SemanticError::BlockNameNotFound(ast_inst.operands[1].span))?;
+                            .ok_or(SemanticError::BlockNameNotFound(
+                            ast_inst.operands[1].span,
+                        ))?;
 
-                        let else_block = dfg_mut!(ctx.module, function)
+                        let else_block = dfg!(ctx.module, function)
                             .get_block_by_name(&else_name)
-                            .ok_or(SemanticError::BlockNameNotFound(ast_inst.operands[2].span))?;
+                            .ok_or(SemanticError::BlockNameNotFound(
+                            ast_inst.operands[2].span,
+                        ))?;
 
                         dfg_mut!(ctx.module, function)
                             .builder()
@@ -293,7 +297,7 @@ impl Ast {
                             }
                             _ => unreachable!(),
                         };
-                        let callee = dfg_mut!(ctx.module, function)
+                        let callee = dfg!(ctx.module, function)
                             .get_value_by_name(&name)
                             .ok_or(SemanticError::ValueNameNotFound(ast_inst.operands[0].span))?;
 
@@ -319,7 +323,7 @@ impl Ast {
                     }
                 };
                 if ast_inst.dest.is_some() {
-                    dfg_mut!(ctx.module, function)
+                    dfg!(ctx.module, function)
                         .assign_local_value_name(value, ast_inst.dest.clone().unwrap())
                         .map_err(|_| SemanticError::NameDuplicated(inst.span))?;
                 }

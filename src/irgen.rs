@@ -160,13 +160,19 @@ pub struct IrGenContext {
 
 macro_rules! dfg_mut {
     ($module:expr, $function:expr) => {
-        $module.function_data_mut($function).unwrap().dfg_mut()
+        &mut $module.function_data_mut($function).unwrap().dfg
+    };
+}
+
+macro_rules! dfg {
+    ($module:expr, $function:expr) => {
+        &$module.function_data($function).unwrap().dfg
     };
 }
 
 macro_rules! layout_mut {
     ($module:expr, $function:expr) => {
-        $module.function_data_mut($function).unwrap().layout_mut()
+        &mut $module.function_data_mut($function).unwrap().layout
     };
 }
 
@@ -175,7 +181,7 @@ macro_rules! entry_block {
         $module
             .function_data_mut($function)
             .unwrap()
-            .layout()
+            .layout
             .entry_block()
     };
 }
@@ -243,7 +249,7 @@ impl IrGen for Decl {
                     layout_mut!(ctx.module, curr_function)
                         .prepend_inst(alloc.into(), entry_block)
                         .unwrap();
-                    dfg_mut!(ctx.module, curr_function)
+                    dfg!(ctx.module, curr_function)
                         .assign_local_value_name(alloc, format!("__SLOT_CONST_{}", &def.ident))
                         .unwrap();
                     let entry = SymbolEntry {
@@ -348,7 +354,7 @@ impl IrGen for Decl {
                     layout_mut!(ctx.module, curr_function)
                         .prepend_inst(alloc.into(), entry_block)
                         .unwrap();
-                    dfg_mut!(ctx.module, curr_function)
+                    dfg!(ctx.module, curr_function)
                         .assign_local_value_name(alloc, format!("__SLOT_VAR_{}", &def.ident))
                         .unwrap();
                     let entry = SymbolEntry {
@@ -541,7 +547,7 @@ impl IrGen for FuncDef {
                     .builder()
                     .block_param(ir_ty)
                     .unwrap();
-                dfg_mut!(ctx.module, func)
+                dfg!(ctx.module, func)
                     .assign_local_value_name(arg, param.ident.clone())
                     .unwrap();
                 let entry = SymbolEntry {
@@ -596,7 +602,11 @@ impl IrGen for Stmt {
                     .append_inst(store.into(), ctx.curr_block.unwrap())
                     .unwrap();
             }
-            Stmt::ExprStmt(expr_stmt) => {}
+            Stmt::ExprStmt(expr_stmt) => {
+                if let Some(ref expr) = expr_stmt.expr {
+                    ctx.irgen_local_expr(expr);
+                }
+            }
             Stmt::Block(block) => {
                 block.irgen(ctx);
             }
@@ -709,10 +719,10 @@ impl IrGenContext {
 
     /// Generate local expression.
     pub fn irgen_local_expr(&mut self, expr: &Expr) -> Value {
-        let ty = &expr.ty;
+        let ty = expr.ty.as_ref().unwrap();
 
         match &expr.kind {
-            ExprKind::Const(comptime_val) => self.irgen_local_comptime_val(&comptime_val),
+            ExprKind::Const(comptime_val) => self.irgen_local_comptime_val(comptime_val),
             ExprKind::Binary(op, lhs, rhs) => {
                 todo!()
             }
@@ -723,21 +733,160 @@ impl IrGenContext {
                 // load, require ty and slot
                 let entry = self.symtable.lookup(&lval.ident).unwrap();
                 let slot = entry.ir_value.unwrap();
-                let ty = IrGenContext::irgen_type(&entry.ty);
-                let load = dfg_mut!(self.module, self.curr_function.unwrap())
-                    .builder()
-                    .load(ty, slot)
-                    .unwrap();
-                let curr_block = self.curr_block.unwrap();
-                layout_mut!(self.module, self.curr_function.unwrap())
-                    .append_inst(load.into(), curr_block)
-                    .unwrap();
-                load
+                let bound_ty = IrGenContext::irgen_type(&entry.ty);
+
+                // three situations:
+                // - non-array: load
+                // - array but all indices are provided: load
+                // - array and some indices are not provided: getelemptr
+
+                // get the shape of the array
+                let mut shape = Vec::new();
+                let mut innermost_ty = &entry.ty;
+
+                while let SysyTypeKind::Array(len, elem_ty) = innermost_ty.kind() {
+                    shape.push(len.unwrap());
+                    innermost_ty = elem_ty;
+                }
+
+                let innermost_ty = Self::irgen_type(innermost_ty);
+
+                if shape.is_empty() {
+                    // non-array
+                    let load = dfg_mut!(self.module, self.curr_function.unwrap())
+                        .builder()
+                        .load(innermost_ty, slot)
+                        .unwrap();
+                    let curr_block = self.curr_block.unwrap();
+                    layout_mut!(self.module, self.curr_function.unwrap())
+                        .append_inst(load.into(), curr_block)
+                        .unwrap();
+                    load
+                } else if lval.indices.len() == shape.len() {
+                    // all indices are provided
+                    let mut ir_indices = Vec::new();
+                    for index in lval.indices.iter() {
+                        let index = self.irgen_local_expr(index);
+                        ir_indices.push(index);
+                    }
+                    let gep = dfg_mut!(self.module, self.curr_function.unwrap())
+                        .builder()
+                        .getelemptr(slot, bound_ty, ir_indices)
+                        .unwrap();
+                    let curr_block = self.curr_block.unwrap();
+                    layout_mut!(self.module, self.curr_function.unwrap())
+                        .append_inst(gep.into(), curr_block)
+                        .unwrap();
+                    // load
+                    let load = dfg_mut!(self.module, self.curr_function.unwrap())
+                        .builder()
+                        .load(innermost_ty, gep)
+                        .unwrap();
+                    let curr_block = self.curr_block.unwrap();
+                    layout_mut!(self.module, self.curr_function.unwrap())
+                        .append_inst(load.into(), curr_block)
+                        .unwrap();
+                    load
+                } else {
+                    // some indices are not provided
+                    let mut ir_indices = Vec::new();
+                    for index in lval.indices.iter() {
+                        let index = self.irgen_local_expr(index);
+                        ir_indices.push(index);
+                    }
+                    let gep = dfg_mut!(self.module, self.curr_function.unwrap())
+                        .builder()
+                        .getelemptr(slot, bound_ty, ir_indices)
+                        .unwrap();
+                    let curr_block = self.curr_block.unwrap();
+                    layout_mut!(self.module, self.curr_function.unwrap())
+                        .append_inst(gep.into(), curr_block)
+                        .unwrap();
+                    gep
+                }
             }
             ExprKind::Coercion(expr) => {
-                todo!()
+                let val = match (expr.ty.as_ref().unwrap().kind(), ty.kind()) {
+                    (SysyTypeKind::Bool, SysyTypeKind::Int) => {
+                        // zeroext
+                        let val = self.irgen_local_expr(expr);
+                        let zext = dfg_mut!(self.module, self.curr_function.unwrap())
+                            .builder()
+                            .cast(ir::values::CastOp::ZExt, Self::irgen_type(ty), val)
+                            .unwrap();
+                        zext
+                    }
+                    (SysyTypeKind::Int, SysyTypeKind::Bool) => {
+                        // icmp ne 0
+                        let val = self.irgen_local_expr(expr);
+                        let zero = dfg_mut!(self.module, self.curr_function.unwrap())
+                            .builder()
+                            .zero(Self::irgen_type(expr.ty.as_ref().unwrap()))
+                            .unwrap();
+                        let icmp = dfg_mut!(self.module, self.curr_function.unwrap())
+                            .builder()
+                            .binary(
+                                ir::values::BinaryOp::ICmp(ir::values::ICmpCond::Ne),
+                                val,
+                                zero,
+                            )
+                            .unwrap();
+                        icmp
+                    }
+                    (SysyTypeKind::Int, SysyTypeKind::Float) => {
+                        // sitofp
+                        let val = self.irgen_local_expr(expr);
+                        let sitofp = dfg_mut!(self.module, self.curr_function.unwrap())
+                            .builder()
+                            .cast(ir::values::CastOp::SIToFp, Self::irgen_type(ty), val)
+                            .unwrap();
+                        sitofp
+                    }
+                    (SysyTypeKind::Float, SysyTypeKind::Int) => {
+                        // fptosi
+                        let val = self.irgen_local_expr(expr);
+                        let fptosi = dfg_mut!(self.module, self.curr_function.unwrap())
+                            .builder()
+                            .cast(ir::values::CastOp::FpToSI, Self::irgen_type(ty), val)
+                            .unwrap();
+                        fptosi
+                    }
+                    (SysyTypeKind::Float, SysyTypeKind::Bool) => {
+                        // fcmp oeq 0.0
+                        let val = self.irgen_local_expr(expr);
+                        let zero = dfg_mut!(self.module, self.curr_function.unwrap())
+                            .builder()
+                            .zero(Self::irgen_type(expr.ty.as_ref().unwrap()))
+                            .unwrap();
+                        let fcmp = dfg_mut!(self.module, self.curr_function.unwrap())
+                            .builder()
+                            .binary(
+                                ir::values::BinaryOp::FCmp(ir::values::FCmpCond::OEq),
+                                val,
+                                zero,
+                            )
+                            .unwrap();
+                        fcmp
+                    }
+                    (SysyTypeKind::Array(_, _), SysyTypeKind::Array(_, _)) => {
+                        // bitcast
+                        let val = self.irgen_local_expr(expr);
+                        let bitcast = dfg_mut!(self.module, self.curr_function.unwrap())
+                            .builder()
+                            .cast(ir::values::CastOp::Bitcast, Self::irgen_type(ty), val)
+                            .unwrap();
+                        bitcast // TODO: this should be removed
+                    }
+                    _ => unreachable!(),
+                };
+
+                layout_mut!(self.module, self.curr_function.unwrap())
+                    .append_inst(val.into(), self.curr_block.unwrap())
+                    .unwrap();
+                val
             }
             ExprKind::FuncCall(FuncCall { ident, args, .. }) => {
+                dbg!(ident);
                 let entry = self.symtable.lookup(ident).unwrap();
                 let (_, ret_ty) = entry.ty.as_function().unwrap();
                 let func = entry.ir_value.unwrap();

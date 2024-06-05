@@ -13,6 +13,7 @@ use thiserror::Error;
 use super::PassResult;
 use crate::ir::{
     entities::{FunctionData, ValueKind},
+    module::DataFlowGraph,
     passes::LocalPass,
     values::{Function, Value},
 };
@@ -39,7 +40,17 @@ impl DefUseChain {
 pub struct DataFlowAnalysis {}
 
 impl DataFlowAnalysis {
-    fn insert_use(&mut self, use_: Value, def: Value, chain: &mut DefUseChain) {
+    fn insert_use(
+        &mut self,
+        use_: Value,
+        def: Value,
+        chain: &mut DefUseChain,
+        dfg: &DataFlowGraph,
+    ) {
+        if dfg.local_value_data(def).is_none() {
+            // the defined value is global
+            return;
+        }
         chain.uses.get_mut(&def).unwrap().push(use_);
     }
 }
@@ -52,7 +63,7 @@ impl LocalPass for DataFlowAnalysis {
         _function: Function,
         data: &FunctionData,
     ) -> PassResult<Self::Ok> {
-        let dfg = data.dfg();
+        let dfg = &data.dfg;
         let mut chain = DefUseChain::new();
         for value in dfg.values().keys() {
             chain.uses.insert(*value, Vec::new());
@@ -61,48 +72,48 @@ impl LocalPass for DataFlowAnalysis {
         for (value, data) in dfg.values() {
             match data.kind() {
                 ValueKind::Alloc(_alloc) => {}
-                ValueKind::Load(load) => self.insert_use(*value, load.ptr(), &mut chain),
+                ValueKind::Load(load) => self.insert_use(*value, load.ptr(), &mut chain, dfg),
                 ValueKind::Store(store) => {
-                    self.insert_use(*value, store.ptr(), &mut chain);
-                    self.insert_use(*value, store.val(), &mut chain);
+                    self.insert_use(*value, store.ptr(), &mut chain, dfg);
+                    self.insert_use(*value, store.val(), &mut chain, dfg);
                 }
                 ValueKind::Binary(binary) => {
-                    self.insert_use(*value, binary.lhs(), &mut chain);
-                    self.insert_use(*value, binary.rhs(), &mut chain);
+                    self.insert_use(*value, binary.lhs(), &mut chain, dfg);
+                    self.insert_use(*value, binary.rhs(), &mut chain, dfg);
                 }
-                ValueKind::Unary(unary) => self.insert_use(*value, unary.val(), &mut chain),
+                ValueKind::Unary(unary) => self.insert_use(*value, unary.val(), &mut chain, dfg),
                 ValueKind::Jump(jump) => {
                     for arg in jump.args() {
-                        self.insert_use(*value, *arg, &mut chain);
+                        self.insert_use(*value, *arg, &mut chain, dfg);
                     }
                 }
                 ValueKind::Branch(br) => {
-                    self.insert_use(*value, br.cond(), &mut chain);
+                    self.insert_use(*value, br.cond(), &mut chain, dfg);
                     for arg in br.then_args() {
-                        self.insert_use(*value, *arg, &mut chain);
+                        self.insert_use(*value, *arg, &mut chain, dfg);
                     }
                     for arg in br.else_args() {
-                        self.insert_use(*value, *arg, &mut chain);
+                        self.insert_use(*value, *arg, &mut chain, dfg);
                     }
                 }
                 ValueKind::Return(ret) => {
                     if let Some(val) = ret.val() {
-                        self.insert_use(*value, val, &mut chain);
+                        self.insert_use(*value, val, &mut chain, dfg);
                     }
                 }
                 ValueKind::Call(call) => {
                     for arg in call.args() {
-                        self.insert_use(*value, *arg, &mut chain);
+                        self.insert_use(*value, *arg, &mut chain, dfg);
                     }
                 }
                 ValueKind::GetElemPtr(gep) => {
-                    self.insert_use(*value, gep.ptr(), &mut chain);
+                    self.insert_use(*value, gep.ptr(), &mut chain, dfg);
                     for idx in gep.indices() {
-                        self.insert_use(*value, *idx, &mut chain);
+                        self.insert_use(*value, *idx, &mut chain, dfg);
                     }
                 }
                 ValueKind::Cast(cast) => {
-                    self.insert_use(*value, cast.val(), &mut chain);
+                    self.insert_use(*value, cast.val(), &mut chain, dfg);
                 }
                 _ => {}
             }

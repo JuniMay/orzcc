@@ -11,3 +11,4 @@ target/
 /test
 /test.ast
 /test.sy
+/test-*.ir

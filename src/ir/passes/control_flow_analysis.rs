@@ -54,7 +54,7 @@ impl LocalPass for ControlFlowAnalysis {
     ) -> PassResult<Self::Ok> {
         let mut cfg = ControlFlowGraph::new();
 
-        let layout = data.layout();
+        let layout = &data.layout;
         for (block, _block_node) in layout.blocks() {
             cfg.preds.insert(block, Vec::new());
         }
@@ -64,7 +64,7 @@ impl LocalPass for ControlFlowAnalysis {
             // because the normalization pass ensures that the last instruction is a
             // terminator
             let inst = layout.exit_inst_of_block(block).unwrap();
-            let inst_data = data.dfg().local_value_data(inst.into()).unwrap();
+            let inst_data = data.dfg.local_value_data(inst.into()).unwrap();
             match inst_data.kind() {
                 ValueKind::Jump(jump) => {
                     succ.push(jump.dst());
@@ -122,9 +122,9 @@ mod test {
 
         let cfg = cfa.run_on_function(function.into(), function_data).unwrap();
 
-        let entry = function_data.dfg().get_block_by_name("^entry").unwrap();
-        let positive = function_data.dfg().get_block_by_name("^positive").unwrap();
-        let negative = function_data.dfg().get_block_by_name("^negative").unwrap();
+        let entry = function_data.dfg.get_block_by_name("^entry").unwrap();
+        let positive = function_data.dfg.get_block_by_name("^positive").unwrap();
+        let negative = function_data.dfg.get_block_by_name("^negative").unwrap();
 
         assert_eq!(cfg.succs.get(&entry).unwrap(), &vec![positive, negative]);
         assert_eq!(cfg.succs.get(&positive).unwrap(), &vec![negative]);

@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 
 use super::{control_flow_analysis::ControlFlowGraph, PassResult};
 use crate::ir::{
-    entities::FunctionData,
+    entities::{FunctionData, FunctionKind},
     passes::{control_flow_analysis::ControlFlowAnalysis, LocalPass},
     values::{Block, Function},
 };
@@ -79,7 +79,7 @@ impl DominanceAnalysis {
     }
 
     fn prepare(&mut self, cfg: &ControlFlowGraph, data: &FunctionData) {
-        let entry_block = data.layout().entry_block().unwrap();
+        let entry_block = data.layout.entry_block().unwrap();
         self.dfs(entry_block, cfg);
         // reverse the postorder traversal sequence
         self.rpo.reverse();
@@ -104,6 +104,10 @@ impl LocalPass for DominanceAnalysis {
     type Ok = Dominance;
 
     fn run_on_function(&mut self, function: Function, data: &FunctionData) -> PassResult<Self::Ok> {
+        if let FunctionKind::Declaration = data.kind() {
+            panic!("Dominance analysis can only be run on defined functions");
+        }
+
         let mut cfa = ControlFlowAnalysis {};
         let cfg = cfa.run_on_function(function, data)?;
         self.prepare(&cfg, data);
@@ -114,7 +118,7 @@ impl LocalPass for DominanceAnalysis {
             idoms.insert(*block, None);
         }
 
-        let entry_block = data.layout().entry_block().unwrap();
+        let entry_block = data.layout.entry_block().unwrap();
         idoms.insert(entry_block, Some(entry_block));
 
         let mut changed = true;
@@ -231,11 +235,11 @@ mod test {
         let frontiers = dominance.frontiers;
         let _domtree = dominance.domtree;
 
-        let b5 = function_data.dfg().get_block_by_name("^5").unwrap();
-        let b4 = function_data.dfg().get_block_by_name("^4").unwrap();
-        let b3 = function_data.dfg().get_block_by_name("^3").unwrap();
-        let b2 = function_data.dfg().get_block_by_name("^2").unwrap();
-        let b1 = function_data.dfg().get_block_by_name("^1").unwrap();
+        let b5 = function_data.dfg.get_block_by_name("^5").unwrap();
+        let b4 = function_data.dfg.get_block_by_name("^4").unwrap();
+        let b3 = function_data.dfg.get_block_by_name("^3").unwrap();
+        let b2 = function_data.dfg.get_block_by_name("^2").unwrap();
+        let b1 = function_data.dfg.get_block_by_name("^1").unwrap();
 
         assert_eq!(idoms[&b5], None);
         assert_eq!(idoms[&b4], Some(b5));
