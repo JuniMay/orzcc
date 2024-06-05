@@ -644,18 +644,16 @@ where
                 span.extend(&token.span);
                 self.consume();
                 loop {
-                    let node = self.parse_operand()?;
-                    params.push(node);
                     let token = self.peek_token()?;
-                    if let TokenKind::Comma = token.kind {
-                        self.consume();
-                        continue;
-                    }
                     if let TokenKind::RightParen = token.kind {
                         self.consume();
                         break;
+                    } else if let TokenKind::Comma = token.kind {
+                        self.consume();
+                        continue;
                     }
-                    return Err(self.unexpected_token());
+                    let node = self.parse_operand()?;
+                    params.push(node);
                 }
                 span.extend(&self.curr_token.span);
                 let callee = Callee::new_boxed(name, params, span);

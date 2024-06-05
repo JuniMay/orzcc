@@ -90,6 +90,15 @@ impl SymbolTableStack {
         None
     }
 
+    pub fn lookup_mut(&mut self, name: &str) -> Option<&mut SymbolEntry> {
+        for table in self.stack.iter_mut().rev() {
+            if let Some(entry) = table.entries.get_mut(name) {
+                return Some(entry);
+            }
+        }
+        None
+    }
+
     /// Register the SysY standard library functions.
     pub fn register_sysylib(&mut self) {
         // check if this is the top level scope
@@ -515,7 +524,7 @@ impl IrGenContext {
         ];
 
         for name in sysylib_names.iter() {
-            let entry = self.symtable.lookup(name).unwrap();
+            let entry = self.symtable.lookup_mut(name).unwrap();
             let ty = IrGenContext::irgen_type(&entry.ty);
             let func = self
                 .module
@@ -525,6 +534,7 @@ impl IrGenContext {
             self.module
                 .assign_name(func, *name)
                 .expect("failed to assign name");
+            entry.ir_value = Some(func.into());
         }
 
         // memcpy and memset
@@ -611,7 +621,22 @@ impl IrGenContext {
                 todo!()
             }
             ExprKind::FuncCall(FuncCall { ident, args, .. }) => {
-                todo!()
+                let entry = self.symtable.lookup(ident).unwrap();
+                let (_, ret_ty) = entry.ty.as_function().unwrap();
+                let func = entry.ir_value.unwrap();
+                let args = args
+                    .iter()
+                    .map(|arg| self.irgen_local_expr(arg))
+                    .collect::<Vec<_>>();
+                let call = dfg_mut!(self.module, self.curr_function.unwrap())
+                    .builder()
+                    .call(Self::irgen_type(&ret_ty), func, args)
+                    .unwrap();
+                let curr_block = self.curr_block.unwrap();
+                layout_mut!(self.module, self.curr_function.unwrap())
+                    .append_inst(call.into(), curr_block)
+                    .unwrap();
+                call
             }
             ExprKind::InitList(_) => unreachable!(),
         }
