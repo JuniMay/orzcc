@@ -55,6 +55,7 @@ pub struct SymbolTable {
 #[derive(Default)]
 pub struct SymbolTableStack {
     stack: Vec<SymbolTable>,
+    pub curr_ret_ty: Option<SysyType>,
 }
 
 impl SymbolTableStack {
@@ -156,6 +157,8 @@ pub struct IrGenContext {
     pub symtable: SymbolTableStack,
     pub curr_function: Option<Function>,
     pub curr_block: Option<ir::values::Block>,
+    pub curr_ret_slot: Option<Value>,
+    pub curr_ret_block: Option<ir::values::Block>,
 }
 
 macro_rules! dfg_mut {
@@ -565,8 +568,53 @@ impl IrGen for FuncDef {
             .block(block_params)
             .unwrap();
         layout_mut!(ctx.module, func).append_block(block).unwrap();
+        let ret_block = dfg_mut!(ctx.module, func)
+            .builder()
+            .block(Vec::new())
+            .unwrap();
         ctx.curr_block = Some(block);
+        ctx.curr_ret_block = Some(ret_block);
+
+        let ret_ty = IrGenContext::irgen_type(&self.ret_ty);
+        let ret_slot = dfg_mut!(ctx.module, func)
+            .builder()
+            .alloc(ret_ty.clone())
+            .unwrap();
+        layout_mut!(ctx.module, func)
+            .append_inst(ret_slot.into(), block)
+            .unwrap();
+
+        ctx.curr_ret_slot = Some(ret_slot);
         self.block.irgen(ctx);
+
+        // append the return block
+        layout_mut!(ctx.module, func)
+            .append_block(ret_block)
+            .unwrap();
+        let ret_slot = ctx.curr_ret_slot.unwrap();
+        let ret_block = ctx.curr_ret_block.unwrap();
+
+        // load, ret
+        let ret_val = dfg_mut!(ctx.module, func)
+            .builder()
+            .load(ret_ty, ret_slot)
+            .unwrap();
+        let ret = dfg_mut!(ctx.module, func)
+            .builder()
+            .return_(Some(ret_val))
+            .unwrap();
+
+        layout_mut!(ctx.module, func)
+            .append_inst(ret_val.into(), ret_block)
+            .unwrap();
+        layout_mut!(ctx.module, func)
+            .append_inst(ret.into(), ret_block)
+            .unwrap();
+
+        ctx.curr_function = None;
+        ctx.curr_block = None;
+        ctx.curr_ret_slot = None;
+        ctx.curr_ret_block = None;
         ctx.symtable.exit_scope();
     }
 }
@@ -614,7 +662,26 @@ impl IrGen for Stmt {
             Stmt::While(cond_expr, loop_stmt) => {}
             Stmt::Break => {}
             Stmt::Continue => {}
-            Stmt::Return(return_stmt) => {}
+            Stmt::Return(return_stmt) => {
+                if let Some(ref expr) = return_stmt.expr {
+                    let val = ctx.irgen_local_expr(expr);
+                    let store = dfg_mut!(ctx.module, ctx.curr_function.unwrap())
+                        .builder()
+                        .store(val, ctx.curr_ret_slot.unwrap())
+                        .unwrap();
+                    layout_mut!(ctx.module, ctx.curr_function.unwrap())
+                        .append_inst(store.into(), ctx.curr_block.unwrap())
+                        .unwrap();
+                }
+                // jump to return block.
+                let jmp = dfg_mut!(ctx.module, ctx.curr_function.unwrap())
+                    .builder()
+                    .jump(ctx.curr_ret_block.unwrap(), Vec::new())
+                    .unwrap();
+                layout_mut!(ctx.module, ctx.curr_function.unwrap())
+                    .append_inst(jmp.into(), ctx.curr_block.unwrap())
+                    .unwrap();
+            }
         }
         ctx.symtable.exit_scope();
     }
@@ -628,6 +695,8 @@ impl IrGenContext {
             symtable: SymbolTableStack::default(),
             curr_function: None,
             curr_block: None,
+            curr_ret_slot: None,
+            curr_ret_block: None,
         }
     }
 

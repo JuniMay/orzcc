@@ -281,7 +281,6 @@ impl Value {
                     if i != 0 {
                         write!(buf, ", ")?;
                     }
-                    dbg!(arg);
                     write!(buf, "{}", arg.format_as_operand(dfg)?)?;
                 }
                 write!(buf, ")")?;

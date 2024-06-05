@@ -634,7 +634,7 @@ impl Expr {
         };
 
         if let Some(ty) = expect {
-            if ty.is_float() || ty.is_int() {
+            if ty.is_float() || ty.is_int() || ty.is_bool() {
                 // try to coerce the result
                 // if the types are the same, the `new_coercion` will return the original
                 // expr
@@ -828,7 +828,9 @@ impl CompUnitItem {
                     ir_value: None,
                 };
                 symtable.insert_upper(func_def.ident.clone(), entry, 1);
+                symtable.curr_ret_ty = Some(func_def.ret_ty.clone());
                 func_def.block.type_check(symtable);
+                symtable.curr_ret_ty = None;
                 symtable.exit_scope();
             }
         }
@@ -906,8 +908,32 @@ impl Stmt {
             Stmt::Continue => Stmt::Continue,
             Stmt::Return(mut ret) => {
                 let expr = ret.expr.take().map(|expr| expr.type_check(None, symtable));
-                ret.expr = expr;
-                // XXX: for return, type coercion might be needed when generating IR.
+
+                if expr.is_none() {
+                    return Stmt::Return(ret);
+                }
+
+                let mut expr = expr.unwrap();
+                let ret_ty = symtable.curr_ret_ty.as_ref().unwrap();
+
+                if ret_ty.is_float() || ret_ty.is_int() || ret_ty.is_bool() {
+                    match ret_ty.kind() {
+                        SysyTypeKind::Bool => {
+                            expr = Expr::new_coercion(Box::new(expr), SysyType::bool());
+                        }
+                        SysyTypeKind::Int => {
+                            expr = Expr::new_coercion(Box::new(expr), SysyType::int());
+                        }
+                        SysyTypeKind::Float => {
+                            expr = Expr::new_coercion(Box::new(expr), SysyType::float());
+                        }
+                        _ => panic!("unsupported type coercion"),
+                    }
+                } else {
+                    panic!("unsupported type coercion");
+                }
+
+                ret.expr = Some(expr);
                 Stmt::Return(ret)
             }
             Stmt::If(cond, then_block, else_block) => {
