@@ -360,8 +360,125 @@ impl IrGen for Decl {
                     if ty.is_array() {
                         // the init value can be variable, and thus needs to be
                         // loaded and then store.
-                        // TODO: store elements one by one, or first memcpy and
-                        // then store.
+                        let init = def.init.as_ref().unwrap();
+
+                        let mut global_init = Vec::new();
+                        // the indices that cannot be memcpy-ed (because of the use of variables)
+                        let mut indices = Vec::new();
+
+                        fn handle_init_list(
+                            expr: &Expr,
+                            global_init: &mut Vec<ComptimeVal>,
+                            indices: &mut Vec<Vec<usize>>,
+                            curr_indices: Vec<usize>,
+                        ) {
+                            match &expr.kind {
+                                ExprKind::InitList(exprs) => {
+                                    let mut inits = Vec::new();
+                                    for (i, expr) in exprs.iter().enumerate() {
+                                        let mut curr_indices = curr_indices.clone();
+                                        curr_indices.push(i);
+                                        handle_init_list(expr, &mut inits, indices, curr_indices);
+                                    }
+                                    global_init.push(ComptimeVal::List(inits));
+                                }
+                                ExprKind::Const(val) => {
+                                    global_init.push(val.clone());
+                                }
+                                _ => {
+                                    // this expr is not a constant, additional handling is needed.
+                                    indices.push(curr_indices);
+                                    // use a undefined value to represent the value in the
+                                    // global_init
+                                    global_init.push(ComptimeVal::Zeros(
+                                        expr.ty.as_ref().unwrap().clone(),
+                                    ));
+                                }
+                            }
+                        }
+                        handle_init_list(init, &mut global_init, &mut indices, Vec::new());
+                        let global_init = global_init.pop().unwrap();
+                        let ty = global_init.get_type();
+                        if global_init.is_zero() {
+                            // memset
+                            let memset = ctx.module.get_value_by_name("@memset").unwrap();
+                            let zero = dfg_mut!(ctx.module, curr_function)
+                                .builder()
+                                .zero(Type::i32_())
+                                .unwrap();
+                            let size = dfg_mut!(ctx.module, curr_function)
+                                .builder()
+                                .bytes(Type::i32_(), ty.bytewidth().to_le_bytes().into())
+                                .unwrap();
+                            let call = dfg_mut!(ctx.module, curr_function)
+                                .builder()
+                                .call(Type::void(), memset, vec![alloc, zero, size])
+                                .unwrap();
+                            layout_mut!(ctx.module, curr_function)
+                                .append_inst(call.into(), curr_block)
+                                .unwrap();
+                        } else {
+                            // memcpy
+                            let global_init = ctx.irgen_global_comptime_val(&global_init);
+                            let global_slot = ctx
+                                .module
+                                .builder()
+                                .global_slot(global_init, false)
+                                .unwrap();
+                            ctx.module
+                                .assign_name(global_slot, format!("__DATA_{}", &def.ident))
+                                .unwrap();
+                            let memcpy = ctx.module.get_value_by_name("@memcpy").unwrap();
+                            let size = dfg_mut!(ctx.module, curr_function)
+                                .builder()
+                                .bytes(Type::i32_(), ty.bytewidth().to_le_bytes().into())
+                                .unwrap();
+                            let call = dfg_mut!(ctx.module, curr_function)
+                                .builder()
+                                .call(Type::void(), memcpy, vec![alloc, global_slot, size])
+                                .unwrap();
+                            layout_mut!(ctx.module, curr_function)
+                                .append_inst(call.into(), curr_block)
+                                .unwrap();
+                        }
+
+                        // set the non-constant values by store
+                        for indices in indices.iter() {
+                            let mut ir_indices = Vec::new();
+
+                            let mut expr = init;
+
+                            for i in indices.iter() {
+                                if let ExprKind::InitList(exprs) = &expr.kind {
+                                    expr = &exprs[*i];
+
+                                    let index = dfg_mut!(ctx.module, curr_function)
+                                        .builder()
+                                        .bytes(Type::i32_(), i.to_le_bytes().to_vec())
+                                        .unwrap();
+
+                                    ir_indices.push(index);
+                                } else {
+                                    unreachable!();
+                                }
+                            }
+
+                            let gep = dfg_mut!(ctx.module, curr_function)
+                                .builder()
+                                .getelemptr(alloc, IrGenContext::irgen_type(&ty), ir_indices)
+                                .unwrap();
+                            let init = ctx.irgen_local_expr(expr);
+                            let store = dfg_mut!(ctx.module, curr_function)
+                                .builder()
+                                .store(init, gep)
+                                .unwrap();
+                            layout_mut!(ctx.module, curr_function)
+                                .append_inst(gep.into(), curr_block)
+                                .unwrap();
+                            layout_mut!(ctx.module, curr_function)
+                                .append_inst(store.into(), curr_block)
+                                .unwrap();
+                        }
                     } else {
                         // store
                         let init = ctx.irgen_local_expr(def.init.as_ref().unwrap());
