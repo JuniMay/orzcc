@@ -392,7 +392,6 @@ impl CodegenContext {
             .add_stack_size((saved_regs_num + 1) * 8);
         let aligned_stack_frame_size =
             machine_function!(mut self.machine_ctx, &function_name).aligned_stack_size();
-        dbg!(aligned_stack_frame_size);
         // fp is used for parameter passing, later.
         if check_itype_imm(aligned_stack_frame_size.into()) {
             let addi_fp = MachineInstData::build_binary_imm(
@@ -1499,7 +1498,6 @@ impl CodegenContext {
                 }
             }
             ValueKind::Cast(cast) => {
-                // TODO
                 let op = cast.op();
                 let val = cast.val();
 
@@ -1766,8 +1764,11 @@ impl CodegenContext {
                             // $ptr + 0 * bytewidth = $ptr
                             // no need to do anything
                         }
+                        ValueKind::Bytes(bytes) if bytes.iter().all(|&b| b == 0) => {
+                            // $ptr + 0 * bytewidth = $ptr
+                            // no need to do anything
+                        }
                         ValueKind::Bytes(bytes) => {
-                            // TODO: the bytes could be all-zeros, which can be optimized
                             let (rd, li) =
                                 MachineInstData::new_li(&mut self.machine_ctx, bytes.into());
                             self.append_inst(&function_name, block, li);
@@ -1818,7 +1819,6 @@ impl CodegenContext {
                             }
                         }
                         _ => {
-                            dbg!(index_data.kind());
                             let rs = self.get_value_as_register(*index);
                             match shamt {
                                 Some(shamt) => {

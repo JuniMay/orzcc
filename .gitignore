@@ -5,10 +5,10 @@ target/
 .DS_Store
 
 /test.asm
-/test.ir
+/test.orzir
 /test.s
 /test.o
 /test
 /test.ast
 /test.sy
-/test-*.ir
+/test-*.orzir

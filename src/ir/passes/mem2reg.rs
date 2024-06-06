@@ -164,6 +164,8 @@ impl Mem2reg {
 
     fn rename(&mut self, block: Block, data: &mut FunctionData) -> bool {
         let mut changed = false;
+        // TODO: this might not be the best way to backup & restore the incomings
+        let incomings_backup = self.incomings.clone();
 
         let node = data.layout.blocks().node(block).unwrap();
         let dfg = &mut data.dfg;
@@ -221,8 +223,7 @@ impl Mem2reg {
         for succ in succs {
             // args to extend the branch/jump instructions
             let mut args = Vec::new();
-            let succ_data = data.dfg.block_data(*succ).unwrap();
-            let params = succ_data.params();
+            let params = data.dfg.block_data(*succ).unwrap().params();
             for param in params {
                 // the params for promotion are placed at the end of the block,
                 // so just get the extension for the args.
@@ -262,6 +263,7 @@ impl Mem2reg {
             self.rename(child, data);
         }
 
+        self.incomings = incomings_backup;
         changed
     }
 }

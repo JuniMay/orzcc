@@ -565,7 +565,7 @@ impl IrGen for FuncDef {
             .iter()
             .zip(param_tys.iter())
             .map(|(param, ty)| {
-                let ir_ty = IrGenContext::irgen_type(&ty);
+                let ir_ty = IrGenContext::irgen_type(ty);
                 let arg = curr_dfg_mut!(ctx).builder().block_param(ir_ty).unwrap();
                 curr_dfg!(ctx)
                     .assign_local_value_name(arg, format!("__ARG_{}", &param.ident))
@@ -1488,6 +1488,7 @@ impl IrGenContext {
                 }
             }
             ExprKind::Coercion(expr) => {
+                let mut append = true;
                 let val = match (expr.ty.as_ref().unwrap().kind(), ty.kind()) {
                     (SysyTypeKind::Bool, SysyTypeKind::Int) => {
                         // zeroext
@@ -1551,20 +1552,17 @@ impl IrGenContext {
                         fcmp
                     }
                     (SysyTypeKind::Array(_, _), SysyTypeKind::Array(_, _)) => {
-                        // bitcast
-                        let val = self.irgen_local_expr(expr);
-                        let bitcast = curr_dfg_mut!(self)
-                            .builder()
-                            .cast(ir::values::CastOp::Bitcast, Self::irgen_type(ty), val)
-                            .unwrap();
-                        bitcast // TODO: this should be removed
+                        append = false;
+                        self.irgen_local_expr(expr)
                     }
                     _ => unreachable!(),
                 };
 
-                curr_layout_mut!(self)
-                    .append_inst(val.into(), self.curr_block.unwrap())
-                    .unwrap();
+                if append {
+                    curr_layout_mut!(self)
+                        .append_inst(val.into(), self.curr_block.unwrap())
+                        .unwrap();
+                }
                 val
             }
             ExprKind::FuncCall(FuncCall { ident, args, .. }) => {
