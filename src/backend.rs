@@ -10,6 +10,166 @@ use crate::{
     ir::module::IdAllocator,
 };
 
+pub const ARGUMENT_REGISTERS: [Register; 16] = [
+    Register::General(RiscvGpReg::A0),
+    Register::General(RiscvGpReg::A1),
+    Register::General(RiscvGpReg::A2),
+    Register::General(RiscvGpReg::A3),
+    Register::General(RiscvGpReg::A4),
+    Register::General(RiscvGpReg::A5),
+    Register::General(RiscvGpReg::A6),
+    Register::General(RiscvGpReg::A7),
+    Register::FloatingPoint(RiscvFpReg::Fa0),
+    Register::FloatingPoint(RiscvFpReg::Fa1),
+    Register::FloatingPoint(RiscvFpReg::Fa2),
+    Register::FloatingPoint(RiscvFpReg::Fa3),
+    Register::FloatingPoint(RiscvFpReg::Fa4),
+    Register::FloatingPoint(RiscvFpReg::Fa5),
+    Register::FloatingPoint(RiscvFpReg::Fa6),
+    Register::FloatingPoint(RiscvFpReg::Fa7),
+];
+
+pub const CALLER_SAVED_REGISTERS: [Register; 36] = [
+    Register::General(RiscvGpReg::Ra),
+    Register::General(RiscvGpReg::T0),
+    Register::General(RiscvGpReg::T1),
+    Register::General(RiscvGpReg::T2),
+    Register::General(RiscvGpReg::T3),
+    Register::General(RiscvGpReg::T4),
+    Register::General(RiscvGpReg::T5),
+    Register::General(RiscvGpReg::T6),
+    Register::General(RiscvGpReg::A0),
+    Register::General(RiscvGpReg::A1),
+    Register::General(RiscvGpReg::A2),
+    Register::General(RiscvGpReg::A3),
+    Register::General(RiscvGpReg::A4),
+    Register::General(RiscvGpReg::A5),
+    Register::General(RiscvGpReg::A6),
+    Register::General(RiscvGpReg::A7),
+    Register::FloatingPoint(RiscvFpReg::Fa0),
+    Register::FloatingPoint(RiscvFpReg::Fa1),
+    Register::FloatingPoint(RiscvFpReg::Fa2),
+    Register::FloatingPoint(RiscvFpReg::Fa3),
+    Register::FloatingPoint(RiscvFpReg::Fa4),
+    Register::FloatingPoint(RiscvFpReg::Fa5),
+    Register::FloatingPoint(RiscvFpReg::Fa6),
+    Register::FloatingPoint(RiscvFpReg::Fa7),
+    Register::FloatingPoint(RiscvFpReg::Ft0),
+    Register::FloatingPoint(RiscvFpReg::Ft1),
+    Register::FloatingPoint(RiscvFpReg::Ft2),
+    Register::FloatingPoint(RiscvFpReg::Ft3),
+    Register::FloatingPoint(RiscvFpReg::Ft4),
+    Register::FloatingPoint(RiscvFpReg::Ft5),
+    Register::FloatingPoint(RiscvFpReg::Ft6),
+    Register::FloatingPoint(RiscvFpReg::Ft7),
+    Register::FloatingPoint(RiscvFpReg::Ft8),
+    Register::FloatingPoint(RiscvFpReg::Ft9),
+    Register::FloatingPoint(RiscvFpReg::Ft10),
+    Register::FloatingPoint(RiscvFpReg::Ft11),
+];
+
+pub const CALLEE_SAVED_REGISTERS: [Register; 25] = [
+    Register::General(RiscvGpReg::Sp),
+    Register::General(RiscvGpReg::S0),
+    Register::General(RiscvGpReg::S1),
+    Register::General(RiscvGpReg::S2),
+    Register::General(RiscvGpReg::S3),
+    Register::General(RiscvGpReg::S4),
+    Register::General(RiscvGpReg::S5),
+    Register::General(RiscvGpReg::S6),
+    Register::General(RiscvGpReg::S7),
+    Register::General(RiscvGpReg::S8),
+    Register::General(RiscvGpReg::S9),
+    Register::General(RiscvGpReg::S10),
+    Register::General(RiscvGpReg::S11),
+    Register::FloatingPoint(RiscvFpReg::Fs0),
+    Register::FloatingPoint(RiscvFpReg::Fs1),
+    Register::FloatingPoint(RiscvFpReg::Fs2),
+    Register::FloatingPoint(RiscvFpReg::Fs3),
+    Register::FloatingPoint(RiscvFpReg::Fs4),
+    Register::FloatingPoint(RiscvFpReg::Fs5),
+    Register::FloatingPoint(RiscvFpReg::Fs6),
+    Register::FloatingPoint(RiscvFpReg::Fs7),
+    Register::FloatingPoint(RiscvFpReg::Fs8),
+    Register::FloatingPoint(RiscvFpReg::Fs9),
+    Register::FloatingPoint(RiscvFpReg::Fs10),
+    Register::FloatingPoint(RiscvFpReg::Fs11),
+];
+
+pub const RETURN_REGISTERS: [Register; 5] = [
+    Register::General(RiscvGpReg::Ra),
+    Register::General(RiscvGpReg::A0),
+    Register::General(RiscvGpReg::A1),
+    Register::FloatingPoint(RiscvFpReg::Fa0),
+    Register::FloatingPoint(RiscvFpReg::Fa1),
+];
+
+pub const ALLOCATABLE_REGISTERS_GP: [Register; 28] = [
+    Register::General(RiscvGpReg::Ra),
+    Register::General(RiscvGpReg::T0),
+    Register::General(RiscvGpReg::T1),
+    Register::General(RiscvGpReg::T2),
+    Register::General(RiscvGpReg::T3),
+    Register::General(RiscvGpReg::T4),
+    Register::General(RiscvGpReg::T5),
+    Register::General(RiscvGpReg::T6),
+    Register::General(RiscvGpReg::A0),
+    Register::General(RiscvGpReg::A1),
+    Register::General(RiscvGpReg::A2),
+    Register::General(RiscvGpReg::A3),
+    Register::General(RiscvGpReg::A4),
+    Register::General(RiscvGpReg::A5),
+    Register::General(RiscvGpReg::A6),
+    Register::General(RiscvGpReg::A7),
+    Register::General(RiscvGpReg::S0),
+    Register::General(RiscvGpReg::S1),
+    Register::General(RiscvGpReg::S2),
+    Register::General(RiscvGpReg::S3),
+    Register::General(RiscvGpReg::S4),
+    Register::General(RiscvGpReg::S5),
+    Register::General(RiscvGpReg::S6),
+    Register::General(RiscvGpReg::S7),
+    Register::General(RiscvGpReg::S8),
+    Register::General(RiscvGpReg::S9),
+    Register::General(RiscvGpReg::S10),
+    Register::General(RiscvGpReg::S11),
+];
+
+pub const ALLOCATABLE_REGISTERS_FP: [Register; 32] = [
+    Register::FloatingPoint(RiscvFpReg::Fa0),
+    Register::FloatingPoint(RiscvFpReg::Fa1),
+    Register::FloatingPoint(RiscvFpReg::Fa2),
+    Register::FloatingPoint(RiscvFpReg::Fa3),
+    Register::FloatingPoint(RiscvFpReg::Fa4),
+    Register::FloatingPoint(RiscvFpReg::Fa5),
+    Register::FloatingPoint(RiscvFpReg::Fa6),
+    Register::FloatingPoint(RiscvFpReg::Fa7),
+    Register::FloatingPoint(RiscvFpReg::Ft0),
+    Register::FloatingPoint(RiscvFpReg::Ft1),
+    Register::FloatingPoint(RiscvFpReg::Ft2),
+    Register::FloatingPoint(RiscvFpReg::Ft3),
+    Register::FloatingPoint(RiscvFpReg::Ft4),
+    Register::FloatingPoint(RiscvFpReg::Ft5),
+    Register::FloatingPoint(RiscvFpReg::Ft6),
+    Register::FloatingPoint(RiscvFpReg::Ft7),
+    Register::FloatingPoint(RiscvFpReg::Ft8),
+    Register::FloatingPoint(RiscvFpReg::Ft9),
+    Register::FloatingPoint(RiscvFpReg::Ft10),
+    Register::FloatingPoint(RiscvFpReg::Ft11),
+    Register::FloatingPoint(RiscvFpReg::Fs0),
+    Register::FloatingPoint(RiscvFpReg::Fs1),
+    Register::FloatingPoint(RiscvFpReg::Fs2),
+    Register::FloatingPoint(RiscvFpReg::Fs3),
+    Register::FloatingPoint(RiscvFpReg::Fs4),
+    Register::FloatingPoint(RiscvFpReg::Fs5),
+    Register::FloatingPoint(RiscvFpReg::Fs6),
+    Register::FloatingPoint(RiscvFpReg::Fs7),
+    Register::FloatingPoint(RiscvFpReg::Fs8),
+    Register::FloatingPoint(RiscvFpReg::Fs9),
+    Register::FloatingPoint(RiscvFpReg::Fs10),
+    Register::FloatingPoint(RiscvFpReg::Fs11),
+];
+
 /// The layout in a machine function/procedure.
 #[derive(Default)]
 pub struct MachineLayout {
@@ -238,6 +398,36 @@ impl MachineLayout {
                 ListError::KeyDuplicated(inst) => MachineLayoutOpErr::InstDuplicated(inst),
                 // this is actually unreachable
                 ListError::NodeNotFound(before) => MachineLayoutOpErr::InstNodeNotFound(before),
+            })?;
+
+        self.inst_blocks.insert(inst, *block);
+
+        Ok(())
+    }
+
+    pub fn insert_inst_after(
+        &mut self,
+        inst: MachineInst,
+        after: MachineInst,
+    ) -> Result<(), MachineLayoutOpErr> {
+        if self.inst_blocks.contains_key(&inst) {
+            return Err(MachineLayoutOpErr::InstDuplicated(inst));
+        }
+
+        let block = self
+            .inst_blocks
+            .get(&after)
+            .ok_or(MachineLayoutOpErr::ParentBlockNotFound(after))?;
+
+        self.blocks
+            .node_mut(*block)
+            .ok_or(MachineLayoutOpErr::BlockNodeNotFound(*block))?
+            .insts_mut()
+            .insert_after(inst, after)
+            .map_err(|err| match err {
+                ListError::KeyDuplicated(inst) => MachineLayoutOpErr::InstDuplicated(inst),
+                // this is actually unreachable
+                ListError::NodeNotFound(after) => MachineLayoutOpErr::InstNodeNotFound(after),
             })?;
 
         self.inst_blocks.insert(inst, *block);
@@ -1406,6 +1596,23 @@ impl MachineInstData {
         ctx.new_inst(data)
     }
 
+    /// Build and store instruction for function argument (entry block arguments)
+    pub fn build_store(
+        ctx: &mut MachineContext,
+        kind: StoreKind,
+        value: Register,
+        base: Register,
+        offset: Immediate,
+    ) -> MachineInst {
+        let data = MachineInstData::Store {
+            kind,
+            value,
+            base,
+            offset,
+        };
+        ctx.new_inst(data)
+    }
+
     /// Build and float load instruction for function argument (entry block
     /// arguments)
     pub fn build_float_load(
@@ -1459,6 +1666,207 @@ impl MachineInstData {
     ) -> MachineInst {
         let data = MachineInstData::BinaryImm { kind, rd, rs1, imm };
         ctx.new_inst(data)
+    }
+
+    pub fn get_use_operands(&self) -> Vec<Register> {
+        match self {
+            MachineInstData::Load { base, .. } => vec![*base],
+            MachineInstData::FloatLoad {  base, .. } => vec![*base],
+            MachineInstData::PseudoLoad { .. } => vec![],
+            MachineInstData::PseudoStore { value, .. } => vec![*value],
+            MachineInstData::FloatPseudoLoad { dest, rt, .. } => vec![*dest, *rt],
+            MachineInstData::FloatPseudoStore { value, rt, .. } => vec![*value, *rt],
+            MachineInstData::Store { value, base, .. } => vec![*value, *base],
+            MachineInstData::FloatStore { value, base, .. } => vec![*value, *base],
+            MachineInstData::FMv { rs, .. } => vec![*rs],
+            MachineInstData::FCvt { rs, .. } => vec![*rs],
+            MachineInstData::Binary { rs1, rs2, .. } => vec![*rs1, *rs2],
+            MachineInstData::BinaryImm { rs1, .. } => vec![*rs1],
+            MachineInstData::FloatBinary { rs1, rs2, .. } => vec![*rs1, *rs2],
+            MachineInstData::FloatMulAdd { rs1, rs2, rs3, .. } => vec![*rs1, *rs2, *rs3],
+            MachineInstData::FloatUnary { rs, .. } => vec![*rs],
+            MachineInstData::Li { .. } => vec![],
+            MachineInstData::Ret => vec![],
+            MachineInstData::Call { .. } => vec![],
+            // MachineInstData::Call { .. } => ARGUMENT_REGISTERS.to_vec(), // TODO: This might be wrong
+            MachineInstData::Branch { rs1, rs2, .. } => vec![*rs1, *rs2],
+            MachineInstData::J { .. } => vec![],
+        }
+    }
+
+    pub fn get_def_operands(&self) -> Vec<Register> {
+        match self {
+            MachineInstData::Load { dest, .. } => vec![*dest],
+            MachineInstData::FloatLoad { dest, .. } => vec![*dest],
+            MachineInstData::PseudoLoad { dest, .. } => vec![*dest],
+            MachineInstData::PseudoStore { rt, .. } => vec![*rt],
+            MachineInstData::FloatPseudoLoad { dest, rt, .. } => vec![*dest, *rt],
+            MachineInstData::FloatPseudoStore { rt, .. } => vec![*rt],
+            MachineInstData::Store { .. } => vec![],
+            MachineInstData::FloatStore { .. } => vec![],
+            MachineInstData::FMv { rd, .. } => vec![*rd],
+            MachineInstData::FCvt { rd, .. } => vec![*rd],
+            MachineInstData::Binary { rd, .. } => vec![*rd],
+            MachineInstData::BinaryImm { rd, .. } => vec![*rd],
+            MachineInstData::FloatBinary { rd, .. } => vec![*rd],
+            MachineInstData::FloatMulAdd { rd, .. } => vec![*rd],
+            MachineInstData::FloatUnary { rd, .. } => vec![*rd],
+            MachineInstData::Li { rd, .. } => vec![*rd],
+            MachineInstData::Ret => vec![],
+            MachineInstData::Call { .. } => CALLER_SAVED_REGISTERS.to_vec(), // TODO: This might be wrong 
+            MachineInstData::Branch { .. } => vec![],
+            MachineInstData::J { .. } => vec![],
+        }
+    }
+
+    pub fn replace_operand(&mut self, from: Register, to: Register) {
+        match self {
+            MachineInstData::Load { dest, base, .. } => {
+                if *base == from {
+                    *base = to;
+                }
+                if *dest == from {
+                    *dest = to;
+                }
+            }
+            MachineInstData::FloatLoad { dest, base, .. } => {
+                if *base == from {
+                    *base = to;
+                }
+                if *dest == from {
+                    *dest = to;
+                }
+            }
+            MachineInstData::PseudoLoad { dest, .. } => {
+                if *dest == from {
+                    *dest = to;
+                }
+            }
+            MachineInstData::PseudoStore { value, rt, .. } => {
+                if *value == from {
+                    *value = to;
+                }
+                if *rt == from {
+                    *rt = to;
+                }
+            }
+            MachineInstData::FloatPseudoLoad { dest, rt, .. } => {
+                if *dest == from {
+                    *dest = to;
+                }
+                if *rt == from {
+                    *rt = to;
+                }
+            }
+            MachineInstData::FloatPseudoStore { value, rt, .. } => {
+                if *value == from {
+                    *value = to;
+                }
+                if *rt == from {
+                    *rt = to;
+                }
+            }
+            MachineInstData::Store { value, base, .. } => {
+                if *value == from {
+                    *value = to;
+                }
+                if *base == from {
+                    *base = to;
+                }
+            }
+            MachineInstData::FloatStore { value, base, .. } => {
+                if *value == from {
+                    *value = to;
+                }
+                if *base == from {
+                    *base = to;
+                }
+            }
+            MachineInstData::FMv { rd, rs, .. } => {
+                if *rd == from {
+                    *rd = to;
+                }
+                if *rs == from {
+                    *rs = to;
+                }
+            }
+            MachineInstData::FCvt { rd, rs, .. } => {
+                if *rd == from {
+                    *rd = to;
+                }
+                if *rs == from {
+                    *rs = to;
+                }
+            }
+            MachineInstData::Binary { rd, rs1, rs2, .. } => {
+                if *rd == from {
+                    *rd = to;
+                }
+                if *rs1 == from {
+                    *rs1 = to;
+                }
+                if *rs2 == from {
+                    *rs2 = to;
+                }
+            }
+            MachineInstData::BinaryImm { rd, rs1, .. } => {
+                if *rd == from {
+                    *rd = to;
+                }
+                if *rs1 == from {
+                    *rs1 = to;
+                }
+            }
+            MachineInstData::FloatBinary { rd, rs1, rs2, .. } => {
+                if *rd == from {
+                    *rd = to;
+                }
+                if *rs1 == from {
+                    *rs1 = to;
+                }
+                if *rs2 == from {
+                    *rs2 = to;
+                }
+            }
+            MachineInstData::FloatMulAdd { rd, rs1, rs2, rs3, .. } => {
+                if *rd == from {
+                    *rd = to;
+                }
+                if *rs1 == from {
+                    *rs1 = to;
+                }
+                if *rs2 == from {
+                    *rs2 = to;
+                }
+                if *rs3 == from {
+                    *rs3 = to;
+                }
+            }
+            MachineInstData::FloatUnary { rd, rs, .. } => {
+                if *rd == from {
+                    *rd = to;
+                }
+                if *rs == from {
+                    *rs = to;
+                }
+            }
+            MachineInstData::Li { rd, .. } => {
+                if *rd == from {
+                    *rd = to;
+                }
+            }
+            MachineInstData::Call { .. } => {}
+            MachineInstData::Ret => {}
+            MachineInstData::Branch { rs1, rs2, .. } => {
+                if *rs1 == from {
+                    *rs1 = to;
+                }
+                if *rs2 == from {
+                    *rs2 = to;
+                }
+            }
+            MachineInstData::J { .. } => {}
+        }
     }
 }
 

@@ -7,11 +7,13 @@ use std::{
 
 use thiserror::Error;
 
-use super::{MachineContext, MachineFunctionData};
+use super::{MachineContext, MachineFunctionData, MachineSymbol};
 
 pub mod block_defsue_analysis;
 pub mod control_flow_analysis;
 pub mod liveness_analysis;
+pub mod live_interval_analysis;
+pub mod graph_coloring_allocation;
 
 pub trait GlobalPass {
     type Ok;
@@ -36,8 +38,8 @@ pub trait LocalPassMut {
     /// changed.
     fn run_on_function(
         &mut self,
-        context: &MachineContext,
-        function_data: &mut MachineFunctionData,
+        context: &mut MachineContext,
+        function_name: &MachineSymbol,
     ) -> PassResult<(Self::Ok, bool)>;
 }
 
