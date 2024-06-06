@@ -240,8 +240,6 @@ fn parse_orzir(path: &str) -> Option<Module> {
     let mut parser = Parser::new(&mut file);
     let result = parser.parse();
 
-    dbg!(&result);
-
     if let Err(e) = result {
         // source code in the file
         let s = std::fs::read_to_string(path).unwrap();

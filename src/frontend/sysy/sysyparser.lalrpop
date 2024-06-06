@@ -213,7 +213,7 @@ pub UnaryExp: Expr = {
   },
   "+" <UnaryExp> => <>,
   "-" <expr: UnaryExp> => Expr::new_unary(UnaryOp::Neg, Box::new(expr)),
-  "!" <expr: UnaryExp> => Expr::new_unary(UnaryOp::Not, Box::new(expr)),
+  "!" <expr: UnaryExp> => Expr::new_unary(UnaryOp::LogicalNot, Box::new(expr)),
 }
 
 // MulExp -> UnaryExp | MulExp ('*' | '/' | '%') UnaryExp

@@ -188,7 +188,6 @@ impl CodegenContext {
 
         for (block, _) in function_data.layout.blocks() {
             let machine_block = self.machine_ctx.new_block();
-            dbg!(machine_block);
             self.block_map.insert(block, machine_block);
 
             machine_function_layout!(mut self.machine_ctx, &function_name)
@@ -355,7 +354,6 @@ impl CodegenContext {
     }
 
     pub fn append_inst(&mut self, function_name: &MachineSymbol, block: Block, inst: MachineInst) {
-        dbg!(self.machine_ctx.inst_data(inst));
         machine_function_layout!(mut self.machine_ctx, function_name)
             .append_inst(inst, self.block_map[&block])
             .unwrap();
@@ -1492,6 +1490,7 @@ impl CodegenContext {
                                 self.value_map
                                     .insert(inst.into(), ValueCodegenResult::Register(rd));
                             }
+                            _ => unreachable!(),
                         }
                     }
                 }
@@ -1858,8 +1857,6 @@ impl CodegenContext {
                             }
                         }
                     }
-
-                    dbg!(&basis_ty);
 
                     basis_ty = match basis_ty.kind() {
                         TypeKind::Array(_, elem_ty) => elem_ty.clone(),
