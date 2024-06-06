@@ -976,7 +976,7 @@ impl CodegenContext {
                     };
 
                     // same as rs1
-                    let rs2 = match lhs_data.kind() {
+                    let rs2 = match rhs_data.kind() {
                         ValueKind::GlobalSlot(_)
                         | ValueKind::Array(_)
                         | ValueKind::Struct(_)
@@ -1021,7 +1021,7 @@ impl CodegenContext {
                         | ValueKind::Cast(_)
                         | ValueKind::BlockParam
                         | ValueKind::Load(_) => {
-                            let codegen_result = self.get_value(lhs);
+                            let codegen_result = self.get_value(rhs);
                             if let ValueCodegenResult::Register(reg) = codegen_result {
                                 *reg
                             } else {
