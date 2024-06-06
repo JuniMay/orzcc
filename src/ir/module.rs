@@ -122,7 +122,7 @@ impl DataFlowGraph {
                 .borrow_mut()
                 .get(value)
         } else {
-            panic!("value should be either local or global.")
+            panic!("value should be either local or global: {:?}", value)
         }
     }
 
@@ -480,15 +480,16 @@ where
             return Err(NameAllocErr::KeyDuplicated);
         }
 
-        let mut name = if name.starts_with(self.prefix) {
+        let base_name = if name.starts_with(self.prefix) {
             name
         } else {
             format!("{}{}", self.prefix, name)
         };
 
         let mut local_counter = 0;
+        let mut name = base_name.clone();
         while self.map.contains_rev(&name) {
-            name = format!("{}_{}", name, local_counter);
+            name = format!("{}_{}", base_name, local_counter);
             local_counter += 1;
         }
 

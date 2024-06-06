@@ -372,6 +372,7 @@ impl GlobalPassMut for Mem2reg {
         let mut changed = false;
         for function in functions {
             let function_data = module.function_data_mut(function).unwrap();
+            self.reset();
             let (_, local_changed) = self.run_on_function(function, function_data).unwrap();
             changed = changed || local_changed;
         }

@@ -146,7 +146,7 @@ impl Ast {
                         AstNodeKind::Block(ref ast_block) => {
                             let block: Block = dfg!(ctx.module, function)
                                 .get_block_by_name(&ast_block.name)
-                                .ok_or(SemanticError::BlockNameNotFound(block_node.span))?;
+                                .unwrap(); // if the block not found, it's a bug.
 
                             for inst_node in ast_block.insts.iter() {
                                 let inst =

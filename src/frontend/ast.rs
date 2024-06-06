@@ -494,8 +494,14 @@ impl Expr {
                 unreachable!()
             }
             ExprKind::Binary(op, lhs, rhs) => {
-                let mut lhs = Box::new(lhs.type_check(None, symtable));
-                let mut rhs = Box::new(rhs.type_check(None, symtable));
+                let sub_expect = if matches!(op, BinaryOp::LogicalAnd | BinaryOp::LogicalOr) {
+                    Some(SysyType::bool())
+                } else {
+                    None
+                };
+
+                let mut lhs = Box::new(lhs.type_check(sub_expect.clone(), symtable));
+                let mut rhs = Box::new(rhs.type_check(sub_expect, symtable));
 
                 // check coercion
                 // i1 -> i32 -> float
@@ -608,7 +614,7 @@ impl Expr {
                 expr
             }
             ExprKind::Unary(op, expr) => {
-                let expr = Box::new(expr.type_check(None, symtable));
+                let mut expr = expr.type_check(None, symtable);
                 let ty = match op {
                     UnaryOp::Neg => {
                         let ty = expr.ty();
@@ -622,12 +628,22 @@ impl Expr {
                         let ty = expr.ty();
                         if ty.is_bool() {
                             ty
+                        } else if ty.is_int() {
+                            let zero = Expr::new_const(ComptimeVal::Int(0));
+                            expr = Expr::new_binary(BinaryOp::Eq, Box::new(expr), Box::new(zero));
+                            expr.ty = Some(SysyType::bool());
+                            SysyType::bool()
+                        } else if ty.is_float() {
+                            let zero = Expr::new_const(ComptimeVal::Float(0.0));
+                            expr = Expr::new_binary(BinaryOp::Eq, Box::new(expr), Box::new(zero));
+                            expr.ty = Some(SysyType::bool());
+                            SysyType::bool()
                         } else {
                             panic!("unsupported type for logical not");
                         }
                     }
                 };
-                let mut expr = Expr::new_unary(op, expr);
+                let mut expr = Expr::new_unary(op, Box::new(expr));
                 expr.ty = Some(ty);
                 expr
             }

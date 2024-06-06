@@ -33,6 +33,7 @@ use crate::{
     },
 };
 
+#[derive(Debug)]
 pub struct SymbolEntry {
     pub ty: SysyType,
     pub comptime_val: Option<ComptimeVal>,
@@ -165,18 +166,6 @@ pub struct IrGenContext {
     pub loop_exit_stack: Vec<ir::values::Block>,
 }
 
-macro_rules! dfg_mut {
-    ($module:expr, $function:expr) => {
-        &mut $module.function_data_mut($function).unwrap().dfg
-    };
-}
-
-macro_rules! dfg {
-    ($module:expr, $function:expr) => {
-        &$module.function_data($function).unwrap().dfg
-    };
-}
-
 macro_rules! curr_dfg {
     ($ctx:expr) => {
         &$ctx
@@ -197,11 +186,6 @@ macro_rules! curr_dfg_mut {
     };
 }
 
-macro_rules! layout_mut {
-    ($module:expr, $function:expr) => {
-        &mut $module.function_data_mut($function).unwrap().layout
-    };
-}
 macro_rules! curr_layout_mut {
     ($ctx:expr) => {
         &mut $ctx
@@ -221,12 +205,6 @@ macro_rules! curr_layout {
             .layout
     };
 }
-
-// macro_rules! layout {
-//     ($module:expr, $function:expr) => {
-//         &$module.function_data_mut($function).unwrap().layout
-//     };
-// }
 
 macro_rules! entry_block {
     ($module:expr, $function:expr) => {
@@ -285,23 +263,19 @@ impl IrGen for Decl {
     fn irgen(&self, ctx: &mut IrGenContext) {
         // for local declaration, a memory slot will be allocated.
         // if the initial value is an array, memcpy and memset will be called.
-        let curr_function = ctx.curr_function.unwrap();
-        let entry_block = entry_block!(ctx.module, curr_function).unwrap();
+        let entry_block = entry_block!(ctx.module, ctx.curr_function.unwrap()).unwrap();
         let curr_block = ctx.curr_block.unwrap();
         match self {
             Decl::ConstDecl(decl) => {
                 for def in decl.defs.iter() {
                     let ty = def.init.ty.as_ref().unwrap();
                     let ir_ty = IrGenContext::irgen_type(ty);
-                    let alloc = dfg_mut!(ctx.module, curr_function)
-                        .builder()
-                        .alloc(ir_ty)
-                        .unwrap();
+                    let alloc = curr_dfg_mut!(ctx).builder().alloc(ir_ty).unwrap();
                     // insert the allocation to the front.
-                    layout_mut!(ctx.module, curr_function)
+                    curr_layout_mut!(ctx)
                         .prepend_inst(alloc.into(), entry_block)
                         .unwrap();
-                    dfg!(ctx.module, curr_function)
+                    curr_dfg!(ctx)
                         .assign_local_value_name(alloc, format!("__SLOT_CONST_{}", &def.ident))
                         .unwrap();
                     let entry = SymbolEntry {
@@ -319,19 +293,17 @@ impl IrGen for Decl {
                                 ComptimeVal::Zeros(ty) => {
                                     // just memset
                                     let memset = ctx.module.get_value_by_name("@memset").unwrap();
-                                    let zero = dfg_mut!(ctx.module, curr_function)
-                                        .builder()
-                                        .zero(Type::i32_())
-                                        .unwrap();
-                                    let size = dfg_mut!(ctx.module, curr_function)
+                                    let zero =
+                                        curr_dfg_mut!(ctx).builder().zero(Type::i32_()).unwrap();
+                                    let size = curr_dfg_mut!(ctx)
                                         .builder()
                                         .bytes(Type::i32_(), ty.bytewidth().to_le_bytes().into())
                                         .unwrap();
-                                    let call = dfg_mut!(ctx.module, curr_function)
+                                    let call = curr_dfg_mut!(ctx)
                                         .builder()
                                         .call(Type::void(), memset, vec![alloc, zero, size])
                                         .unwrap();
-                                    layout_mut!(ctx.module, curr_function)
+                                    curr_layout_mut!(ctx)
                                         .append_inst(call.into(), curr_block)
                                         .unwrap();
                                 }
@@ -339,19 +311,17 @@ impl IrGen for Decl {
                                     let ty = val.get_type();
                                     // also memset
                                     let memset = ctx.module.get_value_by_name("@memset").unwrap();
-                                    let zero = dfg_mut!(ctx.module, curr_function)
-                                        .builder()
-                                        .zero(Type::i32_())
-                                        .unwrap();
-                                    let size = dfg_mut!(ctx.module, curr_function)
+                                    let zero =
+                                        curr_dfg_mut!(ctx).builder().zero(Type::i32_()).unwrap();
+                                    let size = curr_dfg_mut!(ctx)
                                         .builder()
                                         .bytes(Type::i32_(), ty.bytewidth().to_le_bytes().into())
                                         .unwrap();
-                                    let call = dfg_mut!(ctx.module, curr_function)
+                                    let call = curr_dfg_mut!(ctx)
                                         .builder()
                                         .call(Type::void(), memset, vec![alloc, zero, size])
                                         .unwrap();
-                                    layout_mut!(ctx.module, curr_function)
+                                    curr_layout_mut!(ctx)
                                         .append_inst(call.into(), curr_block)
                                         .unwrap();
                                 }
@@ -364,15 +334,15 @@ impl IrGen for Decl {
                                         .assign_name(global_slot, format!("__DATA_{}", &def.ident))
                                         .unwrap();
                                     let memcpy = ctx.module.get_value_by_name("@memcpy").unwrap();
-                                    let size = dfg_mut!(ctx.module, curr_function)
+                                    let size = curr_dfg_mut!(ctx)
                                         .builder()
                                         .bytes(Type::i32_(), ty.bytewidth().to_le_bytes().into())
                                         .unwrap();
-                                    let call = dfg_mut!(ctx.module, curr_function)
+                                    let call = curr_dfg_mut!(ctx)
                                         .builder()
                                         .call(Type::void(), memcpy, vec![alloc, global_slot, size])
                                         .unwrap();
-                                    layout_mut!(ctx.module, curr_function)
+                                    curr_layout_mut!(ctx)
                                         .append_inst(call.into(), curr_block)
                                         .unwrap();
                                 }
@@ -384,11 +354,8 @@ impl IrGen for Decl {
                     } else {
                         // store
                         let init = ctx.irgen_local_expr(&def.init);
-                        let store = dfg_mut!(ctx.module, curr_function)
-                            .builder()
-                            .store(init, alloc)
-                            .unwrap();
-                        layout_mut!(ctx.module, curr_function)
+                        let store = curr_dfg_mut!(ctx).builder().store(init, alloc).unwrap();
+                        curr_layout_mut!(ctx)
                             .append_inst(store.into(), curr_block)
                             .unwrap();
                     }
@@ -398,15 +365,12 @@ impl IrGen for Decl {
                 for def in decl.defs.iter() {
                     let ty = def.init.as_ref().unwrap().ty();
                     let ir_ty = IrGenContext::irgen_type(&ty);
-                    let alloc = dfg_mut!(ctx.module, curr_function)
-                        .builder()
-                        .alloc(ir_ty)
-                        .unwrap();
+                    let alloc = curr_dfg_mut!(ctx).builder().alloc(ir_ty).unwrap();
                     // insert the allocation to the front.
-                    layout_mut!(ctx.module, curr_function)
+                    curr_layout_mut!(ctx)
                         .prepend_inst(alloc.into(), entry_block)
                         .unwrap();
-                    dfg!(ctx.module, curr_function)
+                    curr_dfg!(ctx)
                         .assign_local_value_name(alloc, format!("__SLOT_VAR_{}", &def.ident))
                         .unwrap();
                     let entry = SymbolEntry {
@@ -460,19 +424,16 @@ impl IrGen for Decl {
                         if global_init.is_zero() {
                             // memset
                             let memset = ctx.module.get_value_by_name("@memset").unwrap();
-                            let zero = dfg_mut!(ctx.module, curr_function)
-                                .builder()
-                                .zero(Type::i32_())
-                                .unwrap();
-                            let size = dfg_mut!(ctx.module, curr_function)
+                            let zero = curr_dfg_mut!(ctx).builder().zero(Type::i32_()).unwrap();
+                            let size = curr_dfg_mut!(ctx)
                                 .builder()
                                 .bytes(Type::i32_(), ty.bytewidth().to_le_bytes().into())
                                 .unwrap();
-                            let call = dfg_mut!(ctx.module, curr_function)
+                            let call = curr_dfg_mut!(ctx)
                                 .builder()
                                 .call(Type::void(), memset, vec![alloc, zero, size])
                                 .unwrap();
-                            layout_mut!(ctx.module, curr_function)
+                            curr_layout_mut!(ctx)
                                 .append_inst(call.into(), curr_block)
                                 .unwrap();
                         } else {
@@ -487,15 +448,15 @@ impl IrGen for Decl {
                                 .assign_name(global_slot, format!("__DATA_{}", &def.ident))
                                 .unwrap();
                             let memcpy = ctx.module.get_value_by_name("@memcpy").unwrap();
-                            let size = dfg_mut!(ctx.module, curr_function)
+                            let size = curr_dfg_mut!(ctx)
                                 .builder()
                                 .bytes(Type::i32_(), ty.bytewidth().to_le_bytes().into())
                                 .unwrap();
-                            let call = dfg_mut!(ctx.module, curr_function)
+                            let call = curr_dfg_mut!(ctx)
                                 .builder()
                                 .call(Type::void(), memcpy, vec![alloc, global_slot, size])
                                 .unwrap();
-                            layout_mut!(ctx.module, curr_function)
+                            curr_layout_mut!(ctx)
                                 .append_inst(call.into(), curr_block)
                                 .unwrap();
                         }
@@ -510,7 +471,7 @@ impl IrGen for Decl {
                                 if let ExprKind::InitList(exprs) = &expr.kind {
                                     expr = &exprs[*i];
 
-                                    let index = dfg_mut!(ctx.module, curr_function)
+                                    let index = curr_dfg_mut!(ctx)
                                         .builder()
                                         .bytes(Type::i32_(), i.to_le_bytes().to_vec())
                                         .unwrap();
@@ -521,30 +482,24 @@ impl IrGen for Decl {
                                 }
                             }
 
-                            let gep = dfg_mut!(ctx.module, curr_function)
+                            let gep = curr_dfg_mut!(ctx)
                                 .builder()
                                 .getelemptr(alloc, IrGenContext::irgen_type(&ty), ir_indices)
                                 .unwrap();
                             let init = ctx.irgen_local_expr(expr);
-                            let store = dfg_mut!(ctx.module, curr_function)
-                                .builder()
-                                .store(init, gep)
-                                .unwrap();
-                            layout_mut!(ctx.module, curr_function)
+                            let store = curr_dfg_mut!(ctx).builder().store(init, gep).unwrap();
+                            curr_layout_mut!(ctx)
                                 .append_inst(gep.into(), curr_block)
                                 .unwrap();
-                            layout_mut!(ctx.module, curr_function)
+                            curr_layout_mut!(ctx)
                                 .append_inst(store.into(), curr_block)
                                 .unwrap();
                         }
                     } else {
                         // store
                         let init = ctx.irgen_local_expr(def.init.as_ref().unwrap());
-                        let store = dfg_mut!(ctx.module, curr_function)
-                            .builder()
-                            .store(init, alloc)
-                            .unwrap();
-                        layout_mut!(ctx.module, curr_function)
+                        let store = curr_dfg_mut!(ctx).builder().store(init, alloc).unwrap();
+                        curr_layout_mut!(ctx)
                             .append_inst(store.into(), curr_block)
                             .unwrap();
                     }
@@ -595,12 +550,9 @@ impl IrGen for FuncDef {
             .zip(param_tys.into_iter())
             .map(|(param, ty)| {
                 let ir_ty = IrGenContext::irgen_type(&ty);
-                let arg = dfg_mut!(ctx.module, func)
-                    .builder()
-                    .block_param(ir_ty)
-                    .unwrap();
-                dfg!(ctx.module, func)
-                    .assign_local_value_name(arg, param.ident.clone())
+                let arg = curr_dfg_mut!(ctx).builder().block_param(ir_ty).unwrap();
+                curr_dfg!(ctx)
+                    .assign_local_value_name(arg, format!("__ARG_{}", &param.ident))
                     .unwrap();
                 let entry = SymbolEntry {
                     ty,
@@ -612,24 +564,18 @@ impl IrGen for FuncDef {
             })
             .collect::<Vec<_>>();
 
-        let block = dfg_mut!(ctx.module, func)
-            .builder()
-            .block(block_params)
-            .unwrap();
-        layout_mut!(ctx.module, func).append_block(block).unwrap();
-        let ret_block = dfg_mut!(ctx.module, func)
-            .builder()
-            .block(Vec::new())
-            .unwrap();
+        let block = curr_dfg_mut!(ctx).builder().block(block_params).unwrap();
+        curr_layout_mut!(ctx).append_block(block).unwrap();
+        let ret_block = curr_dfg_mut!(ctx).builder().block(Vec::new()).unwrap();
         ctx.curr_block = Some(block);
         ctx.curr_ret_block = Some(ret_block);
 
         let ret_ty = IrGenContext::irgen_type(&self.ret_ty);
-        let ret_slot = dfg_mut!(ctx.module, func)
-            .builder()
-            .alloc(ret_ty.clone())
+        let ret_slot = curr_dfg_mut!(ctx).builder().alloc(ret_ty.clone()).unwrap();
+        curr_dfg!(ctx)
+            .assign_local_value_name(ret_slot, "__RET_SLOT")
             .unwrap();
-        layout_mut!(ctx.module, func)
+        curr_layout_mut!(ctx)
             .append_inst(ret_slot.into(), block)
             .unwrap();
 
@@ -637,26 +583,18 @@ impl IrGen for FuncDef {
         self.block.irgen(ctx);
 
         // append the return block
-        layout_mut!(ctx.module, func)
-            .append_block(ret_block)
-            .unwrap();
+        curr_layout_mut!(ctx).append_block(ret_block).unwrap();
         let ret_slot = ctx.curr_ret_slot.unwrap();
         let ret_block = ctx.curr_ret_block.unwrap();
 
         // load, ret
-        let ret_val = dfg_mut!(ctx.module, func)
-            .builder()
-            .load(ret_ty, ret_slot)
-            .unwrap();
-        let ret = dfg_mut!(ctx.module, func)
-            .builder()
-            .return_(Some(ret_val))
-            .unwrap();
+        let ret_val = curr_dfg_mut!(ctx).builder().load(ret_ty, ret_slot).unwrap();
+        let ret = curr_dfg_mut!(ctx).builder().return_(Some(ret_val)).unwrap();
 
-        layout_mut!(ctx.module, func)
+        curr_layout_mut!(ctx)
             .append_inst(ret_val.into(), ret_block)
             .unwrap();
-        layout_mut!(ctx.module, func)
+        curr_layout_mut!(ctx)
             .append_inst(ret.into(), ret_block)
             .unwrap();
 
@@ -1227,8 +1165,84 @@ impl IrGenContext {
                         }
                     }
                     BinaryOp::LogicalAnd | BinaryOp::LogicalOr => {
-                        // TODO: short-circuiting
-                        unimplemented!()
+                        // logical-and
+                        // - compute lhs
+                        // - if lhs is false, jump to merge block with arg = false, otherwise rhs
+                        //   block
+                        // - compute rhs, jump to merge block with arg = rhs
+                        // - merge block, with an argument, which is the result of the logical-and
+                        //
+                        // logical-or
+                        // - compute lhs
+                        // - if lhs is true, jump to merge block with arg = true, otherwise rhs
+                        //   block
+                        // - compute rhs, jump to merge block with arg = rhs
+                        // - merge block, with an argument, which is the result of the logical-or
+
+                        let lhs = self.irgen_local_expr(lhs);
+                        let curr_block = self.curr_block.unwrap();
+
+                        let rhs_block = curr_dfg_mut!(self).builder().block(Vec::new()).unwrap();
+
+                        let block_param = curr_dfg_mut!(self)
+                            .builder()
+                            .block_param(Type::i1())
+                            .unwrap();
+                        let merge_block = curr_dfg_mut!(self)
+                            .builder()
+                            .block(vec![block_param])
+                            .unwrap();
+
+                        let false_ = curr_dfg_mut!(self)
+                            .builder()
+                            .bytes(Type::i1(), vec![0])
+                            .unwrap();
+
+                        match op {
+                            BinaryOp::LogicalAnd => {
+                                // if lhs is false, jump to merge block with arg = false, otherwise
+                                // rhs block
+                                let br = curr_dfg_mut!(self)
+                                    .builder()
+                                    .branch(lhs, rhs_block, merge_block, Vec::new(), vec![false_])
+                                    .unwrap();
+                                curr_layout_mut!(self)
+                                    .append_inst(br.into(), curr_block)
+                                    .unwrap();
+                            }
+                            BinaryOp::LogicalOr => {
+                                // if lhs is true, jump to merge block with arg = true, otherwise
+                                // rhs block
+                                let br = curr_dfg_mut!(self)
+                                    .builder()
+                                    .branch(lhs, merge_block, rhs_block, vec![false_], Vec::new())
+                                    .unwrap();
+                                curr_layout_mut!(self)
+                                    .append_inst(br.into(), curr_block)
+                                    .unwrap();
+                            }
+                            _ => unreachable!(),
+                        }
+
+                        // rhs block
+                        curr_layout_mut!(self).append_block(rhs_block).unwrap();
+                        self.curr_block = Some(rhs_block);
+                        let rhs = self.irgen_local_expr(rhs);
+                        // jmp to merge block
+                        let jmp = curr_dfg_mut!(self)
+                            .builder()
+                            .jump(merge_block, vec![rhs])
+                            .unwrap();
+                        // using curr_block to append because the block might be changed
+                        curr_layout_mut!(self)
+                            .append_inst(jmp.into(), self.curr_block.unwrap())
+                            .unwrap();
+
+                        // merge block
+                        curr_layout_mut!(self).append_block(merge_block).unwrap();
+                        self.curr_block = Some(merge_block);
+
+                        block_param
                     }
                 }
             }
@@ -1303,16 +1317,24 @@ impl IrGenContext {
                 let innermost_ty = Self::irgen_type(innermost_ty);
 
                 if shape.is_empty() {
-                    // non-array
-                    let load = curr_dfg_mut!(self)
-                        .builder()
-                        .load(innermost_ty, slot)
-                        .unwrap();
-                    let curr_block = self.curr_block.unwrap();
-                    curr_layout_mut!(self)
-                        .append_inst(load.into(), curr_block)
-                        .unwrap();
-                    load
+                    if curr_dfg!(self)
+                        .local_value_data(slot)
+                        .map_or(false, |data| data.kind().is_block_param())
+                    {
+                        // function parameter
+                        slot
+                    } else {
+                        // non-array
+                        let load = curr_dfg_mut!(self)
+                            .builder()
+                            .load(innermost_ty, slot)
+                            .unwrap();
+                        let curr_block = self.curr_block.unwrap();
+                        curr_layout_mut!(self)
+                            .append_inst(load.into(), curr_block)
+                            .unwrap();
+                        load
+                    }
                 } else if lval.indices.len() == shape.len() {
                     // all indices are provided
                     let mut ir_indices = Vec::new();
@@ -1437,7 +1459,6 @@ impl IrGenContext {
                 val
             }
             ExprKind::FuncCall(FuncCall { ident, args, .. }) => {
-                dbg!(ident);
                 let entry = self.symtable.lookup(ident).unwrap();
                 let (_, ret_ty) = entry.ty.as_function().unwrap();
                 let func = entry.ir_value.unwrap();

@@ -95,7 +95,10 @@ impl CodegenContext {
                                     MachineGlobalData::new_bss(size, 2)
                                 }
                                 ValueKind::Bytes(bytes) => {
-                                    MachineGlobalData::new_data(bytes.clone(), 2)
+                                    // fill the bytes with zero if the length is less than the size
+                                    let mut bytes = bytes.clone();
+                                    bytes.resize(size, 0);
+                                    MachineGlobalData::new_data(bytes, 2)
                                 }
                                 ValueKind::Array(_) => {
                                     let mut bytes: Vec<u8> = Vec::new();
