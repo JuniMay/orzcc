@@ -1,0 +1,25 @@
+{
+  "name": "orzir-vscode",
+  "displayName": "orzir-vscode",
+  "description": "Syntax highlighting support for OrzIR language.",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.88.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [{
+      "id": "orzir",
+      "aliases": ["OrzIR", "orzir"],
+      "extensions": [".orzir"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "orzir",
+      "scopeName": "source.orzir",
+      "path": "./syntaxes/orzir.tmLanguage.json"
+    }]
+  }
+}

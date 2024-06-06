@@ -261,6 +261,9 @@ impl LocalPassMut for Mem2reg {
         function: Function,
         data: &mut FunctionData,
     ) -> PassResult<(Self::Ok, bool)> {
+        // FIXME: `sort` in `87_many_params.sy` does not work, some incorrect
+        // replacement occurs.
+
         if let FunctionKind::Declaration = data.kind() {
             return Ok(((), false));
         }

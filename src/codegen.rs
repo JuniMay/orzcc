@@ -1767,6 +1767,7 @@ impl CodegenContext {
                             // no need to do anything
                         }
                         ValueKind::Bytes(bytes) => {
+                            // TODO: the bytes could be all-zeros, which can be optimized
                             let (rd, li) =
                                 MachineInstData::new_li(&mut self.machine_ctx, bytes.into());
                             self.append_inst(&function_name, block, li);
@@ -1817,6 +1818,7 @@ impl CodegenContext {
                             }
                         }
                         _ => {
+                            dbg!(index_data.kind());
                             let rs = self.get_value_as_register(*index);
                             match shamt {
                                 Some(shamt) => {
@@ -2408,7 +2410,7 @@ impl CodegenContext {
                                     MachineInstData::build_gp_move(&mut self.machine_ctx, a0, zero);
                                 self.append_inst(&function_name, block, mv);
                             } else {
-                                unreachable!()
+                                unreachable!("unexpected return value type: {:?}", val_data.ty());
                             }
                         }
                         ValueKind::Bytes(bytes) => {

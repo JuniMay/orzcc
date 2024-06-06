@@ -10,6 +10,7 @@ pub enum ComptimeVal {
     Float(f32),
     List(Vec<ComptimeVal>),
     Zeros(SysyType),
+    Undef(SysyType),
 }
 
 impl ComptimeVal {
@@ -39,6 +40,8 @@ impl ComptimeVal {
         }
     }
 
+    pub fn new_undef(ty: SysyType) -> Self { ComptimeVal::Undef(ty) }
+
     pub fn get_type(&self) -> SysyType {
         match self {
             ComptimeVal::Bool(_) => SysyType::bool(),
@@ -49,6 +52,7 @@ impl ComptimeVal {
                 SysyType::array(Some(val.len()), ty)
             }
             ComptimeVal::Zeros(ty) => ty.clone(),
+            ComptimeVal::Undef(ty) => ty.clone(),
         }
     }
 
@@ -73,6 +77,7 @@ impl ComptimeVal {
             ComptimeVal::Float(val) => *val == 0.0,
             ComptimeVal::List(val) => val.iter().all(|val| val.is_zero()),
             ComptimeVal::Zeros(_) => true,
+            ComptimeVal::Undef(_) => false,
         }
     }
 }
@@ -1028,8 +1033,8 @@ impl VarDecl {
                 .init
                 .map(|init| init.type_check(Some(ty.clone()), symtable))
                 .unwrap_or_else(|| {
-                    let zeros = ComptimeVal::new_zeros(ty.clone());
-                    Expr::new_const(zeros)
+                    let undef = ComptimeVal::new_undef(ty.clone());
+                    Expr::new_const(undef)
                 });
 
             def.init = Some(init);

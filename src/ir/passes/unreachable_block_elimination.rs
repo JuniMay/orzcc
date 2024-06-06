@@ -15,7 +15,7 @@ use super::{
     TransformationPass,
 };
 use crate::ir::{
-    entities::FunctionData,
+    entities::{FunctionData, FunctionKind},
     module::Module,
     passes::{LocalPass, LocalPassMut},
     values::{Block, Function},
@@ -36,6 +36,10 @@ impl LocalPassMut for UnreachableBlockElimination {
         _function: Function,
         data: &mut FunctionData,
     ) -> PassResult<(Self::Ok, bool)> {
+        if let FunctionKind::Declaration = data.kind() {
+            return Ok(((), false));
+        }
+
         let mut cfa = ControlFlowAnalysis {};
         let cfg = cfa.run_on_function(_function, data).unwrap();
 

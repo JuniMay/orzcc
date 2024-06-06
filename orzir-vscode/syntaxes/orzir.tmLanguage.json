@@ -1,0 +1,139 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "OrzIR",
+	"patterns": [
+		{
+			"include": "#keywords"
+		},
+		{
+			"include": "#strings"
+		},
+		{
+			"include": "#global-name"
+		},
+		{
+			"include": "#block-label"
+		},
+		{
+			"include": "#value-name"
+		},
+		{
+			"include": "#number"
+		},
+		{
+			"include": "#comments"
+		}
+	],
+	"repository": {
+		"global-name": {
+			"name": "support.function.orzir",
+			"match": "(@[a-zA-Z0-9_]+)"
+		},
+		"block-label": {
+			"name": "string.other.orzir",
+			"match": "(\\^[a-zA-Z0-9_]+)"
+		},
+		"value-name": {
+			"name": "variable.parameter.orzir",
+			"match": "(\\%[a-zA-Z0-9_]+)"
+		},
+		"init-value-bytes": {
+			"name": "constant.numeric.orzir",
+			"begin": "bytes\\[",
+			"end": "\\]",
+			"patterns": [
+				{
+					"name": "constant.numeric.orzir",
+					"match": "([0-9a-zA-Z]+)"
+				}
+			]
+		},
+		"number": {
+			"patterns": [
+				{
+					"include": "#hex-integer"
+				},
+				{
+					"include": "#oct-integer"
+				},
+				{
+					"include": "#bin-integer"
+				},
+				{
+					"include": "#dec-integer"
+				},
+				{
+					"include": "#true-false"
+				}
+			]
+		},
+		"hex-integer": {
+			"name": "constant.numeric.orzir",
+			"match": "(0x[0-9a-fA-F]+(i[0-9]+)?)"
+		},
+		"oct-integer": {
+			"name": "constant.numeric.orzir",
+			"match": "(0o[0-7]+(i[0-9]+)?)"
+		},
+		"dec-integer": {
+			"name": "constant.numeric.orzir",
+			"match": "([0-9]+(i[0-9]+)?)"
+		},
+		"bin-integer": {
+			"name": "constant.numeric.orzir",
+			"match": "(0b[01]+(i[0-9]+)?)"
+		},
+		"true-false": {
+			"patterns": [
+				{
+					"name": "constant.language.true.orzir",
+					"match": "(true)"
+				},
+				{
+					"name": "constant.language.false.orzir",
+					"match": "(false)"
+				}
+			]
+		},
+		"keywords": {
+			"patterns": [
+				{
+					"include": "#builtin-types"
+				},
+				{
+					"name": "storage.type.orzir",
+					"match": "(func|decl|slot)"
+				},
+				{
+					"name": "storage.modifier",
+					"match": "(const|global)"
+				},
+				{
+					"name": "constant.numeric.orzir",
+					"match": "(zero|undef)"
+				},
+				{
+					"name": "keyword.operator.orzir",
+					"match": "([a-z.]+|=|:|->|\\[|\\])"
+				}
+			]
+		},
+		"builtin-types": {
+			"patterns": [
+				{
+					"name": "storage.type.orzir",
+					"match": "(void|float|double|ptr|i[0-9]+)"
+				}
+			]
+		},
+		"comments": {
+			"patterns": [
+				{
+					"name": "comment.line.number-sign.orzir",
+					"match": "#.*"
+				}
+			]
+		}
+	},
+	"scopeName": "source.orzir"
+}
