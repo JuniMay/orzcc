@@ -35,6 +35,10 @@ impl DefUseChain {
             uses: HashMap::new(),
         }
     }
+
+    pub fn insert_use(&mut self, use_: Value, def: Value) {
+        self.uses.entry(def).or_insert_with(Vec::new).push(use_);
+    }
 }
 
 pub struct DataFlowAnalysis {}

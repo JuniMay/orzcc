@@ -563,7 +563,7 @@ impl IrGen for FuncDef {
         let block_params = self
             .params
             .iter()
-            .zip(param_tys.into_iter())
+            .zip(param_tys.iter())
             .map(|(param, ty)| {
                 let ir_ty = IrGenContext::irgen_type(&ty);
                 let arg = curr_dfg_mut!(ctx).builder().block_param(ir_ty).unwrap();
@@ -571,7 +571,7 @@ impl IrGen for FuncDef {
                     .assign_local_value_name(arg, format!("__ARG_{}", &param.ident))
                     .unwrap();
                 let entry = SymbolEntry {
-                    ty,
+                    ty: ty.clone(),
                     comptime_val: None,
                     ir_value: Some(arg),
                 };
@@ -582,8 +582,40 @@ impl IrGen for FuncDef {
 
         let block = curr_dfg_mut!(ctx).builder().block(block_params).unwrap();
         curr_layout_mut!(ctx).append_block(block).unwrap();
-        let ret_block = curr_dfg_mut!(ctx).builder().block(Vec::new()).unwrap();
         ctx.curr_block = Some(block);
+        // create local slots for pass-by-value parameters
+        self.params
+            .iter()
+            .zip(param_tys.into_iter())
+            .for_each(|(param, ty)| {
+                if ty.is_float() || ty.is_int() {
+                    let ir_ty = IrGenContext::irgen_type(&ty);
+                    let slot = curr_dfg_mut!(ctx).builder().alloc(ir_ty).unwrap();
+                    curr_dfg!(ctx)
+                        .assign_local_value_name(slot, format!("__SLOT_ARG_{}", &param.ident))
+                        .unwrap();
+                    // prepend alloc to the entry block
+                    curr_layout_mut!(ctx)
+                        .prepend_inst(slot.into(), block)
+                        .unwrap();
+                    // get the old entry
+                    let arg = ctx.symtable.lookup(&param.ident).unwrap().ir_value.unwrap();
+                    // store the block param to the slot
+                    let store = curr_dfg_mut!(ctx).builder().store(arg, slot).unwrap();
+                    curr_layout_mut!(ctx)
+                        .append_inst(store.into(), block)
+                        .unwrap();
+                    // replace the block param with the slot
+                    let entry = SymbolEntry {
+                        ty,
+                        comptime_val: None,
+                        ir_value: Some(slot),
+                    };
+                    ctx.symtable.insert(param.ident.clone(), entry);
+                }
+            });
+
+        let ret_block = curr_dfg_mut!(ctx).builder().block(Vec::new()).unwrap();
         ctx.curr_ret_block = Some(ret_block);
 
         let ret_ty = IrGenContext::irgen_type(&self.ret_ty);

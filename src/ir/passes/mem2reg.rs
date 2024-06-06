@@ -186,8 +186,19 @@ impl Mem2reg {
                     let ptr = load.ptr();
                     if self.variables.contains(&ptr) {
                         let incoming = self.incomings[&ptr];
-                        for use_ in self.chain.uses[&inst.into()].iter() {
-                            dfg.replace_use(*use_, inst.into(), incoming);
+                        // all the uses of the load instruction should be replaced
+                        let inst_uses = self
+                            .chain
+                            .uses
+                            .get_mut(&inst.into())
+                            .unwrap()
+                            .drain(..)
+                            .collect::<Vec<_>>();
+                        // replace the uses
+                        for use_ in inst_uses {
+                            dfg.replace_use(use_, inst.into(), incoming);
+                            // update the def-use chain
+                            self.chain.insert_use(use_, incoming);
                         }
                         insts_to_remove.insert(inst.into());
                     }
@@ -261,9 +272,6 @@ impl LocalPassMut for Mem2reg {
         function: Function,
         data: &mut FunctionData,
     ) -> PassResult<(Self::Ok, bool)> {
-        // FIXME: `sort` in `87_many_params.sy` does not work, some incorrect
-        // replacement occurs.
-
         if let FunctionKind::Declaration = data.kind() {
             return Ok(((), false));
         }

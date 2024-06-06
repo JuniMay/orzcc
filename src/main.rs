@@ -14,6 +14,7 @@ use orzcc::{
             control_flow_canonicalization::ControlFlowCanonicalization,
             mem2reg::Mem2reg,
             printer::Printer,
+            straighten::Straighten,
             unreachable_block_elimination::UnreachableBlockElimination,
             GlobalPass,
             PassManager,
@@ -115,6 +116,7 @@ fn register_passes() {
     Mem2reg::register();
     ControlFlowCanonicalization::register();
     UnreachableBlockElimination::register();
+    Straighten::register();
 }
 
 fn cli() -> Command {
