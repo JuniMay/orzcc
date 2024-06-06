@@ -182,7 +182,6 @@ impl std::ops::Rem for ComptimeVal {
     fn rem(self, other: Self) -> Self {
         match (self, other) {
             (ComptimeVal::Int(a), ComptimeVal::Int(b)) => ComptimeVal::Int(a % b),
-            (ComptimeVal::Float(a), ComptimeVal::Float(b)) => ComptimeVal::Float(a % b),
             _ => panic!("unsupported operation"),
         }
     }
@@ -429,7 +428,11 @@ impl Expr {
                 let mut new_vals = Vec::new();
                 for val in vals.drain(..) {
                     let val = val.type_check(Some(leaf_ty.clone()), symtable);
-                    new_vals.push(val);
+                    if let Some(val) = val.try_fold(symtable) {
+                        new_vals.push(Expr::new_const(val));
+                    } else {
+                        new_vals.push(val);
+                    }
                 }
                 if new_vals.len() < length {
                     for _ in new_vals.len()..length {
@@ -490,13 +493,13 @@ impl Expr {
     }
 
     pub fn type_check(mut self, expect: Option<SysyType>, symtable: &SymbolTableStack) -> Self {
-        if self.ty.is_some() {
+        if self.ty.is_some() && expect.is_none() {
             return self;
         }
         let mut expr = match self.kind {
             ExprKind::Const(_) => {
-                // constant should have a type
-                unreachable!()
+                // const value does not need type check, just wait for coercion
+                self
             }
             ExprKind::Binary(op, lhs, rhs) => {
                 let sub_expect = if matches!(op, BinaryOp::LogicalAnd | BinaryOp::LogicalOr) {
@@ -534,7 +537,7 @@ impl Expr {
                         lhs = Box::new(Expr::new_binary(BinaryOp::Ne, lhs, Box::new(zero)));
                     }
                     (SysyTypeKind::Float, SysyTypeKind::Int) => {
-                        rhs = Box::new(Expr::new_coercion(rhs, SysyType::int()));
+                        rhs = Box::new(Expr::new_coercion(rhs, SysyType::float()));
                     }
                     _ => {
                         if lhs_ty != rhs_ty {
@@ -542,6 +545,9 @@ impl Expr {
                         }
                     }
                 }
+
+                let lhs_ty = lhs.ty();
+                let _rhs_ty = rhs.ty();
 
                 let mut expr = Expr::new_binary(op, lhs, rhs);
 

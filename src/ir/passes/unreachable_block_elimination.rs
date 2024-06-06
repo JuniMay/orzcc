@@ -23,7 +23,7 @@ use crate::ir::{
 
 const UNREACHABLE_BLOCK_ELIMINATION: &str = "unreachable-block-elimination";
 
-pub struct UnreachableBlockElimination {}
+pub struct UnreachableBlockElimination;
 
 #[derive(Debug, Error)]
 pub enum UnreachableBlockEliminationError {}

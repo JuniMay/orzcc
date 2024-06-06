@@ -22,7 +22,7 @@ use crate::ir::{
 
 const CONTROL_FLOW_CANONICALIZATION: &str = "control-flow-canonicalization";
 
-pub struct ControlFlowCanonicalization {}
+pub struct ControlFlowCanonicalization;
 
 #[derive(Error, Debug)]
 pub enum ControlFlowCanonicalizationError {

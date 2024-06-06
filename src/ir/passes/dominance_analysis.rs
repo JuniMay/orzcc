@@ -4,6 +4,8 @@
 //!
 //! This implements the algorithm described in "A Simple, Fast Dominance
 //! Algorithm" by Cooper et al.
+//!
+//! This require the unreachable block elimination pass to be run first.
 
 use std::collections::{HashMap, HashSet};
 
@@ -213,6 +215,7 @@ mod test {
                     jump ^1
                 ^3:
                     jump ^2
+                # ^5: # require unreachable block elimination
                 ^4:
                     jump ^1
             }

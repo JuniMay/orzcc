@@ -31,6 +31,7 @@ use super::{
     control_flow_canonicalization::ControlFlowCanonicalization,
     data_flow_analysis::{DataFlowAnalysis, DefUseChain},
     dominance_analysis::{Dominance, DominanceAnalysis},
+    unreachable_block_elimination::UnreachableBlockElimination,
     GlobalPassMut,
     PassManager,
     PassResult,
@@ -103,8 +104,9 @@ impl Mem2reg {
 
     pub fn register() {
         let pass = Box::new(Mem2reg::new());
-        let canonic = Box::new(ControlFlowCanonicalization {});
-        PassManager::register_transformation(MEM2REG, pass, vec![canonic]);
+        let canonic = Box::new(ControlFlowCanonicalization);
+        let unreach_elim = Box::new(UnreachableBlockElimination);
+        PassManager::register_transformation(MEM2REG, pass, vec![canonic, unreach_elim]);
     }
 
     fn prepare(&mut self, function: Function, data: &FunctionData) {
