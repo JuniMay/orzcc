@@ -574,6 +574,33 @@ impl CodegenContext {
             }
         }
 
+        // restore sp
+        if check_itype_imm(aligned_stack_frame_size.into()) {
+            let addi = MachineInstData::build_binary_imm(
+                &mut self.machine_ctx,
+                MachineBinaryImmOp::Addi,
+                sp,
+                sp,
+                aligned_stack_frame_size.into(),
+            );
+            self.append_inst(&function_name, exit_block, addi);
+        } else {
+            let li = MachineInstData::build_li(
+                &mut self.machine_ctx,
+                t2,
+                aligned_stack_frame_size.into(),
+            );
+            let add = MachineInstData::build_binary(
+                &mut self.machine_ctx,
+                MachineBinaryOp::Add,
+                sp,
+                sp,
+                t2,
+            );
+            self.append_inst(&function_name, exit_block, add);
+            self.append_inst(&function_name, exit_block, li);
+        }
+
         // ret
         let ret = MachineInstData::new_ret(&mut self.machine_ctx);
         self.append_inst(&function_name, exit_block, ret);

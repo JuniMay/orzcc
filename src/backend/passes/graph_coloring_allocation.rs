@@ -2,9 +2,12 @@ use std::collections::{HashMap, HashSet};
 
 use super::{
     live_interval_analysis::{LiveRange, LiveRangeAnalysis},
+    GlobalPassMut,
     LocalPass,
     LocalPassMut,
+    PassManager,
     PassResult,
+    TransformationPass,
 };
 use crate::backend::{
     Immediate,
@@ -16,7 +19,10 @@ use crate::backend::{
     RiscvGpReg,
     StoreKind,
     ALLOCATABLE_REGISTERS_GP,
+    CALLEE_SAVED_REGISTERS,
 };
+
+const GRAPH_COLORING_ALLOCATION: &str = "graph-coloring-allocation";
 
 #[derive(Debug, Clone)]
 pub enum RegisterType {
@@ -317,6 +323,15 @@ impl LocalPassMut for GraphColoringAllocation {
             println!("{}", ctx);
         }
 
+        // mark used callee saved registers
+        for used_regs in colors.values() {
+            if CALLEE_SAVED_REGISTERS.contains(used_regs) {
+                ctx.function_data_mut(func_name)
+                    .unwrap()
+                    .add_saved_reg(*used_regs);
+            }
+        }
+
         // rewrite
         let function = ctx.function_data(func_name).unwrap();
         let mut curr_block = function.layout.entry_block();
@@ -381,6 +396,28 @@ impl LocalPassMut for GraphColoringAllocation {
     }
 }
 
+impl GlobalPassMut for GraphColoringAllocation {
+    type Ok = ();
+
+    fn run_on_context(&mut self, context: &mut MachineContext) -> PassResult<(Self::Ok, bool)> {
+        let functions = context.functions.keys().cloned().collect::<Vec<_>>();
+        let mut changed = false;
+        for func_name in functions {
+            let (_, local_changed) = self.run_on_function(context, &func_name)?;
+            changed = changed || local_changed;
+        }
+        Ok(((), changed))
+    }
+}
+
+impl TransformationPass for GraphColoringAllocation {
+    fn reset(&mut self) {
+        self.total_spills = 0;
+        self.total_loads_added = 0;
+        self.total_stores_added = 0;
+    }
+}
+
 impl GraphColoringAllocation {
     pub fn new() -> Self { Self::default() }
 
@@ -404,6 +441,11 @@ impl GraphColoringAllocation {
             }
         }
         spill.unwrap()
+    }
+
+    pub fn register() {
+        let pass = Box::new(GraphColoringAllocation::new());
+        PassManager::register_transformation(GRAPH_COLORING_ALLOCATION, pass, vec![]);
     }
 }
 
