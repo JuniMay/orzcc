@@ -1,10 +1,14 @@
 use std::collections::{HashMap, HashSet};
 
-use thiserror::Error;
-
-use super::{LocalPass, PassError, PassResult};
+use super::{LocalPass, PassResult};
 use crate::backend::{
-    MachineBlock, MachineContext, MachineFunctionData, MachineInstData, MachineSymbol, Register, RiscvFpReg, RiscvGpReg, ARGUMENT_REGISTERS, CALLER_SAVED_REGISTERS, RETURN_REGISTERS
+    MachineBlock,
+    MachineContext,
+    MachineFunctionData,
+    MachineInstData,
+    Register,
+    RiscvGpReg,
+    RETURN_REGISTERS,
 };
 
 #[derive(Debug, Clone, Default)]
@@ -170,7 +174,7 @@ impl LocalPass for DefUseAnalysis {
 
             // remove gp.zero from uses
             uses.remove(&Register::General(RiscvGpReg::Zero));
-            
+
             block_defuse.uses.insert(block, uses);
             block_defuse.defs.insert(block, defs);
         }
@@ -188,11 +192,8 @@ mod test {
             passes::{block_defsue_analysis::DefUseAnalysis, LocalPass},
             MachineSymbol,
         },
-        codegen::{self, CodegenContext},
-        ir::{
-            frontend::parser::Parser,
-            passes::{control_flow_canonicalization::ControlFlowCanonicalization, PassManager},
-        },
+        codegen::CodegenContext,
+        ir::frontend::parser::Parser,
     };
 
     #[test]
@@ -327,7 +328,11 @@ mod test {
 
         let mut buf = Cursor::new(ir);
         let mut parser = Parser::new(&mut buf);
-        let mut module = parser.parse().unwrap().into_ir("param32_rec".into()).unwrap();
+        let module = parser
+            .parse()
+            .unwrap()
+            .into_ir("param32_rec".into())
+            .unwrap();
 
         let mut codegen_ctx = CodegenContext::new();
         codegen_ctx.codegen(&module);

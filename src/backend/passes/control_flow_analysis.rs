@@ -40,7 +40,8 @@ impl ControlFlowGraph {
     }
 
     pub fn post_order(&self, entry: MachineBlock) -> Vec<MachineBlock> {
-        // get post order traversal of the control flow graph, using iteration instead of recursion
+        // get post order traversal of the control flow graph, using iteration instead
+        // of recursion
         let mut post_order = Vec::new();
         let mut visited = HashSet::new();
         let mut stack1 = vec![entry];
@@ -67,8 +68,6 @@ impl ControlFlowGraph {
 
         post_order
     }
-
-
 }
 
 pub struct ControlFlowAnalysis {}
@@ -141,11 +140,8 @@ mod test {
     use super::ControlFlowAnalysis;
     use crate::{
         backend::{passes::LocalPass, MachineSymbol},
-        codegen::{self, CodegenContext},
-        ir::{
-            frontend::parser::Parser,
-            passes::{control_flow_canonicalization::ControlFlowCanonicalization, PassManager},
-        },
+        codegen::CodegenContext,
+        ir::frontend::parser::Parser,
     };
 
     #[test]
@@ -169,7 +165,7 @@ mod test {
 
         let mut buf = Cursor::new(ir);
         let mut parser = Parser::new(&mut buf);
-        let mut module = parser.parse().unwrap().into_ir("test".into()).unwrap();
+        let module = parser.parse().unwrap().into_ir("test".into()).unwrap();
 
         let mut codegen_ctx = CodegenContext::new();
 
@@ -218,7 +214,7 @@ mod test {
 
         let mut buf = Cursor::new(ir);
         let mut parser = Parser::new(&mut buf);
-        let mut module = parser.parse().unwrap().into_ir("test".into()).unwrap();
+        let module = parser.parse().unwrap().into_ir("test".into()).unwrap();
 
         let mut codegen_ctx = CodegenContext::new();
 
@@ -374,12 +370,13 @@ mod test {
 
         let mut buf = Cursor::new(ir);
         let mut parser = Parser::new(&mut buf);
-        let mut module = parser.parse().unwrap().into_ir("test".into()).unwrap();
-        
+        let module = parser.parse().unwrap().into_ir("test".into()).unwrap();
+
         let mut codegen_ctx = CodegenContext::new();
 
         // ControlFlowCanonicalization::register();
-        // let iter = PassManager::run_transformation("control-flow-canonicalization", &mut module, 1234);
+        // let iter = PassManager::run_transformation("control-flow-canonicalization",
+        // &mut module, 1234);
 
         codegen_ctx.codegen(&module);
 
@@ -387,7 +384,11 @@ mod test {
 
         let mut cfa = ControlFlowAnalysis {};
 
-        let func = codegen_ctx.machine_ctx.functions.get(&MachineSymbol("param32_rec".to_string())).unwrap();
+        let func = codegen_ctx
+            .machine_ctx
+            .functions
+            .get(&MachineSymbol("param32_rec".to_string()))
+            .unwrap();
         let cfg = cfa.run_on_function(&codegen_ctx.machine_ctx, func).unwrap();
 
         println!("{:}", cfg.to_mermaid());
@@ -397,6 +398,5 @@ mod test {
         for block in post_order {
             println!("{:?}", block);
         }
-
     }
 }

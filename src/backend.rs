@@ -1596,7 +1596,8 @@ impl MachineInstData {
         ctx.new_inst(data)
     }
 
-    /// Build and store instruction for function argument (entry block arguments)
+    /// Build and store instruction for function argument (entry block
+    /// arguments)
     pub fn build_store(
         ctx: &mut MachineContext,
         kind: StoreKind,
@@ -1671,7 +1672,7 @@ impl MachineInstData {
     pub fn get_use_operands(&self) -> Vec<Register> {
         match self {
             MachineInstData::Load { base, .. } => vec![*base],
-            MachineInstData::FloatLoad {  base, .. } => vec![*base],
+            MachineInstData::FloatLoad { base, .. } => vec![*base],
             MachineInstData::PseudoLoad { .. } => vec![],
             MachineInstData::PseudoStore { value, .. } => vec![*value],
             MachineInstData::FloatPseudoLoad { dest, rt, .. } => vec![*dest, *rt],
@@ -1688,7 +1689,8 @@ impl MachineInstData {
             MachineInstData::Li { .. } => vec![],
             MachineInstData::Ret => vec![],
             MachineInstData::Call { .. } => vec![],
-            // MachineInstData::Call { .. } => ARGUMENT_REGISTERS.to_vec(), // TODO: This might be wrong
+            // MachineInstData::Call { .. } => ARGUMENT_REGISTERS.to_vec(), // TODO: This might be
+            // wrong
             MachineInstData::Branch { rs1, rs2, .. } => vec![*rs1, *rs2],
             MachineInstData::J { .. } => vec![],
         }
@@ -1713,7 +1715,8 @@ impl MachineInstData {
             MachineInstData::FloatUnary { rd, .. } => vec![*rd],
             MachineInstData::Li { rd, .. } => vec![*rd],
             MachineInstData::Ret => vec![],
-            MachineInstData::Call { .. } => CALLER_SAVED_REGISTERS.to_vec(), // TODO: This might be wrong 
+            MachineInstData::Call { .. } => CALLER_SAVED_REGISTERS.to_vec(), /* TODO: This might
+                                                                               * be wrong */
             MachineInstData::Branch { .. } => vec![],
             MachineInstData::J { .. } => vec![],
         }
@@ -1828,7 +1831,9 @@ impl MachineInstData {
                     *rs2 = to;
                 }
             }
-            MachineInstData::FloatMulAdd { rd, rs1, rs2, rs3, .. } => {
+            MachineInstData::FloatMulAdd {
+                rd, rs1, rs2, rs3, ..
+            } => {
                 if *rd == from {
                     *rd = to;
                 }

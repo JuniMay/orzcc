@@ -1,22 +1,21 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
-
-use thiserror::Error;
+use std::collections::{HashMap, HashSet};
 
 use super::{
-    block_defsue_analysis::DefUseAnalysis,
-    control_flow_analysis::ControlFlowAnalysis,
     live_interval_analysis::{LiveRange, LiveRangeAnalysis},
-    liveness_analysis::InOutAnalysis,
     LocalPass,
     LocalPassMut,
-    PassError,
     PassResult,
 };
-use crate::{
-    backend::{
-        Immediate, LoadKind, MachineBlock, MachineContext, MachineFunctionData, MachineInst, MachineInstData, MachineSymbol, Register, RiscvGpReg, StoreKind, ALLOCATABLE_REGISTERS_GP
-    },
-    codegen::ValueCodegenResult, ir::frontend::ast::Inst,
+use crate::backend::{
+    Immediate,
+    LoadKind,
+    MachineContext,
+    MachineInstData,
+    MachineSymbol,
+    Register,
+    RiscvGpReg,
+    StoreKind,
+    ALLOCATABLE_REGISTERS_GP,
 };
 
 #[derive(Debug, Clone)]
@@ -142,7 +141,8 @@ impl InterferenceGraph {
     }
 }
 
-struct GraphColoringAllocation {
+#[derive(Default)]
+pub struct GraphColoringAllocation {
     pub total_spills: usize,
     pub total_loads_added: usize,
     pub total_stores_added: usize,
@@ -178,7 +178,15 @@ impl LocalPassMut for GraphColoringAllocation {
             interference_graph.construct_from_live_ranges(&live_ranges);
 
             for (reg, neighbors) in interference_graph.graph.iter() {
-                println!("{} - [ {} ]", reg, neighbors.iter().map(|r| r.to_string()).collect::<Vec<_>>().join(", "));
+                println!(
+                    "{} - [ {} ]",
+                    reg,
+                    neighbors
+                        .iter()
+                        .map(|r| r.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
             }
 
             // println!("{:}", interference_graph.to_mermaid());
@@ -220,7 +228,7 @@ impl LocalPassMut for GraphColoringAllocation {
                         ok_colors.retain(|&c| c != color);
                     }
                 }
-                if let Some(color) = ok_colors.pop(){
+                if let Some(color) = ok_colors.pop() {
                     colors.insert(reg, *color);
                 } else {
                     spills.insert(reg);
@@ -253,8 +261,8 @@ impl LocalPassMut for GraphColoringAllocation {
 
             let mut insert_later_loads = HashMap::new();
             let mut insert_later_stores = HashMap::new();
-            for (block, block_data) in ctx.function_data(func_name).unwrap().layout.blocks() {
-                let mut insts = ctx
+            for (block, _) in ctx.function_data(func_name).unwrap().layout.blocks() {
+                let insts = ctx
                     .function_data(func_name)
                     .unwrap()
                     .layout
@@ -285,14 +293,24 @@ impl LocalPassMut for GraphColoringAllocation {
             // println!("stores added to {:?}", insert_later_stores);
 
             for (inst, (def, base, offset)) in insert_later_loads.iter() {
-                let load = MachineInstData::build_load(ctx, LoadKind::DoubleWord, *def, *base, *offset);
-                ctx.function_data_mut(func_name).unwrap().layout.insert_inst_before(load, *inst).unwrap();
+                let load =
+                    MachineInstData::build_load(ctx, LoadKind::DoubleWord, *def, *base, *offset);
+                ctx.function_data_mut(func_name)
+                    .unwrap()
+                    .layout
+                    .insert_inst_before(load, *inst)
+                    .unwrap();
                 self.total_loads_added += 1;
             }
 
             for (inst, (use_, base, offset)) in insert_later_stores.iter() {
-                let store = MachineInstData::build_store(ctx, StoreKind::DoubleWord, *use_, *base, *offset);
-                ctx.function_data_mut(func_name).unwrap().layout.insert_inst_after(store, *inst).unwrap();
+                let store =
+                    MachineInstData::build_store(ctx, StoreKind::DoubleWord, *use_, *base, *offset);
+                ctx.function_data_mut(func_name)
+                    .unwrap()
+                    .layout
+                    .insert_inst_after(store, *inst)
+                    .unwrap();
                 self.total_stores_added += 1;
             }
 
@@ -318,7 +336,13 @@ impl LocalPassMut for GraphColoringAllocation {
             //         }
             //     }
             // }
-            let mut inst_it = ctx.function_data(func_name).unwrap().layout.insts_of_block(block).unwrap().front();
+            let mut inst_it = ctx
+                .function_data(func_name)
+                .unwrap()
+                .layout
+                .insts_of_block(block)
+                .unwrap()
+                .front();
             while let Some(inst) = inst_it {
                 let inst_data = ctx.inst_data_mut(inst).unwrap();
                 let defs = inst_data.get_def_operands();
@@ -333,10 +357,22 @@ impl LocalPassMut for GraphColoringAllocation {
                         inst_data.replace_operand(use_, *color);
                     }
                 }
-                inst_it = ctx.function_data(func_name).unwrap().layout.insts_of_block(block).unwrap().node(inst).unwrap().next;
+                inst_it = ctx
+                    .function_data(func_name)
+                    .unwrap()
+                    .layout
+                    .insts_of_block(block)
+                    .unwrap()
+                    .node(inst)
+                    .unwrap()
+                    .next;
             }
 
-            curr_block = ctx.function_data_mut(func_name).unwrap().layout.next_block(block);
+            curr_block = ctx
+                .function_data_mut(func_name)
+                .unwrap()
+                .layout
+                .next_block(block);
         }
 
         print!("{}", ctx);
@@ -346,17 +382,20 @@ impl LocalPassMut for GraphColoringAllocation {
 }
 
 impl GraphColoringAllocation {
-    pub fn new() -> Self {
-        Self { total_spills: 0, total_loads_added: 0, total_stores_added: 0 }
-    }
-    pub fn choose_to_spill(&self, interference_graph: &InterferenceGraph, live_range: &LiveRange) -> Register {
+    pub fn new() -> Self { Self::default() }
+
+    pub fn choose_to_spill(
+        &self,
+        interference_graph: &InterferenceGraph,
+        live_range: &LiveRange,
+    ) -> Register {
         let mut spill = None;
         let mut max_degree = 0;
         for (reg, _) in interference_graph.graph.iter() {
             if !reg.is_gp_virtual() {
                 continue;
             }
-            if live_range.intervals.get(&reg).unwrap().range_count() > 1 {
+            if live_range.intervals.get(reg).unwrap().range_count() > 1 {
                 continue;
             }
             if interference_graph.degree(*reg) > max_degree {
@@ -364,20 +403,22 @@ impl GraphColoringAllocation {
                 spill = Some(*reg);
             }
         }
-        let spill = spill.unwrap();
-        spill
+        spill.unwrap()
     }
 }
 
+#[cfg(test)]
 mod test {
     use std::io::Cursor;
 
-    use super::InOutAnalysis;
     use crate::{
         backend::{
             passes::{
-                block_defsue_analysis::DefUseAnalysis,
-                graph_coloring_allocation::{GraphColoringAllocation, InterferenceGraph, RegisterType},
+                graph_coloring_allocation::{
+                    GraphColoringAllocation,
+                    InterferenceGraph,
+                    RegisterType,
+                },
                 live_interval_analysis::LiveRangeAnalysis,
                 LocalPass,
                 LocalPassMut,
@@ -387,7 +428,6 @@ mod test {
         codegen::CodegenContext,
         ir::frontend::parser::Parser,
     };
-
     #[test]
     fn test_interference_graph() {
         let ir = r#"
@@ -414,7 +454,7 @@ mod test {
 
         let mut buf = Cursor::new(ir);
         let mut parser = Parser::new(&mut buf);
-        let mut module = parser.parse().unwrap().into_ir("test".into()).unwrap();
+        let module = parser.parse().unwrap().into_ir("test".into()).unwrap();
 
         let mut codegen_ctx = CodegenContext::new();
         codegen_ctx.codegen(&module);
@@ -464,7 +504,7 @@ mod test {
 
         let mut buf = Cursor::new(ir);
         let mut parser = Parser::new(&mut buf);
-        let mut module = parser.parse().unwrap().into_ir("test".into()).unwrap();
+        let module = parser.parse().unwrap().into_ir("test".into()).unwrap();
 
         let mut codegen_ctx = CodegenContext::new();
         codegen_ctx.codegen(&module);
@@ -628,11 +668,11 @@ mod test {
 
         let mut buf = Cursor::new(ir);
         let mut parser = Parser::new(&mut buf);
-        let mut module = parser.parse().unwrap().into_ir("whileIf".into()).unwrap();
+        let _module = parser.parse().unwrap().into_ir("whileIf".into()).unwrap();
 
         let mut buf = Cursor::new(ir);
         let mut parser = Parser::new(&mut buf);
-        let mut module = parser.parse().unwrap().into_ir("test".into()).unwrap();
+        let module = parser.parse().unwrap().into_ir("test".into()).unwrap();
 
         let mut codegen_ctx = CodegenContext::new();
         codegen_ctx.codegen(&module);
@@ -646,8 +686,8 @@ mod test {
             .unwrap();
 
         let mut lra = LiveRangeAnalysis::default();
-        let live_ranges = lra.run_on_function(&codegen_ctx.machine_ctx, func).unwrap();
 
+        let _live_ranges = lra.run_on_function(&codegen_ctx.machine_ctx, func).unwrap();
         // lra.dump(&codegen_ctx.machine_ctx, func, &live_ranges);
 
         let mut graph_coloring_allocation = GraphColoringAllocation::new();
@@ -665,7 +705,13 @@ mod test {
 
         println!("{:}", codegen_ctx.machine_ctx);
         println!("Total spills: {}", graph_coloring_allocation.total_spills);
-        println!("Total loads added: {}", graph_coloring_allocation.total_loads_added);
-        println!("Total stores added: {}", graph_coloring_allocation.total_stores_added);
+        println!(
+            "Total loads added: {}",
+            graph_coloring_allocation.total_loads_added
+        );
+        println!(
+            "Total stores added: {}",
+            graph_coloring_allocation.total_stores_added
+        );
     }
 }

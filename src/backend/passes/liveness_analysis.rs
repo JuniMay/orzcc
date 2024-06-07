@@ -1,15 +1,12 @@
 use std::collections::{HashMap, HashSet};
 
-use thiserror::Error;
-
 use super::{
     block_defsue_analysis::DefUseAnalysis,
     control_flow_analysis::ControlFlowAnalysis,
     LocalPass,
-    PassError,
     PassResult,
 };
-use crate::backend::{MachineBlock, MachineContext, MachineFunctionData, MachineSymbol, Register};
+use crate::backend::{MachineBlock, MachineContext, MachineFunctionData, Register};
 
 #[derive(Debug, Clone, Default)]
 pub struct BlockInOut {
@@ -70,12 +67,12 @@ impl LocalPass for InOutAnalysis {
                 in_set.extend(defs_uses.uses(block).unwrap().iter().cloned());
                 in_set.extend(out_set.difference(defs_uses.defs(block).unwrap()).cloned());
 
-                if in_.get(&block).unwrap() != &in_set {
+                if in_.get(block).unwrap() != &in_set {
                     in_.insert(*block, in_set);
                     changed = true;
                 }
 
-                if out.get(&block).unwrap() != &out_set {
+                if out.get(block).unwrap() != &out_set {
                     out.insert(*block, out_set);
                     changed = true;
                 }
@@ -92,10 +89,7 @@ mod test {
 
     use super::InOutAnalysis;
     use crate::{
-        backend::{
-            passes::{block_defsue_analysis::DefUseAnalysis, LocalPass},
-            MachineSymbol,
-        },
+        backend::{passes::LocalPass, MachineSymbol},
         codegen::CodegenContext,
         ir::frontend::parser::Parser,
     };
@@ -232,7 +226,7 @@ mod test {
 
         let mut buf = Cursor::new(ir);
         let mut parser = Parser::new(&mut buf);
-        let mut module = parser.parse().unwrap().into_ir("test".into()).unwrap();
+        let module = parser.parse().unwrap().into_ir("test".into()).unwrap();
 
         let mut codegen_ctx = CodegenContext::new();
         codegen_ctx.codegen(&module);

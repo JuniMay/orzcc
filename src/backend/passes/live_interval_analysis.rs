@@ -1,24 +1,7 @@
-use std::{collections::{HashMap, HashSet}, fmt::Display};
+use std::{collections::HashMap, fmt::Display};
 
-use thiserror::Error;
-
-use super::{
-    block_defsue_analysis::DefUseAnalysis,
-    control_flow_analysis::ControlFlowAnalysis,
-    liveness_analysis::InOutAnalysis,
-    LocalPass,
-    PassError,
-    PassResult,
-};
-use crate::backend::{
-    MachineBlock,
-    MachineContext,
-    MachineFunctionData,
-    MachineInst,
-    MachineInstData,
-    MachineSymbol,
-    Register, RiscvGpReg,
-};
+use super::{liveness_analysis::InOutAnalysis, LocalPass, PassResult};
+use crate::backend::{MachineContext, MachineFunctionData, MachineInst, Register, RiscvGpReg};
 
 /// Range [start, end)
 #[derive(Debug, Clone, Default, Copy)]
@@ -60,7 +43,7 @@ impl Interval {
         }
     }
 
-    /// Check if two intervals intersect. if ordered is true, 
+    /// Check if two intervals intersect. if ordered is true,
     /// we assume that the ranges are ordered by start. And an optimized
     /// version of the function is used.
     pub fn intersects(&self, other: &Interval, ordered: bool) -> bool {
@@ -99,7 +82,7 @@ pub struct LiveRange {
 
 #[derive(Debug, Clone, Default)]
 pub struct LiveRangeAnalysis {
-    pub instruction_number: HashMap<MachineInst, usize>
+    pub instruction_number: HashMap<MachineInst, usize>,
 }
 
 impl LocalPass for LiveRangeAnalysis {
@@ -114,7 +97,7 @@ impl LocalPass for LiveRangeAnalysis {
         let in_out = ioa.run_on_function(ctx, data)?;
 
         let mut live_interval = LiveRange::default();
-        
+
         self.instruction_number = HashMap::new();
 
         // number all the instructions
@@ -150,7 +133,10 @@ impl LocalPass for LiveRangeAnalysis {
                     }
                     let range = current_range.entry(reg).or_insert_with(|| {
                         Range::new(
-                            *self.instruction_number.get(&block_first_instruction).unwrap(),
+                            *self
+                                .instruction_number
+                                .get(&block_first_instruction)
+                                .unwrap(),
                             self.instruction_number.get(&inst).unwrap() + 1,
                         )
                     });
@@ -165,7 +151,7 @@ impl LocalPass for LiveRangeAnalysis {
                             == self.instruction_number.get(&inst).unwrap() + 1
                         {
                             current_range.get_mut(&reg).unwrap().end =
-                            self.instruction_number.get(&inst).unwrap() + 2;
+                                self.instruction_number.get(&inst).unwrap() + 2;
                         } else {
                             live_interval
                                 .intervals
@@ -192,7 +178,11 @@ impl LocalPass for LiveRangeAnalysis {
             }
             for (reg, range) in current_range.iter_mut() {
                 if live_out.contains(reg) {
-                    range.end = self.instruction_number.get(&block_last_instruction).unwrap() + 2;
+                    range.end = self
+                        .instruction_number
+                        .get(&block_last_instruction)
+                        .unwrap()
+                        + 2;
                 }
                 live_interval
                     .intervals
@@ -204,34 +194,51 @@ impl LocalPass for LiveRangeAnalysis {
             for reg in live_out.iter() {
                 if live_in.contains(reg) && !current_range.contains_key(reg) {
                     let range = Range::new(
-                        *self.instruction_number.get(&block_first_instruction).unwrap(),
-                        self.instruction_number.get(&block_last_instruction).unwrap() + 2,
+                        *self
+                            .instruction_number
+                            .get(&block_first_instruction)
+                            .unwrap(),
+                        self.instruction_number
+                            .get(&block_last_instruction)
+                            .unwrap()
+                            + 2,
                     );
                     current_range.insert(*reg, range);
-                    
                 }
             }
         }
 
-        live_interval.intervals.iter_mut().for_each(|(_, interval)| {
-            interval.optimize();
-        });
+        live_interval
+            .intervals
+            .iter_mut()
+            .for_each(|(_, interval)| {
+                interval.optimize();
+            });
 
         Ok(live_interval)
     }
 }
 
 impl LiveRangeAnalysis {
-    pub fn new() -> Self { Self { instruction_number: HashMap::new() } }
-    
-    pub fn dump(&self, ctx: &MachineContext, data: &MachineFunctionData, live_interval: &LiveRange) {
+    pub fn new() -> Self {
+        Self {
+            instruction_number: HashMap::new(),
+        }
+    }
+
+    pub fn dump(
+        &self,
+        ctx: &MachineContext,
+        data: &MachineFunctionData,
+        live_interval: &LiveRange,
+    ) {
         //  asm    | instruction number | r1 r2 r3 ... |
         //  xxxxxx | 0                  | |  |         |
         //  xxxxxx | 1                  | |  |  |  ... |
         //  xxxxxx | 2                  |    |  |  ... |
         // Vector to store the formatted lines of the disassembled instructions.
         let mut lines = Vec::new();
-        
+
         // Collect all lines with their instruction number.
         for (block, _) in data.layout().blocks() {
             lines.push(format!("bb_{:}:", block.0));
@@ -294,20 +301,23 @@ impl LiveRangeAnalysis {
         // Print the formatted lines.
         print!("{:}", " ".repeat(max_len + asm_max_len + 1));
         println!("{:}", header_line);
-        for ((asm, inst_number), live_range) in lines.iter().zip(inst_numbers.iter()).zip(live_ranges.iter()) {
+        for ((asm, inst_number), live_range) in lines
+            .iter()
+            .zip(inst_numbers.iter())
+            .zip(live_ranges.iter())
+        {
             println!("{:} {:} {:}", inst_number, asm, live_range);
         }
-
     }
 }
 
+#[cfg(test)]
 mod test {
     use std::io::Cursor;
 
-    use super::InOutAnalysis;
     use crate::{
         backend::{
-            passes::{block_defsue_analysis::DefUseAnalysis, live_interval_analysis::LiveRangeAnalysis, LocalPass},
+            passes::{live_interval_analysis::LiveRangeAnalysis, LocalPass},
             MachineSymbol,
         },
         codegen::CodegenContext,
@@ -446,7 +456,7 @@ mod test {
 
         let mut buf = Cursor::new(ir);
         let mut parser = Parser::new(&mut buf);
-        let mut module = parser.parse().unwrap().into_ir("test".into()).unwrap();
+        let module = parser.parse().unwrap().into_ir("test".into()).unwrap();
 
         let mut codegen_ctx = CodegenContext::new();
         codegen_ctx.codegen(&module);
@@ -461,9 +471,7 @@ mod test {
             .get(&MachineSymbol("param32_rec".to_string()))
             .unwrap();
 
-        let live_ranges = lra
-            .run_on_function(&codegen_ctx.machine_ctx, func)
-            .unwrap();
+        let live_ranges = lra.run_on_function(&codegen_ctx.machine_ctx, func).unwrap();
 
         // lra.dump(&codegen_ctx.machine_ctx, func, &live_ranges);
 
@@ -473,7 +481,5 @@ mod test {
                 println!("    [{:}, {:})", range.start, range.end);
             }
         }
-
     }
 }
-
