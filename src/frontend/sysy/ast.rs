@@ -1041,10 +1041,16 @@ impl VarDecl {
                 ty = SysyType::array(Some(*dim as usize), ty);
             }
 
-            // just type check, no folding here
             let init = def
                 .init
-                .map(|init| init.type_check(Some(ty.clone()), symtable))
+                .map(|init| {
+                    // fold as much as possible
+                    let typed_init = init.type_check(Some(ty.clone()), symtable);
+                    match typed_init.try_fold(symtable) {
+                        Some(val) => Expr::new_const(val),
+                        None => typed_init,
+                    }
+                })
                 .unwrap_or_else(|| {
                     let undef = ComptimeVal::new_undef(ty.clone());
                     Expr::new_const(undef)
