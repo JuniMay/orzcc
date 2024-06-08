@@ -702,7 +702,7 @@ impl CodegenContext {
 
                 let ty = function_data
                     .dfg
-                    .with_value_data(store.ptr(), |data| data.ty())
+                    .with_value_data(store.val(), |data| data.ty())
                     .unwrap();
 
                 function_data
