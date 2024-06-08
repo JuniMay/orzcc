@@ -1,4 +1,4 @@
-use crate::frontend::{ast::*, types::*};
+use crate::frontend::sysy::*;
 
 grammar;
 

@@ -1715,8 +1715,8 @@ impl MachineInstData {
             MachineInstData::FloatUnary { rd, .. } => vec![*rd],
             MachineInstData::Li { rd, .. } => vec![*rd],
             MachineInstData::Ret => vec![],
-            MachineInstData::Call { .. } => CALLER_SAVED_REGISTERS.to_vec(), /* TODO: This might
-                                                                               * be wrong */
+            MachineInstData::Call { .. } => CALLER_SAVED_REGISTERS.to_vec(), /* TODO: This might */
+            // be wrong
             MachineInstData::Branch { .. } => vec![],
             MachineInstData::J { .. } => vec![],
         }

@@ -1,5 +1,11 @@
+pub mod ast;
+pub mod irgen;
+pub mod types;
+
+pub use ast::*;
 use lalrpop_util::lalrpop_mod;
 use regex::Regex;
+pub use types::*;
 
 lalrpop_mod!(#[allow(clippy::all)] pub sysyparser, "/frontend/sysy/sysyparser.rs");
 

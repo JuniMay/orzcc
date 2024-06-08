@@ -1,7 +1,10 @@
 use std::fmt;
 
-use super::{SysyType, SysyTypeKind};
-use crate::irgen::{SymbolEntry, SymbolTableStack};
+use crate::frontend::sysy::{
+    irgen::{SymbolEntry, SymbolTableStack},
+    SysyType,
+    SysyTypeKind,
+};
 
 #[derive(Debug, Clone)]
 pub enum ComptimeVal {

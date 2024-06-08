@@ -3,7 +3,7 @@ use orzcc::{
     backend::passes::{graph_coloring_allocation::GraphColoringAllocation, GlobalPassMut},
     codegen::CodegenContext,
     collections::diagnostic::{Diagnostic, Level},
-    frontend::sysy::{preprocess, sysyparser},
+    frontend::sysy::{irgen::IrGenContext, preprocess, sysyparser},
     ir::{
         exec::debugger::Debugger,
         frontend::{
@@ -21,7 +21,6 @@ use orzcc::{
             PassManager,
         },
     },
-    irgen::IrGenContext,
 };
 
 enum CliCommand {

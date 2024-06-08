@@ -6,10 +6,4 @@
 //! implemented for the Sysy language, and multiple frontends may be added in
 //! the future.
 
-pub mod ast;
 pub mod sysy;
-pub mod types;
-
-pub use ast::*;
-pub use sysy::sysyparser::*;
-pub use types::*;
