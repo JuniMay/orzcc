@@ -444,8 +444,20 @@ impl Expr {
                         new_vals.push(expr);
                     }
                 }
-                *vals = new_vals;
-                self.ty = Some(ty);
+                if new_vals.iter().all(|val| {
+                    if let ExprKind::Const(val) = &val.kind {
+                        val.is_zero()
+                    } else {
+                        false
+                    }
+                }) {
+                    // all zeros, use zeros
+                    *self = Expr::new_const(ComptimeVal::new_zeros(ty));
+                } else {
+                    *self = Expr::new_init_list(new_vals);
+                    self.ty = Some(ty);
+                }
+
                 return;
             }
 

@@ -232,7 +232,9 @@ impl IrGen for CompUnitItem {
                             .expect("non-constant init for const decl");
                         let init = ctx.irgen_global_expr(&def.init);
                         let slot = ctx.module.builder().global_slot(init, false).unwrap();
-                        ctx.module.assign_name(slot, def.ident.clone()).unwrap();
+                        ctx.module
+                            .assign_name(slot, format!("__GLOBAL_CONST_{}", &def.ident))
+                            .unwrap();
                         let entry = SymbolEntry {
                             ty: def.init.ty(),
                             comptime_val: Some(comptime_val),
@@ -245,7 +247,9 @@ impl IrGen for CompUnitItem {
                     for def in &var_decl.defs {
                         let init = ctx.irgen_global_expr(def.init.as_ref().unwrap());
                         let slot = ctx.module.builder().global_slot(init, true).unwrap();
-                        ctx.module.assign_name(slot, def.ident.clone()).unwrap();
+                        ctx.module
+                            .assign_name(slot, format!("__GLOBAL_VAR_{}", &def.ident))
+                            .unwrap();
                         let entry = SymbolEntry {
                             ty: def.init.as_ref().unwrap().ty(),
                             comptime_val: None,
@@ -273,7 +277,10 @@ impl IrGen for Decl {
             Decl::ConstDecl(decl) => {
                 for def in decl.defs.iter() {
                     let ty = def.init.ty.as_ref().unwrap();
-                    let comptime_init = def.init.try_fold(&ctx.symtable).expect("non-constant init for const decl");
+                    let comptime_init = def
+                        .init
+                        .try_fold(&ctx.symtable)
+                        .expect("non-constant init for const decl");
                     let ir_ty = IrGenContext::irgen_type(ty);
                     let alloc = curr_dfg_mut!(ctx).builder().alloc(ir_ty).unwrap();
                     // insert the allocation to the front.
@@ -419,7 +426,14 @@ impl IrGen for Decl {
                                                 curr_indices,
                                             );
                                         }
-                                        global_init.push(ComptimeVal::List(inits));
+
+                                        if inits.iter().all(|val| val.is_zero()) {
+                                            global_init.push(ComptimeVal::Zeros(
+                                                expr.ty.as_ref().unwrap().clone(),
+                                            ));
+                                        } else {
+                                            global_init.push(ComptimeVal::List(inits));
+                                        }
                                     }
                                     ExprKind::Const(val) => {
                                         global_init.push(val.clone());
@@ -439,6 +453,22 @@ impl IrGen for Decl {
                             handle_init_list(init, &mut global_init, &mut indices, Vec::new());
                             let global_init = global_init.pop().unwrap();
                             let ty = global_init.get_type();
+
+                            // TODO: heuristic: if half of the values are zeros, then memset is
+                            // used.
+                            let total_bytes = ty.bytewidth();
+                            fn count_zeros(val: &ComptimeVal) -> usize {
+                                match val {
+                                    ComptimeVal::Zeros(ty) => ty.bytewidth(),
+                                    ComptimeVal::List(vals) => vals.iter().map(count_zeros).sum(),
+                                    _ => 0,
+                                }
+                            }
+                            let zero_bytes = count_zeros(&global_init);
+                            if zero_bytes * 2 >= total_bytes {
+                                // TODO
+                            }
+
                             if global_init.is_zero() {
                                 // memset
                                 let memset = ctx.module.get_value_by_name("@memset").unwrap();
@@ -498,7 +528,7 @@ impl IrGen for Decl {
 
                                         ir_indices.push(index);
                                     } else {
-                                        unreachable!();
+                                        unreachable!("invalid array init: {:?}", expr);
                                     }
                                 }
 

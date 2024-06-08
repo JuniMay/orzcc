@@ -354,8 +354,13 @@ impl LocalPassMut for GraphColoringAllocation {
 
             for (inst, (use_, base, offset)) in insert_later_stores.iter() {
                 if check_itype_imm(*offset) {
-                    let store =
-                        MachineInstData::build_store(ctx, StoreKind::DoubleWord, *use_, *base, *offset);
+                    let store = MachineInstData::build_store(
+                        ctx,
+                        StoreKind::DoubleWord,
+                        *use_,
+                        *base,
+                        *offset,
+                    );
                     ctx.function_data_mut(func_name)
                         .unwrap()
                         .layout

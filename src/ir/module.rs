@@ -357,8 +357,8 @@ impl Module {
     /// Get the name of a global value
     pub fn value_name(&self, value: Value) -> String { self.name_allocator.borrow_mut().get(value) }
 
-    /// Assign a name to a global value. There will be a suffix id if the name is
-    /// duplicated.
+    /// Assign a name to a global value. There will be a suffix id if the name
+    /// is duplicated.
     pub fn assign_name(
         &mut self,
         value: impl Into<Value>,

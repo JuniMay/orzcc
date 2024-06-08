@@ -6,7 +6,9 @@ use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 
 use crate::{
-    codegen::check_itype_imm, collections::{List, ListError, ListNode}, ir::module::IdAllocator
+    codegen::check_itype_imm,
+    collections::{List, ListError, ListNode},
+    ir::module::IdAllocator,
 };
 
 pub const ARGUMENT_REGISTERS: [Register; 16] = [
