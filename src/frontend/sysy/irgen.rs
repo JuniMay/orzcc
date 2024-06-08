@@ -625,7 +625,7 @@ impl IrGen for FuncDef {
                 .assign_local_value_name(ret_slot, "__RET_SLOT")
                 .unwrap();
             curr_layout_mut!(ctx)
-                .append_inst(ret_slot.into(), block)
+                .prepend_inst(ret_slot.into(), block)
                 .unwrap();
             ctx.curr_ret_slot = Some(ret_slot);
         }
@@ -1638,7 +1638,7 @@ impl IrGenContext {
     pub fn irgen_global_expr(&mut self, expr: &Expr) -> Value {
         match &expr.kind {
             ExprKind::Const(comptime_val) => self.irgen_global_comptime_val(comptime_val),
-            _ => unreachable!(),
+            _ => unreachable!("{:?}", expr),
         }
     }
 
