@@ -151,11 +151,11 @@ impl LocalPass for DefUseAnalysis {
                         defs.insert(*rd);
                     }
                     MachineInstData::Ret => {}
-                    MachineInstData::Call { .. } => {
+                    MachineInstData::Call { arg_regs, .. } => {
                         // TODO: this might be wrong
-                        // for reg in CALLER_SAVED_REGISTERS.iter() {
-                        //     uses.insert(*reg);
-                        // }
+                        for reg in arg_regs.iter() {
+                            uses.insert(*reg);
+                        }
                         for reg in RETURN_REGISTERS.iter() {
                             defs.insert(*reg);
                         }

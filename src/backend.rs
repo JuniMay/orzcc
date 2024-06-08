@@ -1208,6 +1208,8 @@ pub enum MachineInstData {
     Ret,
     Call {
         symbol: MachineSymbol,
+        /// The used registers for arguments.
+        arg_regs: HashSet<Register>,
     },
     Branch {
         kind: MachineBranchOp,
@@ -1480,8 +1482,8 @@ impl MachineInstData {
         ctx.new_inst(data)
     }
 
-    pub fn new_call(ctx: &mut MachineContext, symbol: MachineSymbol) -> MachineInst {
-        let data = MachineInstData::Call { symbol };
+    pub fn new_call(ctx: &mut MachineContext, symbol: MachineSymbol, arg_regs: HashSet<Register>) -> MachineInst {
+        let data = MachineInstData::Call { symbol, arg_regs };
         ctx.new_inst(data)
     }
 
@@ -1716,7 +1718,9 @@ impl MachineInstData {
             MachineInstData::FloatUnary { rs, .. } => vec![*rs],
             MachineInstData::Li { .. } => vec![],
             MachineInstData::Ret => vec![],
-            MachineInstData::Call { .. } => vec![],
+            MachineInstData::Call { arg_regs, .. } => {
+                arg_regs.clone().into_iter().collect::<Vec<_>>()
+            }
             // MachineInstData::Call { .. } => ARGUMENT_REGISTERS.to_vec(), // TODO: This might be
             // wrong
             MachineInstData::Branch { rs1, rs2, .. } => vec![*rs1, *rs2],
@@ -1989,7 +1993,7 @@ impl fmt::Display for MachineInstData {
             }
             MachineInstData::Li { rd, imm } => write!(f, "li {}, {}", rd, imm)?,
             MachineInstData::Ret => write!(f, "ret")?,
-            MachineInstData::Call { symbol } => write!(f, "call {}", symbol)?,
+            MachineInstData::Call { symbol, .. } => write!(f, "call {}", symbol)?,
             MachineInstData::Branch {
                 kind,
                 rs1,

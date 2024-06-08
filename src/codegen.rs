@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     backend::{
@@ -2009,6 +2009,7 @@ impl CodegenContext {
                 // heuristic: reg passing after the stack pushing, so that the a0~a7 and fa0~fa7
                 // can be used for the stack arguments
                 let mut reg_passing_insts: Vec<MachineInst> = Vec::new();
+                let mut arg_regs = HashSet::new();
 
                 for arg in args {
                     function_data.dfg.with_value_data(*arg, |arg_data| {
@@ -2019,6 +2020,8 @@ impl CodegenContext {
                                 let fa = self
                                     .machine_ctx
                                     .new_fp_reg((RiscvFpReg::Fa0 as u8 + fp_reg_count).into());
+
+                                arg_regs.insert(fa);
                                 let rd = match arg_data.kind() {
                                     ValueKind::GlobalSlot(_)
                                     | ValueKind::Alloc(_)
@@ -2077,6 +2080,7 @@ impl CodegenContext {
                                 let a = self
                                     .machine_ctx
                                     .new_gp_reg((RiscvGpReg::A0 as u8 + gp_reg_count).into());
+                                arg_regs.insert(a);
                                 match arg_data.kind() {
                                     ValueKind::Array(_)
                                     | ValueKind::Struct(_)
@@ -2435,7 +2439,7 @@ impl CodegenContext {
                 // call
                 // XXX: function pointer is not supported.
                 let callee_symbol = self.get_value_as_symbol(callee);
-                let call = MachineInstData::new_call(&mut self.machine_ctx, callee_symbol);
+                let call = MachineInstData::new_call(&mut self.machine_ctx, callee_symbol, arg_regs);
                 self.append_inst(&function_name, block, call);
 
                 // recover the stack
