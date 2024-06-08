@@ -626,8 +626,8 @@ impl CodegenContext {
                 sp,
                 t0,
             );
-            self.append_inst(&function_name, exit_block, add);
             self.append_inst(&function_name, exit_block, li);
+            self.append_inst(&function_name, exit_block, add);
         }
 
         // ret
