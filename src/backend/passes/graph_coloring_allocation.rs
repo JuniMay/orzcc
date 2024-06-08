@@ -542,7 +542,7 @@ impl LocalPassMut for GraphColoringAllocation {
                 if check_itype_imm(*offset) {
                     let load = MachineInstData::build_float_load(
                         ctx,
-                        FloatLoadKind::Double,
+                        FloatLoadKind::Single,
                         *def,
                         *base,
                         *offset,
@@ -562,7 +562,7 @@ impl LocalPassMut for GraphColoringAllocation {
                     );
                     let load = MachineInstData::build_float_load(
                         ctx,
-                        FloatLoadKind::Double,
+                        FloatLoadKind::Single,
                         *def,
                         rd1,
                         Immediate(0),
@@ -590,7 +590,7 @@ impl LocalPassMut for GraphColoringAllocation {
                 if check_itype_imm(*offset) {
                     let store = MachineInstData::build_float_store(
                         ctx,
-                        FloatStoreKind::Double,
+                        FloatStoreKind::Single,
                         *use_,
                         *base,
                         *offset,
@@ -610,7 +610,7 @@ impl LocalPassMut for GraphColoringAllocation {
                     );
                     let store = MachineInstData::build_float_store(
                         ctx,
-                        FloatStoreKind::Double,
+                        FloatStoreKind::Single,
                         *use_,
                         rd1,
                         Immediate(0),
