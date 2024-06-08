@@ -159,7 +159,8 @@ impl DataFlowGraph {
         }
     }
 
-    /// Assign a name to a local value.
+    /// Assign a name to a local value, there will be a suffix id if the name is
+    /// duplicated.
     pub fn assign_local_value_name(
         &self,
         value: Value,
@@ -167,7 +168,7 @@ impl DataFlowGraph {
     ) -> Result<(), NameAllocErr> {
         self.value_name_allocator
             .borrow_mut()
-            .assign(value, name.into())
+            .assign_autoinc(value, name.into())
     }
 
     /// Assign a name to a block, there will be a suffix id if the name is
@@ -356,7 +357,8 @@ impl Module {
     /// Get the name of a global value
     pub fn value_name(&self, value: Value) -> String { self.name_allocator.borrow_mut().get(value) }
 
-    /// Assign a name to a global value.
+    /// Assign a name to a global value. There will be a suffix id if the name is
+    /// duplicated.
     pub fn assign_name(
         &mut self,
         value: impl Into<Value>,
@@ -364,7 +366,7 @@ impl Module {
     ) -> Result<(), NameAllocErr> {
         self.name_allocator
             .borrow_mut()
-            .assign(value.into(), name.into())
+            .assign_autoinc(value.into(), name.into())
     }
 
     /// Get a global [`Value`] indexer by its name.
