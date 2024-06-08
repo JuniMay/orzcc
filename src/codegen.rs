@@ -1161,9 +1161,15 @@ impl CodegenContext {
                     };
 
                     if let BinaryOperand::Immediate(_) = rs1 {
-                        // swap rs1 and rs2 so that rs1 is always a register (unless both are
-                        // immediates)
-                        std::mem::swap(&mut rs1, &mut rs2);
+                        match op {
+                            // for commutative operations,
+                            // swap rs1 and rs2 so that rs1 is always a register (unless both are
+                            // immediates)
+                            BinaryOp::Add | BinaryOp::Mul | BinaryOp::And | BinaryOp::Or => {
+                                std::mem::swap(&mut rs1, &mut rs2);
+                            }
+                            _ => {}
+                        }
                     }
 
                     if let BinaryOperand::Immediate(imm) = rs1 {
