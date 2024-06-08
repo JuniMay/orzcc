@@ -11,7 +11,19 @@ use super::{
 };
 use crate::{
     backend::{
-        FloatLoadKind, FloatStoreKind, Immediate, LoadKind, MachineContext, MachineInstData, MachineSymbol, Register, RiscvGpReg, StoreKind, ALLOCATABLE_REGISTERS_FP, ALLOCATABLE_REGISTERS_GP, CALLEE_SAVED_REGISTERS
+        FloatLoadKind,
+        FloatStoreKind,
+        Immediate,
+        LoadKind,
+        MachineContext,
+        MachineInstData,
+        MachineSymbol,
+        Register,
+        RiscvGpReg,
+        StoreKind,
+        ALLOCATABLE_REGISTERS_FP,
+        ALLOCATABLE_REGISTERS_GP,
+        CALLEE_SAVED_REGISTERS,
     },
     codegen::check_itype_imm,
 };
@@ -213,10 +225,8 @@ impl LocalPassMut for GraphColoringAllocation {
                     stack.push(reg);
                     working_interference_graph.remove_node(reg);
                 } else {
-                    let spill = self.choose_to_spill(
-                        &working_interference_graph,
-                        &spilled_registers,
-                    );
+                    let spill =
+                        self.choose_to_spill(&working_interference_graph, &spilled_registers);
                     stack.push(spill);
                     working_interference_graph.remove_node(spill);
                 }
@@ -450,10 +460,8 @@ impl LocalPassMut for GraphColoringAllocation {
                     stack.push(reg);
                     working_interference_graph.remove_node(reg);
                 } else {
-                    let spill = self.choose_to_spill(
-                        &working_interference_graph,
-                        &spilled_registers,
-                    );
+                    let spill =
+                        self.choose_to_spill(&working_interference_graph, &spilled_registers);
                     stack.push(spill);
                     working_interference_graph.remove_node(spill);
                 }

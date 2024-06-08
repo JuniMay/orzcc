@@ -1,7 +1,10 @@
 pub mod passes;
 
 use core::fmt;
-use std::{collections::{HashMap, HashSet}, vec};
+use std::{
+    collections::{HashMap, HashSet},
+    vec,
+};
 
 use thiserror::Error;
 
@@ -1382,7 +1385,11 @@ impl MachineInstData {
         src_fmt: FCvtFmt,
         rs: Register,
     ) -> (Register, MachineInst) {
-        let rd = ctx.new_virtual_reg(VirtualRegisterKind::FloatingPoint);
+        let kind = match dst_fmt {
+            FCvtFmt::S | FCvtFmt::D | FCvtFmt::H => VirtualRegisterKind::FloatingPoint,
+            FCvtFmt::W | FCvtFmt::L | FCvtFmt::Lu | FCvtFmt::Wu => VirtualRegisterKind::General,
+        };
+        let rd = ctx.new_virtual_reg(kind);
         let data = MachineInstData::FCvt {
             dst_fmt,
             src_fmt,
@@ -1482,7 +1489,11 @@ impl MachineInstData {
         ctx.new_inst(data)
     }
 
-    pub fn new_call(ctx: &mut MachineContext, symbol: MachineSymbol, arg_regs: HashSet<Register>) -> MachineInst {
+    pub fn new_call(
+        ctx: &mut MachineContext,
+        symbol: MachineSymbol,
+        arg_regs: HashSet<Register>,
+    ) -> MachineInst {
         let data = MachineInstData::Call { symbol, arg_regs };
         ctx.new_inst(data)
     }
@@ -1679,7 +1690,7 @@ impl MachineInstData {
         };
         ctx.new_inst(data)
     }
-    
+
     pub fn build_li(ctx: &mut MachineContext, rd: Register, imm: Immediate) -> MachineInst {
         let data = MachineInstData::Li { rd, imm };
         ctx.new_inst(data)
@@ -1790,7 +1801,9 @@ impl MachineInstData {
             MachineInstData::Binary { rd, rs1, rs2, .. } => vec![*rd, *rs1, *rs2],
             MachineInstData::BinaryImm { rd, rs1, .. } => vec![*rd, *rs1],
             MachineInstData::FloatBinary { rd, rs1, rs2, .. } => vec![*rd, *rs1, *rs2],
-            MachineInstData::FloatMulAdd { rd, rs1, rs2, rs3, .. } => vec![*rd, *rs1, *rs2, *rs3],
+            MachineInstData::FloatMulAdd {
+                rd, rs1, rs2, rs3, ..
+            } => vec![*rd, *rs1, *rs2, *rs3],
             MachineInstData::FloatUnary { rd, rs, .. } => vec![*rd, *rs],
             MachineInstData::Li { rd, .. } => vec![*rd],
             MachineInstData::Ret => vec![],
@@ -2012,7 +2025,13 @@ impl fmt::Display for MachineInstData {
                 src_fmt,
                 rd,
                 rs,
-            } => write!(f, "fcvt.{}.{} {}, {}", dst_fmt, src_fmt, rd, rs)?,
+            } => {
+                write!(f, "fcvt.{}.{} {}, {}", dst_fmt, src_fmt, rd, rs)?;
+                if matches!(dst_fmt, FCvtFmt::W | FCvtFmt::Wu | FCvtFmt::L | FCvtFmt::Lu) {
+                    // rounding rtz
+                    write!(f, ", rtz")?;
+                }
+            }
             MachineInstData::Binary { kind, rd, rs1, rs2 } => {
                 write!(f, "{} {}, {}, {}", kind, rd, rs1, rs2)?
             }
@@ -2427,6 +2446,16 @@ impl fmt::Display for MachineFloatBinaryFmt {
         match self {
             MachineFloatBinaryFmt::S => write!(f, "s"),
             MachineFloatBinaryFmt::D => write!(f, "d"),
+        }
+    }
+}
+
+impl MachineFloatBinaryFmt {
+    pub fn from_byte_width(width: usize) -> Self {
+        match width {
+            4 => MachineFloatBinaryFmt::S,
+            8 => MachineFloatBinaryFmt::D,
+            _ => unimplemented!(),
         }
     }
 }

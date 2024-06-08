@@ -219,7 +219,7 @@ def parse_args():
     parser.add_argument('--runtime-lib-dir', default='./sysy-runtime-lib')
     parser.add_argument('--csv-file', default='./result.csv')
 
-    parser.add_argument('--executable-path', default='./target/release/orzcc')
+    parser.add_argument('--executable-path', default='./target/release/compiler')
 
     parser.add_argument('--no-compile', action='store_true', default=False)
     parser.add_argument('--no-test', action='store_true', default=False)
@@ -300,11 +300,11 @@ def test(executable_path: str, testcase_dir: str, output_dir: str,
         log_path = os.path.join(output_dir, f'{basename}.log')
         log_file = open(log_path, 'w')
 
-        command = (f'{executable_path} compile '
-                   f'--file {testcase}.sy '
+        command = (f'{executable_path} -S '
+                   f'-o {asm_path} '
+                   f'{testcase}.sy '
                    #f'--emit-ast {ast_path} ' # AST will cause TLE on some cases.
-                   f'--emit-ir {ir_path} '
-                   f'--emit-asm {asm_path} ')
+                   f'--emit-ir {ir_path}')
 
         exec_result = execute(command, exec_timeout)
         log(log_file, command, exec_result)

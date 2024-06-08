@@ -1575,7 +1575,7 @@ impl IrGenContext {
                         fptosi
                     }
                     (SysyTypeKind::Float, SysyTypeKind::Bool) => {
-                        // fcmp oeq 0.0
+                        // fcmp one 0.0
                         let val = self.irgen_local_expr(expr);
                         let zero = curr_dfg_mut!(self)
                             .builder()
@@ -1584,7 +1584,7 @@ impl IrGenContext {
                         let fcmp = curr_dfg_mut!(self)
                             .builder()
                             .binary(
-                                ir::values::BinaryOp::FCmp(ir::values::FCmpCond::OEq),
+                                ir::values::BinaryOp::FCmp(ir::values::FCmpCond::ONe),
                                 val,
                                 zero,
                             )

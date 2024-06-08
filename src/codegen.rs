@@ -677,7 +677,21 @@ impl CodegenContext {
                     .dfg
                     .with_value_data(store.val(), |data| match data.kind() {
                         ValueKind::Zero | ValueKind::Undef => {
-                            self.machine_ctx.new_gp_reg(RiscvGpReg::Zero)
+                            let zero = self.machine_ctx.new_gp_reg(RiscvGpReg::Zero);
+                            // check float
+                            if data.ty().is_float() {
+                                // fmv
+                                let (rd, fmv) = MachineInstData::new_float_move(
+                                    &mut self.machine_ctx,
+                                    FMvFmt::from_byte_width(data.ty().bytewidth()),
+                                    FMvFmt::X,
+                                    zero,
+                                );
+                                self.append_inst(&function_name, block, fmv);
+                                rd
+                            } else {
+                                zero
+                            }
                         }
                         ValueKind::GlobalSlot(_) | ValueKind::Function => {
                             let symbol = self.get_value_as_symbol(store.val());
@@ -699,7 +713,19 @@ impl CodegenContext {
                             let (rd, li) =
                                 MachineInstData::new_li(&mut self.machine_ctx, imm.into());
                             self.append_inst(&function_name, block, li);
-                            rd
+                            if data.ty().is_float() {
+                                // fmv
+                                let (rd, fmv) = MachineInstData::new_float_move(
+                                    &mut self.machine_ctx,
+                                    FMvFmt::from_byte_width(data.ty().bytewidth()),
+                                    FMvFmt::X,
+                                    rd,
+                                );
+                                self.append_inst(&function_name, block, fmv);
+                                rd
+                            } else {
+                                rd
+                            }
                         }
                         ValueKind::Alloc(_) => {
                             let (base, offset) = self.get_value_as_stack_slot(store.val());
@@ -1527,17 +1553,19 @@ impl CodegenContext {
 
                 match op {
                     UnaryOp::FNeg => {
-                        // fmv
-                        let dst_fmt = FMvFmt::from_byte_width(val_data.ty().bytewidth());
-
-                        let (rd, fmv) = MachineInstData::new_float_move(
-                            &mut self.machine_ctx,
-                            dst_fmt,
-                            FMvFmt::X,
-                            operand,
-                        );
-
-                        self.append_inst(&function_name, block, fmv);
+                        let rd = if operand.is_fp() | operand.is_fp_virtual() {
+                            operand
+                        } else {
+                            let dst_fmt = FMvFmt::from_byte_width(val_data.ty().bytewidth());
+                            let (rd, fmv) = MachineInstData::new_float_move(
+                                &mut self.machine_ctx,
+                                dst_fmt,
+                                FMvFmt::X,
+                                operand,
+                            );
+                            self.append_inst(&function_name, block, fmv);
+                            rd
+                        };
 
                         // fneg => fsgnjn
                         let fmt = match val_data.ty().bytewidth() {
@@ -1693,20 +1721,20 @@ impl CodegenContext {
                         // make sure result is int
                         assert!(inst_data.ty().is_int());
                         // fcvt.[w/l].[s/d] $rd, $rs
-                        let fmt = match val_data.ty().bytewidth() {
-                            4 => FCvtFmt::W,
-                            8 => FCvtFmt::L,
-                            _ => unimplemented!(),
-                        };
-                        let dst_fmt = match inst_data.ty().bytewidth() {
+                        let src_fmt = match val_data.ty().bytewidth() {
                             4 => FCvtFmt::S,
                             8 => FCvtFmt::D,
                             _ => unimplemented!(),
                         };
+                        let dst_fmt = match inst_data.ty().bytewidth() {
+                            4 => FCvtFmt::W,
+                            8 => FCvtFmt::L,
+                            _ => unimplemented!(),
+                        };
                         let (rd, fcvt) = MachineInstData::new_float_convert(
                             &mut self.machine_ctx,
-                            fmt,
                             dst_fmt,
+                            src_fmt,
                             rs,
                         );
                         self.append_inst(&function_name, block, fcvt);
@@ -1719,7 +1747,7 @@ impl CodegenContext {
                         // make sure result is float
                         assert!(inst_data.ty().is_float());
                         // fcvt.[s/d].[w/l] $rd, $rs
-                        let fmt = match val_data.ty().bytewidth() {
+                        let src_fmt = match val_data.ty().bytewidth() {
                             4 => FCvtFmt::W,
                             8 => FCvtFmt::L,
                             _ => unimplemented!(),
@@ -1731,8 +1759,8 @@ impl CodegenContext {
                         };
                         let (rd, fcvt) = MachineInstData::new_float_convert(
                             &mut self.machine_ctx,
-                            fmt,
                             dst_fmt,
+                            src_fmt,
                             rs,
                         );
                         self.append_inst(&function_name, block, fcvt);
@@ -2439,7 +2467,8 @@ impl CodegenContext {
                 // call
                 // XXX: function pointer is not supported.
                 let callee_symbol = self.get_value_as_symbol(callee);
-                let call = MachineInstData::new_call(&mut self.machine_ctx, callee_symbol, arg_regs);
+                let call =
+                    MachineInstData::new_call(&mut self.machine_ctx, callee_symbol, arg_regs);
                 self.append_inst(&function_name, block, call);
 
                 // recover the stack
@@ -2481,10 +2510,11 @@ impl CodegenContext {
                     // do nothing
                 } else if ret_ty.is_float() {
                     let fa0 = self.machine_ctx.new_fp_reg(RiscvFpReg::Fa0);
-                    let (rd, fmv) = MachineInstData::new_float_move(
+                    let (rd, fmv) = MachineInstData::new_float_binary(
                         &mut self.machine_ctx,
-                        FMvFmt::from_byte_width(ret_ty.bytewidth()),
-                        FMvFmt::X,
+                        MachineFloatBinaryOp::Fsgnj,
+                        MachineFloatBinaryFmt::from_byte_width(ret_ty.bytewidth()),
+                        fa0,
                         fa0,
                     );
                     self.append_inst(&function_name, block, fmv);

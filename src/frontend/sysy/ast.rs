@@ -546,10 +546,8 @@ impl Expr {
                         lhs = Box::new(Expr::new_coercion(lhs, SysyType::float()));
                     }
                     (SysyTypeKind::Float, SysyTypeKind::Bool) => {
-                        // lhs != 0
-                        let mut zero = Expr::new_const(ComptimeVal::Int(0));
-                        zero.ty = Some(SysyType::float());
-                        lhs = Box::new(Expr::new_binary(BinaryOp::Ne, lhs, Box::new(zero)));
+                        let tmp = Expr::new_coercion(rhs, SysyType::int());
+                        rhs = Box::new(Expr::new_coercion(Box::new(tmp), SysyType::float()));
                     }
                     (SysyTypeKind::Float, SysyTypeKind::Int) => {
                         rhs = Box::new(Expr::new_coercion(rhs, SysyType::float()));
