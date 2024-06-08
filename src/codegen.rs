@@ -1097,7 +1097,7 @@ impl CodegenContext {
                             &mut self.machine_ctx,
                             MachineBinaryImmOp::Xori,
                             rd,
-                            (-1).into(),
+                            1.into(),
                         );
                         self.append_inst(&function_name, block, neg);
 
@@ -1327,7 +1327,7 @@ impl CodegenContext {
                                     &mut self.machine_ctx,
                                     MachineBinaryImmOp::Xori,
                                     rd,
-                                    (-1).into(),
+                                    1.into(),
                                 );
 
                                 self.append_inst(&function_name, block, xori);
@@ -1400,7 +1400,7 @@ impl CodegenContext {
                                     &mut self.machine_ctx,
                                     MachineBinaryImmOp::Xori,
                                     rd,
-                                    (-1).into(),
+                                    1.into(),
                                 );
 
                                 self.append_inst(&function_name, block, xori);
