@@ -11,16 +11,7 @@ use super::{
 };
 use crate::{
     backend::{
-        Immediate,
-        LoadKind,
-        MachineContext,
-        MachineInstData,
-        MachineSymbol,
-        Register,
-        RiscvGpReg,
-        StoreKind,
-        ALLOCATABLE_REGISTERS_GP,
-        CALLEE_SAVED_REGISTERS,
+        FloatLoadKind, FloatStoreKind, Immediate, LoadKind, MachineContext, MachineInstData, MachineSymbol, Register, RiscvGpReg, StoreKind, ALLOCATABLE_REGISTERS_FP, ALLOCATABLE_REGISTERS_GP, CALLEE_SAVED_REGISTERS
     },
     codegen::check_itype_imm,
 };
@@ -165,15 +156,16 @@ impl LocalPassMut for GraphColoringAllocation {
         ctx: &mut MachineContext,
         func_name: &MachineSymbol,
     ) -> PassResult<(Self::Ok, bool)> {
-        // Gp registers
-        let mut colors;
+        let mut gp_colors: HashMap<Register, Register>;
+        let mut fp_colors: HashMap<Register, Register>;
         let mut changed = false;
         let mut spilled_registers = HashSet::new();
 
         // println!("{}", ctx);
 
+        // gp registers
         loop {
-            colors = HashMap::new();
+            gp_colors = HashMap::new();
 
             let mut lra = LiveRangeAnalysis::default();
             let live_ranges = lra.run_on_function(ctx, ctx.function_data(func_name).unwrap())?;
@@ -240,12 +232,12 @@ impl LocalPassMut for GraphColoringAllocation {
                 for neighbor in interference_graph.adjacent(reg).unwrap_or(&HashSet::new()) {
                     if neighbor.is_gp() {
                         ok_colors.retain(|&c| c != neighbor);
-                    } else if let Some(color) = colors.get(neighbor) {
+                    } else if let Some(color) = gp_colors.get(neighbor) {
                         ok_colors.retain(|&c| c != color);
                     }
                 }
                 if let Some(color) = ok_colors.pop() {
-                    colors.insert(reg, *color);
+                    gp_colors.insert(reg, *color);
                 } else {
                     spills.insert(reg);
                 }
@@ -408,6 +400,252 @@ impl LocalPassMut for GraphColoringAllocation {
             // println!("{}", ctx);
         }
 
+        // fp registers
+        loop {
+            fp_colors = HashMap::new();
+
+            let mut lra = LiveRangeAnalysis::default();
+            let live_ranges = lra.run_on_function(ctx, ctx.function_data(func_name).unwrap())?;
+
+            // lra.dump(ctx, ctx.function_data(func_name).unwrap(), &live_ranges);
+            // print live ranges
+            // for (reg, live_range) in live_ranges.intervals.iter() {
+            //     println!("{:?}:", reg);
+            //     for range in live_range.ranges.iter() {
+            //         println!("\t{}", range);
+            //     }
+            // }
+
+            let mut interference_graph = InterferenceGraph::new(RegisterType::FloatingPoint);
+            interference_graph.construct_from_live_ranges(&live_ranges);
+
+            // for (reg, neighbors) in interference_graph.graph.iter() {
+            //     println!(
+            //         "{} - [ {} ]",
+            //         reg,
+            //         neighbors
+            //             .iter()
+            //             .map(|r| r.to_string())
+            //             .collect::<Vec<_>>()
+            //             .join(", ")
+            //     );
+            // }
+
+            // println!("{:}", interference_graph.to_mermaid());
+
+            let mut stack = Vec::new();
+
+            let mut working_interference_graph = interference_graph.clone();
+
+            // simplify
+            while !working_interference_graph.all_colored() {
+                if let Some(reg) = working_interference_graph
+                    .graph
+                    .iter()
+                    .find(|(reg, neighbors)| {
+                        reg.is_fp_virtual() && neighbors.len() < ALLOCATABLE_REGISTERS_FP.len()
+                    })
+                    .map(|(reg, _)| *reg)
+                {
+                    stack.push(reg);
+                    working_interference_graph.remove_node(reg);
+                } else {
+                    let spill = self.choose_to_spill(
+                        &working_interference_graph,
+                        &spilled_registers,
+                    );
+                    stack.push(spill);
+                    working_interference_graph.remove_node(spill);
+                }
+            }
+
+            // println!("{:?}", stack);
+
+            let mut spills = HashSet::new();
+
+            // select
+            while let Some(reg) = stack.pop() {
+                let mut ok_colors: Vec<_> = ALLOCATABLE_REGISTERS_FP.iter().rev().collect();
+                for neighbor in interference_graph.adjacent(reg).unwrap_or(&HashSet::new()) {
+                    if neighbor.is_gp() {
+                        ok_colors.retain(|&c| c != neighbor);
+                    } else if let Some(color) = fp_colors.get(neighbor) {
+                        ok_colors.retain(|&c| c != color);
+                    }
+                }
+                if let Some(color) = ok_colors.pop() {
+                    fp_colors.insert(reg, *color);
+                } else {
+                    spills.insert(reg);
+                }
+            }
+
+            // spill
+            if spills.is_empty() {
+                break;
+            }
+
+            let mut spill_slots = HashMap::new();
+            for spill in spills.iter() {
+                changed = true;
+                // allocate on stack
+                let stack_offset = ctx.function_data_mut(func_name).unwrap().stack_size;
+                ctx.function_data_mut(func_name).unwrap().add_stack_size(8);
+                let stack_slot = (
+                    Register::General(RiscvGpReg::Sp),
+                    Immediate(stack_offset as i128),
+                );
+                spill_slots.insert(spill, stack_slot);
+                spilled_registers.insert(*spill);
+                self.total_spills += 1;
+            }
+
+            // println!("Spilling");
+            // for (reg, stack_slot) in spill_slots.iter() {
+            //     println!("{} -> {}(sp)", reg, stack_slot.1);
+            // }
+
+            let mut insert_later_loads = HashMap::new();
+            let mut insert_later_stores = HashMap::new();
+            for (block, _) in ctx.function_data(func_name).unwrap().layout.blocks() {
+                let insts = ctx
+                    .function_data(func_name)
+                    .unwrap()
+                    .layout
+                    .insts_of_block(block)
+                    .unwrap();
+                for (inst, _) in insts.iter() {
+                    let inst_data = ctx.inst_data(inst).unwrap();
+                    let defs = inst_data.get_def_operands();
+                    let uses = inst_data.get_use_operands();
+                    for def in defs {
+                        if spills.contains(&def) {
+                            let stack_slot = spill_slots.get(&def).unwrap();
+                            let load = (def, stack_slot.0, stack_slot.1);
+                            insert_later_stores.insert(inst, load);
+                        }
+                    }
+                    for use_ in uses {
+                        if spills.contains(&use_) {
+                            let stack_slot = spill_slots.get(&use_).unwrap();
+                            let store = (use_, stack_slot.0, stack_slot.1);
+                            insert_later_loads.insert(inst, store);
+                        }
+                    }
+                }
+            }
+
+            // println!("loads added to {:?}", insert_later_loads);
+            // println!("stores added to {:?}", insert_later_stores);
+
+            for (inst, (def, base, offset)) in insert_later_loads.iter() {
+                if check_itype_imm(*offset) {
+                    let load = MachineInstData::build_float_load(
+                        ctx,
+                        FloatLoadKind::Double,
+                        *def,
+                        *base,
+                        *offset,
+                    );
+                    ctx.function_data_mut(func_name)
+                        .unwrap()
+                        .layout
+                        .insert_inst_before(load, *inst)
+                        .unwrap();
+                } else {
+                    let (rd, li) = MachineInstData::new_li(ctx, *offset);
+                    let (rd1, add) = MachineInstData::new_binary(
+                        ctx,
+                        crate::backend::MachineBinaryOp::Add,
+                        *base,
+                        rd,
+                    );
+                    let load = MachineInstData::build_float_load(
+                        ctx,
+                        FloatLoadKind::Double,
+                        *def,
+                        rd1,
+                        Immediate(0),
+                    );
+                    ctx.function_data_mut(func_name)
+                        .unwrap()
+                        .layout
+                        .insert_inst_before(li, *inst)
+                        .unwrap();
+                    ctx.function_data_mut(func_name)
+                        .unwrap()
+                        .layout
+                        .insert_inst_before(add, *inst)
+                        .unwrap();
+                    ctx.function_data_mut(func_name)
+                        .unwrap()
+                        .layout
+                        .insert_inst_before(load, *inst)
+                        .unwrap();
+                }
+                self.total_loads_added += 1;
+            }
+
+            for (inst, (use_, base, offset)) in insert_later_stores.iter() {
+                if check_itype_imm(*offset) {
+                    let store = MachineInstData::build_float_store(
+                        ctx,
+                        FloatStoreKind::Double,
+                        *use_,
+                        *base,
+                        *offset,
+                    );
+                    ctx.function_data_mut(func_name)
+                        .unwrap()
+                        .layout
+                        .insert_inst_after(store, *inst)
+                        .unwrap();
+                } else {
+                    let (rd, li) = MachineInstData::new_li(ctx, *offset);
+                    let (rd1, add) = MachineInstData::new_binary(
+                        ctx,
+                        crate::backend::MachineBinaryOp::Add,
+                        *base,
+                        rd,
+                    );
+                    let store = MachineInstData::build_float_store(
+                        ctx,
+                        FloatStoreKind::Double,
+                        *use_,
+                        rd1,
+                        Immediate(0),
+                    );
+                    ctx.function_data_mut(func_name)
+                        .unwrap()
+                        .layout
+                        .insert_inst_after(store, *inst)
+                        .unwrap();
+                    ctx.function_data_mut(func_name)
+                        .unwrap()
+                        .layout
+                        .insert_inst_after(add, *inst)
+                        .unwrap();
+                    ctx.function_data_mut(func_name)
+                        .unwrap()
+                        .layout
+                        .insert_inst_after(li, *inst)
+                        .unwrap();
+                }
+                self.total_stores_added += 1;
+            }
+
+            // println!("{}", ctx);
+        }
+
+        // merge gp_colors and fp_colors
+        let mut colors = HashMap::new();
+        for (reg, color) in gp_colors.iter() {
+            colors.insert(*reg, *color);
+        }
+        for (reg, color) in fp_colors.iter() {
+            colors.insert(*reg, *color);
+        }
+
         // mark used callee saved registers
         for used_regs in colors.values() {
             if CALLEE_SAVED_REGISTERS.contains(used_regs) {
@@ -508,8 +746,17 @@ impl GraphColoringAllocation {
         let mut spill = None;
         let mut max_degree = 0;
         for (reg, _) in interference_graph.graph.iter() {
-            if !reg.is_gp_virtual() {
-                continue;
+            match interference_graph.reg_type {
+                RegisterType::General => {
+                    if !reg.is_gp_virtual() {
+                        continue;
+                    }
+                }
+                RegisterType::FloatingPoint => {
+                    if !reg.is_fp_virtual() {
+                        continue;
+                    }
+                }
             }
             if spilled_registers.contains(reg) {
                 continue;

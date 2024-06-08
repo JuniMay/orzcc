@@ -134,16 +134,41 @@ impl LocalPass for LiveRangeAnalysis {
             for (inst, _) in data.layout().insts_of_block(block).unwrap() {
                 let inst_data = ctx.inst_data(inst).unwrap();
                 // for pseudo-load rt, mark liverange as [this, this + 1)
-                if let MachineInstData::PseudoStore { rt, .. } = inst_data {
-                    let range = Range::new(
-                        *self.instruction_number.get(&inst).unwrap(),
-                        self.instruction_number.get(&inst).unwrap() + 1,
-                    );
-                    live_interval
-                        .intervals
-                        .entry(*rt)
-                        .or_insert_with(Interval::new)
-                        .add_range(range);
+                match inst_data {
+                    MachineInstData::PseudoStore { rt, .. } => {
+                        let range = Range::new(
+                            *self.instruction_number.get(&inst).unwrap(),
+                            self.instruction_number.get(&inst).unwrap() + 1,
+                        );
+                        live_interval
+                            .intervals
+                            .entry(*rt)
+                            .or_insert_with(Interval::new)
+                            .add_range(range);
+                    }
+                    MachineInstData::FloatPseudoLoad { rt, .. } => {
+                        let range = Range::new(
+                            *self.instruction_number.get(&inst).unwrap(),
+                            self.instruction_number.get(&inst).unwrap() + 1,
+                        );
+                        live_interval
+                            .intervals
+                            .entry(*rt)
+                            .or_insert_with(Interval::new)
+                            .add_range(range);
+                    }
+                    MachineInstData::FloatPseudoStore { rt, .. } => {
+                        let range = Range::new(
+                            *self.instruction_number.get(&inst).unwrap(),
+                            self.instruction_number.get(&inst).unwrap() + 1,
+                        );
+                        live_interval
+                            .intervals
+                            .entry(*rt)
+                            .or_insert_with(Interval::new)
+                            .add_range(range);
+                    }
+                    _ => {}
                 }
                 for reg in inst_data.get_use_operands() {
                     // except the zero register and sp register

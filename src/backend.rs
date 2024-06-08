@@ -1659,6 +1659,27 @@ impl MachineInstData {
         ctx.new_inst(data)
     }
 
+    /// Build and float store instruction for function argument (entry block
+    /// arguments)
+    pub fn build_float_store(
+        ctx: &mut MachineContext,
+        kind: FloatStoreKind,
+        value: Register,
+        base: Register,
+        offset: Immediate,
+    ) -> MachineInst {
+        if !check_itype_imm(offset) {
+            panic!("invalid offset for store instruction");
+        }
+        let data = MachineInstData::FloatStore {
+            kind,
+            value,
+            base,
+            offset,
+        };
+        ctx.new_inst(data)
+    }
+    
     pub fn build_li(ctx: &mut MachineContext, rd: Register, imm: Immediate) -> MachineInst {
         let data = MachineInstData::Li { rd, imm };
         ctx.new_inst(data)
