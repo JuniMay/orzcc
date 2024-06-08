@@ -631,11 +631,15 @@ impl Expr {
                 let mut expr = expr.type_check(None, symtable);
                 let ty = match op {
                     UnaryOp::Neg => {
+                        if expr.ty().is_bool() {
+                            // if this is bool, convert to int first
+                            expr = Expr::new_coercion(Box::new(expr), SysyType::int());
+                        }
                         let ty = expr.ty();
                         if ty.is_int() || ty.is_float() {
                             ty
                         } else {
-                            panic!("unsupported type for negation");
+                            panic!("unsupported type for negation: {:?}", ty);
                         }
                     }
                     UnaryOp::LogicalNot => {
@@ -644,16 +648,16 @@ impl Expr {
                             ty
                         } else if ty.is_int() {
                             let zero = Expr::new_const(ComptimeVal::Int(0));
-                            expr = Expr::new_binary(BinaryOp::Eq, Box::new(expr), Box::new(zero));
+                            expr = Expr::new_binary(BinaryOp::Ne, Box::new(expr), Box::new(zero));
                             expr.ty = Some(SysyType::bool());
                             SysyType::bool()
                         } else if ty.is_float() {
                             let zero = Expr::new_const(ComptimeVal::Float(0.0));
-                            expr = Expr::new_binary(BinaryOp::Eq, Box::new(expr), Box::new(zero));
+                            expr = Expr::new_binary(BinaryOp::Ne, Box::new(expr), Box::new(zero));
                             expr.ty = Some(SysyType::bool());
                             SysyType::bool()
                         } else {
-                            panic!("unsupported type for logical not");
+                            panic!("unsupported type for logical not: {:?}", ty);
                         }
                     }
                 };
