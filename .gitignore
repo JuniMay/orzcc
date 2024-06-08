@@ -12,3 +12,5 @@ target/
 /test.ast
 /test.sy
 /test-*.orzir
+
+output/
