@@ -127,8 +127,8 @@ impl LocalPass for LiveRangeAnalysis {
             for (inst, _) in data.layout().insts_of_block(block).unwrap() {
                 let inst_data = ctx.inst_data(inst).unwrap();
                 for reg in inst_data.get_use_operands() {
-                    // except the zero register
-                    if reg == Register::General(RiscvGpReg::Zero) {
+                    // except the zero register and sp register
+                    if reg == Register::General(RiscvGpReg::Zero) || reg == Register::General(RiscvGpReg::Sp) {
                         continue;
                     }
                     let range = current_range.entry(reg).or_insert_with(|| {
@@ -144,14 +144,19 @@ impl LocalPass for LiveRangeAnalysis {
 
                     last_use.insert(reg, inst);
                 }
-
+                
+                // TODO: Psuedo instructions rt needs to be optimized
                 for reg in inst_data.get_def_operands() {
+                    // except the zero register and sp register
+                    if reg == Register::General(RiscvGpReg::Zero) || reg == Register::General(RiscvGpReg::Sp) {
+                        continue;
+                    }
                     if current_range.contains_key(&reg) {
                         if current_range.get(&reg).unwrap().end
                             == self.instruction_number.get(&inst).unwrap() + 1
                         {
-                            current_range.get_mut(&reg).unwrap().end =
-                                self.instruction_number.get(&inst).unwrap() + 2;
+                            current_range.get_mut(&reg).unwrap().start =
+                                *self.instruction_number.get(&inst).unwrap();
                         } else {
                             live_interval
                                 .intervals

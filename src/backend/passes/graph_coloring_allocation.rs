@@ -172,6 +172,7 @@ impl LocalPassMut for GraphColoringAllocation {
             let mut lra = LiveRangeAnalysis::default();
             let live_ranges = lra.run_on_function(ctx, ctx.function_data(func_name).unwrap())?;
 
+            // lra.dump(ctx, ctx.function_data(func_name).unwrap(), &live_ranges);
             // print live ranges
             // for (reg, live_range) in live_ranges.intervals.iter() {
             //     println!("{:?}:", reg);

@@ -1674,7 +1674,7 @@ impl MachineInstData {
             MachineInstData::Load { base, .. } => vec![*base],
             MachineInstData::FloatLoad { base, .. } => vec![*base],
             MachineInstData::PseudoLoad { .. } => vec![],
-            MachineInstData::PseudoStore { value, .. } => vec![*value],
+            MachineInstData::PseudoStore { value, rt, .. } => vec![*value, *rt],
             MachineInstData::FloatPseudoLoad { dest, rt, .. } => vec![*dest, *rt],
             MachineInstData::FloatPseudoStore { value, rt, .. } => vec![*value, *rt],
             MachineInstData::Store { value, base, .. } => vec![*value, *base],
