@@ -169,6 +169,8 @@ impl LocalPassMut for GraphColoringAllocation {
         let mut colors;
         let mut changed = false;
 
+        println!("{}", ctx);
+
         loop {
             colors = HashMap::new();
 

@@ -197,6 +197,10 @@ impl LocalPass for LiveRangeAnalysis {
             }
 
             for reg in live_out.iter() {
+                // except the zero register and sp register
+                if *reg == Register::General(RiscvGpReg::Zero) || *reg == Register::General(RiscvGpReg::Sp) {
+                    continue;
+                }
                 if live_in.contains(reg) && !current_range.contains_key(reg) {
                     let range = Range::new(
                         *self
@@ -208,7 +212,11 @@ impl LocalPass for LiveRangeAnalysis {
                             .unwrap()
                             + 2,
                     );
-                    current_range.insert(*reg, range);
+                    live_interval
+                        .intervals
+                        .entry(*reg)
+                        .or_insert_with(Interval::new)
+                        .add_range(range);
                 }
             }
         }
