@@ -168,8 +168,9 @@ impl LocalPassMut for GraphColoringAllocation {
         // Gp registers
         let mut colors;
         let mut changed = false;
+        let mut spilled_registers = HashSet::new();
 
-        println!("{}", ctx);
+        // println!("{}", ctx);
 
         loop {
             colors = HashMap::new();
@@ -189,17 +190,17 @@ impl LocalPassMut for GraphColoringAllocation {
             let mut interference_graph = InterferenceGraph::new(RegisterType::General);
             interference_graph.construct_from_live_ranges(&live_ranges);
 
-            for (reg, neighbors) in interference_graph.graph.iter() {
-                println!(
-                    "{} - [ {} ]",
-                    reg,
-                    neighbors
-                        .iter()
-                        .map(|r| r.to_string())
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                );
-            }
+            // for (reg, neighbors) in interference_graph.graph.iter() {
+            //     println!(
+            //         "{} - [ {} ]",
+            //         reg,
+            //         neighbors
+            //             .iter()
+            //             .map(|r| r.to_string())
+            //             .collect::<Vec<_>>()
+            //             .join(", ")
+            //     );
+            // }
 
             // println!("{:}", interference_graph.to_mermaid());
 
@@ -220,7 +221,10 @@ impl LocalPassMut for GraphColoringAllocation {
                     stack.push(reg);
                     working_interference_graph.remove_node(reg);
                 } else {
-                    let spill = self.choose_to_spill(&working_interference_graph, &live_ranges);
+                    let spill = self.choose_to_spill(
+                        &working_interference_graph,
+                        &spilled_registers,
+                    );
                     stack.push(spill);
                     working_interference_graph.remove_node(spill);
                 }
@@ -263,13 +267,14 @@ impl LocalPassMut for GraphColoringAllocation {
                     Immediate(stack_offset as i128),
                 );
                 spill_slots.insert(spill, stack_slot);
+                spilled_registers.insert(*spill);
                 self.total_spills += 1;
             }
 
-            println!("Spilling");
-            for (reg, stack_slot) in spill_slots.iter() {
-                println!("{} -> {}(sp)", reg, stack_slot.1);
-            }
+            // println!("Spilling");
+            // for (reg, stack_slot) in spill_slots.iter() {
+            //     println!("{} -> {}(sp)", reg, stack_slot.1);
+            // }
 
             let mut insert_later_loads = HashMap::new();
             let mut insert_later_stores = HashMap::new();
@@ -400,7 +405,7 @@ impl LocalPassMut for GraphColoringAllocation {
                 self.total_stores_added += 1;
             }
 
-            println!("{}", ctx);
+            // println!("{}", ctx);
         }
 
         // mark used callee saved registers
@@ -464,7 +469,7 @@ impl LocalPassMut for GraphColoringAllocation {
                 .next_block(block);
         }
 
-        print!("{}", ctx);
+        // print!("{}", ctx);
 
         Ok((colors, changed))
     }
@@ -498,7 +503,7 @@ impl GraphColoringAllocation {
     pub fn choose_to_spill(
         &self,
         interference_graph: &InterferenceGraph,
-        live_range: &LiveRange,
+        spilled_registers: &HashSet<Register>,
     ) -> Register {
         let mut spill = None;
         let mut max_degree = 0;
@@ -506,7 +511,7 @@ impl GraphColoringAllocation {
             if !reg.is_gp_virtual() {
                 continue;
             }
-            if live_range.intervals.get(reg).unwrap().range_count() > 1 {
+            if spilled_registers.contains(reg) {
                 continue;
             }
             if interference_graph.degree(*reg) > max_degree {
@@ -514,7 +519,7 @@ impl GraphColoringAllocation {
                 spill = Some(*reg);
             }
         }
-        spill.unwrap()
+        spill.unwrap_or_else(|| panic!("No spill candidate found"))
     }
 
     pub fn register() {
