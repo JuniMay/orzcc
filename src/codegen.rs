@@ -658,7 +658,11 @@ impl CodegenContext {
                         }
                         ValueKind::Array(_) | ValueKind::Struct(_) => unimplemented!(),
                         ValueKind::Bytes(bytes) => {
-                            let imm = bytes.iter().fold(0, |acc, &byte| (acc << 8) | byte as u64);
+                            // little endian
+                            let imm = bytes
+                                .iter()
+                                .rev()
+                                .fold(0, |acc, &byte| (acc << 8) | byte as u64);
                             let (rd, li) =
                                 MachineInstData::new_li(&mut self.machine_ctx, imm.into());
                             self.append_inst(&function_name, block, li);
