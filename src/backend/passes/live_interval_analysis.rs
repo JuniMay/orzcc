@@ -1,7 +1,14 @@
 use std::{collections::HashMap, fmt::Display};
 
 use super::{liveness_analysis::InOutAnalysis, LocalPass, PassResult};
-use crate::backend::{MachineContext, MachineFunctionData, MachineInst, Register, RiscvGpReg};
+use crate::backend::{
+    MachineContext,
+    MachineFunctionData,
+    MachineInst,
+    MachineInstData,
+    Register,
+    RiscvGpReg,
+};
 
 /// Range [start, end)
 #[derive(Debug, Clone, Default, Copy)]
@@ -126,6 +133,18 @@ impl LocalPass for LiveRangeAnalysis {
 
             for (inst, _) in data.layout().insts_of_block(block).unwrap() {
                 let inst_data = ctx.inst_data(inst).unwrap();
+                // for pseudo-load rt, mark liverange as [this, this + 1)
+                if let MachineInstData::PseudoStore { rt, .. } = inst_data {
+                    let range = Range::new(
+                        *self.instruction_number.get(&inst).unwrap(),
+                        self.instruction_number.get(&inst).unwrap() + 1,
+                    );
+                    live_interval
+                        .intervals
+                        .entry(*rt)
+                        .or_insert_with(Interval::new)
+                        .add_range(range);
+                }
                 for reg in inst_data.get_use_operands() {
                     // except the zero register and sp register
                     if reg == Register::General(RiscvGpReg::Zero)
@@ -158,9 +177,10 @@ impl LocalPass for LiveRangeAnalysis {
                     if current_range.contains_key(&reg) {
                         if current_range.get(&reg).unwrap().end
                             == self.instruction_number.get(&inst).unwrap() + 1
+                        // for call, mark liverange as [last_def, this + 1) and [this + 1, this + 2)
                         {
-                            current_range.get_mut(&reg).unwrap().start =
-                                *self.instruction_number.get(&inst).unwrap();
+                            current_range.get_mut(&reg).unwrap().end =
+                                self.instruction_number.get(&inst).unwrap() + 2;
                         } else {
                             live_interval
                                 .intervals

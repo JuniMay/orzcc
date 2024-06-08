@@ -440,16 +440,10 @@ impl LocalPassMut for GraphColoringAllocation {
                 .front();
             while let Some(inst) = inst_it {
                 let inst_data = ctx.inst_data_mut(inst).unwrap();
-                let defs = inst_data.get_def_operands();
-                let uses = inst_data.get_use_operands();
-                for def in defs {
-                    if let Some(color) = colors.get(&def) {
-                        inst_data.replace_operand(def, *color);
-                    }
-                }
-                for use_ in uses {
-                    if let Some(color) = colors.get(&use_) {
-                        inst_data.replace_operand(use_, *color);
+                let operands = inst_data.get_all_operand();
+                for operand in operands {
+                    if let Some(color) = colors.get(&operand) {
+                        inst_data.replace_operand(operand, *color);
                     }
                 }
                 inst_it = ctx

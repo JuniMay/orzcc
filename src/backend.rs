@@ -1,7 +1,7 @@
 pub mod passes;
 
 use core::fmt;
-use std::collections::{HashMap, HashSet};
+use std::{collections::{HashMap, HashSet}, vec};
 
 use thiserror::Error;
 
@@ -1704,9 +1704,9 @@ impl MachineInstData {
             MachineInstData::Load { base, .. } => vec![*base],
             MachineInstData::FloatLoad { base, .. } => vec![*base],
             MachineInstData::PseudoLoad { .. } => vec![],
-            MachineInstData::PseudoStore { value, rt, .. } => vec![*value, *rt],
-            MachineInstData::FloatPseudoLoad { dest, rt, .. } => vec![*dest, *rt],
-            MachineInstData::FloatPseudoStore { value, rt, .. } => vec![*value, *rt],
+            MachineInstData::PseudoStore { value, .. } => vec![*value],
+            MachineInstData::FloatPseudoLoad { dest, .. } => vec![*dest],
+            MachineInstData::FloatPseudoStore { value, .. } => vec![*value],
             MachineInstData::Store { value, base, .. } => vec![*value, *base],
             MachineInstData::FloatStore { value, base, .. } => vec![*value, *base],
             MachineInstData::FMv { rs, .. } => vec![*rs],
@@ -1733,9 +1733,9 @@ impl MachineInstData {
             MachineInstData::Load { dest, .. } => vec![*dest],
             MachineInstData::FloatLoad { dest, .. } => vec![*dest],
             MachineInstData::PseudoLoad { dest, .. } => vec![*dest],
-            MachineInstData::PseudoStore { rt, .. } => vec![*rt],
-            MachineInstData::FloatPseudoLoad { dest, rt, .. } => vec![*dest, *rt],
-            MachineInstData::FloatPseudoStore { rt, .. } => vec![*rt],
+            MachineInstData::PseudoStore { .. } => vec![],
+            MachineInstData::FloatPseudoLoad { dest, .. } => vec![*dest],
+            MachineInstData::FloatPseudoStore { .. } => vec![],
             MachineInstData::Store { .. } => vec![],
             MachineInstData::FloatStore { .. } => vec![],
             MachineInstData::FMv { rd, .. } => vec![*rd],
@@ -1750,6 +1750,31 @@ impl MachineInstData {
             MachineInstData::Call { .. } => CALLER_SAVED_REGISTERS.to_vec(), /* TODO: This might */
             // be wrong
             MachineInstData::Branch { .. } => vec![],
+            MachineInstData::J { .. } => vec![],
+        }
+    }
+
+    pub fn get_all_operand(&self) -> Vec<Register> {
+        match self {
+            MachineInstData::Load { dest, base, .. } => vec![*dest, *base],
+            MachineInstData::FloatLoad { dest, base, .. } => vec![*dest, *base],
+            MachineInstData::PseudoLoad { dest, .. } => vec![*dest],
+            MachineInstData::PseudoStore { value, rt, .. } => vec![*value, *rt],
+            MachineInstData::FloatPseudoLoad { dest, rt, .. } => vec![*dest, *rt],
+            MachineInstData::FloatPseudoStore { value, rt, .. } => vec![*value, *rt],
+            MachineInstData::Store { value, base, .. } => vec![*value, *base],
+            MachineInstData::FloatStore { value, base, .. } => vec![*value, *base],
+            MachineInstData::FMv { rd, rs, .. } => vec![*rd, *rs],
+            MachineInstData::FCvt { rd, rs, .. } => vec![*rd, *rs],
+            MachineInstData::Binary { rd, rs1, rs2, .. } => vec![*rd, *rs1, *rs2],
+            MachineInstData::BinaryImm { rd, rs1, .. } => vec![*rd, *rs1],
+            MachineInstData::FloatBinary { rd, rs1, rs2, .. } => vec![*rd, *rs1, *rs2],
+            MachineInstData::FloatMulAdd { rd, rs1, rs2, rs3, .. } => vec![*rd, *rs1, *rs2, *rs3],
+            MachineInstData::FloatUnary { rd, rs, .. } => vec![*rd, *rs],
+            MachineInstData::Li { rd, .. } => vec![*rd],
+            MachineInstData::Ret => vec![],
+            MachineInstData::Call { .. } => vec![],
+            MachineInstData::Branch { rs1, rs2, .. } => vec![*rs1, *rs2],
             MachineInstData::J { .. } => vec![],
         }
     }
