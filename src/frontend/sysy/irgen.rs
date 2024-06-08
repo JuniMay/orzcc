@@ -1301,6 +1301,11 @@ impl IrGenContext {
                             .bytes(Type::i1(), vec![0])
                             .unwrap();
 
+                        let true_ = curr_dfg_mut!(self)
+                            .builder()
+                            .bytes(Type::i1(), vec![1])
+                            .unwrap();
+
                         match op {
                             BinaryOp::LogicalAnd => {
                                 // if lhs is false, jump to merge block with arg = false, otherwise
@@ -1318,7 +1323,7 @@ impl IrGenContext {
                                 // rhs block
                                 let br = curr_dfg_mut!(self)
                                     .builder()
-                                    .branch(lhs, merge_block, rhs_block, vec![false_], Vec::new())
+                                    .branch(lhs, merge_block, rhs_block, vec![true_], Vec::new())
                                     .unwrap();
                                 curr_layout_mut!(self)
                                     .append_inst(br.into(), curr_block)
