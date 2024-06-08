@@ -6,8 +6,7 @@ use std::collections::{HashMap, HashSet};
 use thiserror::Error;
 
 use crate::{
-    collections::{List, ListError, ListNode},
-    ir::module::IdAllocator,
+    codegen::check_itype_imm, collections::{List, ListError, ListNode}, ir::module::IdAllocator
 };
 
 pub const ARGUMENT_REGISTERS: [Register; 16] = [
@@ -1226,6 +1225,9 @@ impl MachineInstData {
         base: Register,
         offset: Immediate,
     ) -> (Register, MachineInst) {
+        if !check_itype_imm(offset) {
+            panic!("invalid offset for store instruction");
+        }
         let dest = ctx.new_virtual_reg(VirtualRegisterKind::General);
         let data = MachineInstData::Load {
             kind,
@@ -1242,6 +1244,9 @@ impl MachineInstData {
         base: Register,
         offset: Immediate,
     ) -> (Register, MachineInst) {
+        if !check_itype_imm(offset) {
+            panic!("invalid offset for store instruction");
+        }
         let dest = ctx.new_virtual_reg(VirtualRegisterKind::FloatingPoint);
         let data = MachineInstData::FloatLoad {
             kind,
@@ -1317,6 +1322,9 @@ impl MachineInstData {
         base: Register,
         offset: Immediate,
     ) -> MachineInst {
+        if !check_itype_imm(offset) {
+            panic!("invalid offset for store instruction");
+        }
         let data = MachineInstData::Store {
             kind,
             value,
@@ -1333,6 +1341,9 @@ impl MachineInstData {
         base: Register,
         offset: Immediate,
     ) -> MachineInst {
+        if !check_itype_imm(offset) {
+            panic!("invalid offset for store instruction");
+        }
         let data = MachineInstData::FloatStore {
             kind,
             value,
@@ -1394,6 +1405,9 @@ impl MachineInstData {
         rs1: Register,
         imm: Immediate,
     ) -> (Register, MachineInst) {
+        if !check_itype_imm(imm) {
+            panic!("invalid immediate value for I-type instruction");
+        }
         let rd = ctx.new_virtual_reg(VirtualRegisterKind::General);
         let data = MachineInstData::BinaryImm { kind, rd, rs1, imm };
         (rd, ctx.new_inst(data))
@@ -1587,6 +1601,9 @@ impl MachineInstData {
         base: Register,
         offset: Immediate,
     ) -> MachineInst {
+        if !check_itype_imm(offset) {
+            panic!("invalid offset for store instruction");
+        }
         let data = MachineInstData::Load {
             kind,
             dest,
@@ -1605,6 +1622,9 @@ impl MachineInstData {
         base: Register,
         offset: Immediate,
     ) -> MachineInst {
+        if !check_itype_imm(offset) {
+            panic!("invalid offset for store instruction");
+        }
         let data = MachineInstData::Store {
             kind,
             value,
@@ -1623,6 +1643,9 @@ impl MachineInstData {
         base: Register,
         offset: Immediate,
     ) -> MachineInst {
+        if !check_itype_imm(offset) {
+            panic!("invalid offset for store instruction");
+        }
         let data = MachineInstData::FloatLoad {
             kind,
             dest,
@@ -1665,6 +1688,9 @@ impl MachineInstData {
         rs1: Register,
         imm: Immediate,
     ) -> MachineInst {
+        if !check_itype_imm(imm) {
+            panic!("invalid immediate value for I-type instruction");
+        }
         let data = MachineInstData::BinaryImm { kind, rd, rs1, imm };
         ctx.new_inst(data)
     }

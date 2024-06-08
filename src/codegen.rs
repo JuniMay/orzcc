@@ -670,14 +670,28 @@ impl CodegenContext {
                         }
                         ValueKind::Alloc(_) => {
                             let (base, offset) = self.get_value_as_stack_slot(store.val());
-                            let (rd, addi) = MachineInstData::new_binary_imm(
-                                &mut self.machine_ctx,
-                                MachineBinaryImmOp::Addi,
-                                base,
-                                offset,
-                            );
-                            self.append_inst(&function_name, block, addi);
-                            rd
+                            if check_itype_imm(offset) {
+                                let (rd, addi) = MachineInstData::new_binary_imm(
+                                    &mut self.machine_ctx,
+                                    MachineBinaryImmOp::Addi,
+                                    base,
+                                    offset,
+                                );
+                                self.append_inst(&function_name, block, addi);
+                                rd
+                            } else {
+                                let (rd, li) =
+                                    MachineInstData::new_li(&mut self.machine_ctx, offset);
+                                let (rd, add) = MachineInstData::new_binary(
+                                    &mut self.machine_ctx,
+                                    MachineBinaryOp::Add,
+                                    base,
+                                    rd,
+                                );
+                                self.append_inst(&function_name, block, li);
+                                self.append_inst(&function_name, block, add);
+                                rd
+                            }
                         }
                         ValueKind::Store(_)
                         | ValueKind::Jump(_)
@@ -748,6 +762,23 @@ impl CodegenContext {
                         }
                         ValueKind::Alloc(_) => {
                             let (base, offset) = self.get_value_as_stack_slot(store.ptr());
+
+                            let (base, offset) = if check_itype_imm(offset) {
+                                (base, offset)
+                            } else {
+                                let (rd, li) =
+                                    MachineInstData::new_li(&mut self.machine_ctx, offset);
+                                let (rd, add) = MachineInstData::new_binary(
+                                    &mut self.machine_ctx,
+                                    MachineBinaryOp::Add,
+                                    base,
+                                    rd,
+                                );
+                                self.append_inst(&function_name, block, li);
+                                self.append_inst(&function_name, block, add);
+                                (rd, 0.into())
+                            };
+
                             let store = if ty.is_float() {
                                 let kind = match ty.bytewidth() {
                                     4 => FloatStoreKind::Single,
@@ -871,6 +902,22 @@ impl CodegenContext {
                         }
                         ValueKind::Alloc(_) => {
                             let (base, offset) = self.get_value_as_stack_slot(ptr);
+                            let (base, offset) = if check_itype_imm(offset) {
+                                (base, offset)
+                            } else {
+                                let (rd, li) =
+                                    MachineInstData::new_li(&mut self.machine_ctx, offset);
+                                let (rd, add) = MachineInstData::new_binary(
+                                    &mut self.machine_ctx,
+                                    MachineBinaryOp::Add,
+                                    base,
+                                    rd,
+                                );
+                                self.append_inst(&function_name, block, li);
+                                self.append_inst(&function_name, block, add);
+                                (rd, 0.into())
+                            };
+
                             let (rd, load) = if ty.is_float() {
                                 let kind = match ty.bytewidth() {
                                     4 => FloatLoadKind::Single,
