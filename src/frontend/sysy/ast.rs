@@ -600,7 +600,14 @@ impl Expr {
                 expr.ty = Some(ret_ty);
                 expr
             }
-            ExprKind::InitList(_) => {
+            ExprKind::InitList(ref vals) => {
+                if vals.is_empty() {
+                    // empty list, a type is expected and default to zero init to save time.
+                    let ty = expect.unwrap();
+                    let val = ComptimeVal::new_zeros(ty);
+                    let expr = Expr::new_const(val);
+                    return expr;
+                }
                 // for initialization list, the elements and types should be handled separately
                 self.canonialize_init_list(expect.clone().unwrap(), symtable);
                 self

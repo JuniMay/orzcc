@@ -302,7 +302,7 @@ def test(executable_path: str, testcase_dir: str, output_dir: str,
 
         command = (f'{executable_path} compile '
                    f'--file {testcase}.sy '
-                   f'--emit-ast {ast_path} '
+                   #f'--emit-ast {ast_path} ' # AST will cause TLE on some cases.
                    f'--emit-ir {ir_path} '
                    f'--emit-asm {asm_path} ')
 
@@ -312,10 +312,10 @@ def test(executable_path: str, testcase_dir: str, output_dir: str,
         if exec_result['returncode'] is None:
             if exec_result['stderr'] == 'TIMEOUT':
                 result_md_table += f"| `{testcase}` | ⚠️ orzcc TLE |\n"
-                print(f'[  ERROR  ] (orzcc TLE) {testcase}')
+                print(f'\033[33m[  ERROR  ](orzcc TLE)\033[0m {testcase}')
             else:
                 result_md_table += f"| `{testcase}` | ⚠️ orzcc RE |\n"
-                print(f'[  ERROR  ] (orzcc RE) {testcase}')
+                print(f'\033[35m[  ERROR  ] (orzcc RE)\033[0m {testcase}')
 
             continue
 
@@ -327,7 +327,7 @@ def test(executable_path: str, testcase_dir: str, output_dir: str,
 
         if exec_result['returncode'] is None or exec_result['stderr'] != '':
             result_md_table += f"| `{testcase}` | 😢 CE |\n"
-            print(f'[  ERROR  ] (CE) {testcase}, see: ', log_path)
+            print(f'\033[33m[  ERROR  ] (CE)\033[0m {testcase}, see: ', log_path)
             continue
 
         command = (f'qemu-riscv64 -L /usr/riscv64-linux-gnu {exec_path}'
@@ -356,18 +356,18 @@ def test(executable_path: str, testcase_dir: str, output_dir: str,
         if exec_result['returncode'] is None:
             if exec_result['stderr'] == 'TIMEOUT':
                 result_md_table += f'| `{testcase}` | ⏱️ TLE |\n'
-                print(f'[  ERROR  ] (TLE) {testcase}, check: {asm_path}')
+                print(f'\033[33m[  ERROR  ] (TLE)\033[0m {testcase}, check: {asm_path}')
             else:
                 # SOS icon
                 result_md_table += f'| `{testcase}` | 🆘 RE |\n'
-                print(f'[  ERROR  ] (RE) {testcase}, see: {log_path}')
+                print(f'\033[35m[  ERROR  ] (RE)\033[0m {testcase}, see: {log_path}')
         elif is_equal:
             correct_cnt += 1
             result_md_table += f'| `{testcase}` | ✅ AC |\n'
-            print(f'[ CORRECT ] (AC) {testcase}')
+            print(f'\033[32m[ CORRECT ] (AC)\033[0m {testcase}')
         else:
             result_md_table += f'| `{testcase}` | ❌ WA |\n'
-            print(f'[  ERROR  ] (WA) {testcase}, see: {log_path}')
+            print(f'\033[31m[  ERROR  ] (WA)\033[0m {testcase}, see: {log_path}')
 
         log(log_file, command, exec_result)
 

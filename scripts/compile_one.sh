@@ -1,1 +1,1 @@
-RUST_BACKTRACE=1 cargo run -- compile -f test.sy --emit-ir test.orzir --emit-asm test.s --emit-ast test.ast
+RUST_BACKTRACE=1 cargo run --release -- compile -f test.sy --emit-ir test.orzir --emit-asm test.s # --emit-ast test.ast
