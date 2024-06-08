@@ -742,12 +742,16 @@ impl Expr {
                     indices.push(index);
                 }
                 let val = match val {
-                    ComptimeVal::List(list) => {
+                    ComptimeVal::List(_) => {
                         let mut val = val.clone();
                         for index in indices {
-                            val = list[index as usize].clone();
+                            if let ComptimeVal::List(list) = val {
+                                val = list[index as usize].clone();
+                            } else {
+                                panic!("invalid index");
+                            }
                         }
-                        val
+                        val.clone()
                     }
                     _ => val.clone(),
                 };
