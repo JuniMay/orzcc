@@ -226,12 +226,16 @@ impl IrGen for CompUnitItem {
             CompUnitItem::Decl(decl) => match decl {
                 Decl::ConstDecl(const_decl) => {
                     for def in &const_decl.defs {
+                        let comptime_val = def
+                            .init
+                            .try_fold(&ctx.symtable)
+                            .expect("non-constant init for const decl");
                         let init = ctx.irgen_global_expr(&def.init);
                         let slot = ctx.module.builder().global_slot(init, false).unwrap();
                         ctx.module.assign_name(slot, def.ident.clone()).unwrap();
                         let entry = SymbolEntry {
                             ty: def.init.ty(),
-                            comptime_val: None,
+                            comptime_val: Some(comptime_val),
                             ir_value: Some(slot),
                         };
                         ctx.symtable.insert(def.ident.clone(), entry);
@@ -269,6 +273,7 @@ impl IrGen for Decl {
             Decl::ConstDecl(decl) => {
                 for def in decl.defs.iter() {
                     let ty = def.init.ty.as_ref().unwrap();
+                    let comptime_init = def.init.try_fold(&ctx.symtable).expect("non-constant init for const decl");
                     let ir_ty = IrGenContext::irgen_type(ty);
                     let alloc = curr_dfg_mut!(ctx).builder().alloc(ir_ty).unwrap();
                     // insert the allocation to the front.
@@ -280,7 +285,7 @@ impl IrGen for Decl {
                         .unwrap();
                     let entry = SymbolEntry {
                         ty: ty.clone(),
-                        comptime_val: None,
+                        comptime_val: Some(comptime_init),
                         ir_value: Some(alloc),
                     };
                     ctx.symtable.insert(&def.ident, entry);

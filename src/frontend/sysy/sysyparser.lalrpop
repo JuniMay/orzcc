@@ -140,8 +140,8 @@ pub MStmt: Stmt = {
     Stmt::If(c, Box::new(s1), Some(Box::new(s2)))
   },
   "while" "(" <c: Cond> ")" <s: MStmt> => Stmt::While(c, Box::new(s)),
-  "break;" => Stmt::Break,
-  "continue;" => Stmt::Continue,
+  "break" ";" => Stmt::Break,
+  "continue" ";" => Stmt::Continue,
   "return" <e:(Exp)?> ";" => Stmt::Return(Return{expr:e}),
 }
 

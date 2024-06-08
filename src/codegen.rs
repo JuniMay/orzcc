@@ -290,6 +290,21 @@ impl CodegenContext {
             let rd = self.get_value_as_register(arg);
 
             if arg_data.ty().is_float() {
+                let (base, offset) = if check_itype_imm(offset.into()) {
+                    (fp, offset.into())
+                } else {
+                    let (rd, li) = MachineInstData::new_li(&mut self.machine_ctx, offset.into());
+                    let (rd, add) = MachineInstData::new_binary(
+                        &mut self.machine_ctx,
+                        MachineBinaryOp::Add,
+                        fp,
+                        rd,
+                    );
+                    self.append_inst(&function_name, entry_block, li);
+                    self.append_inst(&function_name, entry_block, add);
+                    (rd, 0.into())
+                };
+
                 let kind = match arg_data.ty().bytewidth() {
                     4 => FloatLoadKind::Single,
                     8 => FloatLoadKind::Double,
@@ -299,11 +314,25 @@ impl CodegenContext {
                     &mut self.machine_ctx,
                     kind,
                     rd,
-                    fp,
-                    offset.into(),
+                    base,
+                    offset,
                 );
                 self.append_inst(&function_name, entry_block, load)
             } else if arg_data.ty().is_int() || arg_data.ty().is_ptr() {
+                let (base, offset) = if check_itype_imm(offset.into()) {
+                    (fp, offset.into())
+                } else {
+                    let (rd, li) = MachineInstData::new_li(&mut self.machine_ctx, offset.into());
+                    let (rd, add) = MachineInstData::new_binary(
+                        &mut self.machine_ctx,
+                        MachineBinaryOp::Add,
+                        fp,
+                        rd,
+                    );
+                    self.append_inst(&function_name, entry_block, li);
+                    self.append_inst(&function_name, entry_block, add);
+                    (rd, 0.into())
+                };
                 let kind = match arg_data.ty().bytewidth() {
                     1 => LoadKind::Byte,
                     2 => LoadKind::Half,
@@ -312,7 +341,7 @@ impl CodegenContext {
                     _ => unimplemented!(),
                 };
                 let load =
-                    MachineInstData::build_load(&mut self.machine_ctx, kind, rd, fp, offset.into());
+                    MachineInstData::build_load(&mut self.machine_ctx, kind, rd, base, offset);
                 self.append_inst(&function_name, entry_block, load)
             } else {
                 unimplemented!("non-integer, non-float argument");
