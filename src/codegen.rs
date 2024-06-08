@@ -2744,7 +2744,7 @@ impl CodegenContext {
     }
 }
 
-fn check_itype_imm(imm: Immediate) -> bool {
+pub fn check_itype_imm(imm: Immediate) -> bool {
     if imm.0 > i32::MAX as i128 || imm.0 < i32::MIN as i128 {
         return false;
     }

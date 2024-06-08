@@ -9,17 +9,20 @@ use super::{
     PassResult,
     TransformationPass,
 };
-use crate::backend::{
-    Immediate,
-    LoadKind,
-    MachineContext,
-    MachineInstData,
-    MachineSymbol,
-    Register,
-    RiscvGpReg,
-    StoreKind,
-    ALLOCATABLE_REGISTERS_GP,
-    CALLEE_SAVED_REGISTERS,
+use crate::{
+    backend::{
+        Immediate,
+        LoadKind,
+        MachineContext,
+        MachineInstData,
+        MachineSymbol,
+        Register,
+        RiscvGpReg,
+        StoreKind,
+        ALLOCATABLE_REGISTERS_GP,
+        CALLEE_SAVED_REGISTERS,
+    },
+    codegen::check_itype_imm,
 };
 
 const GRAPH_COLORING_ALLOCATION: &str = "graph-coloring-allocation";
@@ -300,24 +303,93 @@ impl LocalPassMut for GraphColoringAllocation {
             // println!("stores added to {:?}", insert_later_stores);
 
             for (inst, (def, base, offset)) in insert_later_loads.iter() {
-                let load =
-                    MachineInstData::build_load(ctx, LoadKind::DoubleWord, *def, *base, *offset);
-                ctx.function_data_mut(func_name)
-                    .unwrap()
-                    .layout
-                    .insert_inst_before(load, *inst)
-                    .unwrap();
+                if check_itype_imm(*offset) {
+                    let load = MachineInstData::build_load(
+                        ctx,
+                        LoadKind::DoubleWord,
+                        *def,
+                        *base,
+                        *offset,
+                    );
+                    ctx.function_data_mut(func_name)
+                        .unwrap()
+                        .layout
+                        .insert_inst_before(load, *inst)
+                        .unwrap();
+                } else {
+                    let (rd, li) = MachineInstData::new_li(ctx, *offset);
+                    let (rd1, add) = MachineInstData::new_binary(
+                        ctx,
+                        crate::backend::MachineBinaryOp::Add,
+                        *base,
+                        rd,
+                    );
+                    let load = MachineInstData::build_load(
+                        ctx,
+                        LoadKind::DoubleWord,
+                        *def,
+                        rd1,
+                        Immediate(0),
+                    );
+                    ctx.function_data_mut(func_name)
+                        .unwrap()
+                        .layout
+                        .insert_inst_before(li, *inst)
+                        .unwrap();
+                    ctx.function_data_mut(func_name)
+                        .unwrap()
+                        .layout
+                        .insert_inst_before(add, *inst)
+                        .unwrap();
+                    ctx.function_data_mut(func_name)
+                        .unwrap()
+                        .layout
+                        .insert_inst_before(load, *inst)
+                        .unwrap();
+                }
                 self.total_loads_added += 1;
             }
 
             for (inst, (use_, base, offset)) in insert_later_stores.iter() {
-                let store =
-                    MachineInstData::build_store(ctx, StoreKind::DoubleWord, *use_, *base, *offset);
-                ctx.function_data_mut(func_name)
-                    .unwrap()
-                    .layout
-                    .insert_inst_after(store, *inst)
-                    .unwrap();
+                if check_itype_imm(*offset) {
+                    let store =
+                        MachineInstData::build_store(ctx, StoreKind::DoubleWord, *use_, *base, *offset);
+                    ctx.function_data_mut(func_name)
+                        .unwrap()
+                        .layout
+                        .insert_inst_after(store, *inst)
+                        .unwrap();
+                } else {
+                    let (rd, li) = MachineInstData::new_li(ctx, *offset);
+                    let (rd1, add) = MachineInstData::new_binary(
+                        ctx,
+                        crate::backend::MachineBinaryOp::Add,
+                        *base,
+                        rd,
+                    );
+                    let store = MachineInstData::build_store(
+                        ctx,
+                        StoreKind::DoubleWord,
+                        *use_,
+                        rd1,
+                        Immediate(0),
+                    );
+                    ctx.function_data_mut(func_name)
+                        .unwrap()
+                        .layout
+                        .insert_inst_after(store, *inst)
+                        .unwrap();
+                    ctx.function_data_mut(func_name)
+                        .unwrap()
+                        .layout
+                        .insert_inst_after(add, *inst)
+                        .unwrap();
+                    ctx.function_data_mut(func_name)
+                        .unwrap()
+                        .layout
+                        .insert_inst_after(li, *inst)
+                        .unwrap();
+                }
                 self.total_stores_added += 1;
             }
 
