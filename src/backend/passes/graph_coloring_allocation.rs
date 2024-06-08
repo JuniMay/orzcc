@@ -475,7 +475,7 @@ impl LocalPassMut for GraphColoringAllocation {
             while let Some(reg) = stack.pop() {
                 let mut ok_colors: Vec<_> = ALLOCATABLE_REGISTERS_FP.iter().rev().collect();
                 for neighbor in interference_graph.adjacent(reg).unwrap_or(&HashSet::new()) {
-                    if neighbor.is_gp() {
+                    if neighbor.is_fp() {
                         ok_colors.retain(|&c| c != neighbor);
                     } else if let Some(color) = fp_colors.get(neighbor) {
                         ok_colors.retain(|&c| c != color);
