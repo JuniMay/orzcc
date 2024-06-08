@@ -377,7 +377,7 @@ impl CodegenContext {
 
         let fp = self.machine_ctx.new_gp_reg(RiscvGpReg::S0);
         let sp = self.machine_ctx.new_gp_reg(RiscvGpReg::Sp);
-        let t2 = self.machine_ctx.new_gp_reg(RiscvGpReg::T2);
+        let t0 = self.machine_ctx.new_gp_reg(RiscvGpReg::T0);
         let ra = self.machine_ctx.new_gp_reg(RiscvGpReg::Ra);
 
         machine_function!(mut self.machine_ctx, &function_name).add_saved_reg(fp);
@@ -405,7 +405,7 @@ impl CodegenContext {
         } else {
             let li = MachineInstData::build_li(
                 &mut self.machine_ctx,
-                t2,
+                t0,
                 aligned_stack_frame_size.into(),
             );
             let add_fp = MachineInstData::build_binary(
@@ -413,7 +413,7 @@ impl CodegenContext {
                 MachineBinaryOp::Add,
                 fp,
                 sp,
-                t2,
+                t0,
             );
             self.prepend_inst(&function_name, entry_block, add_fp);
             self.prepend_inst(&function_name, entry_block, li);
@@ -435,17 +435,17 @@ impl CodegenContext {
                 (sp, curr_frame_pos.into())
             } else {
                 let li =
-                    MachineInstData::build_li(&mut self.machine_ctx, t2, curr_frame_pos.into());
+                    MachineInstData::build_li(&mut self.machine_ctx, t0, curr_frame_pos.into());
                 let add = MachineInstData::build_binary(
                     &mut self.machine_ctx,
                     MachineBinaryOp::Add,
-                    t2,
+                    t0,
                     sp,
-                    t2,
+                    t0,
                 );
                 insts.push(li);
                 insts.push(add);
-                (t2, 0.into())
+                (t0, 0.into())
             };
             if reg.is_gp() {
                 let sd = MachineInstData::new_store(
@@ -490,7 +490,7 @@ impl CodegenContext {
         } else {
             let li = MachineInstData::build_li(
                 &mut self.machine_ctx,
-                t2,
+                t0,
                 (-(aligned_stack_frame_size as i32)).into(),
             );
             let add = MachineInstData::build_binary(
@@ -498,7 +498,7 @@ impl CodegenContext {
                 MachineBinaryOp::Add,
                 sp,
                 sp,
-                t2,
+                t0,
             );
             self.prepend_inst(&function_name, entry_block, add);
             self.prepend_inst(&function_name, entry_block, li);
@@ -513,7 +513,7 @@ impl CodegenContext {
         let function_name = self.get_value_as_symbol(function.into());
 
         let sp = self.machine_ctx.new_gp_reg(RiscvGpReg::Sp);
-        let t2 = self.machine_ctx.new_gp_reg(RiscvGpReg::T2);
+        let t0 = self.machine_ctx.new_gp_reg(RiscvGpReg::T0);
         let ra = self.machine_ctx.new_gp_reg(RiscvGpReg::Ra);
 
         let aligned_stack_frame_size =
@@ -534,17 +534,17 @@ impl CodegenContext {
                 (sp, curr_frame_pos.into())
             } else {
                 let li =
-                    MachineInstData::build_li(&mut self.machine_ctx, t2, curr_frame_pos.into());
+                    MachineInstData::build_li(&mut self.machine_ctx, t0, curr_frame_pos.into());
                 let add = MachineInstData::build_binary(
                     &mut self.machine_ctx,
                     MachineBinaryOp::Add,
-                    t2,
+                    t0,
                     sp,
-                    t2,
+                    t0,
                 );
                 self.append_inst(&function_name, exit_block, li);
                 self.append_inst(&function_name, exit_block, add);
-                (t2, 0.into())
+                (t0, 0.into())
             };
             if reg.is_gp() {
                 let ld = MachineInstData::build_load(
@@ -587,7 +587,7 @@ impl CodegenContext {
         } else {
             let li = MachineInstData::build_li(
                 &mut self.machine_ctx,
-                t2,
+                t0,
                 aligned_stack_frame_size.into(),
             );
             let add = MachineInstData::build_binary(
@@ -595,7 +595,7 @@ impl CodegenContext {
                 MachineBinaryOp::Add,
                 sp,
                 sp,
-                t2,
+                t0,
             );
             self.append_inst(&function_name, exit_block, add);
             self.append_inst(&function_name, exit_block, li);
