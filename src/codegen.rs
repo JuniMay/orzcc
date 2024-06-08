@@ -1925,11 +1925,16 @@ impl CodegenContext {
                                     ptr_reg = rd;
                                 }
                                 None => {
-                                    // mul
+                                    // li + mul
+                                    let (bw, li) = MachineInstData::new_li(
+                                        &mut self.machine_ctx,
+                                        bytewidth.into(),
+                                    );
+                                    self.append_inst(&function_name, block, li);
                                     let (rs, mul) = MachineInstData::new_binary(
                                         &mut self.machine_ctx,
                                         MachineBinaryOp::Mul,
-                                        rs,
+                                        bw,
                                         rs,
                                     );
                                     self.append_inst(&function_name, block, mul);
