@@ -289,6 +289,8 @@ impl CodegenContext {
             let arg_data = function_data.dfg.local_value_data(arg).unwrap();
             let rd = self.get_value_as_register(arg);
 
+            let delta_offset;
+
             if arg_data.ty().is_float() {
                 let (base, offset) = if check_itype_imm(offset.into()) {
                     (fp, offset.into())
@@ -305,6 +307,7 @@ impl CodegenContext {
                     (rd, 0.into())
                 };
 
+                delta_offset = arg_data.ty().bytewidth();
                 let kind = match arg_data.ty().bytewidth() {
                     4 => FloatLoadKind::Single,
                     8 => FloatLoadKind::Double,
@@ -333,6 +336,7 @@ impl CodegenContext {
                     self.append_inst(&function_name, entry_block, add);
                     (rd, 0.into())
                 };
+                delta_offset = arg_data.ty().bytewidth();
                 let kind = match arg_data.ty().bytewidth() {
                     1 => LoadKind::Byte,
                     2 => LoadKind::Half,
@@ -347,7 +351,7 @@ impl CodegenContext {
                 unimplemented!("non-integer, non-float argument");
             }
 
-            offset += 8;
+            offset += delta_offset;
         }
 
         for (block, block_node) in function_data.layout.blocks() {

@@ -12,5 +12,6 @@ target/
 /test.ast
 /test.sy
 /test-*.orzir
+/test.in
 
 output/
