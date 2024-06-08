@@ -202,12 +202,16 @@ impl DataFlowGraph {
 
     /// Remove a local value from the dfg.
     pub(super) fn remove_local_value(&mut self, value: Value) -> Option<ValueData> {
-        self.values.remove(&value)
+        let data = self.values.remove(&value)?;
+        self.value_name_allocator.borrow_mut().remove(value);
+        Some(data)
     }
 
     /// Remove a block from the dfg.
     pub(super) fn remove_block(&mut self, block: Block) -> Option<BlockData> {
-        self.blocks.remove(&block)
+        let data = self.blocks.remove(&block)?;
+        self.block_name_allocator.borrow_mut().remove(block);
+        Some(data)
     }
 }
 
@@ -517,4 +521,6 @@ where
         let name = name.to_string();
         self.map.get_rev(&name).copied()
     }
+
+    pub fn remove(&mut self, key: T) -> Option<String> { self.map.remove_fwd(&key) }
 }
