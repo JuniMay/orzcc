@@ -8,8 +8,8 @@
 //!     %x0 = phi [%val0, %pred0], [%val1, %pred1], ...
 //! ```
 //!
-//! But here, since we use block arguments insead of phi instructions, the generated code will be
-//! like:
+//! But here, since we use block arguments insead of phi instructions, the
+//! generated code will be like:
 //! ```orzir
 //! ^pred0:
 //!     #...
@@ -21,26 +21,29 @@
 //!     #...
 //! ```
 //!
-//! The algorithms are similar, except that multiple phis become multiple parameters of the block.
-//!
+//! The algorithms are similar, except that multiple phis become multiple
+//! parameters of the block.
 
 use std::collections::{HashMap, HashSet, VecDeque};
-
-use crate::ir::{
-    builders::{BuildLocalValue, BuildNonAggregateConstant},
-    entities::{FunctionData, ValueKind},
-    module::DataFlowGraph,
-    passes::{LocalPass, LocalPassMut},
-    types::Type,
-    values::{Block, Function, Value},
-};
 
 use super::{
     control_flow_analysis::{ControlFlowAnalysis, ControlFlowGraph},
     control_flow_canonicalization::ControlFlowCanonicalization,
     data_flow_analysis::{DataFlowAnalysis, DefUseChain},
     dominance_analysis::{Dominance, DominanceAnalysis},
-    GlobalPassMut, PassManager, PassResult, TransformationPass,
+    unreachable_block_elimination::UnreachableBlockElimination,
+    GlobalPassMut,
+    PassManager,
+    PassResult,
+    TransformationPass,
+};
+use crate::ir::{
+    builders::{BuildLocalValue, BuildNonAggregateConstant},
+    entities::{FunctionData, FunctionKind, ValueKind},
+    module::DataFlowGraph,
+    passes::{LocalPass, LocalPassMut},
+    types::Type,
+    values::{Block, Function, Value},
 };
 
 const MEM2REG: &str = "mem2reg";
@@ -78,9 +81,7 @@ pub struct Mem2reg {
 }
 
 impl Default for Mem2reg {
-    fn default() -> Self {
-        Self::new()
-    }
+    fn default() -> Self { Self::new() }
 }
 
 impl Mem2reg {
@@ -103,8 +104,9 @@ impl Mem2reg {
 
     pub fn register() {
         let pass = Box::new(Mem2reg::new());
-        let canonic = Box::new(ControlFlowCanonicalization {});
-        PassManager::register_transformation(MEM2REG, pass, vec![canonic]);
+        let canonic = Box::new(ControlFlowCanonicalization);
+        let unreach_elim = Box::new(UnreachableBlockElimination);
+        PassManager::register_transformation(MEM2REG, pass, vec![canonic, unreach_elim]);
     }
 
     fn prepare(&mut self, function: Function, data: &FunctionData) {
@@ -162,10 +164,13 @@ impl Mem2reg {
 
     fn rename(&mut self, block: Block, data: &mut FunctionData) -> bool {
         let mut changed = false;
+        // TODO: this might not be the best way to backup & restore the incomings
+        let incomings_backup = self.incomings.clone();
 
-        let node = data.layout().blocks().node(block).unwrap();
+        let node = data.layout.blocks().node(block).unwrap();
+        let dfg = &mut data.dfg;
 
-        let block_data = data.dfg().block_data(block).unwrap();
+        let block_data = dfg.block_data(block).unwrap();
         let params = block_data.params();
         for param in params {
             if self.block_params.contains_key(param) {
@@ -177,18 +182,27 @@ impl Mem2reg {
         }
 
         let mut insts_to_remove: HashSet<Value> = HashSet::new();
-        // inst -> (old, new)
-        let mut insts_to_replace_use: HashMap<Value, (Value, Value)> = HashMap::new();
 
         for (inst, _) in node.insts() {
-            let inst_data = data.dfg().local_value_data(inst.into()).unwrap();
+            let inst_data = dfg.local_value_data(inst.into()).unwrap();
             match inst_data.kind() {
                 ValueKind::Load(load) => {
                     let ptr = load.ptr();
                     if self.variables.contains(&ptr) {
                         let incoming = self.incomings[&ptr];
-                        for use_ in self.chain.uses[&inst.into()].iter() {
-                            insts_to_replace_use.insert(*use_, (inst.into(), incoming));
+                        // all the uses of the load instruction should be replaced
+                        let inst_uses = self
+                            .chain
+                            .uses
+                            .get_mut(&inst.into())
+                            .unwrap()
+                            .drain(..)
+                            .collect::<Vec<_>>();
+                        // replace the uses
+                        for use_ in inst_uses {
+                            dfg.replace_use(use_, inst.into(), incoming);
+                            // update the def-use chain
+                            self.chain.insert_use(use_, incoming);
                         }
                         insts_to_remove.insert(inst.into());
                     }
@@ -209,8 +223,7 @@ impl Mem2reg {
         for succ in succs {
             // args to extend the branch/jump instructions
             let mut args = Vec::new();
-            let succ_data = data.dfg().block_data(*succ).unwrap();
-            let params = succ_data.params();
+            let params = data.dfg.block_data(*succ).unwrap().params();
             for param in params {
                 // the params for promotion are placed at the end of the block,
                 // so just get the extension for the args.
@@ -220,11 +233,8 @@ impl Mem2reg {
                     args.push(incoming);
                 }
             }
-            let exit_inst = data.layout().exit_inst_of_block(block).unwrap();
-            let exit_inst_data = data
-                .dfg_mut()
-                .local_value_data_mut(exit_inst.into())
-                .unwrap();
+            let exit_inst = data.layout.exit_inst_of_block(block).unwrap();
+            let exit_inst_data = data.dfg.local_value_data_mut(exit_inst.into()).unwrap();
             match exit_inst_data.kind_mut() {
                 ValueKind::Jump(jump) => {
                     jump.extend_args(args);
@@ -241,12 +251,6 @@ impl Mem2reg {
             }
         }
 
-        // replace the uses
-        for (use_, (old, new)) in insts_to_replace_use {
-            data.dfg_mut().replace_use(use_, old, new);
-            changed = true;
-        }
-
         // remove the insts
         for inst in insts_to_remove {
             data.remove_inst(inst.into());
@@ -259,6 +263,7 @@ impl Mem2reg {
             self.rename(child, data);
         }
 
+        self.incomings = incomings_backup;
         changed
     }
 }
@@ -271,16 +276,18 @@ impl LocalPassMut for Mem2reg {
         function: Function,
         data: &mut FunctionData,
     ) -> PassResult<(Self::Ok, bool)> {
+        if let FunctionKind::Declaration = data.kind() {
+            return Ok(((), false));
+        }
+
         // prepare the information
         self.prepare(function, data);
-
-        let dfg = data.dfg();
 
         let mut changed = false;
 
         // initialize the promotable variables
-        for value in dfg.values().keys() {
-            if let Some(ty) = self.promotable(*value, dfg) {
+        for value in data.dfg.values().keys() {
+            if let Some(ty) = self.promotable(*value, &data.dfg) {
                 self.variables.insert(*value);
                 self.def_blocks.insert(*value, HashSet::new());
                 self.worklists.insert(*value, VecDeque::new());
@@ -289,12 +296,12 @@ impl LocalPassMut for Mem2reg {
             }
         }
 
-        let layout = data.layout();
+        let layout = &data.layout;
 
         // construct worklist.
         for (block, block_node) in layout.blocks() {
             for (inst, _inst_block) in block_node.insts() {
-                let inst_data = dfg.local_value_data(inst.into()).unwrap();
+                let inst_data = data.dfg.local_value_data(inst.into()).unwrap();
                 if let ValueKind::Store(store) = inst_data.kind() {
                     let ptr = store.ptr();
                     if self.variables.contains(&ptr) && !self.def_blocks[&ptr].contains(&block) {
@@ -307,8 +314,6 @@ impl LocalPassMut for Mem2reg {
             }
         }
 
-        let dfg = data.dfg_mut();
-
         // insert block parameters
         for (value, worklist) in self.worklists.iter_mut() {
             while !worklist.is_empty() {
@@ -319,8 +324,8 @@ impl LocalPassMut for Mem2reg {
                         continue;
                     }
                     let ty = self.alloc_types[value].clone();
-                    let param = dfg.builder().block_param(ty).unwrap();
-                    let df_data = dfg.block_data_mut(*df).unwrap();
+                    let param = data.dfg.builder().block_param(ty).unwrap();
+                    let df_data = data.dfg.block_data_mut(*df).unwrap();
                     df_data.params_mut().push(param);
 
                     // map param -> value (allocated variable)
@@ -336,7 +341,7 @@ impl LocalPassMut for Mem2reg {
 
         for variable in self.variables.iter() {
             let undef = data
-                .dfg_mut()
+                .dfg
                 .builder()
                 .undef(self.alloc_types[variable].clone())
                 .unwrap();
@@ -344,7 +349,7 @@ impl LocalPassMut for Mem2reg {
         }
 
         // rename the variables
-        let entry_block = data.layout().entry_block().unwrap();
+        let entry_block = data.layout.entry_block().unwrap();
         changed = changed || self.rename(entry_block, data);
 
         for variable in self.variables.iter() {
@@ -382,6 +387,7 @@ impl GlobalPassMut for Mem2reg {
         let mut changed = false;
         for function in functions {
             let function_data = module.function_data_mut(function).unwrap();
+            self.reset();
             let (_, local_changed) = self.run_on_function(function, function_data).unwrap();
             changed = changed || local_changed;
         }
@@ -394,13 +400,12 @@ impl GlobalPassMut for Mem2reg {
 mod test {
     use std::io::{BufWriter, Cursor};
 
+    use super::{Mem2reg, MEM2REG};
     use crate::ir::{
         frontend::parser::Parser,
         module::Module,
         passes::{printer::Printer, GlobalPass, PassManager},
     };
-
-    use super::{Mem2reg, MEM2REG};
 
     fn print(module: &Module) {
         let mut buf = BufWriter::new(Vec::new());

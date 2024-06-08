@@ -2,18 +2,19 @@
 //!
 //! This module contains the implementation of the dominance analysis pass.
 //!
-//! This implements the algorithm described in "A Simple, Fast Dominance Algorithm" by Cooper et al.
+//! This implements the algorithm described in "A Simple, Fast Dominance
+//! Algorithm" by Cooper et al.
 //!
+//! This require the unreachable block elimination pass to be run first.
 
-use crate::ir::{
-    entities::FunctionData,
-    passes::control_flow_analysis::ControlFlowAnalysis,
-    passes::LocalPass,
-    values::{Block, Function},
-};
 use std::collections::{HashMap, HashSet};
 
 use super::{control_flow_analysis::ControlFlowGraph, PassResult};
+use crate::ir::{
+    entities::{FunctionData, FunctionKind},
+    passes::{control_flow_analysis::ControlFlowAnalysis, LocalPass},
+    values::{Block, Function},
+};
 
 /// The result of the dominance analysis pass.
 pub struct Dominance {
@@ -26,9 +27,7 @@ pub struct Dominance {
 }
 
 impl Default for Dominance {
-    fn default() -> Self {
-        Self::new()
-    }
+    fn default() -> Self { Self::new() }
 }
 
 impl Dominance {
@@ -56,9 +55,7 @@ pub struct DominanceAnalysis {
 }
 
 impl Default for DominanceAnalysis {
-    fn default() -> Self {
-        Self::new()
-    }
+    fn default() -> Self { Self::new() }
 }
 
 impl DominanceAnalysis {
@@ -84,7 +81,7 @@ impl DominanceAnalysis {
     }
 
     fn prepare(&mut self, cfg: &ControlFlowGraph, data: &FunctionData) {
-        let entry_block = data.layout().entry_block().unwrap();
+        let entry_block = data.layout.entry_block().unwrap();
         self.dfs(entry_block, cfg);
         // reverse the postorder traversal sequence
         self.rpo.reverse();
@@ -109,6 +106,10 @@ impl LocalPass for DominanceAnalysis {
     type Ok = Dominance;
 
     fn run_on_function(&mut self, function: Function, data: &FunctionData) -> PassResult<Self::Ok> {
+        if let FunctionKind::Declaration = data.kind() {
+            panic!("Dominance analysis can only be run on defined functions");
+        }
+
         let mut cfa = ControlFlowAnalysis {};
         let cfg = cfa.run_on_function(function, data)?;
         self.prepare(&cfg, data);
@@ -119,7 +120,7 @@ impl LocalPass for DominanceAnalysis {
             idoms.insert(*block, None);
         }
 
-        let entry_block = data.layout().entry_block().unwrap();
+        let entry_block = data.layout.entry_block().unwrap();
         idoms.insert(entry_block, Some(entry_block));
 
         let mut changed = true;
@@ -197,9 +198,8 @@ impl LocalPass for DominanceAnalysis {
 mod test {
     use std::io::Cursor;
 
-    use crate::ir::{frontend::parser::Parser, passes::LocalPass};
-
     use super::DominanceAnalysis;
+    use crate::ir::{frontend::parser::Parser, passes::LocalPass};
 
     #[test]
     fn test_dominance_analysis() {
@@ -215,6 +215,7 @@ mod test {
                     jump ^1
                 ^3:
                     jump ^2
+                # ^5: # require unreachable block elimination
                 ^4:
                     jump ^1
             }
@@ -237,11 +238,11 @@ mod test {
         let frontiers = dominance.frontiers;
         let _domtree = dominance.domtree;
 
-        let b5 = function_data.dfg().get_block_by_name("^5").unwrap();
-        let b4 = function_data.dfg().get_block_by_name("^4").unwrap();
-        let b3 = function_data.dfg().get_block_by_name("^3").unwrap();
-        let b2 = function_data.dfg().get_block_by_name("^2").unwrap();
-        let b1 = function_data.dfg().get_block_by_name("^1").unwrap();
+        let b5 = function_data.dfg.get_block_by_name("^5").unwrap();
+        let b4 = function_data.dfg.get_block_by_name("^4").unwrap();
+        let b3 = function_data.dfg.get_block_by_name("^3").unwrap();
+        let b2 = function_data.dfg.get_block_by_name("^2").unwrap();
+        let b1 = function_data.dfg.get_block_by_name("^1").unwrap();
 
         assert_eq!(idoms[&b5], None);
         assert_eq!(idoms[&b4], Some(b5));

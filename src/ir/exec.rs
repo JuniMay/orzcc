@@ -53,9 +53,7 @@ impl ExecVReg {
         Self { width, data }
     }
 
-    pub fn from_data(width: usize, data: Vec<u8>) -> Self {
-        Self { width, data }
-    }
+    pub fn from_data(width: usize, data: Vec<u8>) -> Self { Self { width, data } }
 
     pub fn as_<T>(&self) -> T
     where

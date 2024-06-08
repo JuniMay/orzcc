@@ -1,6 +1,5 @@
-use crate::ir::{types::Type, values::CastOp};
-
 use super::{tokens::Span, InstKind};
+use crate::ir::{types::Type, values::CastOp};
 
 /// An abstract syntax tree.
 #[derive(Debug)]
@@ -9,20 +8,14 @@ pub struct Ast {
 }
 
 impl Default for Ast {
-    fn default() -> Self {
-        Self::new()
-    }
+    fn default() -> Self { Self::new() }
 }
 
 impl Ast {
-    pub fn new() -> Self {
-        Self { items: Vec::new() }
-    }
+    pub fn new() -> Self { Self { items: Vec::new() } }
 
     /// Push an item to the abstract syntax tree.
-    pub fn push(&mut self, item: AstNodeBox) {
-        self.items.push(item);
-    }
+    pub fn push(&mut self, item: AstNodeBox) { self.items.push(item); }
 }
 
 pub type AstNodeBox = Box<AstNode>;
@@ -53,9 +46,7 @@ impl AstNode {
         AstNode::new_boxed(AstNodeKind::Bytes(bytes), span)
     }
 
-    pub fn new_boxed_zero(span: Span) -> AstNodeBox {
-        AstNode::new_boxed(AstNodeKind::Zero, span)
-    }
+    pub fn new_boxed_zero(span: Span) -> AstNodeBox { AstNode::new_boxed(AstNodeKind::Zero, span) }
 
     pub fn new_boxed_undef(span: Span) -> AstNodeBox {
         AstNode::new_boxed(AstNodeKind::Undef, span)

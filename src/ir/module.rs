@@ -7,15 +7,16 @@ use std::{
 
 use thiserror::Error;
 
-use crate::collections::BiMap;
-
 use super::{
     builders::{GlobalBuilder, LocalBuilder},
-    entities::{BlockData, FunctionData, ValueData},
+    entities::{BlockData, FunctionData, ValueData, ValueKind},
     types::Type,
     values::{Block, Function, Value},
-    GLOBAL_PREFIX, LABEL_PREFIX, LOCAL_PREFIX,
+    GLOBAL_PREFIX,
+    LABEL_PREFIX,
+    LOCAL_PREFIX,
 };
+use crate::collections::BiMap;
 
 /// The data flow graph.
 pub struct DataFlowGraph {
@@ -42,9 +43,7 @@ pub struct DataFlowGraph {
 }
 
 impl Default for DataFlowGraph {
-    fn default() -> Self {
-        Self::new()
-    }
+    fn default() -> Self { Self::new() }
 }
 
 impl DataFlowGraph {
@@ -61,9 +60,7 @@ impl DataFlowGraph {
     }
 
     /// Get all the values and their corresponding data.
-    pub fn values(&self) -> &HashMap<Value, ValueData> {
-        &self.values
-    }
+    pub fn values(&self) -> &HashMap<Value, ValueData> { &self.values }
 
     /// Allocate an id using [`IdAllocator`].
     fn allocate_id(&self) -> usize {
@@ -89,14 +86,10 @@ impl DataFlowGraph {
     }
 
     /// Get the local builder of the dfg.
-    pub fn builder(&mut self) -> LocalBuilder {
-        LocalBuilder::new(self)
-    }
+    pub fn builder(&mut self) -> LocalBuilder { LocalBuilder::new(self) }
 
     /// Get the value data of a local value.
-    pub fn local_value_data(&self, value: Value) -> Option<&ValueData> {
-        self.values.get(&value)
-    }
+    pub fn local_value_data(&self, value: Value) -> Option<&ValueData> { self.values.get(&value) }
 
     /// Apply a function to the value data of a local or global value.
     pub fn with_value_data<F, R>(&self, value: Value, f: F) -> Option<R>
@@ -129,7 +122,7 @@ impl DataFlowGraph {
                 .borrow_mut()
                 .get(value)
         } else {
-            panic!("value should be either local or global.")
+            panic!("value should be either local or global: {:?}", value)
         }
     }
 
@@ -167,19 +160,30 @@ impl DataFlowGraph {
     }
 
     /// Assign a name to a local value.
-    pub fn assign_local_value_name(&self, value: Value, name: String) -> Result<(), NameAllocErr> {
-        self.value_name_allocator.borrow_mut().assign(value, name)
+    pub fn assign_local_value_name(
+        &self,
+        value: Value,
+        name: impl Into<String>,
+    ) -> Result<(), NameAllocErr> {
+        self.value_name_allocator
+            .borrow_mut()
+            .assign(value, name.into())
     }
 
-    /// Assign a name to a block.
-    pub fn assign_block_name(&self, block: Block, name: String) -> Result<(), NameAllocErr> {
-        self.block_name_allocator.borrow_mut().assign(block, name)
+    /// Assign a name to a block, there will be a suffix id if the name is
+    /// duplicated.
+    pub fn assign_block_name(
+        &self,
+        block: Block,
+        name: impl Into<String>,
+    ) -> Result<(), NameAllocErr> {
+        self.block_name_allocator
+            .borrow_mut()
+            .assign_autoinc(block, name.into())
     }
 
     /// Get the block data of a block.
-    pub fn block_data(&self, block: Block) -> Option<&BlockData> {
-        self.blocks.get(&block)
-    }
+    pub fn block_data(&self, block: Block) -> Option<&BlockData> { self.blocks.get(&block) }
 
     /// Get the mutable block data of a block.
     pub fn block_data_mut(&mut self, block: Block) -> Option<&mut BlockData> {
@@ -198,12 +202,16 @@ impl DataFlowGraph {
 
     /// Remove a local value from the dfg.
     pub(super) fn remove_local_value(&mut self, value: Value) -> Option<ValueData> {
-        self.values.remove(&value)
+        let data = self.values.remove(&value)?;
+        self.value_name_allocator.borrow_mut().remove(value);
+        Some(data)
     }
 
     /// Remove a block from the dfg.
     pub(super) fn remove_block(&mut self, block: Block) -> Option<BlockData> {
-        self.blocks.remove(&block)
+        let data = self.blocks.remove(&block)?;
+        self.block_name_allocator.borrow_mut().remove(block);
+        Some(data)
     }
 }
 
@@ -217,16 +225,16 @@ pub type BlockNameAllocator = NameAllocator<Block>;
 
 /// A module.
 ///
-/// Module is the top-level container of the IR. It contains all the global values,
-/// functions, and user defined types.
+/// Module is the top-level container of the IR. It contains all the global
+/// values, functions, and user defined types.
 pub struct Module {
     /// Module name
     name: String,
 
     /// Globals
     ///
-    /// This includes global memory slots and functions. Note that the [`ValueData`] and
-    /// [`FunctionData`] of a function are different.
+    /// This includes global memory slots and functions. Note that the
+    /// [`ValueData`] and [`FunctionData`] of a function are different.
     globals: Rc<RefCell<GlobalValueMap>>,
 
     /// Layout of global slots
@@ -249,14 +257,14 @@ pub struct Module {
 }
 
 impl Module {
-    pub fn new(name: String) -> Self {
+    pub fn new(name: impl Into<String>) -> Self {
         let globals = Rc::new(RefCell::new(HashMap::new()));
         let functions = HashMap::new();
         let id_allocator = Rc::new(RefCell::new(IdAllocator::new()));
         let name_allocator = Rc::new(RefCell::new(NameAllocator::new(GLOBAL_PREFIX)));
 
         Self {
-            name,
+            name: name.into(),
             globals,
             global_slot_layout: Vec::new(),
             functions,
@@ -275,34 +283,22 @@ impl Module {
         self.globals.borrow().get(&value).map(f)
     }
 
-    pub fn name(&self) -> &str {
-        &self.name
-    }
+    pub fn name(&self) -> &str { &self.name }
 
     /// Get the layout of global slots
-    pub fn global_slot_layout(&self) -> &[Value] {
-        &self.global_slot_layout
-    }
+    pub fn global_slot_layout(&self) -> &[Value] { &self.global_slot_layout }
 
     /// Get the layout of functions
-    pub fn function_layout(&self) -> &[Function] {
-        &self.function_layout
-    }
+    pub fn function_layout(&self) -> &[Function] { &self.function_layout }
 
     /// Get the layout of identified types
-    pub fn identified_type_layout(&self) -> &[String] {
-        &self.identified_type_layout
-    }
+    pub fn identified_type_layout(&self) -> &[String] { &self.identified_type_layout }
 
     /// Allocate an id using [`IdAllocator`].
-    fn allocate_id(&self) -> usize {
-        self.id_allocator.borrow_mut().allocate()
-    }
+    fn allocate_id(&self) -> usize { self.id_allocator.borrow_mut().allocate() }
 
     /// Get the global builder of the module.
-    pub fn builder(&mut self) -> GlobalBuilder {
-        GlobalBuilder::new(self)
-    }
+    pub fn builder(&mut self) -> GlobalBuilder { GlobalBuilder::new(self) }
 
     /// Get the function data of a function.
     pub fn function_data(&self, function: Function) -> Option<&FunctionData> {
@@ -314,13 +310,18 @@ impl Module {
         self.functions.get_mut(&function)
     }
 
-    /// Get the value data of a global value.
+    /// Add the value data of a global value.
     ///
-    /// This will also add the slot into the layout.
+    /// If this is a global slot, the value will also be added to the layout.
     pub(super) fn add_global_slot(&mut self, data: ValueData) -> Value {
+        if let ValueKind::Function = data.kind() {
+            panic!("function should be added using `add_function` method.");
+        }
         let value = Value::new(self.allocate_id());
+        if let ValueKind::GlobalSlot(_) = data.kind() {
+            self.global_slot_layout.push(value);
+        }
         self.globals.borrow_mut().insert(value, data);
-        self.global_slot_layout.push(value);
         value
     }
 
@@ -341,7 +342,7 @@ impl Module {
         let weak_id_allocator = Rc::downgrade(&self.id_allocator);
         let weak_name_allocator = Rc::downgrade(&self.name_allocator);
 
-        let dfg = self.function_data_mut(function.into()).unwrap().dfg_mut();
+        let dfg = &mut self.function_data_mut(function.into()).unwrap().dfg;
 
         dfg.globals = weak_globals;
         dfg.id_allocator = weak_id_allocator;
@@ -353,13 +354,17 @@ impl Module {
     }
 
     /// Get the name of a global value
-    pub fn value_name(&self, value: Value) -> String {
-        self.name_allocator.borrow_mut().get(value)
-    }
+    pub fn value_name(&self, value: Value) -> String { self.name_allocator.borrow_mut().get(value) }
 
     /// Assign a name to a global value.
-    pub fn assign_name(&mut self, value: Value, name: String) -> Result<(), NameAllocErr> {
-        self.name_allocator.borrow_mut().assign(value, name)
+    pub fn assign_name(
+        &mut self,
+        value: impl Into<Value>,
+        name: impl Into<String>,
+    ) -> Result<(), NameAllocErr> {
+        self.name_allocator
+            .borrow_mut()
+            .assign(value.into(), name.into())
     }
 
     /// Get a global [`Value`] indexer by its name.
@@ -368,9 +373,7 @@ impl Module {
     }
 
     /// Add an identified type to the module.
-    pub fn add_identified_type(&mut self, name: String) {
-        self.identified_type_layout.push(name);
-    }
+    pub fn add_identified_type(&mut self, name: String) { self.identified_type_layout.push(name); }
 }
 
 /// Allocator of ids.
@@ -382,15 +385,11 @@ pub struct IdAllocator {
 }
 
 impl Default for IdAllocator {
-    fn default() -> Self {
-        Self::new()
-    }
+    fn default() -> Self { Self::new() }
 }
 
 impl IdAllocator {
-    pub fn new() -> Self {
-        Self { counter: 0 }
-    }
+    pub fn new() -> Self { Self { counter: 0 } }
 
     pub fn allocate(&mut self) -> usize {
         let id = self.counter;
@@ -428,8 +427,8 @@ where
 {
     /// Create a new name allocator.
     ///
-    /// The `prefix` is the prefix of the name, e.g. in `%value`, `^block`, `@global`, the prefix
-    /// is `%`, `^`, `@` respectively.
+    /// The `prefix` is the prefix of the name, e.g. in `%value`, `^block`,
+    /// `@global`, the prefix is `%`, `^`, `@` respectively.
     pub fn new(prefix: &'static str) -> Self {
         Self {
             counter: 0,
@@ -479,6 +478,30 @@ where
         Ok(())
     }
 
+    /// Manually assign a name for the key, add suffix id if duplicated.
+    pub fn assign_autoinc(&mut self, key: T, name: String) -> Result<(), NameAllocErr> {
+        if self.map.contains_fwd(&key) {
+            return Err(NameAllocErr::KeyDuplicated);
+        }
+
+        let base_name = if name.starts_with(self.prefix) {
+            name
+        } else {
+            format!("{}{}", self.prefix, name)
+        };
+
+        let mut local_counter = 0;
+        let mut name = base_name.clone();
+        while self.map.contains_rev(&name) {
+            name = format!("{}_{}", base_name, local_counter);
+            local_counter += 1;
+        }
+
+        self.map.insert(key, name);
+
+        Ok(())
+    }
+
     /// Get the name of the key.
     ///
     /// If the name is not assigned, allocate a new name.
@@ -492,12 +515,12 @@ where
     /// Try to get the name of the key.
     ///
     /// This will not allocate a new name if the name is not assigned.
-    pub fn try_get(&self, key: T) -> Option<String> {
-        self.map.get_fwd(&key).cloned()
-    }
+    pub fn try_get(&self, key: T) -> Option<String> { self.map.get_fwd(&key).cloned() }
 
     pub fn try_get_by_name(&self, name: &str) -> Option<T> {
         let name = name.to_string();
         self.map.get_rev(&name).copied()
     }
+
+    pub fn remove(&mut self, key: T) -> Option<String> { self.map.remove_fwd(&key) }
 }

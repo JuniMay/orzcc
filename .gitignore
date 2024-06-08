@@ -1,3 +1,16 @@
-/target
+target/
+.vscode/*
+!.vscode/settings.json
 
-.vscode/
+.DS_Store
+
+/test.asm
+/test.orzir
+/test.s
+/test.o
+/test
+/test.ast
+/test.sy
+/test-*.orzir
+
+output/

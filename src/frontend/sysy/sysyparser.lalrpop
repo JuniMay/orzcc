@@ -1,0 +1,291 @@
+use crate::frontend::sysy::*;
+
+grammar;
+
+match {
+  r"\s*" => {},
+  r"//[^\n\r]*[\n\r]*" => {},
+  r"/\*[^*]*\*+(?:[^/*][^*]*\*+)*/" => {},
+  _
+}
+
+// CompUnit -> [ CompUnit ] ( Decl | FuncDef )
+pub CompUnit: CompUnit = {
+  <item: (CompUnitItem)*> => CompUnit { <> }
+}
+
+// CompUnitItem -> Decl | FuncDef
+pub CompUnitItem: CompUnitItem = {
+  <d: Decl> => CompUnitItem::Decl(d),
+  <f: FuncDef> => CompUnitItem::FuncDef(f)
+}
+
+// Decl -> ConstDecl | VarDecl
+pub Decl: Decl = {
+  <d: ConstDecl> => Decl::ConstDecl(d),
+  <v: VarDecl> => Decl::VarDecl(v)
+}
+
+// BasicType -> 'void' | 'int' | 'float'
+pub BasicType: SysyType = {
+  "void" => SysyType::void(),
+  "int" => SysyType::int(),
+  "float" => SysyType::float(),
+}
+
+// ConstDecl -> 'const' BasicType ConstDef { ',' ConstDef } ';'
+pub ConstDecl: ConstDecl = {
+  "const" <t: BasicType> <c: ConstDef> <mut v: ("," <ConstDef>)*> ";" => {
+    v.insert(0, c); 
+    ConstDecl { ty: t, defs: v } 
+  }
+}
+
+// ConstDef -> Ident { '[' ConstExp ']' } '=' ConstInitVal
+pub ConstDef: ConstDef = {
+  <i: Ident> <v: ("[" <ConstExp> "]" )* > "=" <c: ConstInitVal> => {
+    ConstDef { ident: i, shape: v, init: c }
+  }
+}
+
+// ConstInitVal -> ConstExp | '{' [ ConstInitVal { ',' ConstInitVal } ] '}'
+pub ConstInitVal: Expr = {
+  <c: ConstExp> => c,
+  "{" <ci: ConstInitVal> <mut v: ("," <ConstInitVal>)*> "}" => {
+    v.insert(0, ci);
+    Expr::new_init_list(v)
+  },
+  "{" "}" => Expr::new_init_list(Vec::new())
+}
+
+// VarDecl -> BasicType VarDef { ',' VarDef } ';'
+pub VarDecl: VarDecl = {
+  <t: BasicType> <vd: VarDef> <mut v: ("," <VarDef>)* > ";" => {
+    v.insert(0, vd); 
+    VarDecl { ty: t, defs: v } 
+  }
+}
+
+// VarDef -> Ident { '[' ConstExp ']' } | Ident { '[' ConstExp ']' } '=' InitVal
+pub VarDef: VarDef = {
+  <i: Ident> <v:("[" <ConstExp> "]" )* > <ini: ("=" <InitVal>)?> => {
+    VarDef { ident: i, shape: v, init: ini }
+  }
+}
+
+// InitVal -> Exp | '{' [ InitVal { ',' InitVal } ] '}'
+pub InitVal: Expr = {
+  <e: Exp> => e,
+  "{" <iv: InitVal> <mut v: ("," <InitVal>)* > "}" => {
+    v.insert(0, iv);
+    Expr::new_init_list(v)
+  },
+  "{" "}" => Expr::new_init_list(Vec::new())
+}
+
+// FuncDef -> BasicType Ident '(' [FuncFParams] ')' Block
+pub FuncDef: FuncDef = {
+  <t: BasicType> <i: Ident> "(" ")" <b: Block> => {
+    FuncDef{ ret_ty: t, ident: i, params: vec![], block: b }
+  },
+  <t: BasicType> <i: Ident> "(" <fps: FuncFParams> ")" <b: Block> => {
+    FuncDef{ ret_ty: t, ident: i, params: fps, block: b }
+  },
+}
+
+// FuncFParams -> FuncFParam { ',' FuncFParam }
+pub FuncFParams: Vec<FuncFParam> = {
+  <fp: FuncFParam> <mut v: ("," <FuncFParam>)*> => {
+    v.insert(0, fp);
+    v
+  }
+}
+
+// FuncFParam -> BasicType Ident ['[' ']' { '[' Exp ']' }]
+pub FuncFParam: FuncFParam = {
+  <ty: BasicType> <ident: Ident> <indices: ("[" "]" <("[" <Exp> "]")*>)?> => {
+    FuncFParam { <> }
+  },
+}
+
+// Block -> '{' { BlockItem } '}'
+Block: Block = "{" <blockitem: (BlockItem)*> "}" => Block { <> };
+
+
+// BlockItem -> Decl | Stmt
+pub BlockItem: BlockItem = {
+  Decl => BlockItem::Decl(<>),
+  Stmt => BlockItem::Stmt(<>),
+}
+
+// Stmt -> LVal '=' Exp ';' 
+//       | [Exp] ';' 
+//       | Block
+//       | 'if' '( Cond ')' Stmt [ 'else' Stmt ]
+//       | 'while' '(' Cond ')' Stmt
+//       | 'break' ';' 
+//       | 'continue' ';'
+//       | 'return' [Exp] ';'
+// reference: https://github.com/pku-minic/kira-rs/blob/master/src/sysy.lalrpop
+pub Stmt: Stmt = {
+  MStmt => <>,
+  OStmt => <>,
+}
+
+pub MStmt: Stmt = {
+  <lval: LVal> "=" <exp: Exp> ";" => Stmt::Assign(lval, exp),
+  <expr: (Exp)?> ";" => Stmt::ExprStmt(ExprStmt{<>}),
+  <b: Block> => Stmt::Block(b),
+  "if" "(" <c: Cond> ")" <s1: MStmt> "else" <s2: MStmt> => {
+    Stmt::If(c, Box::new(s1), Some(Box::new(s2)))
+  },
+  "while" "(" <c: Cond> ")" <s: MStmt> => Stmt::While(c, Box::new(s)),
+  "break;" => Stmt::Break,
+  "continue;" => Stmt::Continue,
+  "return" <e:(Exp)?> ";" => Stmt::Return(Return{expr:e}),
+}
+
+pub OStmt: Stmt = {
+  "if" "(" <c: Cond> ")" <s1: Stmt> => {
+    Stmt::If(c, Box::new(s1), None)
+  },
+  "if" "(" <c: Cond> ")" <s1: MStmt> "else" <s2: OStmt> => {
+    Stmt::If(c, Box::new(s1), Some(Box::new(s2)))
+  },
+  "while" "(" <c: Cond> ")" <s: OStmt> => Stmt::While(c, Box::new(s)),
+}
+
+// Exp -> AddExp 
+pub Exp: Expr = <addexp: AddExp> => <>;
+
+// Cond -> LOrExp
+pub Cond: Expr = <lorexp: LOrExp> => <>;
+
+// LVal -> Ident {'[' Exp ']'}
+pub LVal: LVal = <ident: Ident> <indices: ("[" <Exp> "]")*> => LVal { <> };
+
+// PrimaryExp -> '(' Exp ')' | LVal | Number
+pub PrimaryExp: Expr = {
+  "(" <Exp> ")" => <>,
+  LVal => Expr::new_lval(<>),
+  Number => Expr::new_const(<>),
+}
+
+Int: i32 = {
+  r"[1-9][0-9]*" => i32::from_str_radix(<>, 10).unwrap(),
+  r"0[0-7]*" => i32::from_str_radix(<>, 8).unwrap(),
+  r"0[xX][0-9a-fA-F]+" => i32::from_str_radix(&<>[2..], 16).unwrap(),
+}
+
+Float: f32 = {
+  r"((([0-9]*[.][0-9]*([eE][+-]?[0-9]+)?)|([0-9]+[eE][+-]?[0-9]+))[fLlL]?)" => <>.parse::<f32>().unwrap(),
+  r"(0[xX](([0-9A-Fa-f]*[.][0-9A-Fa-f]*([pP][+-]?[0-9]+)?)|([0-9A-Fa-f]+[pP][+-]?[0-9]+))[fLlL]?)" => {
+        let float_literal: hexponent::FloatLiteral = <>.parse().unwrap();
+        float_literal.convert::<f32>().inner()
+    },
+}
+
+// Number -> IntConst | floatConst
+pub Number: ComptimeVal = {
+  <n: Int> => ComptimeVal::new_int(n),
+  <f: Float> => ComptimeVal::new_float(f),
+}
+
+// UnaryExp -> PrimaryExp | Ident '(' [FuncRParams] ')' | UnaryOp UnaryExp
+pub UnaryExp: Expr = {
+  PrimaryExp => <>,
+  <start: @L> <i: Ident> <end: @R> "(" ")" => Expr::new_func_call(
+    FuncCall { 
+      ident:i,
+      args: Vec::new(),
+      span: Span { start, end }
+    }
+  ),
+  <start: @L> <i: Ident> <end: @R> "(" <e: Exp> <mut args: ("," <Exp>)*> ")" => {
+    args.insert(0, e);
+    Expr::new_func_call(
+      FuncCall { 
+        ident:i,
+        args,
+        span: Span { start, end }
+      }
+    )
+  },
+  "+" <UnaryExp> => <>,
+  "-" <expr: UnaryExp> => Expr::new_unary(UnaryOp::Neg, Box::new(expr)),
+  "!" <expr: UnaryExp> => Expr::new_unary(UnaryOp::LogicalNot, Box::new(expr)),
+}
+
+// MulExp -> UnaryExp | MulExp ('*' | '/' | '%') UnaryExp
+pub MulExp: Expr = {
+  UnaryExp => <>,
+  <lhs: MulExp> "*" <rhs: UnaryExp> => {
+    Expr::new_binary(BinaryOp::Mul, Box::new(lhs), Box::new(rhs))
+  },
+  <lhs: MulExp> "/" <rhs: UnaryExp> => {
+    Expr::new_binary(BinaryOp::Div, Box::new(lhs), Box::new(rhs))
+  },
+  <lhs: MulExp> "%" <rhs: UnaryExp> => {
+    Expr::new_binary(BinaryOp::Mod, Box::new(lhs), Box::new(rhs))
+  },
+}
+
+// AddExp -> MulExp | AddExp ('+' | '−') MulExp
+pub AddExp: Expr = {
+  MulExp => <>,
+  <lhs: AddExp> "+" <rhs: MulExp> => {
+    Expr::new_binary(BinaryOp::Add, Box::new(lhs), Box::new(rhs))
+  },
+  <lhs: AddExp> "-" <rhs: MulExp> => {
+    Expr::new_binary(BinaryOp::Sub, Box::new(lhs), Box::new(rhs))
+  },
+}
+
+// RelExp -> AddExp | RelExp ('<' | '>' | '<=' | '>=') AddExp
+pub RelExp: Expr = {
+  AddExp => <>,
+  <lhs: RelExp> "<" <rhs: AddExp> => {
+    Expr::new_binary(BinaryOp::Lt, Box::new(lhs), Box::new(rhs))
+  },
+  <lhs: RelExp> ">" <rhs: AddExp> => {
+    Expr::new_binary(BinaryOp::Gt, Box::new(lhs), Box::new(rhs))
+  },
+  <lhs: RelExp> "<=" <rhs: AddExp> => {
+    Expr::new_binary(BinaryOp::Le, Box::new(lhs), Box::new(rhs))
+  },
+  <lhs: RelExp> ">=" <rhs: AddExp> => {
+    Expr::new_binary(BinaryOp::Ge, Box::new(lhs), Box::new(rhs))
+  },
+}
+
+// EqExp -> RelExp | EqExp ('==' | '!=') RelExp
+pub EqExp: Expr = {
+  RelExp => <>,
+  <lhs: EqExp> "==" <rhs: RelExp> => {
+    Expr::new_binary(BinaryOp::Eq, Box::new(lhs), Box::new(rhs))
+  },
+  <lhs: EqExp> "!=" <rhs: RelExp> => {
+    Expr::new_binary(BinaryOp::Ne, Box::new(lhs), Box::new(rhs))
+  },
+}
+
+// LAndExp -> EqExp | LAndExp '&&' EqExp
+LAndExp: Expr = {
+  EqExp => <>,
+  <lhs: LAndExp> "&&" <rhs: EqExp> => {
+    Expr::new_binary(BinaryOp::LogicalAnd, Box::new(lhs), Box::new(rhs))
+  },
+}
+
+// LOrExp -> LAndExp | LOrExp '||' LAndExp
+LOrExp: Expr = {
+  LAndExp => <>,
+  <lhs: LOrExp> "||" <rhs: LAndExp> => {
+    Expr::new_binary(BinaryOp::LogicalOr, Box::new(lhs), Box::new(rhs))
+  },
+}
+
+// ConstExp -> AddExp
+pub ConstExp: Expr = <addexp: AddExp> => <>;
+
+Ident: String = r"[_a-zA-Z][_a-zA-Z0-9]*" => <>.to_string();

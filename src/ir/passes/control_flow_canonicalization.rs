@@ -1,15 +1,18 @@
 //! # Control-Flow Normalization Pass of IR
 //!
-//! This pass will normalize the IR structure, which will transform the following:
-//! 1. If a block has no terminator (which is a jump, branch, or a return instruction), a jump
-//!    to the next block will be added.
-//! 2. If a block has more instructions after the terminator, those instructions will removed.
+//! This pass will normalize the IR structure, which will transform the
+//! following:
+//! 1. If a block has no terminator (which is a jump, branch, or a return
+//!    instruction), a jump to the next block will be added.
+//! 2. If a block has more instructions after the terminator, those instructions
+//!    will removed.
 //!
-//! This pass will not optimize the code, but make the IR structure more consistent and easier to
-//! work with.
+//! This pass will not optimize the code, but make the IR structure more
+//! consistent and easier to work with.
 
 use thiserror::Error;
 
+use super::{GlobalPassMut, PassError, PassManager, PassResult, TransformationPass};
 use crate::ir::{
     builders::BuildLocalValue,
     entities::FunctionData,
@@ -17,11 +20,9 @@ use crate::ir::{
     values::{Block, Function},
 };
 
-use super::{GlobalPassMut, PassError, PassManager, PassResult, TransformationPass};
-
 const CONTROL_FLOW_CANONICALIZATION: &str = "control-flow-canonicalization";
 
-pub struct ControlFlowCanonicalization {}
+pub struct ControlFlowCanonicalization;
 
 #[derive(Error, Debug)]
 pub enum ControlFlowCanonicalizationError {
@@ -49,8 +50,8 @@ impl LocalPassMut for ControlFlowCanonicalization {
         let mut insts_to_remove = Vec::new();
         let mut blocks_to_add_jump = Vec::new();
 
-        let dfg = data.dfg();
-        let layout = data.layout();
+        let dfg = &data.dfg;
+        let layout = &data.layout;
 
         let mut changed = false;
 
@@ -88,8 +89,8 @@ impl LocalPassMut for ControlFlowCanonicalization {
         }
 
         for (block, next_block) in blocks_to_add_jump {
-            let jump = data.dfg_mut().builder().jump(next_block, vec![]).unwrap();
-            data.layout_mut().append_inst(jump.into(), block).unwrap();
+            let jump = data.dfg.builder().jump(next_block, vec![]).unwrap();
+            data.layout.append_inst(jump.into(), block).unwrap();
             changed = true;
         }
 
@@ -129,16 +130,19 @@ impl TransformationPass for ControlFlowCanonicalization {
 
 #[cfg(test)]
 mod test {
+    use std::io::{BufWriter, Cursor};
+
     use super::ControlFlowCanonicalization;
     use crate::ir::{
         frontend::parser::Parser,
         module::Module,
         passes::{
-            control_flow_canonicalization::CONTROL_FLOW_CANONICALIZATION, printer::Printer,
-            GlobalPass, PassManager,
+            control_flow_canonicalization::CONTROL_FLOW_CANONICALIZATION,
+            printer::Printer,
+            GlobalPass,
+            PassManager,
         },
     };
-    use std::io::{BufWriter, Cursor};
 
     fn verify(module: &Module, function_name: &str) -> bool {
         let function = module.get_value_by_name(function_name).unwrap();
@@ -146,8 +150,8 @@ mod test {
 
         let valid = true;
 
-        let dfg = function_data.dfg();
-        let layout = function_data.layout();
+        let dfg = &function_data.dfg;
+        let layout = &function_data.layout;
 
         for (_block, block_node) in layout.blocks() {
             let mut has_terminator = false;

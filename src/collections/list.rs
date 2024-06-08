@@ -29,6 +29,7 @@ where
 {
     list: &'a List<K, N>,
     curr: Option<K>,
+    tail: Option<K>,
 }
 
 impl<'a, K, N> Iterator for Iter<'a, K, N>
@@ -42,6 +43,19 @@ where
         let curr = self.curr?;
         let node = self.list.nodes.get(&curr).unwrap();
         self.curr = node.next();
+        Some((curr, node))
+    }
+}
+
+impl<'a, K, N> DoubleEndedIterator for Iter<'a, K, N>
+where
+    K: Copy + Eq + Hash,
+    N: ListNode<K>,
+{
+    fn next_back(&mut self) -> Option<Self::Item> {
+        let curr = self.tail?;
+        let node = self.list.nodes.get(&curr).unwrap();
+        self.tail = node.prev();
         Some((curr, node))
     }
 }
@@ -77,13 +91,14 @@ where
     K: Copy + Eq + Hash,
     N: ListNode<K>,
 {
-    type Item = (K, &'a N);
     type IntoIter = Iter<'a, K, N>;
+    type Item = (K, &'a N);
 
     fn into_iter(self) -> Self::IntoIter {
         Iter {
             list: self,
             curr: self.head,
+            tail: self.tail,
         }
     }
 }
@@ -108,29 +123,17 @@ where
     K: Copy + Eq + Hash,
     N: ListNode<K>,
 {
-    pub fn is_empty(&self) -> bool {
-        self.head.is_none()
-    }
+    pub fn is_empty(&self) -> bool { self.head.is_none() }
 
-    pub fn front(&self) -> Option<K> {
-        self.head
-    }
+    pub fn front(&self) -> Option<K> { self.head }
 
-    pub fn back(&self) -> Option<K> {
-        self.tail
-    }
+    pub fn back(&self) -> Option<K> { self.tail }
 
-    pub fn node(&self, key: K) -> Option<&N> {
-        self.nodes.get(&key)
-    }
+    pub fn node(&self, key: K) -> Option<&N> { self.nodes.get(&key) }
 
-    pub fn node_mut(&mut self, key: K) -> Option<&mut N> {
-        self.nodes.get_mut(&key)
-    }
+    pub fn node_mut(&mut self, key: K) -> Option<&mut N> { self.nodes.get_mut(&key) }
 
-    pub fn contains(&self, key: K) -> bool {
-        self.nodes.contains_key(&key)
-    }
+    pub fn contains(&self, key: K) -> bool { self.nodes.contains_key(&key) }
 
     pub fn insert_after(&mut self, key: K, after: K) -> Result<(), ListError<K>> {
         if self.contains(key) {
@@ -244,6 +247,8 @@ where
 
         Ok(())
     }
+
+    pub fn iter(&self) -> Iter<K, N> { self.into_iter() }
 }
 
 #[cfg(test)]
@@ -257,21 +262,13 @@ mod test {
     }
 
     impl ListNode<usize> for TestNode {
-        fn next(&self) -> Option<usize> {
-            self.next
-        }
+        fn next(&self) -> Option<usize> { self.next }
 
-        fn prev(&self) -> Option<usize> {
-            self.prev
-        }
+        fn prev(&self) -> Option<usize> { self.prev }
 
-        fn set_next(&mut self, next: Option<usize>) {
-            self.next = next;
-        }
+        fn set_next(&mut self, next: Option<usize>) { self.next = next; }
 
-        fn set_prev(&mut self, prev: Option<usize>) {
-            self.prev = prev;
-        }
+        fn set_prev(&mut self, prev: Option<usize>) { self.prev = prev; }
     }
 
     #[test]
@@ -401,5 +398,23 @@ mod test {
         list.extend(1..=5);
         assert_eq!(list.front(), Some(1));
         assert_eq!(list.back(), Some(5));
+    }
+
+    #[test]
+    fn test_list_reverse() {
+        let mut list = List::<usize, TestNode>::default();
+        list.extend(1..=5);
+        assert_eq!(list.front(), Some(1));
+        assert_eq!(list.back(), Some(5));
+
+        for i in list.into_iter().rev() {
+            println!("{:?}", i);
+        }
+
+        let mut iter = list.into_iter();
+        for i in (1..=5).rev() {
+            let (key, _) = iter.next_back().unwrap();
+            assert_eq!(key, i);
+        }
     }
 }

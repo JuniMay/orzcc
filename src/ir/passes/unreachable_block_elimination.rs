@@ -2,27 +2,28 @@
 //!
 //! This module contains the implementation of the Unreachable BB Elim pass.
 
+use std::collections::{HashSet, VecDeque};
+
 use thiserror::Error;
 
+use super::{
+    control_flow_analysis::ControlFlowAnalysis,
+    control_flow_canonicalization::ControlFlowCanonicalization,
+    GlobalPassMut,
+    PassManager,
+    PassResult,
+    TransformationPass,
+};
 use crate::ir::{
-    entities::FunctionData,
+    entities::{FunctionData, FunctionKind},
     module::Module,
     passes::{LocalPass, LocalPassMut},
     values::{Block, Function},
 };
 
-use std::collections::HashSet;
-use std::collections::VecDeque;
-
-use super::{
-    control_flow_analysis::ControlFlowAnalysis,
-    control_flow_canonicalization::ControlFlowCanonicalization, GlobalPassMut, PassManager,
-    PassResult, TransformationPass,
-};
-
 const UNREACHABLE_BLOCK_ELIMINATION: &str = "unreachable-block-elimination";
 
-pub struct UnreachableBlockElimination {}
+pub struct UnreachableBlockElimination;
 
 #[derive(Debug, Error)]
 pub enum UnreachableBlockEliminationError {}
@@ -35,13 +36,17 @@ impl LocalPassMut for UnreachableBlockElimination {
         _function: Function,
         data: &mut FunctionData,
     ) -> PassResult<(Self::Ok, bool)> {
+        if let FunctionKind::Declaration = data.kind() {
+            return Ok(((), false));
+        }
+
         let mut cfa = ControlFlowAnalysis {};
         let cfg = cfa.run_on_function(_function, data).unwrap();
 
         let mut reachable_blocks: HashSet<Block> = HashSet::new();
         let mut queue: VecDeque<Block> = VecDeque::new();
 
-        let entry_block = data.layout().entry_block().unwrap();
+        let entry_block = data.layout.entry_block().unwrap();
 
         queue.push_back(entry_block);
         reachable_blocks.insert(entry_block);
@@ -60,7 +65,7 @@ impl LocalPassMut for UnreachableBlockElimination {
         }
 
         let mut unreachable_blocks: Vec<Block> = Vec::new();
-        for (block, _block_node) in data.layout().blocks() {
+        for (block, _block_node) in data.layout.blocks() {
             if !reachable_blocks.contains(&block) {
                 unreachable_blocks.push(block);
             }
@@ -107,13 +112,12 @@ impl TransformationPass for UnreachableBlockElimination {
 mod test {
     use std::io::{BufWriter, Cursor};
 
+    use super::{UnreachableBlockElimination, UNREACHABLE_BLOCK_ELIMINATION};
     use crate::ir::{
         frontend::parser::Parser,
         module::Module,
         passes::{printer::Printer, GlobalPass, PassManager},
     };
-
-    use super::{UnreachableBlockElimination, UNREACHABLE_BLOCK_ELIMINATION};
 
     fn print(module: &Module) {
         let mut buf = BufWriter::new(Vec::new());

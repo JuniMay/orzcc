@@ -1,6 +1,7 @@
 //! # Debugger of OrzIR
 //!
-//! Debugger facilitates the virtual machine of OrzIR to realize interactive debugging like GDB.
+//! Debugger facilitates the virtual machine of OrzIR to realize interactive
+//! debugging like GDB.
 //!
 //! Currently, there are several simple commands.
 //!
@@ -16,20 +17,21 @@
 //! | `dump-vreg <func> <value>`   | Dump the virtual registers of the function                        |                               |
 //!
 //! Please refer to the parse function for more details of the command.
-//!
 
-use std::collections::HashSet;
-use std::io::{stdin, stdout, BufWriter, Write};
-
-use crate::ir::entities::FunctionKind;
-use crate::ir::values::{Inst, ValueIndexer};
-use crate::ir::{
-    module::Module,
-    values::{Function, Value},
+use std::{
+    collections::HashSet,
+    io::{stdin, stdout, BufWriter, Write},
 };
 
-use super::vm::{Addr, ExecResult, VirtualMachine};
-use super::ExecError;
+use super::{
+    vm::{Addr, ExecResult, VirtualMachine},
+    ExecError,
+};
+use crate::ir::{
+    entities::FunctionKind,
+    module::Module,
+    values::{Function, Inst, Value, ValueIndexer},
+};
 
 pub struct Debugger<'a> {
     vm: VirtualMachine<'a>,
@@ -207,8 +209,8 @@ impl<'a> Debugger<'a> {
                 .ok_or_else(|| ExecError::FunctionNotFound((*function).into()))?;
             let function_name = self.module.value_name((*function).into());
 
-            let dfg = function_data.dfg();
-            let layout = function_data.layout();
+            let dfg = &function_data.dfg;
+            let layout = &function_data.layout;
 
             if let FunctionKind::Definition = function_data.kind() {
                 println!(
@@ -295,7 +297,7 @@ impl<'a> Debugger<'a> {
             .ok_or_else(|| ExecError::FunctionNotFound(function.into()))?;
         let function_name = self.module.value_name(function.into());
 
-        let dfg = function_data.dfg();
+        let dfg = &function_data.dfg;
 
         if let Some(value) = value {
             let vreg = self.vm.read_vreg(value);
@@ -419,7 +421,7 @@ impl<'a> Debugger<'a> {
                                     .unwrap_or_else(|| self.vm.curr_function().into())
                                     .into(),
                             )
-                            .and_then(|data| data.dfg().get_local_value_by_name(&name))
+                            .and_then(|data| data.dfg.get_local_value_by_name(&name))
                     });
 
                     let function = function.map(|f| f.into());
@@ -442,7 +444,7 @@ impl<'a> Debugger<'a> {
                                     .unwrap_or_else(|| self.vm.curr_function().into())
                                     .into(),
                             )
-                            .and_then(|data| data.dfg().get_local_value_by_name(&name))
+                            .and_then(|data| data.dfg.get_local_value_by_name(&name))
                     });
 
                     let function = function.map(|f| f.into());

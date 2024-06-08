@@ -2,14 +2,15 @@
 //!
 //! This module contains the intermediate representation (IR) for the OrzCC.
 //!
-//! The OrzIR is a low-level representation of programming languages. It is inspired by
-//! the LLVM IR, Koopa and Cranelift IRs. The IR is designed to preserve the semantics and
-//! structure of higher-level programming languages, while being simple and efficient to
-//! manipulate and optimize.
+//! The OrzIR is a low-level representation of programming languages. It is
+//! inspired by the LLVM IR, Koopa and Cranelift IRs. The IR is designed to
+//! preserve the semantics and structure of higher-level programming languages,
+//! while being simple and efficient to manipulate and optimize.
 //!
-//! The IR has a hierarchical structure, with a module at the top level, which contains functions,
-//! globals, and types. Each function contains a data flow graph (DFG) and a layout. The DFG
-//! contains the instructions and the layout contains the sequence of basic blocks and instructions.
+//! The IR has a hierarchical structure, with a module at the top level, which
+//! contains functions, globals, and types. Each function contains a data flow
+//! graph (DFG) and a layout. The DFG contains the instructions and the layout
+//! contains the sequence of basic blocks and instructions.
 //!
 //! ## OrzIR Syntax
 //!
@@ -17,9 +18,10 @@
 //!
 //! ### Global Slots
 //!
-//! The [global slots](values::GlobalSlot) are used to store global variables and constants.
-//! The global slots are allocated in the data segment of the program, and are used to store the
-//! initial values of the global variables and constants.
+//! The [global slots](values::GlobalSlot) are used to store global variables
+//! and constants. The global slots are allocated in the data segment of the
+//! program, and are used to store the initial values of the global variables
+//! and constants.
 //!
 //! The format to define a global slot is:
 //! ```orzir
@@ -29,7 +31,8 @@
 //!
 //! ### Functions
 //!
-//! The [functions](entities::FunctionData) are the main units of computation in the OrzIR.
+//! The [functions](entities::FunctionData) are the main units of computation in
+//! the OrzIR.
 //!
 //! The format to define a function is:
 //! ```orzir
@@ -45,13 +48,14 @@
 //!
 //! ### Blocks
 //!
-//! The [blocks](entities::BlockData) are the basic units of control flow in the OrzIR.
-//! The type of a block is [`label`](types::TypeKind::Label), and the name of a block starts with
-//! a `^` followed by a sequence of alphanumeric characters.
+//! The [blocks](entities::BlockData) are the basic units of control flow in the
+//! OrzIR. The type of a block is [`label`](types::TypeKind::Label), and the
+//! name of a block starts with a `^` followed by a sequence of alphanumeric
+//! characters.
 //!
-//! In the OrzIR, phi nodes are not used for SSA, instead, block parameters are used to represent
-//! the incoming values from the predecessors of the block. This is the same as MLIR, Koopa, and
-//! Cranelift IRs.
+//! In the OrzIR, phi nodes are not used for SSA, instead, block parameters are
+//! used to represent the incoming values from the predecessors of the block.
+//! This is the same as MLIR, Koopa, and Cranelift IRs.
 //!
 //! The format to define a block is:
 //! ```orzir
@@ -96,7 +100,7 @@
 //! };
 //!
 //! // Firstly, create a module:
-//! let mut module = Module::new("module_name".to_string());
+//! let mut module = Module::new("module_name");
 //!
 //! // Then build global values with the global builder:
 //!
@@ -119,31 +123,31 @@
 //!
 //! // example: build an entry block, and since there is a parameter of the function, we need to
 //! // add the parameter to the block.
-//! let param = function_data.dfg_mut().builder().block_param(Type::i32_()).unwrap();
-//! let entry = function_data.dfg_mut().builder().block(vec![param]).unwrap();
+//! let param = function_data.dfg.builder().block_param(Type::i32_()).unwrap();
+//! let entry = function_data.dfg.builder().block(vec![param]).unwrap();
 //!
 //! // example: allocate a stack slot.
-//! let inst = function_data.dfg_mut().builder().alloc(Type::i32_()).unwrap();
+//! let inst = function_data.dfg.builder().alloc(Type::i32_()).unwrap();
 //!
 //! // next, we need to add the inst to the block in the function layout.
-//! function_data.layout_mut().append_block(entry).unwrap();
-//! function_data.layout_mut().append_inst(inst.into(), entry).unwrap();
+//! function_data.layout.append_block(entry).unwrap();
+//! function_data.layout.append_inst(inst.into(), entry).unwrap();
 //!
 //! // After the structural construction, we can assign names to the values and blocks:
 //!
 //! // layout is just a linear description of components, all metadata is stored in the dfg.
-//! function_data.dfg_mut().assign_local_value_name(param, "%param".to_string()).unwrap();
-//! function_data.dfg_mut().assign_block_name(entry, "^entry".to_string()).unwrap();
+//! function_data.dfg.assign_local_value_name(param, "%param").unwrap();
+//! function_data.dfg.assign_block_name(entry, "^entry").unwrap();
 //!
-//! module.assign_name(var, "@var_name".to_string()).unwrap();
-//! module.assign_name(const_, "@const_name".to_string()).unwrap();
-//! module.assign_name(function.into(), "@function_name".to_string()).unwrap();
+//! module.assign_name(var, "@var_name").unwrap();
+//! module.assign_name(const_, "@const_name").unwrap();
+//! module.assign_name(function, "@function_name").unwrap();
 //! ```
 //!
 //! ---
 //!
-//! For more details, please refer to the documentation of each module and the source code.
-//!
+//! For more details, please refer to the documentation of each module and the
+//! source code.
 
 pub mod builders;
 pub mod entities;
@@ -178,7 +182,7 @@ mod tests {
 
     #[test]
     fn test_properties() {
-        let module = Module::new("module_name".to_string());
+        let module = Module::new("module_name");
         assert_eq!(module.name(), "module_name");
     }
 }
