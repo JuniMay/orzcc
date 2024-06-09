@@ -17,6 +17,7 @@ pub mod mem2reg;
 pub mod printer;
 pub mod straighten;
 pub mod unreachable_block_elimination;
+pub mod peephole;
 
 pub trait GlobalPass {
     type Ok;
