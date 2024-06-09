@@ -1,6 +1,8 @@
 //! # Strength_reduce(IR)
 //!
 //! This module contains the implementation of the strength_reduce pass.
+use std::collections::HashMap;
+
 use thiserror::Error;
 
 use super::{
@@ -10,10 +12,10 @@ use super::{
     TransformationPass,
 };
 use crate::ir::{
-    entities::{FunctionData, FunctionKind},
+    entities::{FunctionData, FunctionKind, ValueKind},
     module::Module,
     passes::{LocalPass, LocalPassMut},
-    values::{Block, Function, Inst},
+    values::{Binary, Block, Function, Inst, BinaryOp},
 };
 
 const STRENGTH_REDUCE: &str = "strength-reduce";
@@ -23,6 +25,32 @@ pub struct StrengthReduce {}
 #[derive(Debug, Error)]
 pub enum StrengthReduceError {}
 
+// pub struct TochangeBlockInsts {
+//     block: Block,
+//     tochange_insts: Vec<Inst>,
+// }
+
+pub enum OptimizationSituation {
+    // Multiplication by zero
+    MulByZero,
+    // Multiplication by a power of two, stores the number of shifts
+    MulByPowerOfTwo { shift: usize },
+    // Division by one
+    DivByOne,
+    // Division by negative one
+    DivByNegativeOne,
+    // Division by two
+    DivByTwo,
+    // Division by a power of two, stores the number of shifts
+    DivByPowerOfTwo { shift: usize },
+    // Remainder by a power of two, stores the bitmask for the operation
+    SRemByPowerOfTwo { mask: usize },
+}
+
+pub struct StrengthReduceOptimization {
+    inst: Inst,
+    situation: OptimizationSituation,
+}
 
 impl LocalPassMut for StrengthReduce {
     type Ok = ();
@@ -33,12 +61,79 @@ impl LocalPassMut for StrengthReduce {
         data: &mut FunctionData,
     ) -> PassResult<(Self::Ok, bool)> {
         let mut changed = false;
+        let dfg = &mut data.dfg;
 
-        // iter all blocks
-        for (block, _block_node) in data.layout.blocks() {
+        // let mut to_change_blockinsts: Vec<TochangeBlockInsts> = Vec::new();
+
+        let mut inst_situation: Vec<StrengthReduceOptimization> = Vec::new();
+
+        // iter all blocks, the part of record
+        for (block, block_node) in data.layout.blocks() {
+
+            // iter all inst in block
+            for (inst, _) in block_node.insts() {
+                let inst_data = dfg.local_value_data(inst.into()).unwrap();
+                if let ValueKind::Binary(binary) = inst_data.kind() {
+                    let operation = binary.op();
+                    match operation {
+                        BinaryOp::FMul => {
+                            let lhs = binary.lhs();
+                            let rhs = binary.rhs();
+                            // if lhs/rhs is zero or lhs/rhs is one or lhs/rhs is negative one or lhs/rhs is +-power of two
+
+                        }
+                        BinaryOp::Mul => {
+                            let lhs = binary.lhs();
+                            let rhs = binary.rhs();
+                            // if lhs/rhs is zero or lhs/rhs is one or lhs/rhs is negative one or lhs/rhs is +-power of two
+                            
+                        }
+                        BinaryOp::FDiv => {
+                            let lhs = binary.lhs();
+                            let rhs = binary.rhs();
+                            // if rhs is one or rhs is negative one or rhs is power of two
+                        
+                        }
+                        BinaryOp::SDiv => {
+                            let lhs = binary.lhs();
+                            let rhs = binary.rhs();
+                            // if rhs is one or rhs is negative one or rhs is power of two
+
+                        }
+                        BinaryOp::UDiv => {
+                            let lhs = binary.lhs();
+                            let rhs = binary.rhs();
+                            // if rhs is one or rhs is power of two
+
+                        }
+                        BinaryOp::SRem => {
+                            let lhs = binary.lhs();
+                            let rhs = binary.rhs();
+                            // if rhs is power of two
+
+                        }
+                        BinaryOp::URem => {
+                            let lhs = binary.lhs();
+                            let rhs = binary.rhs();
+                            // if rhs is power of two
+
+                        }
+                        _ => {
+                            continue;
+                        }
+                    }
+                } else {
+                    continue;
+                }
+            }
+        }
 
 
-
+        // Check if the vector is empty, the part of change
+        if inst_situation.is_empty() {
+            return Ok(((), false));
+        } else {
+            todo!()
         }
 
         Ok(((), changed))
