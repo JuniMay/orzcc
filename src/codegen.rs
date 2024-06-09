@@ -32,7 +32,7 @@ use crate::{
     ir::{
         entities::{FunctionKind, ValueKind},
         module::Module,
-        types::TypeKind,
+        types::{Type, TypeKind},
         values::{BinaryOp, Block, CastOp, FCmpCond, Function, ICmpCond, Inst, UnaryOp, Value},
     },
 };
@@ -706,12 +706,8 @@ impl CodegenContext {
                         ValueKind::Array(_) | ValueKind::Struct(_) => unimplemented!(),
                         ValueKind::Bytes(bytes) => {
                             // little endian
-                            let imm = bytes
-                                .iter()
-                                .rev()
-                                .fold(0, |acc, &byte| (acc << 8) | byte as u64);
-                            let (rd, li) =
-                                MachineInstData::new_li(&mut self.machine_ctx, imm.into());
+                            let imm = bytes_to_imm(bytes, data.ty());
+                            let (rd, li) = MachineInstData::new_li(&mut self.machine_ctx, imm);
                             self.append_inst(&function_name, block, li);
                             if data.ty().is_float() {
                                 // fmv
@@ -1082,7 +1078,7 @@ impl CodegenContext {
                             rd
                         }
                         ValueKind::Bytes(bytes) => {
-                            let imm: Immediate = bytes.into();
+                            let imm: Immediate = bytes_to_imm(bytes, lhs_data.ty());
                             let (rd, li) = MachineInstData::new_li(&mut self.machine_ctx, imm);
                             let dst_fmt = FMvFmt::from_byte_width(lhs_data.ty().bytewidth());
                             let (rd, fmv) = MachineInstData::new_float_move(
@@ -1137,7 +1133,7 @@ impl CodegenContext {
                             rd
                         }
                         ValueKind::Bytes(bytes) => {
-                            let imm: Immediate = bytes.into();
+                            let imm: Immediate = bytes_to_imm(bytes, rhs_data.ty());
                             let (rd, li) = MachineInstData::new_li(&mut self.machine_ctx, imm);
                             let dst_fmt = FMvFmt::from_byte_width(lhs_data.ty().bytewidth());
                             let (rd, fmv) = MachineInstData::new_float_move(
@@ -1231,7 +1227,7 @@ impl CodegenContext {
                         | ValueKind::Return(_) => unreachable!(),
                         ValueKind::Zero | ValueKind::Undef => BinaryOperand::Immediate(0.into()),
                         ValueKind::Bytes(bytes) => {
-                            let imm: Immediate = bytes.into();
+                            let imm: Immediate = bytes_to_imm(bytes, lhs_data.ty());
                             if check_itype_imm(imm) {
                                 BinaryOperand::Immediate(imm)
                             } else {
@@ -1254,7 +1250,7 @@ impl CodegenContext {
                         | ValueKind::Return(_) => unreachable!(),
                         ValueKind::Zero | ValueKind::Undef => BinaryOperand::Immediate(0.into()),
                         ValueKind::Bytes(bytes) => {
-                            let imm: Immediate = bytes.into();
+                            let imm: Immediate = bytes_to_imm(bytes, rhs_data.ty());
                             if check_itype_imm(imm) {
                                 BinaryOperand::Immediate(imm)
                             } else {
@@ -1543,7 +1539,7 @@ impl CodegenContext {
                         zero
                     }
                     ValueKind::Bytes(bytes) => {
-                        let imm: Immediate = bytes.into();
+                        let imm: Immediate = bytes_to_imm(bytes, val_data.ty());
                         let (rd, li) = MachineInstData::new_li(&mut self.machine_ctx, imm);
                         self.append_inst(&function_name, block, li);
                         rd
@@ -1672,7 +1668,7 @@ impl CodegenContext {
                         zero
                     }
                     ValueKind::Bytes(bytes) => {
-                        let imm: Immediate = bytes.into();
+                        let imm: Immediate = bytes_to_imm(bytes, val_data.ty());
                         match val_data.ty() {
                             ty if ty.is_int() => {
                                 let (rd, li) = MachineInstData::new_li(&mut self.machine_ctx, imm);
@@ -1804,7 +1800,7 @@ impl CodegenContext {
                     | ValueKind::Zero
                     | ValueKind::Undef => unreachable!(),
                     ValueKind::Bytes(bytes) => {
-                        let imm: Immediate = bytes.into();
+                        let imm: Immediate = bytes_to_imm(bytes, cond_data.ty());
                         let (rd, li) = MachineInstData::new_li(&mut self.machine_ctx, imm);
                         self.append_inst(&function_name, block, li);
                         rd
@@ -1914,8 +1910,8 @@ impl CodegenContext {
                             // no need to do anything
                         }
                         ValueKind::Bytes(bytes) => {
-                            let (rd, li) =
-                                MachineInstData::new_li(&mut self.machine_ctx, bytes.into());
+                            let imm = bytes_to_imm(bytes, index_data.ty());
+                            let (rd, li) = MachineInstData::new_li(&mut self.machine_ctx, imm);
                             self.append_inst(&function_name, block, li);
                             match shamt {
                                 Some(shamt) => {
@@ -2075,7 +2071,7 @@ impl CodegenContext {
                                     }
                                     ValueKind::Bytes(bytes) => {
                                         // load into reg
-                                        let imm: Immediate = bytes.into();
+                                        let imm: Immediate = bytes_to_imm(bytes, ty.clone());
                                         // li
                                         let (rd, li) =
                                             MachineInstData::new_li(&mut self.machine_ctx, imm);
@@ -2139,7 +2135,7 @@ impl CodegenContext {
                                     }
                                     ValueKind::Bytes(bytes) => {
                                         // load into reg
-                                        let imm: Immediate = bytes.into();
+                                        let imm: Immediate = bytes_to_imm(bytes, ty);
                                         // li
                                         let li = MachineInstData::build_li(
                                             &mut self.machine_ctx,
@@ -2298,7 +2294,7 @@ impl CodegenContext {
                                     self.append_inst(&function_name, block, store);
                                 }
                                 ValueKind::Bytes(bytes) => {
-                                    let imm: Immediate = bytes.into();
+                                    let imm: Immediate = bytes_to_imm(bytes, arg_data.ty());
                                     let (rd, li) =
                                         MachineInstData::new_li(&mut self.machine_ctx, imm);
                                     self.append_inst(&function_name, block, li);
@@ -2571,7 +2567,7 @@ impl CodegenContext {
                         }
                         ValueKind::Bytes(bytes) => {
                             if val_data.ty().is_float() {
-                                let imm: Immediate = bytes.into();
+                                let imm: Immediate = bytes_to_imm(bytes, val_data.ty());
                                 let (rd, li) = MachineInstData::new_li(&mut self.machine_ctx, imm);
                                 self.append_inst(&function_name, block, li);
                                 let fa0 = self.machine_ctx.new_fp_reg(RiscvFpReg::Fa0);
@@ -2579,7 +2575,7 @@ impl CodegenContext {
                                     MachineInstData::build_fp_move(&mut self.machine_ctx, fa0, rd);
                                 self.append_inst(&function_name, block, fmv);
                             } else if val_data.ty().is_int() || val_data.ty().is_ptr() {
-                                let imm: Immediate = bytes.into();
+                                let imm: Immediate = bytes_to_imm(bytes, val_data.ty());
                                 let a0 = self.machine_ctx.new_gp_reg(RiscvGpReg::A0);
                                 let li = MachineInstData::build_li(&mut self.machine_ctx, a0, imm);
                                 self.append_inst(&function_name, block, li);
@@ -2707,7 +2703,7 @@ impl CodegenContext {
                         }
                     }
                     ValueKind::Bytes(bytes) => {
-                        let imm: Immediate = bytes.into();
+                        let imm: Immediate = bytes_to_imm(bytes, arg_data.ty());
                         if arg_data.ty().is_float() {
                             let (tmp, li) = MachineInstData::new_li(&mut self.machine_ctx, imm);
                             let fmv = MachineInstData::build_fmv(
@@ -2876,4 +2872,38 @@ pub fn check_itype_imm(imm: Immediate) -> bool {
     let imm = imm.0 as i32;
     // -0x800 is excluded for the correctness negation
     (-0x7ff..=0x7ff).contains(&imm)
+}
+
+/// Convert the bytes to the immediate value according to the type.
+pub fn bytes_to_imm(bytes: &[u8], ty: Type) -> Immediate {
+    if ty.is_float() {
+        // just convert the bytes to the immediate value
+        let mut imm = 0u64;
+        for (i, &byte) in bytes.iter().enumerate() {
+            imm |= (byte as u64) << (i * 8);
+        }
+        imm.into()
+    } else if ty.is_i1() {
+        // the immediate value is the first byte
+        let imm = bytes[0];
+        imm.into()
+    } else if ty.is_int() {
+        // this is a little bit complicated.
+        // the bitwdth and the corresponding bits in `bytes` need to be checked to
+        // decide if this is a negative number or just a binary number.
+        let bitwidth = ty.bitwidth();
+        let mut imm = 0i128;
+        for (i, &byte) in bytes.iter().enumerate() {
+            imm |= (byte as i128) << (i * 8);
+        }
+
+        if imm & (1 << (bitwidth - 1)) != 0 {
+            // negative number
+            imm |= !0 << bitwidth;
+        }
+
+        imm.into()
+    } else {
+        unimplemented!()
+    }
 }

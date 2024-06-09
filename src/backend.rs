@@ -1006,17 +1006,6 @@ impl fmt::Display for Immediate {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
-impl From<&Vec<u8>> for Immediate {
-    fn from(data: &Vec<u8>) -> Self {
-        let mut value = 0;
-        for byte in data.iter().rev() {
-            value <<= 8;
-            value |= *byte as i128;
-        }
-        Immediate(value)
-    }
-}
-
 impl From<i128> for Immediate {
     fn from(value: i128) -> Self { Immediate(value) }
 }

@@ -14,4 +14,7 @@ target/
 /test-*.orzir
 /test.in
 
+/tests/sysy/final_performance
+/tests/sysy/performance
+
 output/
