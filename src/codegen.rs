@@ -2626,9 +2626,14 @@ impl CodegenContext {
         let function_name = module.value_name(function.into()).into();
 
         assert_eq!(args.len(), params.len());
-        for (arg, param) in args.iter().zip(params.iter()) {
+
+        // XXX: arugment passing needs to avoid RAW dependency, so each argument should
+        // be assigned to a set of new registers first, then the register is
+        // used to pass the argument.
+        let mut pre_arg_regs = Vec::new();
+
+        for arg in args.iter() {
             // the register should have been assigned to the block argument.
-            let rd = self.get_value_as_register(*param);
             function_data.dfg.with_value_data(*arg, |arg_data| {
                 match arg_data.kind() {
                     ValueKind::Array(_)
@@ -2641,44 +2646,44 @@ impl CodegenContext {
                     ValueKind::GlobalSlot(_) => {
                         // la
                         let symbol = self.get_value_as_symbol(*arg);
-                        let la = MachineInstData::build_pseudo_load(
+                        let (tmp_rd, la) = MachineInstData::new_pseudo_load(
                             &mut self.machine_ctx,
                             PseudoLoadKind::Address,
-                            rd,
                             symbol,
                         );
                         self.append_inst(&function_name, block, la);
+                        pre_arg_regs.push(tmp_rd);
                     }
                     ValueKind::Alloc(_) => {
                         let (rs, offset) = self.get_value_as_stack_slot(*arg);
                         if check_itype_imm(offset) {
                             // addi
-                            let addi = MachineInstData::build_binary_imm(
+                            let (tmp_rd, addi) = MachineInstData::new_binary_imm(
                                 &mut self.machine_ctx,
                                 MachineBinaryImmOp::Addi,
-                                rd,
                                 rs,
                                 offset,
                             );
                             self.append_inst(&function_name, block, addi);
+                            pre_arg_regs.push(tmp_rd);
                         } else {
                             // li
-                            let li = MachineInstData::build_li(&mut self.machine_ctx, rd, offset);
+                            let (tmp_rd, li) =
+                                MachineInstData::new_li(&mut self.machine_ctx, offset);
                             self.append_inst(&function_name, block, li);
                             // add
-                            let add = MachineInstData::build_binary(
+                            let (tmp_rd, add) = MachineInstData::new_binary(
                                 &mut self.machine_ctx,
                                 MachineBinaryOp::Add,
-                                rd,
-                                rd,
+                                tmp_rd,
                                 rs,
                             );
                             self.append_inst(&function_name, block, add);
+                            pre_arg_regs.push(tmp_rd);
                         }
                     }
                     ValueKind::Zero | ValueKind::Undef => {
                         let zero = self.machine_ctx.new_gp_reg(RiscvGpReg::Zero);
-
                         if arg_data.ty().is_float() {
                             let dst_fmt = match arg_data.ty().bytewidth() {
                                 2 => FMvFmt::H,
@@ -2686,18 +2691,16 @@ impl CodegenContext {
                                 8 => FMvFmt::D,
                                 _ => unimplemented!(),
                             };
-                            let fmv = MachineInstData::build_fmv(
+                            let (tmp_rd, fmv) = MachineInstData::new_float_move(
                                 &mut self.machine_ctx,
                                 dst_fmt,
                                 FMvFmt::X,
-                                rd,
                                 zero,
                             );
                             self.append_inst(&function_name, block, fmv);
+                            pre_arg_regs.push(tmp_rd);
                         } else if arg_data.ty().is_int() || arg_data.ty().is_ptr() {
-                            let mv =
-                                MachineInstData::build_gp_move(&mut self.machine_ctx, rd, zero);
-                            self.append_inst(&function_name, block, mv);
+                            pre_arg_regs.push(zero);
                         } else {
                             unreachable!()
                         }
@@ -2705,36 +2708,61 @@ impl CodegenContext {
                     ValueKind::Bytes(bytes) => {
                         let imm: Immediate = bytes_to_imm(bytes, arg_data.ty());
                         if arg_data.ty().is_float() {
-                            let (tmp, li) = MachineInstData::new_li(&mut self.machine_ctx, imm);
-                            let fmv = MachineInstData::build_fmv(
+                            let (tmp_rd, li) = MachineInstData::new_li(&mut self.machine_ctx, imm);
+                            let (tmp_rd, fmv) = MachineInstData::new_float_move(
                                 &mut self.machine_ctx,
                                 FMvFmt::from_byte_width(arg_data.ty().bytewidth()),
                                 FMvFmt::X,
-                                rd,
-                                tmp,
+                                tmp_rd,
                             );
                             self.append_inst(&function_name, block, li);
                             self.append_inst(&function_name, block, fmv);
+                            pre_arg_regs.push(tmp_rd);
                         } else if arg_data.ty().is_int() || arg_data.ty().is_ptr() {
-                            let li = MachineInstData::build_li(&mut self.machine_ctx, rd, imm);
+                            let (tmp_rd, li) = MachineInstData::new_li(&mut self.machine_ctx, imm);
                             self.append_inst(&function_name, block, li);
+                            pre_arg_regs.push(tmp_rd);
                         } else {
                             unreachable!()
                         }
                     }
                     _ => {
                         let rs = self.get_value_as_register(*arg);
-                        let mv = if arg_data.ty().is_float() {
-                            MachineInstData::build_fp_move(&mut self.machine_ctx, rd, rs)
+                        let (tmp_rd, mv) = if arg_data.ty().is_float() {
+                            MachineInstData::new_float_binary(
+                                &mut self.machine_ctx,
+                                MachineFloatBinaryOp::Fsgnj,
+                                MachineFloatBinaryFmt::S,
+                                rs,
+                                rs,
+                            )
                         } else if arg_data.ty().is_int() || arg_data.ty().is_ptr() {
-                            MachineInstData::build_gp_move(&mut self.machine_ctx, rd, rs)
+                            MachineInstData::new_binary_imm(
+                                &mut self.machine_ctx,
+                                MachineBinaryImmOp::Addi,
+                                rs,
+                                0.into(),
+                            )
                         } else {
                             unreachable!();
                         };
                         self.append_inst(&function_name, block, mv);
+                        pre_arg_regs.push(tmp_rd);
                     }
                 }
             });
+        }
+
+        // now, move all the tmp regs to params
+        for (param, tmp_reg) in params.iter().zip(pre_arg_regs.into_iter()) {
+            let param_reg = self.get_value_as_register(*param);
+            if param_reg.is_fp() || param_reg.is_fp_virtual() {
+                let mv = MachineInstData::build_fp_move(&mut self.machine_ctx, param_reg, tmp_reg);
+                self.append_inst(&function_name, block, mv);
+            } else {
+                let mv = MachineInstData::build_gp_move(&mut self.machine_ctx, param_reg, tmp_reg);
+                self.append_inst(&function_name, block, mv);
+            }
         }
     }
 

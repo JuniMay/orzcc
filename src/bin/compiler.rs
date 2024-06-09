@@ -153,8 +153,8 @@ fn parse_args() -> CliCommand {
     let mut passes = Vec::new();
     if opt > 0 {
         passes.push(MEM2REG.to_string());
-        // passes.push(UNREACHABLE_BLOCK_ELIMINATION.to_string());
-        // passes.push(STRAIGHTEN.to_string());
+        passes.push(UNREACHABLE_BLOCK_ELIMINATION.to_string());
+        passes.push(STRAIGHTEN.to_string());
     }
 
     let transformation_names = PassManager::get_transformation_names();
