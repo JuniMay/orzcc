@@ -18,10 +18,10 @@ pub fn preprocess(context: &str) -> String {
     let mut lineno = 1;
     for line in context.lines() {
         if re_starttime.find(line).is_some() {
-            let replaced_line = _replace_starttime(line, lineno);
+            let replaced_line = replace_starttime(line, lineno);
             result.push_str(&replaced_line);
         } else if re_stoptime.find(line).is_some() {
-            let replaced_line = _replace_stoptime(line, lineno);
+            let replaced_line = replace_stoptime(line, lineno);
             result.push_str(&replaced_line);
         } else {
             result.push_str(line);
@@ -32,39 +32,45 @@ pub fn preprocess(context: &str) -> String {
     result
 }
 
-fn _replace_starttime(line: &str, lineno: usize) -> String {
+fn replace_starttime(line: &str, lineno: usize) -> String {
     let mut result = String::new();
     let re = Regex::new(r#"starttime\s*\(\s*\)"#).unwrap();
     if let Some(mat) = re.find(line) {
         let start = mat.start();
         let end = mat.end();
-        result.push_str(&_copy_until_index(line, start));
-        result.push_str(&_replace_lineno_start(lineno));
-        result.push_str(&_copy_from_index(line, end));
+        result.push_str(&copy_until_index(line, start));
+        result.push_str(&replace_lineno_start(lineno));
+        result.push_str(&copy_from_index(line, end));
     }
     result
 }
 
-fn _replace_stoptime(line: &str, lineno: usize) -> String {
+fn replace_stoptime(line: &str, lineno: usize) -> String {
     let mut result = String::new();
     let re = Regex::new(r#"stoptime\s*\(\s*\)"#).unwrap();
     if let Some(mat) = re.find(line) {
         let start = mat.start();
         let end = mat.end();
-        result.push_str(&_copy_until_index(line, start));
-        result.push_str(&_replace_lineno_stop(lineno));
-        result.push_str(&_copy_from_index(line, end));
+        result.push_str(&copy_until_index(line, start));
+        result.push_str(&replace_lineno_stop(lineno));
+        result.push_str(&copy_from_index(line, end));
     }
     result
 }
 
-fn _replace_lineno_start(lineno: usize) -> String { format!("_sysy_starttime({})", lineno) }
+fn replace_lineno_start(lineno: usize) -> String { format!("_sysy_starttime({})", lineno) }
 
-fn _replace_lineno_stop(lineno: usize) -> String { format!("_sysy_stoptime({})", lineno) }
+fn replace_lineno_stop(lineno: usize) -> String { format!("_sysy_stoptime({})", lineno) }
 
-fn _copy_until_index(s: &str, index: usize) -> String { s[..index].to_string() }
+fn copy_until_index(s: &str, index: usize) -> String { s[..index].to_string() }
 
-fn _copy_from_index(s: &str, index: usize) -> String { s[index..].to_string() }
+fn copy_from_index(s: &str, index: usize) -> String { s[index..].to_string() }
+
+pub fn parse_hexadecimal_float(s: &str) -> f32 {
+    let float_literal: hexponent::FloatLiteral = s.parse().unwrap();
+    let result = float_literal.convert::<f64>(); // imprecise otherwise
+    result.inner() as f32
+}
 
 #[cfg(test)]
 mod test {
@@ -79,5 +85,13 @@ mod test {
     "#;
         let processed = preprocess(context);
         println!("{}", processed);
+    }
+
+    #[test]
+    fn test_hexadecimal_float() {
+        let f = parse_hexadecimal_float("0x1.921fb6p+1");
+        // 0x40490fdb, compare binary
+        let f = f.to_bits();
+        assert_eq!(f, 0x40490fdb);
     }
 }
