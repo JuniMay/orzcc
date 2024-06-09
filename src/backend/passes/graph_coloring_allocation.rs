@@ -128,10 +128,7 @@ impl InterferenceGraph {
 
     /// Returns true if only precolored nodes are left in the graph
     pub fn all_colored(&self) -> bool {
-        match self.reg_type {
-            RegisterType::General => self.graph.iter().all(|(reg, _)| reg.is_gp()),
-            RegisterType::FloatingPoint => self.graph.iter().all(|(reg, _)| reg.is_fp()),
-        }
+        self.graph.iter().all(|(reg, _)| reg.is_gp() || reg.is_fp())
     }
 
     /// Retrun all the precolored nodes in the graph
@@ -278,8 +275,8 @@ impl LocalPassMut for GraphColoringAllocation {
             //     println!("{} -> {}(sp)", reg, stack_slot.1);
             // }
 
-            let mut insert_later_loads = HashMap::new();
-            let mut insert_later_stores = HashMap::new();
+            let mut insert_later_loads = Vec::new();
+            let mut insert_later_stores = Vec::new();
             for (block, _) in ctx.function_data(func_name).unwrap().layout.blocks() {
                 let insts = ctx
                     .function_data(func_name)
@@ -295,14 +292,14 @@ impl LocalPassMut for GraphColoringAllocation {
                         if spills.contains(&def) {
                             let stack_slot = spill_slots.get(&def).unwrap();
                             let load = (def, stack_slot.0, stack_slot.1);
-                            insert_later_stores.insert(inst, load);
+                            insert_later_stores.push((inst, load));
                         }
                     }
                     for use_ in uses {
                         if spills.contains(&use_) {
                             let stack_slot = spill_slots.get(&use_).unwrap();
                             let store = (use_, stack_slot.0, stack_slot.1);
-                            insert_later_loads.insert(inst, store);
+                            insert_later_loads.push((inst, store));
                         }
                     }
                 }
@@ -513,8 +510,8 @@ impl LocalPassMut for GraphColoringAllocation {
             //     println!("{} -> {}(sp)", reg, stack_slot.1);
             // }
 
-            let mut insert_later_loads = HashMap::new();
-            let mut insert_later_stores = HashMap::new();
+            let mut insert_later_loads = Vec::new();
+            let mut insert_later_stores = Vec::new();
             for (block, _) in ctx.function_data(func_name).unwrap().layout.blocks() {
                 let insts = ctx
                     .function_data(func_name)
@@ -530,14 +527,14 @@ impl LocalPassMut for GraphColoringAllocation {
                         if spills.contains(&def) {
                             let stack_slot = spill_slots.get(&def).unwrap();
                             let load = (def, stack_slot.0, stack_slot.1);
-                            insert_later_stores.insert(inst, load);
+                            insert_later_stores.push((inst, load));
                         }
                     }
                     for use_ in uses {
                         if spills.contains(&use_) {
                             let stack_slot = spill_slots.get(&use_).unwrap();
                             let store = (use_, stack_slot.0, stack_slot.1);
-                            insert_later_loads.insert(inst, store);
+                            insert_later_loads.push((inst, store));
                         }
                     }
                 }
