@@ -18,6 +18,7 @@ pub mod printer;
 pub mod straighten;
 pub mod unreachable_block_elimination;
 pub mod peephole;
+pub mod strength_reduce;
 
 pub trait GlobalPass {
     type Ok;

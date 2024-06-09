@@ -1,6 +1,6 @@
-//! # Peephole(IR)
+//! # Strength_reduce(IR)
 //!
-//! This module contains the implementation of the peephole pass.
+//! This module contains the implementation of the strength_reduce pass.
 use thiserror::Error;
 
 use super::{
@@ -16,15 +16,15 @@ use crate::ir::{
     values::{Block, Function, Inst},
 };
 
-const PEEPHOLE: &str = "peephole";
+const STRENGTH_REDUCE: &str = "strength-reduce";
 
-pub struct Peephole {}
+pub struct StrengthReduce {}
 
 #[derive(Debug, Error)]
-pub enum PeepholeError {}
+pub enum StrengthReduceError {}
 
 
-impl LocalPassMut for Peephole {
+impl LocalPassMut for StrengthReduce {
     type Ok = ();
 
     fn run_on_function(
@@ -34,13 +34,18 @@ impl LocalPassMut for Peephole {
     ) -> PassResult<(Self::Ok, bool)> {
         let mut changed = false;
 
-        todo!("Peephole pass");
+        // iter all blocks
+        for (block, _block_node) in data.layout.blocks() {
+
+
+
+        }
 
         Ok(((), changed))
     }
 }
 
-impl GlobalPassMut for Peephole {
+impl GlobalPassMut for StrengthReduce {
     type Ok = ();
 
     fn run_on_module(&mut self, module: &mut Module) -> PassResult<(Self::Ok, bool)> {
@@ -63,14 +68,14 @@ impl GlobalPassMut for Peephole {
     }
 }
 
-impl Peephole {
+impl StrengthReduce {
     pub fn register() {
-        let pass = Box::new(Peephole {});
-        PassManager::register_transformation(PEEPHOLE, pass, Vec::new());
+        let pass = Box::new(StrengthReduce {});
+        PassManager::register_transformation(STRENGTH_REDUCE, pass, Vec::new());
     }
 }
 
-impl TransformationPass for Peephole {
+impl TransformationPass for StrengthReduce {
     fn reset(&mut self) {}
 }
 
@@ -78,7 +83,7 @@ impl TransformationPass for Peephole {
 // mod test {
 //     use std::io::{BufWriter, Cursor};
 
-//     use super::{Peephole, PEEPHOLE};
+//     use super::{StrengthReduce, STRENGTH_REDUCE};
 //     use crate::ir::{
 //         frontend::parser::Parser,
 //         module::Module,
@@ -93,7 +98,7 @@ impl TransformationPass for Peephole {
 //     }
 
 //     #[test]
-//     fn test_peephole() {
+//     fn test_strength_reduce() {
 //         let ir = r#"
 
 //             }"#;
@@ -102,8 +107,8 @@ impl TransformationPass for Peephole {
 //         let mut parser = Parser::new(&mut buf);
 //         let mut module = parser.parse().unwrap().into_ir("test".into()).unwrap();
 
-//         Peephole::register();
-//         let iter = PassManager::run_transformation(PEEPHOLE, &mut module, 4321);
+//         StrengthReduce::register();
+//         let iter = PassManager::run_transformation(STRENGTH_REDUCE, &mut module, 4321);
 //         assert_eq!(iter, 3);
 //         print(&module);
 //     }
