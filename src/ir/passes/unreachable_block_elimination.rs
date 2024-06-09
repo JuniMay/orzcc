@@ -21,7 +21,7 @@ use crate::ir::{
     values::{Block, Function},
 };
 
-const UNREACHABLE_BLOCK_ELIMINATION: &str = "unreachable-block-elimination";
+pub const UNREACHABLE_BLOCK_ELIMINATION: &str = "unreachable-block-elimination";
 
 pub struct UnreachableBlockElimination;
 

@@ -46,7 +46,7 @@ use crate::ir::{
     values::{Block, Function, Value},
 };
 
-const MEM2REG: &str = "mem2reg";
+pub const MEM2REG: &str = "mem2reg";
 
 pub struct Mem2reg {
     /// Variable set.

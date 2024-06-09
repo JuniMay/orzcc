@@ -16,5 +16,6 @@ target/
 
 /tests/sysy/final_performance
 /tests/sysy/performance
+/tests/sysy/problematic
 
 output/
