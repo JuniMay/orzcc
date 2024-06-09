@@ -21,7 +21,7 @@ use crate::ir::{
     values::{Block, Function, Inst},
 };
 
-const STRAIGHTEN: &str = "straighten";
+pub const STRAIGHTEN: &str = "straighten";
 
 pub struct Straighten {}
 

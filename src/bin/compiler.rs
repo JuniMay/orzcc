@@ -7,10 +7,13 @@ use orzcc::{
     frontend::sysy::{irgen::IrGenContext, preprocess, sysyparser},
     ir::passes::{
         control_flow_canonicalization::ControlFlowCanonicalization,
-        mem2reg::Mem2reg,
+        mem2reg::{Mem2reg, MEM2REG},
         printer::Printer,
-        straighten::Straighten,
-        unreachable_block_elimination::UnreachableBlockElimination,
+        straighten::{Straighten, STRAIGHTEN},
+        unreachable_block_elimination::{
+            UnreachableBlockElimination,
+            UNREACHABLE_BLOCK_ELIMINATION,
+        },
         GlobalPass,
         PassManager,
     },
@@ -149,7 +152,9 @@ fn parse_args() -> CliCommand {
 
     let mut passes = Vec::new();
     if opt > 0 {
-        passes.push("mem2reg".to_string());
+        passes.push(MEM2REG.to_string());
+        // passes.push(UNREACHABLE_BLOCK_ELIMINATION.to_string());
+        // passes.push(STRAIGHTEN.to_string());
     }
 
     let transformation_names = PassManager::get_transformation_names();
