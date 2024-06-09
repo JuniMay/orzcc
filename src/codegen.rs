@@ -2710,9 +2710,15 @@ impl CodegenContext {
                         let imm: Immediate = bytes.into();
                         if arg_data.ty().is_float() {
                             let (tmp, li) = MachineInstData::new_li(&mut self.machine_ctx, imm);
-                            let mv = MachineInstData::build_fp_move(&mut self.machine_ctx, rd, tmp);
+                            let fmv = MachineInstData::build_fmv(
+                                &mut self.machine_ctx,
+                                FMvFmt::from_byte_width(arg_data.ty().bytewidth()),
+                                FMvFmt::X,
+                                rd,
+                                tmp,
+                            );
                             self.append_inst(&function_name, block, li);
-                            self.append_inst(&function_name, block, mv);
+                            self.append_inst(&function_name, block, fmv);
                         } else if arg_data.ty().is_int() || arg_data.ty().is_ptr() {
                             let li = MachineInstData::build_li(&mut self.machine_ctx, rd, imm);
                             self.append_inst(&function_name, block, li);

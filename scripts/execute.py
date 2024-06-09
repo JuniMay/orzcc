@@ -187,7 +187,7 @@ def test_native(executable_path: str,
         asm_path = os.path.join(output_dir, f'{basename}.s')
         exec_path = os.path.join(output_dir, f'{basename}')
 
-        command = f'{executable_path} {testcase}.sy -S -o {asm_path} -O{opt_level}'
+        command = f'{executable_path} -S -o {asm_path} {testcase}.sy -O{opt_level}'
 
         execute(command, exec_timeout)
 
@@ -304,7 +304,8 @@ def test(executable_path: str, testcase_dir: str, output_dir: str,
                    f'-o {asm_path} '
                    f'{testcase}.sy '
                    #f'--emit-ast {ast_path} ' # AST will cause TLE on some cases.
-                   f'--emit-ir {ir_path}')
+                   f'--emit-ir {ir_path} '
+                   f'-O{opt_level}')
 
         exec_result = execute(command, exec_timeout)
         log(log_file, command, exec_result)
