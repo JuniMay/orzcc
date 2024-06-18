@@ -2,7 +2,11 @@ use std::collections::HashMap;
 
 use super::{def_use::Usable, Context, Signature, Symbol, Ty, User};
 use crate::{
-    collections::storage::{ArenaLikeAlloc, ArenaLikeDeref, ArenaLikeFree, ArenaPtr, ArenaPtrLike},
+    collections::{
+        linked_list::LinkedListPtr,
+        storage::{ArenaLikeAlloc, ArenaLikeDeref, ArenaLikeFree, ArenaPtr, ArenaPtrLike},
+    },
+    impl_arena,
     ir::{Block, Constant, Value},
 };
 
@@ -131,12 +135,40 @@ pub enum InstKind {
 }
 
 pub struct InstData {
+    /// Self reference.
     this: Inst,
+    /// The instruction kind.
     kind: InstKind,
+    /// The next instruction.
+    next: Option<Inst>,
+    /// The previous instruction.
+    prev: Option<Inst>,
+    /// The parent block.
+    parent: Option<Block>,
 }
 
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
 pub struct Inst(ArenaPtr<InstData>);
+
+impl_arena!(Context, InstData, Inst, insts);
+
+impl LinkedListPtr for Inst {
+    type ContainerPtr = Block;
+
+    fn next(self, ctx: &Context) -> Option<Inst> { self.deref(ctx).next }
+
+    fn prev(self, ctx: &Context) -> Option<Inst> { self.deref(ctx).prev }
+
+    fn set_next(self, ctx: &mut Context, next: Option<Inst>) { self.deref_mut(ctx).next = next; }
+
+    fn set_prev(self, ctx: &mut Context, prev: Option<Inst>) { self.deref_mut(ctx).prev = prev; }
+
+    fn container(self, ctx: &Context) -> Option<Block> { self.deref(ctx).parent }
+
+    fn set_container(self, ctx: &mut Context, container: Option<Block>) {
+        self.deref_mut(ctx).parent = container;
+    }
+}
 
 impl User<Block> for Inst {
     fn uses(self, ctx: &Context) -> Vec<Block> {
@@ -403,38 +435,4 @@ impl User<Value> for Inst {
             new.add_user(ctx, self);
         }
     }
-}
-
-impl ArenaPtrLike for Inst {
-    type A = Context;
-    type T = InstData;
-
-    fn try_deref(self, ctx: &Self::A) -> Option<&Self::T> { ctx.try_deref(self) }
-
-    fn try_deref_mut(self, ctx: &mut Self::A) -> Option<&mut Self::T> { ctx.try_deref_mut(self) }
-}
-
-impl ArenaLikeDeref<InstData, Inst> for Context {
-    fn try_deref(&self, inst: Inst) -> Option<&InstData> { self.insts.try_deref(inst.0) }
-
-    fn try_deref_mut(&mut self, inst: Inst) -> Option<&mut InstData> {
-        self.insts.try_deref_mut(inst.0)
-    }
-}
-
-impl ArenaLikeAlloc<InstData, Inst> for Context {
-    fn alloc_with<F>(&mut self, f: F) -> Inst
-    where
-        F: FnOnce(Inst) -> InstData,
-    {
-        let ptr = self.insts.alloc_with(|ptr| {
-            let inst = Inst(ptr);
-            f(inst)
-        });
-        Inst(ptr)
-    }
-}
-
-impl ArenaLikeFree<InstData, Inst> for Context {
-    fn free(&mut self, inst: Inst) { self.insts.free(inst.0) }
 }

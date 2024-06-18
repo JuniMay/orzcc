@@ -69,6 +69,7 @@
 //! into a high-level container.
 //!
 //! ```rust
+//! use orzcc::impl_arena;
 //! use orzcc::collections::storage::*;
 //!
 //! // Two self-referential structs
@@ -77,10 +78,10 @@
 //!
 //! // And two arena pointers, just wrappers, because `ArenaPtr` is already
 //! // associated with `Arena`
-//! #[derive(Clone, Copy)]
+//! #[derive(Clone, Copy, PartialEq, Eq)]
 //! struct FooPtr(ArenaPtr<Foo>);
 //!
-//! #[derive(Clone, Copy)]
+//! #[derive(Clone, Copy, PartialEq, Eq)]
 //! struct BarPtr(ArenaPtr<Bar>);
 //!
 //! // A high-level container for the two arenas
@@ -91,82 +92,8 @@
 //! }
 //!
 //! // Now we can implement the pointers for the high-level container
-//! impl ArenaPtrLike for FooPtr {
-//!     type T = Foo;
-//!     type A = FooBarArena;
-//!
-//!     // Note that the implementation here uses `deref` & `deref_mut`
-//!     // that are implemented in `FooBarArena` afterwards.
-//!     fn try_deref(self, arena: &FooBarArena) -> Option<&Foo> {
-//!         arena.try_deref(self)
-//!     }
-//!
-//!     fn try_deref_mut(self, arena: &mut FooBarArena) -> Option<&mut Foo> {
-//!         arena.try_deref_mut(self)
-//!     }
-//! }
-//!
-//! // Also implement the pointers for `BarPtr`
-//! impl ArenaPtrLike for BarPtr {
-//!     type T = Bar;
-//!     type A = FooBarArena;
-//!
-//!     fn try_deref(self, arena: &FooBarArena) -> Option<&Bar> {
-//!         arena.try_deref(self)
-//!     }
-//!
-//!     fn try_deref_mut(self, arena: &mut FooBarArena) -> Option<&mut Bar> {
-//!         arena.try_deref_mut(self)
-//!     }
-//! }
-//!
-//! // Implement the deref, alloc and free for foo, using `foo_arena`
-//! impl ArenaLikeDeref<Foo, FooPtr> for FooBarArena {
-//!     fn try_deref(&self, ptr: FooPtr) -> Option<&Foo> {
-//!         self.foo_arena.try_deref(ptr.0)
-//!     }
-//!
-//!     fn try_deref_mut(&mut self, ptr: FooPtr) -> Option<&mut Foo> {
-//!         self.foo_arena.try_deref_mut(ptr.0)
-//!     }
-//! }
-//!
-//! impl ArenaLikeAlloc<Foo, FooPtr> for FooBarArena {
-//!     fn alloc_with<F>(&mut self, f: F) -> FooPtr
-//!     where
-//!         F: FnOnce(FooPtr) -> Foo,
-//!     {
-//!         FooPtr(self.foo_arena.alloc_with(|ptr| f(FooPtr(ptr))))
-//!     }
-//! }
-//!
-//! impl ArenaLikeFree<Foo, FooPtr> for FooBarArena {
-//!     fn free(&mut self, ptr: FooPtr) { self.foo_arena.free(ptr.0) }
-//! }
-//!
-//! // Implement the deref, alloc and free for bar, using `bar_arena`
-//! impl ArenaLikeDeref<Bar, BarPtr> for FooBarArena {
-//!     fn try_deref(&self, ptr: BarPtr) -> Option<&Bar> {
-//!         self.bar_arena.try_deref(ptr.0)
-//!     }
-//!
-//!     fn try_deref_mut(&mut self, ptr: BarPtr) -> Option<&mut Bar> {
-//!         self.bar_arena.try_deref_mut(ptr.0)
-//!     }
-//! }
-//!
-//! impl ArenaLikeAlloc<Bar, BarPtr> for FooBarArena {
-//!     fn alloc_with<F>(&mut self, f: F) -> BarPtr
-//!     where
-//!         F: FnOnce(BarPtr) -> Bar,
-//!     {
-//!         BarPtr(self.bar_arena.alloc_with(|ptr| f(BarPtr(ptr))))
-//!     }
-//! }
-//!
-//! impl ArenaLikeFree<Bar, BarPtr> for FooBarArena {
-//!     fn free(&mut self, ptr: BarPtr) { self.bar_arena.free(ptr.0) }
-//! }
+//! impl_arena!(FooBarArena, Foo, FooPtr, foo_arena);
+//! impl_arena!(FooBarArena, Bar, BarPtr, bar_arena);
 //!
 //! // Create an instance of the arena container
 //! let mut arena = FooBarArena::default();
@@ -345,7 +272,7 @@ where
 
 /// The pointer-like trait that can be used to deref and get the value from the
 /// corresponding [ArenaLikeDeref] type.
-pub trait ArenaPtrLike: Copy + Sized {
+pub trait ArenaPtrLike: Copy + Sized + Eq {
     /// The type of dereferenced value.
     type T;
 
@@ -627,6 +554,46 @@ impl<T> Arena<T> {
                 ArenaEntry::Occupied(val) => Some((ArenaPtr::from(index), val)),
             })
     }
+}
+
+/// Implement the arena trait for a given type.
+#[macro_export]
+macro_rules! impl_arena {
+    ($arena:ty, $value:ty, $ptr:path, $field:ident) => {
+        impl $crate::collections::storage::ArenaPtrLike for $ptr {
+            type A = $arena;
+            type T = $value;
+
+            fn try_deref(self, arena: &Self::A) -> Option<&Self::T> {
+                $crate::collections::storage::ArenaLikeDeref::try_deref(arena, self)
+            }
+
+            fn try_deref_mut(self, arena: &mut Self::A) -> Option<&mut Self::T> {
+                $crate::collections::storage::ArenaLikeDeref::try_deref_mut(arena, self)
+            }
+        }
+
+        impl $crate::collections::storage::ArenaLikeAlloc<$value, $ptr> for $arena {
+            fn alloc_with<F>(&mut self, f: F) -> $ptr
+            where
+                F: FnOnce($ptr) -> $value,
+            {
+                $ptr(self.$field.alloc_with(|ptr| f($ptr(ptr))))
+            }
+        }
+
+        impl $crate::collections::storage::ArenaLikeDeref<$value, $ptr> for $arena {
+            fn try_deref(&self, ptr: $ptr) -> Option<&$value> { self.$field.try_deref(ptr.0) }
+
+            fn try_deref_mut(&mut self, ptr: $ptr) -> Option<&mut $value> {
+                self.$field.try_deref_mut(ptr.0)
+            }
+        }
+
+        impl $crate::collections::storage::ArenaLikeFree<$value, $ptr> for $arena {
+            fn free(&mut self, ptr: $ptr) { self.$field.free(ptr.0) }
+        }
+    };
 }
 
 /// A unique hash for the arena.

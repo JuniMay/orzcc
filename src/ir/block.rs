@@ -2,7 +2,11 @@ use std::collections::HashSet;
 
 use super::{def_use::Usable, Inst, Ty, Value, ValueData};
 use crate::{
-    collections::storage::{ArenaLikeAlloc, ArenaLikeDeref, ArenaLikeFree, ArenaPtr, ArenaPtrLike},
+    collections::{
+        linked_list::LinkedListContainerPtr,
+        storage::{ArenaLikeAlloc, ArenaLikeDeref, ArenaPtr, ArenaPtrLike},
+    },
+    impl_arena,
     ir::Context,
 };
 
@@ -14,10 +18,20 @@ pub struct BlockData {
     params: Vec<Value>,
     /// The users of the block.
     users: HashSet<Inst>,
+    /// The first instruction of the block.
+    head: Option<Inst>,
+    /// The last instruction of the block.
+    tail: Option<Inst>,
+    /// The next block.
+    next: Option<Block>,
+    /// The previous block.
+    prev: Option<Block>,
 }
 
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
 pub struct Block(ArenaPtr<BlockData>);
+
+impl_arena!(Context, BlockData, Block, blocks);
 
 impl Block {
     /// Create a new block with empty parameters.
@@ -26,6 +40,10 @@ impl Block {
             this,
             params: Vec::new(),
             users: HashSet::new(),
+            head: None,
+            tail: None,
+            next: None,
+            prev: None,
         })
     }
 
@@ -49,44 +67,20 @@ impl Block {
     pub fn params(self, ctx: &Context) -> &[Value] { self.deref(ctx).params.as_slice() }
 }
 
+impl LinkedListContainerPtr<Inst> for Block {
+    fn head(self, ctx: &Context) -> Option<Inst> { self.deref(ctx).head }
+
+    fn tail(self, ctx: &Self::A) -> Option<Inst> { self.deref(ctx).tail }
+
+    fn set_head(self, ctx: &mut Context, head: Option<Inst>) { self.deref_mut(ctx).head = head; }
+
+    fn set_tail(self, ctx: &mut Context, tail: Option<Inst>) { self.deref_mut(ctx).tail = tail; }
+}
+
 impl Usable<Inst> for Block {
     fn users(self, ctx: &Context) -> Vec<Inst> { self.deref(ctx).users.iter().copied().collect() }
 
     fn add_user(self, ctx: &mut Context, user: Inst) { self.deref_mut(ctx).users.insert(user); }
 
     fn remove_user(self, ctx: &mut Context, user: Inst) { self.deref_mut(ctx).users.remove(&user); }
-}
-
-impl ArenaPtrLike for Block {
-    type A = Context;
-    type T = BlockData;
-
-    fn try_deref(self, ctx: &Self::A) -> Option<&Self::T> { ctx.try_deref(self) }
-
-    fn try_deref_mut(self, ctx: &mut Self::A) -> Option<&mut Self::T> { ctx.try_deref_mut(self) }
-}
-
-impl ArenaLikeDeref<BlockData, Block> for Context {
-    fn try_deref(&self, block: Block) -> Option<&BlockData> { self.blocks.try_deref(block.0) }
-
-    fn try_deref_mut(&mut self, block: Block) -> Option<&mut BlockData> {
-        self.blocks.try_deref_mut(block.0)
-    }
-}
-
-impl ArenaLikeAlloc<BlockData, Block> for Context {
-    fn alloc_with<F>(&mut self, f: F) -> Block
-    where
-        F: FnOnce(Block) -> BlockData,
-    {
-        let ptr = self.blocks.alloc_with(|ptr| {
-            let block = Block(ptr);
-            f(block)
-        });
-        Block(ptr)
-    }
-}
-
-impl ArenaLikeFree<BlockData, Block> for Context {
-    fn free(&mut self, block: Block) { self.blocks.free(block.0) }
 }
