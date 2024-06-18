@@ -127,9 +127,85 @@ where
     }
 
     /// Merge another linked list into this linked list.
+    ///
+    /// This operation will not release/free `other`, but only set the head and
+    /// tail of `other` to `None`, and make the nodes in `other` to be in this
+    /// container.
+    ///
+    /// This is used to simplify the implementation of control flow
+    /// simplification.
     fn merge(self, arena: &mut Self::A, other: Self) {
-        // TODO: merge the other list into this list
-        unimplemented!()
+        // we need to unlink all nodes in `other` from the original container,
+        // so that we can modify the nodes' container to `self`
+
+        // iterate all nodes in `other`, and modify.
+        // yes, this is O(N), but in order to modify each nodes' container, we
+        // have to do so.
+        let mut curr = other.head(arena);
+        while let Some(node) = curr {
+            let next = node.next(arena);
+            // unlink, and push back to `self`
+            node.unlink(arena);
+            self.push_back(arena, node);
+            curr = next;
+        }
+
+        // actually, the head and tail of `other` should be `None` now,
+        // so just assert it
+        assert!(
+            other.head(arena).is_none(),
+            "the head of `other` is not `None`"
+        );
+        assert!(
+            other.tail(arena).is_none(),
+            "the tail of `other` is not `None`"
+        );
+    }
+
+    /// Split the linked list in two at the given position.
+    ///
+    /// If the second container is not empty, all the splited nodes will be
+    /// [push_front](LinkedListContainerPtr::push_front) to the second
+    /// container.
+    ///
+    /// # Parameters
+    ///
+    /// - `arena`: The arena to allocate the nodes.
+    /// - `other`: The container to store the nodes after the position.
+    /// - `pos`: The position to split the linked list, and the position itself
+    ///  will be in the `self` container.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `pos` is not in `self`.
+    fn split(self, arena: &mut Self::A, other: Self, pos: NodePtr) {
+        // assert that `pos` is in `self`
+        assert!(pos.container(arena) == Some(self), "`pos` is not in `self`");
+
+        // we need to unlink all nodes after `pos` from the original container,
+        // so that we can modify the nodes' container to `other`
+
+        // iterate all nodes after `pos`, and modify.
+        // yes, this is also O(N).
+        let mut curr = self.tail(arena);
+        while let Some(node) = curr {
+            if node == pos {
+                // we have reached `pos`, stop, this should always be reached.
+                break;
+            }
+
+            let prev = node.prev(arena);
+            // unlink, and push front to `other`
+            node.unlink(arena);
+            other.push_front(arena, node);
+            curr = prev;
+        }
+
+        // the tail of `self` should be `pos` now, assert it
+        assert!(
+            self.tail(arena) == Some(pos),
+            "the tail of `self` is not `pos`"
+        );
     }
 
     /// Get an immutable iterator of the linked list.
@@ -515,12 +591,13 @@ mod tests {
 
         let expected = [3, 2, 1];
 
-        for (ptr, expected) in container.iter(&ctx).zip(expected.iter()) {
+        for (ptr, expected) in container.iter(&ctx).zip(expected.into_iter()) {
             assert_eq!(
                 ptr.deref(&ctx).value,
-                *expected,
-                "value mismatch, expected {}",
-                expected
+                expected,
+                "expected: {}, got: {}",
+                expected,
+                ptr.deref(&ctx).value
             );
         }
 
@@ -543,5 +620,271 @@ mod tests {
 
         assert_eq!(container.head(&ctx), None);
         assert_eq!(container.tail(&ctx), None);
+    }
+
+    #[test]
+    fn test_container_merge_basic() {
+        let mut ctx = Context::default();
+
+        let container1 = ctx.alloc(Container {
+            head: None,
+            tail: None,
+        });
+
+        let container2 = ctx.alloc(Container {
+            head: None,
+            tail: None,
+        });
+
+        let node1 = ctx.alloc(Node::new(1));
+        let node2 = ctx.alloc(Node::new(2));
+        let node3 = ctx.alloc(Node::new(3));
+
+        container1.push_back(&mut ctx, node1);
+        container2.push_back(&mut ctx, node2);
+        container2.push_back(&mut ctx, node3);
+
+        container1.merge(&mut ctx, container2);
+
+        assert_eq!(container1.head(&ctx), Some(node1));
+        assert_eq!(node1.next(&ctx), Some(node2));
+        assert_eq!(node2.prev(&ctx), Some(node1));
+        assert_eq!(node2.next(&ctx), Some(node3));
+        assert_eq!(node3.prev(&ctx), Some(node2));
+        assert_eq!(container1.tail(&ctx), Some(node3));
+        assert_eq!(container2.head(&ctx), None);
+        assert_eq!(container2.tail(&ctx), None);
+    }
+
+    #[test]
+    fn test_container_merge_empty() {
+        let mut ctx = Context::default();
+
+        let container1 = ctx.alloc(Container {
+            head: None,
+            tail: None,
+        });
+
+        let container2 = ctx.alloc(Container {
+            head: None,
+            tail: None,
+        });
+
+        container1.merge(&mut ctx, container2);
+
+        assert_eq!(container1.head(&ctx), None);
+        assert_eq!(container1.tail(&ctx), None);
+        assert_eq!(container2.head(&ctx), None);
+        assert_eq!(container2.tail(&ctx), None);
+    }
+
+    #[test]
+    fn test_container_merge_many_empty() {
+        // try to merge an empty container to a non-empty container
+        let mut ctx = Context::default();
+
+        let container1 = ctx.alloc(Container {
+            head: None,
+            tail: None,
+        });
+
+        let container2 = ctx.alloc(Container {
+            head: None,
+            tail: None,
+        });
+
+        for i in 0..10 {
+            let node = ctx.alloc(Node::new(i));
+            container1.push_back(&mut ctx, node);
+        }
+        assert_eq!(container1.head(&ctx).unwrap().deref(&ctx).value, 0);
+        assert_eq!(container1.tail(&ctx).unwrap().deref(&ctx).value, 9);
+        assert!(container2.head(&ctx).is_none());
+        assert!(container2.tail(&ctx).is_none());
+
+        container1.merge(&mut ctx, container2);
+
+        assert_eq!(container1.head(&ctx).unwrap().deref(&ctx).value, 0);
+        assert_eq!(container1.tail(&ctx).unwrap().deref(&ctx).value, 9);
+        assert!(container2.head(&ctx).is_none());
+        assert!(container2.tail(&ctx).is_none());
+    }
+
+    #[test]
+    fn test_container_merge_empty_many() {
+        // try to merge a non-empty container to an empty container
+        let mut ctx = Context::default();
+
+        let container1 = ctx.alloc(Container {
+            head: None,
+            tail: None,
+        });
+
+        let container2 = ctx.alloc(Container {
+            head: None,
+            tail: None,
+        });
+
+        for i in 0..10 {
+            let node = ctx.alloc(Node::new(i));
+            container2.push_back(&mut ctx, node);
+        }
+        assert!(container1.head(&ctx).is_none());
+        assert!(container1.tail(&ctx).is_none());
+        assert_eq!(container2.head(&ctx).unwrap().deref(&ctx).value, 0);
+        assert_eq!(container2.tail(&ctx).unwrap().deref(&ctx).value, 9);
+
+        container1.merge(&mut ctx, container2);
+
+        assert_eq!(container1.head(&ctx).unwrap().deref(&ctx).value, 0);
+        assert_eq!(container1.tail(&ctx).unwrap().deref(&ctx).value, 9);
+        assert!(container2.head(&ctx).is_none());
+        assert!(container2.tail(&ctx).is_none());
+    }
+
+    #[test]
+    fn test_container_merge_many_many() {
+        // try to merge two non-empty containers
+        let mut ctx = Context::default();
+
+        let container1 = ctx.alloc(Container {
+            head: None,
+            tail: None,
+        });
+
+        let container2 = ctx.alloc(Container {
+            head: None,
+            tail: None,
+        });
+
+        for i in 0..10 {
+            let node = ctx.alloc(Node::new(i));
+            container1.push_back(&mut ctx, node);
+        }
+        assert_eq!(container1.head(&ctx).unwrap().deref(&ctx).value, 0);
+        assert_eq!(container1.tail(&ctx).unwrap().deref(&ctx).value, 9);
+        assert!(container2.head(&ctx).is_none());
+        assert!(container2.tail(&ctx).is_none());
+
+        for i in 10..20 {
+            let node = ctx.alloc(Node::new(i));
+            container2.push_back(&mut ctx, node);
+        }
+        assert_eq!(container2.head(&ctx).unwrap().deref(&ctx).value, 10);
+        assert_eq!(container2.tail(&ctx).unwrap().deref(&ctx).value, 19);
+
+        container1.merge(&mut ctx, container2);
+
+        assert_eq!(container1.head(&ctx).unwrap().deref(&ctx).value, 0);
+        assert_eq!(container1.tail(&ctx).unwrap().deref(&ctx).value, 19);
+        assert!(container2.head(&ctx).is_none());
+        assert!(container2.tail(&ctx).is_none());
+
+        // check each value
+        for (ptr, expected) in container1.iter(&ctx).zip(0..20) {
+            assert_eq!(
+                ptr.deref(&ctx).value,
+                expected,
+                "expected: {}, got: {}",
+                expected,
+                ptr.deref(&ctx).value
+            );
+        }
+    }
+
+    #[test]
+    fn test_container_split() {
+        let mut ctx = Context::default();
+
+        let container = ctx.alloc(Container {
+            head: None,
+            tail: None,
+        });
+
+        let node1 = ctx.alloc(Node::new(1));
+        let node2 = ctx.alloc(Node::new(2));
+        let node3 = ctx.alloc(Node::new(3));
+        let node4 = ctx.alloc(Node::new(4));
+        let node5 = ctx.alloc(Node::new(5));
+
+        container.push_back(&mut ctx, node1);
+        container.push_back(&mut ctx, node2);
+        container.push_back(&mut ctx, node3);
+        container.push_back(&mut ctx, node4);
+        container.push_back(&mut ctx, node5);
+
+        let new_container = ctx.alloc(Container {
+            head: None,
+            tail: None,
+        });
+
+        container.split(&mut ctx, new_container, node3);
+
+        assert_eq!(container.head(&ctx).unwrap().deref(&ctx).value, 1);
+        assert_eq!(container.tail(&ctx).unwrap().deref(&ctx).value, 3);
+
+        assert_eq!(new_container.head(&ctx).unwrap().deref(&ctx).value, 4);
+        assert_eq!(new_container.tail(&ctx).unwrap().deref(&ctx).value, 5);
+    }
+
+    #[test]
+    fn test_container_split_non_empty() {
+        let mut ctx = Context::default();
+
+        let container = ctx.alloc(Container {
+            head: None,
+            tail: None,
+        });
+
+        let node1 = ctx.alloc(Node::new(1));
+        let node2 = ctx.alloc(Node::new(2));
+        let node3 = ctx.alloc(Node::new(3));
+        let node4 = ctx.alloc(Node::new(4));
+        let node5 = ctx.alloc(Node::new(5));
+
+        container.push_back(&mut ctx, node1);
+        container.push_back(&mut ctx, node2);
+        container.push_back(&mut ctx, node3);
+        container.push_back(&mut ctx, node4);
+        container.push_back(&mut ctx, node5);
+
+        let new_container = ctx.alloc(Container {
+            head: None,
+            tail: None,
+        });
+
+        let new_node1 = ctx.alloc(Node::new(6));
+        let new_node2 = ctx.alloc(Node::new(7));
+
+        new_container.push_back(&mut ctx, new_node1);
+        new_container.push_back(&mut ctx, new_node2);
+
+        container.split(&mut ctx, new_container, node3);
+
+        assert_eq!(container.head(&ctx).unwrap().deref(&ctx).value, 1);
+        assert_eq!(container.tail(&ctx).unwrap().deref(&ctx).value, 3);
+
+        assert_eq!(new_container.head(&ctx).unwrap().deref(&ctx).value, 4);
+        assert_eq!(new_container.tail(&ctx).unwrap().deref(&ctx).value, 7);
+
+        for (ptr, expected) in container.iter(&ctx).zip(1..=3) {
+            assert_eq!(
+                ptr.deref(&ctx).value,
+                expected,
+                "expected: {}, got: {}",
+                expected,
+                ptr.deref(&ctx).value
+            );
+        }
+
+        for (ptr, expected) in new_container.iter(&ctx).zip(4..=7) {
+            assert_eq!(
+                ptr.deref(&ctx).value,
+                expected,
+                "expected: {}, got: {}",
+                expected,
+                ptr.deref(&ctx).value
+            );
+        }
     }
 }
