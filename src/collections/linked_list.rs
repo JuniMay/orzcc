@@ -216,6 +216,23 @@ where
             curr_back: self.tail(arena),
         }
     }
+
+    /// Get an cursor of the linked list.
+    ///
+    /// # Parameters
+    ///
+    /// - `arena`: The arena to allocate the cursor.
+    ///
+    /// # See Also
+    ///
+    /// [LinkedListCursor]
+    fn cursor(self) -> LinkedListCursor<NodePtr> {
+        LinkedListCursor {
+            container: self,
+            curr_front: None,
+            curr_back: None,
+        }
+    }
 }
 
 /// The iterator of a linked list.
@@ -247,19 +264,17 @@ impl<'a, T: LinkedListNodePtr> Iterator for LinkedListIterator<'a, T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let curr = self.curr_front?;
-        let next = curr.next(self.arena);
-        self.curr_front = next;
-        Some(curr)
+        let curr = self.curr_front;
+        self.curr_front = curr.and_then(|n| n.next(self.arena));
+        curr
     }
 }
 
 impl<'a, T: LinkedListNodePtr> DoubleEndedIterator for LinkedListIterator<'a, T> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        let curr = self.curr_back?;
-        let prev = curr.prev(self.arena);
-        self.curr_back = prev;
-        Some(curr)
+        let curr = self.curr_back;
+        self.curr_back = curr.and_then(|n| n.prev(self.arena));
+        curr
     }
 }
 
@@ -420,6 +435,54 @@ pub trait LinkedListNodePtr: ArenaPtrLike {
         self.set_prev(arena, None);
         self.set_next(arena, None);
         self.set_container(arena, None);
+    }
+}
+
+/// A cursor to modify the linked list.
+///
+/// The cursor is implemented because mutable iterator is hard to implement.
+pub struct LinkedListCursor<T: LinkedListNodePtr> {
+    container: T::ContainerPtr,
+    /// The current node in the forward order.
+    ///
+    /// This is different from the current node in the iterator, because one
+    /// might mutate the `next` pointer of the current node, here the current
+    /// node is the node that is already visited.
+    ///
+    /// And to achieve this, we need to set the initial value to `None`, and
+    /// update it when we visit the next node.
+    curr_front: Option<T>,
+    /// The current node in the reverse order.
+    ///
+    /// Same as `curr_front`, but in the reverse order.
+    curr_back: Option<T>,
+}
+
+impl<T> LinkedListCursor<T>
+where
+    T: LinkedListNodePtr,
+{
+    pub fn next(&mut self, arena: &T::A) -> Option<T> {
+        if let Some(curr) = self.curr_front {
+            // Get the next node.
+            self.curr_front = curr.next(arena);
+        } else {
+            // Get the head of the container.
+            self.curr_front = self.container.head(arena);
+        }
+        self.curr_front
+    }
+
+    /// Get the next node in the reverse order.
+    pub fn prev(&mut self, arena: &T::A) -> Option<T> {
+        if let Some(curr) = self.curr_back {
+            // Get the previous node.
+            self.curr_back = curr.prev(arena);
+        } else {
+            // Get the tail of the container.
+            self.curr_back = self.container.tail(arena);
+        }
+        self.curr_back
     }
 }
 
@@ -886,5 +949,103 @@ mod tests {
                 ptr.deref(&ctx).value
             );
         }
+    }
+
+    #[test]
+    fn test_linked_list_cursor() {
+        let mut ctx = Context::default();
+
+        let container = ctx.alloc(Container {
+            head: None,
+            tail: None,
+        });
+
+        let node1 = ctx.alloc(Node::new(1));
+        let node2 = ctx.alloc(Node::new(2));
+        let node3 = ctx.alloc(Node::new(3));
+        let node4 = ctx.alloc(Node::new(4));
+        let node5 = ctx.alloc(Node::new(5));
+
+        container.push_back(&mut ctx, node1);
+        container.push_back(&mut ctx, node2);
+        container.push_back(&mut ctx, node3);
+        container.push_back(&mut ctx, node4);
+        container.push_back(&mut ctx, node5);
+
+        let mut cursor = container.cursor();
+
+        assert_eq!(cursor.next(&ctx).unwrap().deref(&ctx).value, 1);
+        assert_eq!(cursor.next(&ctx).unwrap().deref(&ctx).value, 2);
+
+        let node = cursor.next(&ctx).unwrap();
+        assert_eq!(node.deref(&ctx).value, 3);
+
+        let new_node = ctx.alloc(Node::new(6));
+        node.insert_after(&mut ctx, new_node);
+
+        assert_eq!(cursor.next(&ctx).unwrap().deref(&ctx).value, 6);
+        assert_eq!(cursor.next(&ctx).unwrap().deref(&ctx).value, 4);
+        assert_eq!(cursor.next(&ctx).unwrap().deref(&ctx).value, 5);
+        assert!(cursor.next(&ctx).is_none());
+        // because `None` is hit, so the cursor will start from the beginning
+        assert_eq!(cursor.next(&ctx).unwrap().deref(&ctx).value, 1);
+        assert_eq!(cursor.next(&ctx).unwrap().deref(&ctx).value, 2);
+        assert_eq!(cursor.next(&ctx).unwrap().deref(&ctx).value, 3);
+        assert_eq!(cursor.next(&ctx).unwrap().deref(&ctx).value, 6);
+        assert_eq!(cursor.next(&ctx).unwrap().deref(&ctx).value, 4);
+        assert_eq!(cursor.next(&ctx).unwrap().deref(&ctx).value, 5);
+    }
+
+    #[test]
+    fn test_linked_list_cursor_rev() {
+        let mut ctx = Context::default();
+
+        let container = ctx.alloc(Container {
+            head: None,
+            tail: None,
+        });
+
+        let node1 = ctx.alloc(Node::new(1));
+        let node2 = ctx.alloc(Node::new(2));
+        let node3 = ctx.alloc(Node::new(3));
+        let node4 = ctx.alloc(Node::new(4));
+        let node5 = ctx.alloc(Node::new(5));
+
+        container.push_back(&mut ctx, node1);
+        container.push_back(&mut ctx, node2);
+        container.push_back(&mut ctx, node3);
+        container.push_back(&mut ctx, node4);
+        container.push_back(&mut ctx, node5);
+
+        let mut cursor = container.cursor();
+
+        assert_eq!(cursor.prev(&ctx).unwrap().deref(&ctx).value, 5);
+        assert_eq!(cursor.prev(&ctx).unwrap().deref(&ctx).value, 4);
+
+        let node = cursor.prev(&ctx).unwrap();
+        assert_eq!(node.deref(&ctx).value, 3);
+
+        // lets insert after the node, but check later.
+        let new_node = ctx.alloc(Node::new(123));
+        node.insert_after(&mut ctx, new_node);
+
+        let new_node = ctx.alloc(Node::new(6));
+        node.insert_before(&mut ctx, new_node);
+
+        // insert_before will affect the cursor.
+        assert_eq!(cursor.prev(&ctx).unwrap().deref(&ctx).value, 6);
+
+        assert_eq!(cursor.prev(&ctx).unwrap().deref(&ctx).value, 2);
+        assert_eq!(cursor.prev(&ctx).unwrap().deref(&ctx).value, 1);
+        assert!(cursor.prev(&ctx).is_none());
+        // because `None` is hit, so the cursor will start from the end
+        assert_eq!(cursor.prev(&ctx).unwrap().deref(&ctx).value, 5);
+        assert_eq!(cursor.prev(&ctx).unwrap().deref(&ctx).value, 4);
+        // insert after will now show up
+        assert_eq!(cursor.prev(&ctx).unwrap().deref(&ctx).value, 123);
+        assert_eq!(cursor.prev(&ctx).unwrap().deref(&ctx).value, 3);
+        assert_eq!(cursor.prev(&ctx).unwrap().deref(&ctx).value, 6);
+        assert_eq!(cursor.prev(&ctx).unwrap().deref(&ctx).value, 2);
+        assert_eq!(cursor.prev(&ctx).unwrap().deref(&ctx).value, 1);
     }
 }
