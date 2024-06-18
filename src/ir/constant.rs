@@ -61,6 +61,7 @@ impl Constant {
     /// - `Some(f32)` if the constant is a [Constant::Float32].
     /// - `None` if the constant is not a [Constant::Float32].
     pub fn as_f32(&self) -> Option<f32> {
+        #[allow(clippy::wildcard_enum_match_arm)]
         match self {
             Constant::Float32(val) => Some(f32::from_bits(*val)),
             _ => None,
@@ -76,6 +77,7 @@ impl Constant {
     /// - `Some(f64)` if the constant is a [Constant::Float64].
     /// - `None` if the constant is not a [Constant::Float64].
     pub fn as_f64(&self) -> Option<f64> {
+        #[allow(clippy::wildcard_enum_match_arm)]
         match self {
             Constant::Float64(val) => Some(f64::from_bits(*val)),
             _ => None,
@@ -99,6 +101,7 @@ impl TryFrom<Constant> for ApInt {
     type Error = &'static str;
 
     fn try_from(constant: Constant) -> Result<Self, Self::Error> {
+        #[allow(clippy::wildcard_enum_match_arm)]
         match constant {
             Constant::Integer(apint) => Ok(apint),
             _ => Err("trying to convert a non-integer constant to ApInt"),
@@ -110,6 +113,7 @@ impl TryFrom<Constant> for f32 {
     type Error = &'static str;
 
     fn try_from(constant: Constant) -> Result<Self, Self::Error> {
+        #[allow(clippy::wildcard_enum_match_arm)]
         match constant {
             Constant::Float32(val) => Ok(f32::from_bits(val)),
             _ => Err("trying to convert a non-float32 constant to f32"),
@@ -121,6 +125,7 @@ impl TryFrom<Constant> for f64 {
     type Error = &'static str;
 
     fn try_from(constant: Constant) -> Result<Self, Self::Error> {
+        #[allow(clippy::wildcard_enum_match_arm)]
         match constant {
             Constant::Float64(val) => Ok(f64::from_bits(val)),
             _ => Err("trying to convert a non-float64 constant to f64"),

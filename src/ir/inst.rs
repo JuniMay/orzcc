@@ -3,8 +3,8 @@ use std::collections::HashMap;
 use super::{def_use::Usable, Context, Signature, Symbol, Ty, User};
 use crate::{
     collections::{
-        linked_list::LinkedListPtr,
-        storage::{ArenaLikeAlloc, ArenaLikeDeref, ArenaLikeFree, ArenaPtr, ArenaPtrLike},
+        linked_list::LinkedListNodePtr,
+        storage::{ArenaPtr, ArenaPtrLike},
     },
     impl_arena,
     ir::{Block, Constant, Value},
@@ -43,6 +43,15 @@ pub enum InstKind {
         /// [Constant::Float64]
         constant: Constant,
     },
+    /// Create a new value as a stack slot.
+    StackSlot {
+        /// The size of the stack slot.
+        ///
+        /// We don't represent the slot with type, but with size, as the size
+        /// is more important than the type in the stack allocation. The type
+        /// can be decided when loading or storing the value.
+        size: u32,
+    },
     /// Binary operation instruction.
     Binary {
         /// The opcode of the binary operation.
@@ -55,7 +64,10 @@ pub enum InstKind {
     /// Binary immediate operation instruction.
     ///
     /// This is used to represent near-backend instructions, e.g., `addi` in
-    /// RISC-V.
+    /// RISC-V, so that some optimization can be done on the mid-end.
+    ///
+    /// Admittedly, this will make the instruction set more complex, but it
+    /// should be fine as long as the optimization is done correctly.
     BinaryImm {
         /// The opcode of the binary operation.
         op: BinaryImmOp,
@@ -152,7 +164,7 @@ pub struct Inst(ArenaPtr<InstData>);
 
 impl_arena!(Context, InstData, Inst, insts);
 
-impl LinkedListPtr for Inst {
+impl LinkedListNodePtr for Inst {
     type ContainerPtr = Block;
 
     fn next(self, ctx: &Context) -> Option<Inst> { self.deref(ctx).next }
@@ -173,21 +185,19 @@ impl LinkedListPtr for Inst {
 impl User<Block> for Inst {
     fn uses(self, ctx: &Context) -> Vec<Block> {
         // only append the block if this is a branch instruction
-        match self.deref(ctx).kind {
-            InstKind::Branch {
-                ref succs,
-                ref default,
-                ..
-            } => {
-                let mut uses = vec![];
-                uses.extend(succs.iter().map(|s| s.block));
-                if let Some(default) = default {
-                    uses.push(default.block);
-                }
-                uses
+        let mut uses = vec![];
+        if let InstKind::Branch {
+            ref succs,
+            ref default,
+            ..
+        } = self.deref(ctx).kind
+        {
+            uses.extend(succs.iter().map(|s| s.block));
+            if let Some(default) = default {
+                uses.push(default.block);
             }
-            _ => vec![],
         }
+        uses
     }
 
     fn replace(self, ctx: &mut Context, old: Block, new: Block) {
@@ -276,7 +286,7 @@ impl User<Value> for Inst {
     fn uses(self, ctx: &Context) -> Vec<Value> {
         use InstKind as Ik;
         match self.deref(ctx).kind {
-            Ik::IConst { .. } | Ik::FConst { .. } => vec![],
+            Ik::IConst { .. } | Ik::FConst { .. } | Ik::StackSlot { .. } => vec![],
             Ik::Binary { lhs, rhs, .. } => vec![lhs, rhs],
             Ik::BinaryImm { lhs, .. } => vec![lhs],
             Ik::Unary { val, .. } => vec![val],
@@ -318,7 +328,7 @@ impl User<Value> for Inst {
         let mut replaced = false;
 
         match self.deref_mut(ctx).kind {
-            Ik::IConst { .. } | Ik::FConst { .. } => {}
+            Ik::IConst { .. } | Ik::FConst { .. } | Ik::StackSlot { .. } => {}
             Ik::Binary {
                 ref mut lhs,
                 ref mut rhs,

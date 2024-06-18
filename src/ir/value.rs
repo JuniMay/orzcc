@@ -8,7 +8,7 @@ use std::collections::HashSet;
 
 use super::{def_use::Usable, inst::Inst, Context, Ty};
 use crate::{
-    collections::storage::{ArenaLikeAlloc, ArenaLikeDeref, ArenaLikeFree, ArenaPtr, ArenaPtrLike},
+    collections::storage::{ArenaPtr, ArenaPtrLike},
     impl_arena,
     ir::Block,
 };

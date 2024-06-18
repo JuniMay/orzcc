@@ -8,3 +8,4 @@ thiserror = "1.0.61"
 
 [features]
 sysy = []
+ir-frontend = []

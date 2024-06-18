@@ -4,7 +4,7 @@ use super::{def_use::Usable, Inst, Ty, Value, ValueData};
 use crate::{
     collections::{
         linked_list::LinkedListContainerPtr,
-        storage::{ArenaLikeAlloc, ArenaLikeDeref, ArenaPtr, ArenaPtrLike},
+        storage::{ArenaLikeAlloc, ArenaPtr, ArenaPtrLike},
     },
     impl_arena,
     ir::Context,

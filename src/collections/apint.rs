@@ -994,7 +994,7 @@ impl Ord for ApInt {
         for (a, b) in self.chunks.iter().zip(other.chunks.iter()).rev() {
             match a.cmp(b) {
                 std::cmp::Ordering::Equal => continue,
-                ord => return ord,
+                ord @ std::cmp::Ordering::Less | ord @ std::cmp::Ordering::Greater => return ord,
             }
         }
         std::cmp::Ordering::Equal
