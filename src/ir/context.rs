@@ -1,4 +1,4 @@
-use super::{inst::InstData, BlockData, ValueData};
+use super::{inst::InstData, BlockData, FuncData, ValueData};
 use crate::{
     collections::storage::{Arena, UniqueArena},
     ir::TyData,
@@ -23,4 +23,6 @@ pub struct Context {
     pub(in crate::ir) insts: Arena<InstData>,
     /// The storage of values.
     pub(in crate::ir) values: Arena<ValueData>,
+    /// The storage of functions.
+    pub(in crate::ir) funcs: Arena<FuncData>,
 }

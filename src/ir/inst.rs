@@ -24,7 +24,8 @@ pub struct Successor {
     block: Block,
     /// Argument mapping.
     ///
-    /// This represents the parameter to argument mapping.
+    /// This represents the parameter to argument mapping, the keys represent
+    /// parameters, and the values represent arguments.
     args: HashMap<Value, Value>,
 }
 
@@ -60,23 +61,6 @@ pub enum InstKind {
         lhs: Value,
         /// The right-hand side value.
         rhs: Value,
-    },
-    /// Binary immediate operation instruction.
-    ///
-    /// This is used to represent near-backend instructions, e.g., `addi` in
-    /// RISC-V, so that some optimization can be done on the mid-end.
-    ///
-    /// Admittedly, this will make the instruction set more complex, but it
-    /// should be fine as long as the optimization is done correctly.
-    BinaryImm {
-        /// The opcode of the binary operation.
-        op: BinaryImmOp,
-        /// The left-hand side value.
-        lhs: Value,
-        /// The right-hand side immediate value.
-        ///
-        /// Note that the immediate here does not guarantee its width.
-        imm: Constant,
     },
     /// Unary operation instruction.
     Unary {
@@ -288,7 +272,6 @@ impl User<Value> for Inst {
         match self.deref(ctx).kind {
             Ik::IConst { .. } | Ik::FConst { .. } | Ik::StackSlot { .. } => vec![],
             Ik::Binary { lhs, rhs, .. } => vec![lhs, rhs],
-            Ik::BinaryImm { lhs, .. } => vec![lhs],
             Ik::Unary { val, .. } => vec![val],
             Ik::Branch {
                 cond,
@@ -340,12 +323,6 @@ impl User<Value> for Inst {
                 }
                 if *rhs == old {
                     *rhs = new;
-                    replaced = true;
-                }
-            }
-            Ik::BinaryImm { ref mut lhs, .. } => {
-                if *lhs == old {
-                    *lhs = new;
                     replaced = true;
                 }
             }

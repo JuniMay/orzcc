@@ -134,6 +134,15 @@ where
     ///
     /// This is used to simplify the implementation of control flow
     /// simplification.
+    ///
+    /// # Notes
+    ///
+    /// Merging of blocks in IR should also update the block parameters and
+    /// maintain the def-use chain.
+    ///
+    /// # See Also
+    ///
+    /// [Block::merge](crate::ir::Block::merge)
     fn merge(self, arena: &mut Self::A, other: Self) {
         // we need to unlink all nodes in `other` from the original container,
         // so that we can modify the nodes' container to `self`
@@ -178,6 +187,15 @@ where
     /// # Panics
     ///
     /// Panics if `pos` is not in `self`.
+    ///
+    /// # Notes
+    ///
+    /// Splitting block in IR should also update the terminator, and maybe
+    /// maintain the def-use chain.
+    ///
+    /// # See Also
+    ///
+    /// [Block::split](crate::ir::Block::split)
     fn split(self, arena: &mut Self::A, other: Self, pos: NodePtr) {
         // assert that `pos` is in `self`
         assert!(pos.container(arena) == Some(self), "`pos` is not in `self`");
@@ -637,6 +655,7 @@ mod tests {
 
         assert_eq!(container.head(&ctx), Some(node1));
         assert_eq!(container.tail(&ctx), Some(node1));
+        assert_eq!(node1.container(&ctx), Some(container));
 
         container.push_front(&mut ctx, node2);
 
@@ -644,6 +663,8 @@ mod tests {
         assert_eq!(container.tail(&ctx), Some(node1));
         assert_eq!(node2.next(&ctx), Some(node1));
         assert_eq!(node1.prev(&ctx), Some(node2));
+        assert_eq!(node1.container(&ctx), Some(container));
+        assert_eq!(node2.container(&ctx), Some(container));
 
         node2.insert_before(&mut ctx, node3);
 
@@ -651,6 +672,10 @@ mod tests {
         assert_eq!(container.tail(&ctx), Some(node1));
         assert_eq!(node2.next(&ctx), Some(node1));
         assert_eq!(node1.prev(&ctx), Some(node2));
+
+        assert_eq!(node3.container(&ctx), Some(container));
+        assert_eq!(node2.container(&ctx), Some(container));
+        assert_eq!(node1.container(&ctx), Some(container));
 
         let expected = [3, 2, 1];
 
@@ -840,6 +865,7 @@ mod tests {
 
         assert_eq!(container1.head(&ctx).unwrap().deref(&ctx).value, 0);
         assert_eq!(container1.tail(&ctx).unwrap().deref(&ctx).value, 19);
+
         assert!(container2.head(&ctx).is_none());
         assert!(container2.tail(&ctx).is_none());
 
@@ -852,6 +878,7 @@ mod tests {
                 expected,
                 ptr.deref(&ctx).value
             );
+            assert_eq!(ptr.container(&ctx), Some(container1));
         }
     }
 
@@ -885,9 +912,14 @@ mod tests {
 
         assert_eq!(container.head(&ctx).unwrap().deref(&ctx).value, 1);
         assert_eq!(container.tail(&ctx).unwrap().deref(&ctx).value, 3);
+        assert_eq!(node1.container(&ctx), Some(container));
+        assert_eq!(node2.container(&ctx), Some(container));
+        assert_eq!(node3.container(&ctx), Some(container));
 
         assert_eq!(new_container.head(&ctx).unwrap().deref(&ctx).value, 4);
         assert_eq!(new_container.tail(&ctx).unwrap().deref(&ctx).value, 5);
+        assert_eq!(node4.container(&ctx), Some(new_container));
+        assert_eq!(node5.container(&ctx), Some(new_container));
     }
 
     #[test]
@@ -938,6 +970,7 @@ mod tests {
                 expected,
                 ptr.deref(&ctx).value
             );
+            assert_eq!(ptr.container(&ctx), Some(container));
         }
 
         for (ptr, expected) in new_container.iter(&ctx).zip(4..=7) {
@@ -948,6 +981,7 @@ mod tests {
                 expected,
                 ptr.deref(&ctx).value
             );
+            assert_eq!(ptr.container(&ctx), Some(new_container));
         }
     }
 
