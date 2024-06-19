@@ -57,6 +57,7 @@ pub enum TyData {
 /// Yes, function does not has a type, but a signature representing its
 /// parameter and return types. The function type does not interact with other
 /// types, so it is reasonable to make it standalone.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Signature {
     ret: Ty,
     params: Vec<Ty>,

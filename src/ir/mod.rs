@@ -14,7 +14,7 @@ pub use constant::Constant;
 pub use context::Context;
 pub use def_use::User;
 pub use fold::FoldContext;
-pub use global::{Func, FuncData, Symbol};
+pub use global::{Func, FuncData, GlobalSlot, GlobalSlotData, Symbol, SymbolKind};
 pub use inst::{BinaryImmOp, BinaryOp, Inst, InstData, InstKind, Successor, UnaryOp};
 pub use ty::{Signature, Ty, TyData};
 pub use value::{Value, ValueData, ValueKind};

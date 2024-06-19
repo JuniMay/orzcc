@@ -92,6 +92,9 @@ pub enum InstKind {
     /// Call instruction.
     Call {
         /// The callee symbol.
+        ///
+        /// This symbol can be used to lookup in the [Context] using
+        /// [Context::lookup_symbol].
         callee: Symbol,
         /// The arguments to the callee.
         args: Vec<Value>,

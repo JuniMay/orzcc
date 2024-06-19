@@ -1,4 +1,4 @@
-use super::{Block, Signature};
+use super::{Block, Constant, Signature, Ty};
 use crate::{
     collections::{
         linked_list::LinkedListContainerPtr,
@@ -20,9 +20,21 @@ impl From<String> for Symbol {
     fn from(s: String) -> Self { Self(s) }
 }
 
+/// The data of a function.
+///
+/// Cranelift and the old version of OrzIR uses data flow graph to represent
+/// local variables and blocks, but it turns out that complicates the design
+/// and makes the passes harder to implement. So no separate data flow graph
+/// is used in the new version of OrzIR, everything is stored in [Context].
+/// The local layout is represented with intrusive linked list of each entity.
+///
+/// Also, function declaration and definition are two different types in the
+/// framework, so one can distinguish them in compile time.
 pub struct FuncData {
     this: Func,
+    /// The name of the function.
     name: Symbol,
+    /// The signature of the function.
     sig: Signature,
     /// The head block of the function, also the entry block in control flow.
     head: Option<Block>,
@@ -38,13 +50,16 @@ impl_arena!(Context, FuncData, Func, funcs);
 
 impl Func {
     pub fn new(ctx: &mut Context, name: impl Into<Symbol>, sig: Signature) -> Func {
-        ctx.alloc_with(|this| FuncData {
+        let func = ctx.alloc_with(|this| FuncData {
             this,
             name: name.into(),
             sig,
             head: None,
             tail: None,
-        })
+        });
+        // establish the mapping from name to function
+        ctx.insert_func(func);
+        func
     }
 
     pub fn name(self, ctx: &Context) -> &str { &self.deref(ctx).name.0 }
@@ -72,4 +87,47 @@ impl LinkedListContainerPtr<Block> for Func {
     fn set_tail(self, arena: &mut Self::A, tail: Option<Block>) {
         self.deref_mut(arena).tail = tail;
     }
+}
+
+/// Global memory slot.
+pub struct GlobalSlotData {
+    this: GlobalSlot,
+    name: Symbol,
+    ty: Ty,
+    init: Option<Constant>,
+}
+
+#[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
+pub struct GlobalSlot(BaseArenaPtr<GlobalSlotData>);
+
+impl_arena!(Context, GlobalSlotData, GlobalSlot, global_slots);
+
+impl GlobalSlot {
+    pub fn new(ctx: &mut Context, name: impl Into<Symbol>, ty: Ty) -> GlobalSlot {
+        let slot = ctx.alloc_with(|this| GlobalSlotData {
+            this,
+            name: name.into(),
+            ty,
+            init: None,
+        });
+        ctx.insert_global_slot(slot);
+        slot
+    }
+
+    pub fn name(self, ctx: &Context) -> &str { &self.deref(ctx).name.0 }
+
+    pub fn ty(self, ctx: &Context) -> Ty { self.deref(ctx).ty }
+
+    pub fn init(self, ctx: &Context) -> Option<&Constant> { self.deref(ctx).init.as_ref() }
+}
+
+/// The entity that a symbol defines.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SymbolKind {
+    /// A function definition.
+    FuncDef(Func),
+    /// A global memory slot.
+    GlobalSlot(GlobalSlot),
+    /// A function declaration.
+    FuncDecl(Signature),
 }
