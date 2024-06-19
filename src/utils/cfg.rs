@@ -42,9 +42,9 @@ where
     /// The region associated with the control flow graph.
     region: R,
     /// The predecessors of each node.
-    succs: HashMap<N, HashSet<N>>,
+    succs: HashMap<N, Vec<N>>,
     /// The successors of each node.
-    preds: HashMap<N, HashSet<N>>,
+    preds: HashMap<N, Vec<N>>,
 }
 
 impl<N, R> CfgInfo<N, R>
@@ -54,8 +54,8 @@ where
 {
     /// Derive the control flow graph information from the region.
     pub fn new(arena: &N::A, region: R) -> Self {
-        let mut succs: HashMap<N, HashSet<N>> = HashMap::new();
-        let mut preds: HashMap<N, HashSet<N>> = HashMap::new();
+        let mut succs: HashMap<N, Vec<N>> = HashMap::new();
+        let mut preds: HashMap<N, Vec<N>> = HashMap::new();
 
         let entry = region.entry_node(arena);
 
@@ -69,9 +69,15 @@ where
 
             visited.insert(node);
 
+            // for all visited nodes, we need to create entries in the
+            // predecessors and successors maps, indicating that they are
+            // reachable.
+            succs.entry(node).or_default();
+            preds.entry(node).or_default();
+
             for succ in node.succs(arena) {
-                succs.entry(node).or_default().insert(succ);
-                preds.entry(succ).or_default().insert(node);
+                succs.entry(node).or_default().push(succ);
+                preds.entry(succ).or_default().push(node);
                 worklist.push(succ);
             }
         }
@@ -84,10 +90,20 @@ where
     }
 
     /// Get the successors of a node.
-    pub fn succs(&self, node: N) -> &HashSet<N> { self.succs.get(&node).unwrap() }
+    ///
+    /// # Returns
+    ///
+    /// - `Some(succs)`: The successors of the node.
+    /// - `None`: The node is not reachable.
+    pub fn succs(&self, node: N) -> Option<&[N]> { self.succs.get(&node).map(|v| v.as_slice()) }
 
     /// Get the predecessors of a node.
-    pub fn preds(&self, node: N) -> &HashSet<N> { self.preds.get(&node).unwrap() }
+    ///
+    /// # Returns
+    ///
+    /// - `Some(preds)`: The predecessors of the node.
+    /// - `None`: The node is not reachable.
+    pub fn preds(&self, node: N) -> Option<&[N]> { self.preds.get(&node).map(|v| v.as_slice()) }
 
     /// Get the region associated with the control flow graph.
     pub fn region(&self) -> &R { &self.region }

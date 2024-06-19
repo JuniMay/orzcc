@@ -459,6 +459,17 @@ pub trait LinkedListNodePtr: ArenaPtr {
 /// A cursor to modify the linked list.
 ///
 /// The cursor is implemented because mutable iterator is hard to implement.
+///
+/// # Notes
+///
+/// This cannot handle the situation where the current node is unlinked, USE
+/// WITH CAUTION.
+///
+/// TODO: Maybe add options to adjust the iteration manner, e.g., when to get
+/// the next node, because sometimes we need to visit the next node just after
+/// modification, and sometimes we might want to visit the old next node and
+/// skip the new next node. The implementation now will always visit the new
+/// next node.
 pub struct LinkedListCursor<T: LinkedListNodePtr> {
     container: T::ContainerPtr,
     /// The current node in the forward order.
