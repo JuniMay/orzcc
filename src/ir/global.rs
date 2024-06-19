@@ -2,7 +2,7 @@ use super::{Block, Signature};
 use crate::{
     collections::{
         linked_list::LinkedListContainerPtr,
-        storage::{ArenaLikeAlloc, ArenaPtr, ArenaPtrLike},
+        storage::{ArenaAlloc, ArenaPtr, BaseArenaPtr},
     },
     impl_arena,
     ir::Context,
@@ -31,7 +31,7 @@ pub struct FuncData {
 }
 
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
-pub struct Func(ArenaPtr<FuncData>);
+pub struct Func(BaseArenaPtr<FuncData>);
 
 impl_arena!(Context, FuncData, Func, funcs);
 

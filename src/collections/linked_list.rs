@@ -3,7 +3,7 @@
 //! Linked list is not easy to implement, but with arena, it is easier
 //! (hopefully).
 
-use super::storage::ArenaPtrLike;
+use super::storage::ArenaPtr;
 
 /// A container of linked lists.
 ///
@@ -17,7 +17,7 @@ use super::storage::ArenaPtrLike;
 /// the linked list is a type parameter.
 ///
 /// - `NodePtr`: The pointer type of the nodes in the linked list.
-pub trait LinkedListContainerPtr<NodePtr>: ArenaPtrLike
+pub trait LinkedListContainerPtr<NodePtr>: ArenaPtr
 where
     NodePtr: LinkedListNodePtr<A = Self::A, ContainerPtr = Self>,
 {
@@ -305,7 +305,7 @@ impl<'a, T: LinkedListNodePtr> DoubleEndedIterator for LinkedListIterator<'a, T>
 /// The setters in this trait are low-level operations, and it is not
 /// recommended to call them directly. Instead, use `insert-` and
 /// [unlink](LinkedListNodePtr::unlink) methods to manipulate the linked list.
-pub trait LinkedListNodePtr: ArenaPtrLike {
+pub trait LinkedListNodePtr: ArenaPtr {
     /// The type of the container of the node.
     ///
     /// Container is the data structure that contains the linked list. For
@@ -508,12 +508,12 @@ where
 mod tests {
     use super::{LinkedListContainerPtr, LinkedListNodePtr};
     use crate::{
-        collections::storage::{Arena, ArenaLikeAlloc, ArenaPtr, ArenaPtrLike},
+        collections::storage::{ArenaAlloc, ArenaPtr, BaseArena, BaseArenaPtr},
         impl_arena,
     };
 
     #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
-    struct NodePtr(ArenaPtr<Node>);
+    struct NodePtr(BaseArenaPtr<Node>);
 
     struct Node {
         value: i32,
@@ -534,7 +534,7 @@ mod tests {
     }
 
     #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
-    struct ContainerPtr(ArenaPtr<Container>);
+    struct ContainerPtr(BaseArenaPtr<Container>);
 
     struct Container {
         head: Option<NodePtr>,
@@ -543,8 +543,8 @@ mod tests {
 
     #[derive(Default)]
     struct Context {
-        nodes: Arena<Node>,
-        containers: Arena<Container>,
+        nodes: BaseArena<Node>,
+        containers: BaseArena<Container>,
     }
 
     impl_arena!(Context, Node, NodePtr, nodes);

@@ -1,6 +1,6 @@
 use super::{inst::InstData, BlockData, FuncData, ValueData};
 use crate::{
-    collections::storage::{Arena, UniqueArena},
+    collections::storage::{BaseArena, UniqueArena},
     ir::TyData,
 };
 
@@ -18,11 +18,11 @@ pub struct Context {
     /// is used, it should not be freed.
     pub(in crate::ir) tys: UniqueArena<TyData>,
     /// The storage of blocks
-    pub(in crate::ir) blocks: Arena<BlockData>,
+    pub(in crate::ir) blocks: BaseArena<BlockData>,
     /// The storage of instructions
-    pub(in crate::ir) insts: Arena<InstData>,
+    pub(in crate::ir) insts: BaseArena<InstData>,
     /// The storage of values.
-    pub(in crate::ir) values: Arena<ValueData>,
+    pub(in crate::ir) values: BaseArena<ValueData>,
     /// The storage of functions.
-    pub(in crate::ir) funcs: Arena<FuncData>,
+    pub(in crate::ir) funcs: BaseArena<FuncData>,
 }

@@ -7,5 +7,12 @@ edition = "2021"
 thiserror = "1.0.61"
 
 [features]
-sysy = []
+
+default = ["ir-frontend", "riscv64", "arm64", "arm32", "sysy-frontend"]
+
 ir-frontend = []
+riscv64 = []
+arm64 = []
+arm32 = []
+
+sysy-frontend = []

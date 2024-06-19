@@ -1,7 +1,7 @@
 use std::fmt;
 
 use crate::{
-    collections::storage::{ArenaLikeAlloc, ArenaLikeDeref, ArenaPtrLike, UniqueArenaPtr},
+    collections::storage::{ArenaAlloc, ArenaDeref, ArenaPtr, UniqueArenaPtr},
     ir::Context,
 };
 
@@ -128,7 +128,10 @@ impl Ty {
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
 pub struct Ty(UniqueArenaPtr<TyData>);
 
-impl ArenaPtrLike for Ty {
+// [Ty] is special because it wraps [UniqueArenaPtr], so we need to implement
+// it manually.
+
+impl ArenaPtr for Ty {
     type A = Context;
     type T = TyData;
 
@@ -139,13 +142,13 @@ impl ArenaPtrLike for Ty {
     }
 }
 
-impl ArenaLikeDeref<TyData, Ty> for Context {
+impl ArenaDeref<TyData, Ty> for Context {
     fn try_deref(&self, ptr: Ty) -> Option<&TyData> { self.tys.try_deref(ptr.0) }
 
     fn try_deref_mut(&mut self, ptr: Ty) -> Option<&mut TyData> { self.tys.try_deref_mut(ptr.0) }
 }
 
-impl ArenaLikeAlloc<TyData, Ty> for Context {
+impl ArenaAlloc<TyData, Ty> for Context {
     /// # Panics
     ///
     /// Panics if `alloc_with` is called, because unique hash is required for

@@ -14,16 +14,16 @@
 use std::{collections::HashSet, hash::Hash};
 
 use super::Context;
-use crate::collections::storage::ArenaPtrLike;
+use crate::collections::storage::ArenaPtr;
 
 /// The [Usable] trait is used to describe a entity that can be used.
 ///
 /// # Type Parameters
 ///
 /// - `T`: The type of the users.
-pub trait Usable<T>: Sized + ArenaPtrLike + Eq + Hash
+pub trait Usable<T>: Sized + ArenaPtr + Eq + Hash
 where
-    T: User<Self> + ArenaPtrLike,
+    T: User<Self> + ArenaPtr,
 {
     /// Get the users of this entity.
     fn users(self, ctx: &Context) -> Vec<T>;
@@ -40,9 +40,9 @@ where
 /// # Type Parameters
 ///
 /// - `T`: The type of the usable entities.
-pub trait User<T>: Sized + ArenaPtrLike
+pub trait User<T>: Sized + ArenaPtr
 where
-    T: Usable<Self> + ArenaPtrLike + Eq + Hash,
+    T: Usable<Self> + ArenaPtr + Eq + Hash,
 {
     /// Get all the used entities.
     fn uses(self, ctx: &Context) -> Vec<T>;

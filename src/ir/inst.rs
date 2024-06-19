@@ -4,7 +4,7 @@ use super::{def_use::Usable, Context, Signature, Symbol, Ty, User};
 use crate::{
     collections::{
         linked_list::LinkedListNodePtr,
-        storage::{ArenaPtr, ArenaPtrLike},
+        storage::{ArenaPtr, BaseArenaPtr},
     },
     impl_arena,
     ir::{Block, Constant, Value},
@@ -144,7 +144,7 @@ pub struct InstData {
 }
 
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
-pub struct Inst(ArenaPtr<InstData>);
+pub struct Inst(BaseArenaPtr<InstData>);
 
 impl_arena!(Context, InstData, Inst, insts);
 

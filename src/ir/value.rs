@@ -8,7 +8,7 @@ use std::collections::HashSet;
 
 use super::{def_use::Usable, inst::Inst, Context, Ty};
 use crate::{
-    collections::storage::{ArenaPtr, ArenaPtrLike},
+    collections::storage::{ArenaPtr, BaseArenaPtr},
     impl_arena,
     ir::Block,
 };
@@ -57,7 +57,7 @@ impl ValueData {
 }
 
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
-pub struct Value(ArenaPtr<ValueData>);
+pub struct Value(BaseArenaPtr<ValueData>);
 
 impl_arena!(Context, ValueData, Value, values);
 

@@ -4,7 +4,7 @@ use super::{def_use::Usable, Func, Inst, Ty, Value, ValueData};
 use crate::{
     collections::{
         linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
-        storage::{ArenaLikeAlloc, ArenaPtr, ArenaPtrLike},
+        storage::{ArenaAlloc, ArenaPtr, BaseArenaPtr},
     },
     impl_arena,
     ir::Context,
@@ -31,7 +31,7 @@ pub struct BlockData {
 }
 
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
-pub struct Block(ArenaPtr<BlockData>);
+pub struct Block(BaseArenaPtr<BlockData>);
 
 impl_arena!(Context, BlockData, Block, blocks);
 

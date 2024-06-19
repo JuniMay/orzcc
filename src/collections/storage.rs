@@ -1,6 +1,6 @@
 //! Storage utilities.
 //!
-//! This module provides [Arena] for managing memory allocation and
+//! This module provides [BaseArena] for managing memory allocation and
 //! deallocation. The arena is mainly used to deal with the linked data
 //! structures in the IR.
 //!
@@ -8,10 +8,10 @@
 //! arena itself can easily panic. So this module also provides some traits to
 //! help with the wrapping.
 //!
-//! - [ArenaPtrLike]: The trait for the pointer in the arena.
-//! - [ArenaLikeDeref]: The trait for dereferencing the arena pointer.
-//! - [ArenaLikeAlloc]: The trait for allocating memory in the arena.
-//! - [ArenaLikeFree]: The trait for freeing memory in the arena.
+//! - [ArenaPtr]: The trait for the pointer in the arena.
+//! - [ArenaDeref]: The trait for dereferencing the arena pointer.
+//! - [ArenaAlloc]: The trait for allocating memory in the arena.
+//! - [ArenaFree]: The trait for freeing memory in the arena.
 //!
 //! The traits above can be used to wrap one or multiple arenas in a high-level
 //! container, e.g., a context or a module in the IR.
@@ -21,9 +21,10 @@
 //! The arena can be used for a single type, or be combined into a container
 //! of instances of different types.
 //!
-//! ## Usage of [Arena]
+//! ## Usage of Arenas
 //!
-//! Here is a simple example demonstrating how to use the arena.
+//! Here is a simple example demonstrating how to use the [BaseArena] and
+//! [BaseArenaPtr].
 //!
 //! ```rust
 //! use orzcc::collections::storage::*;
@@ -33,10 +34,10 @@
 //!     a: i32,
 //!     b: i32,
 //!     // Self-referential struct
-//!     this: ArenaPtr<Test>,
+//!     this: BaseArenaPtr<Test>,
 //! }
 //!
-//! let mut arena = Arena::default();
+//! let mut arena = BaseArena::default();
 //!
 //! // We can create a self-referential struct using `alloc_with`
 //! let ptr1 = arena.alloc_with(|this| Test { a: 1, b: 2, this });
@@ -63,7 +64,7 @@
 //! assert_eq!(arena.try_deref(ptr3).unwrap().a, 7);
 //! ```
 //!
-//! ## Combine Two [Arena]s
+//! ## Combine Two [BaseArena]s
 //!
 //! Below is an example of how to combine two arenas for two different types
 //! into a high-level container.
@@ -76,19 +77,19 @@
 //! struct Foo { this: FooPtr, value: i32 }
 //! struct Bar { this: BarPtr, value: f32 }
 //!
-//! // And two arena pointers, just wrappers, because `ArenaPtr` is already
-//! // associated with `Arena`
+//! // And two arena pointers, just wrappers, because [BaseArenaPtr] is already
+//! // associated with [BaseArena]
 //! #[derive(Clone, Copy, PartialEq, Eq)]
-//! struct FooPtr(ArenaPtr<Foo>);
+//! struct FooPtr(BaseArenaPtr<Foo>);
 //!
 //! #[derive(Clone, Copy, PartialEq, Eq)]
-//! struct BarPtr(ArenaPtr<Bar>);
+//! struct BarPtr(BaseArenaPtr<Bar>);
 //!
 //! // A high-level container for the two arenas
 //! #[derive(Default)]
 //! struct FooBarArena {
-//!     foo_arena: Arena<Foo>,
-//!     bar_arena: Arena<Bar>,
+//!     foo_arena: BaseArena<Foo>,
+//!     bar_arena: BaseArena<Bar>,
 //! }
 //!
 //! // Now we can implement the pointers for the high-level container
@@ -131,9 +132,9 @@ use std::{
 ///
 /// This trait abstracts the dereferencing operation for an arena-like type,
 /// which is the most basic operation for an arena.
-pub trait ArenaLikeDeref<T, Ptr>
+pub trait ArenaDeref<T, Ptr>
 where
-    Ptr: ArenaPtrLike<T = T, A = Self>,
+    Ptr: ArenaPtr<T = T, A = Self>,
 {
     /// Try to dereference a pointer and get a value in the arena.
     ///
@@ -150,7 +151,7 @@ where
     ///
     /// # See Also
     ///
-    /// - [ArenaLikeDeref::try_deref_mut]
+    /// - [ArenaDeref::try_deref_mut]
     fn try_deref(&self, ptr: Ptr) -> Option<&T>;
 
     /// Try to dereference a pointer and get a mutable value in the arena.
@@ -168,7 +169,7 @@ where
     ///
     /// # See Also
     ///
-    /// - [ArenaLikeDeref::try_deref]
+    /// - [ArenaDeref::try_deref]
     fn try_deref_mut(&mut self, ptr: Ptr) -> Option<&mut T>;
 }
 
@@ -180,10 +181,10 @@ where
 ///
 /// # See Also
 ///
-/// - [ArenaLikeFree]
-pub trait ArenaLikeAlloc<T, Ptr>: ArenaLikeDeref<T, Ptr>
+/// - [ArenaFree]
+pub trait ArenaAlloc<T, Ptr>: ArenaDeref<T, Ptr>
 where
-    Ptr: ArenaPtrLike<T = T, A = Self>,
+    Ptr: ArenaPtr<T = T, A = Self>,
 {
     /// Allocate a value with a closure accepting the index.
     ///
@@ -208,14 +209,14 @@ where
     /// # Examples
     ///
     /// ```rust
-    /// use orzcc::collections::storage::{Arena, ArenaPtr, ArenaLikeAlloc};
+    /// use orzcc::collections::storage::{BaseArena, BaseArenaPtr, ArenaAlloc};
     ///
     /// struct Node {
-    ///     this: ArenaPtr<Node>,
+    ///     this: BaseArenaPtr<Node>,
     ///     value: i32,
-    ///     next: Option<ArenaPtr<Node>>,
+    ///     next: Option<BaseArenaPtr<Node>>,
     /// }
-    /// let mut arena = Arena::default();
+    /// let mut arena = BaseArena::default();
     /// let node = arena.alloc_with(|this| Node {
     ///     this,
     ///     value: 42,
@@ -225,14 +226,14 @@ where
     ///
     /// # See Also
     ///
-    /// - [ArenaLikeAlloc::alloc]
+    /// - [ArenaAlloc::alloc]
     fn alloc_with<F>(&mut self, f: F) -> Ptr
     where
         F: FnOnce(Ptr) -> T;
 
     /// Allocate a value in the arena.
     ///
-    /// By default, this will call [ArenaLikeAlloc::alloc_with] with a closure
+    /// By default, this will call [ArenaAlloc::alloc_with] with a closure
     /// that returns the value directly.
     ///
     /// # Parameters
@@ -245,7 +246,7 @@ where
     ///
     /// # See Also
     ///
-    /// - [ArenaLikeAlloc::alloc_with]
+    /// - [ArenaAlloc::alloc_with]
     fn alloc(&mut self, val: T) -> Ptr { self.alloc_with(|_| val) }
 }
 
@@ -253,9 +254,9 @@ where
 ///
 /// This trait abstracts the freeing operation for an arena-like type, and thus
 /// requires the type to be able to allocate values as well.
-pub trait ArenaLikeFree<T, Ptr>: ArenaLikeAlloc<T, Ptr>
+pub trait ArenaFree<T, Ptr>: ArenaAlloc<T, Ptr>
 where
-    Ptr: ArenaPtrLike<T = T, A = Self>,
+    Ptr: ArenaPtr<T = T, A = Self>,
 {
     /// Free a value in the arena.
     ///
@@ -271,13 +272,13 @@ where
 }
 
 /// The pointer-like trait that can be used to deref and get the value from the
-/// corresponding [ArenaLikeDeref] type.
-pub trait ArenaPtrLike: Copy + Sized + Eq {
+/// corresponding [ArenaDeref] type.
+pub trait ArenaPtr: Copy + Sized + Eq {
     /// The type of dereferenced value.
     type T;
 
     /// The type of the corresponding arena.
-    type A: ArenaLikeDeref<Self::T, Self>;
+    type A: ArenaDeref<Self::T, Self>;
 
     /// Try to dereference the pointer.
     ///
@@ -339,34 +340,34 @@ pub trait ArenaPtrLike: Copy + Sized + Eq {
     }
 }
 
-/// ArenaPtr is a pointer to an object in the basic arena.
+/// [BaseArenaPtr] is a pointer to an object in the [BaseArena].
 ///
 /// This can be understood as a handle, one can dereference it to get the
 /// reference (in the form of `&T`) to the object in the arena.
-pub struct ArenaPtr<T> {
+pub struct BaseArenaPtr<T> {
     index: usize,
     _marker: PhantomData<T>,
 }
 
-impl<T> fmt::Debug for ArenaPtr<T> {
+impl<T> fmt::Debug for BaseArenaPtr<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "ArenaPtr({})", self.index)
+        write!(f, "BaseArenaPtr({})", self.index)
     }
 }
 
-impl<T> PartialEq for ArenaPtr<T> {
+impl<T> PartialEq for BaseArenaPtr<T> {
     fn eq(&self, other: &Self) -> bool { self.index == other.index }
 }
 
-impl<T> Eq for ArenaPtr<T> {}
+impl<T> Eq for BaseArenaPtr<T> {}
 
-impl<T> Hash for ArenaPtr<T> {
+impl<T> Hash for BaseArenaPtr<T> {
     fn hash<H: Hasher>(&self, state: &mut H) { self.index.hash(state); }
 }
 
-impl<T> From<usize> for ArenaPtr<T> {
+impl<T> From<usize> for BaseArenaPtr<T> {
     fn from(index: usize) -> Self {
-        ArenaPtr {
+        BaseArenaPtr {
             index,
             _marker: PhantomData,
         }
@@ -374,19 +375,19 @@ impl<T> From<usize> for ArenaPtr<T> {
 }
 
 #[allow(clippy::non_canonical_clone_impl)]
-impl<T> Clone for ArenaPtr<T> {
+impl<T> Clone for BaseArenaPtr<T> {
     fn clone(&self) -> Self {
         // `Clone` will not be implemented for `T` when `T` is not `Clone`-able.
-        ArenaPtr {
+        BaseArenaPtr {
             index: self.index,
             _marker: PhantomData,
         }
     }
 }
 
-impl<T> Copy for ArenaPtr<T> {}
+impl<T> Copy for BaseArenaPtr<T> {}
 
-impl<T> ArenaPtr<T> {
+impl<T> BaseArenaPtr<T> {
     /// Get the inner index.
     ///
     /// # Returns
@@ -395,28 +396,28 @@ impl<T> ArenaPtr<T> {
     fn index(self) -> usize { self.index }
 }
 
-impl<T> ArenaPtrLike for ArenaPtr<T> {
-    type A = Arena<T>;
+impl<T> ArenaPtr for BaseArenaPtr<T> {
+    type A = BaseArena<T>;
     type T = T;
 
-    fn try_deref(self, arena: &Arena<T>) -> Option<&T> { arena.try_deref(self) }
+    fn try_deref(self, arena: &BaseArena<T>) -> Option<&T> { arena.try_deref(self) }
 
-    fn try_deref_mut(self, arena: &mut Arena<T>) -> Option<&mut T> { arena.try_deref_mut(self) }
+    fn try_deref_mut(self, arena: &mut BaseArena<T>) -> Option<&mut T> { arena.try_deref_mut(self) }
 
-    fn deref(self, arena: &Arena<T>) -> &T {
+    fn deref(self, arena: &BaseArena<T>) -> &T {
         self.try_deref(arena).expect("arena pointer out of bounds")
     }
 
-    fn deref_mut(self, arena: &mut Arena<T>) -> &mut T {
+    fn deref_mut(self, arena: &mut BaseArena<T>) -> &mut T {
         self.try_deref_mut(arena)
             .expect("arena pointer out of bounds")
     }
 }
 
-/// The entry kind in the arena.
+/// The entry kind in [BaseArena].
 ///
 /// The entry can be either vacant or occupied.
-pub enum ArenaEntry<T> {
+pub enum BaseArenaEntry<T> {
     /// The slot is vacant.
     ///
     /// The vacant slot will occur when an entry is freed.
@@ -432,9 +433,11 @@ pub enum ArenaEntry<T> {
 /// Arena can be useful when the data structure is a linked data structure or
 /// a self-referential data structure. Also, arena can sometimes lead to better
 /// spatial locality.
-pub struct Arena<T> {
+///
+/// This can also be used to compose a more complex arena.
+pub struct BaseArena<T> {
     /// The pool of entries.
-    pool: Vec<ArenaEntry<T>>,
+    pool: Vec<BaseArenaEntry<T>>,
 
     /// The free list.
     ///
@@ -444,64 +447,64 @@ pub struct Arena<T> {
     free: VecDeque<usize>,
 }
 
-impl<T> Default for Arena<T> {
+impl<T> Default for BaseArena<T> {
     fn default() -> Self {
-        Arena {
+        BaseArena {
             pool: Vec::new(),
             free: VecDeque::new(),
         }
     }
 }
 
-impl<T> ArenaLikeAlloc<T, ArenaPtr<T>> for Arena<T> {
-    fn alloc_with<F>(&mut self, f: F) -> ArenaPtr<T>
+impl<T> ArenaAlloc<T, BaseArenaPtr<T>> for BaseArena<T> {
+    fn alloc_with<F>(&mut self, f: F) -> BaseArenaPtr<T>
     where
-        F: FnOnce(ArenaPtr<T>) -> T,
+        F: FnOnce(BaseArenaPtr<T>) -> T,
     {
         let index = if let Some(index) = self.free.pop_front() {
             index
         } else {
             let index = self.pool.len();
-            self.pool.push(ArenaEntry::Vacant);
+            self.pool.push(BaseArenaEntry::Vacant);
             index
         };
-        let ptr = ArenaPtr::from(index);
-        self.pool[index] = ArenaEntry::Occupied(f(ptr));
+        let ptr = BaseArenaPtr::from(index);
+        self.pool[index] = BaseArenaEntry::Occupied(f(ptr));
         ptr
     }
 }
 
-impl<T> ArenaLikeFree<T, ArenaPtr<T>> for Arena<T> {
-    fn free(&mut self, ptr: ArenaPtr<T>) {
-        if let ArenaEntry::Vacant = self.pool[ptr.index()] {
+impl<T> ArenaFree<T, BaseArenaPtr<T>> for BaseArena<T> {
+    fn free(&mut self, ptr: BaseArenaPtr<T>) {
+        if let BaseArenaEntry::Vacant = self.pool[ptr.index()] {
             panic!("the arena pointer is invalid, double free may occur")
         }
         // this will panic if the index is out of bounds
-        self.pool[ptr.index()] = ArenaEntry::Vacant;
+        self.pool[ptr.index()] = BaseArenaEntry::Vacant;
         // just push the index to the back of the queue
         self.free.push_back(ptr.index());
     }
 }
 
-impl<T> ArenaLikeDeref<T, ArenaPtr<T>> for Arena<T> {
-    fn try_deref(&self, ptr: ArenaPtr<T>) -> Option<&T> {
+impl<T> ArenaDeref<T, BaseArenaPtr<T>> for BaseArena<T> {
+    fn try_deref(&self, ptr: BaseArenaPtr<T>) -> Option<&T> {
         let entry = self.pool.get(ptr.index())?;
         match entry {
-            ArenaEntry::Vacant => None,
-            ArenaEntry::Occupied(val) => Some(val),
+            BaseArenaEntry::Vacant => None,
+            BaseArenaEntry::Occupied(val) => Some(val),
         }
     }
 
-    fn try_deref_mut(&mut self, ptr: ArenaPtr<T>) -> Option<&mut T> {
+    fn try_deref_mut(&mut self, ptr: BaseArenaPtr<T>) -> Option<&mut T> {
         let entry = self.pool.get_mut(ptr.index())?;
         match entry {
-            ArenaEntry::Vacant => None,
-            ArenaEntry::Occupied(val) => Some(val),
+            BaseArenaEntry::Vacant => None,
+            BaseArenaEntry::Occupied(val) => Some(val),
         }
     }
 }
 
-impl<T> Arena<T> {
+impl<T> BaseArena<T> {
     /// Reserve a given capacity for the arena.
     ///
     /// # Parameters
@@ -526,13 +529,13 @@ impl<T> Arena<T> {
     /// # See Also
     ///
     /// - [Arena::iter_mut]
-    pub fn iter(&self) -> impl Iterator<Item = (ArenaPtr<T>, &T)> {
+    pub fn iter(&self) -> impl Iterator<Item = (BaseArenaPtr<T>, &T)> {
         self.pool
             .iter()
             .enumerate()
             .filter_map(|(index, entry)| match entry {
-                ArenaEntry::Vacant => None,
-                ArenaEntry::Occupied(val) => Some((ArenaPtr::from(index), val)),
+                BaseArenaEntry::Vacant => None,
+                BaseArenaEntry::Occupied(val) => Some((BaseArenaPtr::from(index), val)),
             })
     }
 
@@ -545,13 +548,13 @@ impl<T> Arena<T> {
     /// # See Also
     ///
     /// - [Arena::iter]
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = (ArenaPtr<T>, &mut T)> {
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (BaseArenaPtr<T>, &mut T)> {
         self.pool
             .iter_mut()
             .enumerate()
             .filter_map(|(index, entry)| match entry {
-                ArenaEntry::Vacant => None,
-                ArenaEntry::Occupied(val) => Some((ArenaPtr::from(index), val)),
+                BaseArenaEntry::Vacant => None,
+                BaseArenaEntry::Occupied(val) => Some((BaseArenaPtr::from(index), val)),
             })
     }
 }
@@ -560,20 +563,20 @@ impl<T> Arena<T> {
 #[macro_export]
 macro_rules! impl_arena {
     ($arena:ty, $value:ty, $ptr:path, $field:ident) => {
-        impl $crate::collections::storage::ArenaPtrLike for $ptr {
+        impl $crate::collections::storage::ArenaPtr for $ptr {
             type A = $arena;
             type T = $value;
 
             fn try_deref(self, arena: &Self::A) -> Option<&Self::T> {
-                $crate::collections::storage::ArenaLikeDeref::try_deref(arena, self)
+                $crate::collections::storage::ArenaDeref::try_deref(arena, self)
             }
 
             fn try_deref_mut(self, arena: &mut Self::A) -> Option<&mut Self::T> {
-                $crate::collections::storage::ArenaLikeDeref::try_deref_mut(arena, self)
+                $crate::collections::storage::ArenaDeref::try_deref_mut(arena, self)
             }
         }
 
-        impl $crate::collections::storage::ArenaLikeAlloc<$value, $ptr> for $arena {
+        impl $crate::collections::storage::ArenaAlloc<$value, $ptr> for $arena {
             fn alloc_with<F>(&mut self, f: F) -> $ptr
             where
                 F: FnOnce($ptr) -> $value,
@@ -582,7 +585,7 @@ macro_rules! impl_arena {
             }
         }
 
-        impl $crate::collections::storage::ArenaLikeDeref<$value, $ptr> for $arena {
+        impl $crate::collections::storage::ArenaDeref<$value, $ptr> for $arena {
             fn try_deref(&self, ptr: $ptr) -> Option<&$value> { self.$field.try_deref(ptr.0) }
 
             fn try_deref_mut(&mut self, ptr: $ptr) -> Option<&mut $value> {
@@ -590,7 +593,7 @@ macro_rules! impl_arena {
             }
         }
 
-        impl $crate::collections::storage::ArenaLikeFree<$value, $ptr> for $arena {
+        impl $crate::collections::storage::ArenaFree<$value, $ptr> for $arena {
             fn free(&mut self, ptr: $ptr) { self.$field.free(ptr.0) }
         }
     };
@@ -628,12 +631,12 @@ pub struct UniqueArena<T>
 where
     T: GetUniqueArenaHash + Eq,
 {
-    arena: Arena<T>,
-    unique_map: HashMap<UniqueArenaHash, HashSet<ArenaPtr<T>>>,
+    arena: BaseArena<T>,
+    unique_map: HashMap<UniqueArenaHash, HashSet<BaseArenaPtr<T>>>,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
-pub struct UniqueArenaPtr<T>(ArenaPtr<T>);
+pub struct UniqueArenaPtr<T>(BaseArenaPtr<T>);
 
 #[allow(clippy::non_canonical_clone_impl)]
 impl<T> Clone for UniqueArenaPtr<T> {
@@ -648,13 +651,13 @@ where
 {
     fn default() -> Self {
         UniqueArena {
-            arena: Arena::default(),
+            arena: BaseArena::default(),
             unique_map: HashMap::new(),
         }
     }
 }
 
-impl<T> ArenaPtrLike for UniqueArenaPtr<T>
+impl<T> ArenaPtr for UniqueArenaPtr<T>
 where
     T: GetUniqueArenaHash + Eq,
 {
@@ -668,7 +671,7 @@ where
     }
 }
 
-impl<T> ArenaLikeDeref<T, UniqueArenaPtr<T>> for UniqueArena<T>
+impl<T> ArenaDeref<T, UniqueArenaPtr<T>> for UniqueArena<T>
 where
     T: GetUniqueArenaHash + Eq,
 {
@@ -679,7 +682,7 @@ where
     }
 }
 
-impl<T> ArenaLikeAlloc<T, UniqueArenaPtr<T>> for UniqueArena<T>
+impl<T> ArenaAlloc<T, UniqueArenaPtr<T>> for UniqueArena<T>
 where
     T: GetUniqueArenaHash + Eq,
 {
@@ -695,7 +698,7 @@ where
     where
         F: FnOnce(UniqueArenaPtr<T>) -> T,
     {
-        panic!("alloc_with is not implemented for UniqueArena")
+        panic!("alloc_with is not available for UniqueArena")
     }
 
     fn alloc(&mut self, val: T) -> UniqueArenaPtr<T> {
@@ -713,7 +716,7 @@ where
     }
 }
 
-impl<T> ArenaLikeFree<T, UniqueArenaPtr<T>> for UniqueArena<T>
+impl<T> ArenaFree<T, UniqueArenaPtr<T>> for UniqueArena<T>
 where
     T: GetUniqueArenaHash + Eq,
 {
@@ -735,12 +738,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::UniqueArena;
-    use crate::collections::storage::{
-        ArenaLikeAlloc,
-        ArenaLikeDeref,
-        ArenaLikeFree,
-        ArenaPtrLike,
-    };
+    use crate::collections::storage::{ArenaAlloc, ArenaDeref, ArenaFree, ArenaPtr};
 
     #[derive(Debug, PartialEq, Eq, Hash)]
     struct Test {
