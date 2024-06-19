@@ -8,6 +8,7 @@ mod name_alloc;
 mod ty;
 mod value;
 
+pub mod debug;
 pub mod passman;
 
 #[cfg(feature = "ir-frontend")]

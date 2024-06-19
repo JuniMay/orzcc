@@ -1,4 +1,4 @@
-use super::{Block, Constant, Context, Signature, Ty};
+use super::{debug::CommentPos, Block, Constant, Context, Signature, Ty};
 use crate::{
     collections::{
         linked_list::LinkedListContainerPtr,
@@ -17,6 +17,12 @@ impl From<&str> for Symbol {
 
 impl From<String> for Symbol {
     fn from(s: String) -> Self { Self(s) }
+}
+
+impl Symbol {
+    pub fn comment(&self, ctx: &mut Context, pos: CommentPos, content: String) {
+        ctx.comment_info.comment_symbol(self.clone(), pos, content);
+    }
 }
 
 /// The data of a function.

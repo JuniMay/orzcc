@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use super::{Block, Constant, Context, Signature, Symbol, Ty, Value, ValueData};
+use super::{debug::CommentPos, Block, Constant, Context, Signature, Symbol, Ty, Value, ValueData};
 use crate::{
     collections::{
         linked_list::LinkedListNodePtr,
@@ -259,11 +259,11 @@ impl Inst {
             result.drop(ctx);
         }
         // update the uses of blocks
-        for block in User::<Block>::uses(self, ctx) {
+        for block in User::<Block>::all_uses(self, ctx) {
             block.remove_user(ctx, self);
         }
         // update the uses of operands
-        for operand in User::<Value>::uses(self, ctx) {
+        for operand in User::<Value>::all_uses(self, ctx) {
             operand.remove_user(ctx, self);
         }
         // free the instruction
@@ -289,6 +289,10 @@ impl Inst {
     }
 
     pub fn results(self, ctx: &Context) -> &[Value] { &self.deref(ctx).results }
+
+    pub fn comment(self, ctx: &mut Context, pos: CommentPos, content: String) {
+        ctx.comment_info.comment_inst(self, pos, content);
+    }
 }
 
 impl LinkedListNodePtr for Inst {
@@ -310,7 +314,7 @@ impl LinkedListNodePtr for Inst {
 }
 
 impl User<Block> for Inst {
-    fn uses(self, ctx: &Context) -> Vec<Block> {
+    fn all_uses(self, ctx: &Context) -> Vec<Block> {
         // only append the block if this is a branch instruction
         let mut uses = vec![];
         if let InstKind::Branch {
@@ -410,7 +414,7 @@ impl User<Block> for Inst {
 }
 
 impl User<Value> for Inst {
-    fn uses(self, ctx: &Context) -> Vec<Value> {
+    fn all_uses(self, ctx: &Context) -> Vec<Value> {
         use InstKind as Ik;
         match self.deref(ctx).kind {
             Ik::IConst { .. } | Ik::FConst { .. } | Ik::StackSlot { .. } => vec![],

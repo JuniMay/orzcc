@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use super::{Context, Func, Inst, InstKind, Ty, Value, ValueData};
+use super::{debug::CommentPos, Context, Func, Inst, InstKind, Ty, Value, ValueData};
 use crate::{
     collections::{
         linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
@@ -209,10 +209,6 @@ impl Block {
     /// - Panics if the name is already assigned to another block.
     /// - Panics if the name is empty.
     /// - Panics if this block is already assigned a name.
-    ///
-    /// # See Also
-    ///
-    /// - [NameAlloc::assign_name](crate::ir::name_alloc::NameAlloc::assign_name)
     pub fn assign_name(self, ctx: &mut Context, name: String) {
         ctx.block_name_alloc.assign_name(self, name);
     }
@@ -227,10 +223,6 @@ impl Block {
     /// # Panics
     ///
     /// - Panics if this block is already assigned a name.
-    ///
-    /// # See Also
-    ///
-    /// - [NameAlloc::alloc_name](crate::ir::name_alloc::NameAlloc::alloc_name)
     pub fn alloc_name(self, ctx: &mut Context, prefix: String) -> &String {
         ctx.block_name_alloc.alloc_name(self, prefix)
     }
@@ -249,6 +241,10 @@ impl Block {
         } else {
             self.name(ctx).unwrap()
         }
+    }
+
+    pub fn comment(self, ctx: &mut Context, pos: CommentPos, content: String) {
+        ctx.comment_info.comment_block(self, pos, content);
     }
 }
 

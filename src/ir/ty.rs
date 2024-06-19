@@ -122,7 +122,7 @@ impl Ty {
 
 /// The type in IR.
 ///
-/// [Ty] is actually a wrapper of [UniqueArenaPtr] of [TyKind], and can be
+/// [Ty] is actually a wrapper of [UniqueArenaPtr] of [TyData], and can be
 /// copied and hashed. The associated arena is [Context].
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
 pub struct Ty(UniqueArenaPtr<TyData>);
@@ -155,7 +155,7 @@ impl ArenaAlloc<TyData, Ty> for Context {
     ///
     /// # See Also
     ///
-    /// - [UniqueArena]
+    /// - [UniqueArena](crate::collections::storage::UniqueArena)
     fn alloc_with<F>(&mut self, _f: F) -> Ty
     where
         F: FnOnce(Ty) -> TyData,

@@ -528,7 +528,7 @@ impl<T> BaseArena<T> {
     ///
     /// # See Also
     ///
-    /// - [Arena::iter_mut]
+    /// - [BaseArena::iter_mut]
     pub fn iter(&self) -> impl Iterator<Item = (BaseArenaPtr<T>, &T)> {
         self.pool
             .iter()
@@ -547,7 +547,7 @@ impl<T> BaseArena<T> {
     ///
     /// # See Also
     ///
-    /// - [Arena::iter]
+    /// - [BaseArena::iter]
     pub fn iter_mut(&mut self) -> impl Iterator<Item = (BaseArenaPtr<T>, &mut T)> {
         self.pool
             .iter_mut()

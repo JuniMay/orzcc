@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use super::{
+    debug::CommentInfo,
     name_alloc::NameAlloc,
     Block,
     BlockData,
@@ -53,10 +54,14 @@ pub struct Context {
     pub(super) value_name_alloc: NameAlloc<Value>,
     /// The name of blocks.
     pub(super) block_name_alloc: NameAlloc<Block>,
+
     // +-----------------+
     // | debug interface |
     // +-----------------+
-    // TODO: We also need a tool to add comment to instructions/blocks/functions.
+    /// The comment information.
+    ///
+    /// This is used to add human-readable comment when emitting the IR.
+    pub(super) comment_info: CommentInfo,
 }
 
 impl Default for Context {
@@ -78,6 +83,11 @@ impl Default for Context {
             // +-----------------+
             value_name_alloc: NameAlloc::new(),
             block_name_alloc: NameAlloc::new(),
+
+            // +-----------------+
+            // | debug interface |
+            // +-----------------+
+            comment_info: CommentInfo::default(),
         }
     }
 }

@@ -101,10 +101,6 @@ impl Value {
     /// - Panics if the name is already assigned to another value.
     /// - Panics if the name is empty.
     /// - Panics if this value is already assigned a name.
-    ///
-    /// # See Also
-    ///
-    /// - [NameAlloc::assign_name](crate::ir::name_alloc::NameAlloc::assign_name)
     pub fn assign_name(self, ctx: &mut Context, name: String) {
         ctx.value_name_alloc.assign_name(self, name);
     }
@@ -119,10 +115,6 @@ impl Value {
     /// # Panics
     ///
     /// - Panics if this value is already assigned a name.
-    ///
-    /// # See Also
-    ///
-    /// - [NameAlloc::alloc_name](crate::ir::name_alloc::NameAlloc::alloc_name)
     pub fn alloc_name(self, ctx: &mut Context, prefix: String) -> &String {
         ctx.value_name_alloc.alloc_name(self, prefix)
     }

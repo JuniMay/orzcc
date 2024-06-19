@@ -10,8 +10,8 @@ use super::{Constant, Context, Inst, Value};
 
 /// The context of the constant folding.
 ///
-/// The context is used to store the corresponding
-/// [Constant](crate::ir::Constant) for the values in the IR.
+/// The context is used to store the corresponding [Constant] for the values in
+/// the IR.
 #[derive(Default)]
 pub struct FoldContext {
     /// The folded constant values.
