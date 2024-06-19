@@ -224,6 +224,9 @@ impl Inst {
                 blocks.push(default.block);
             }
             blocks
+        } else if let InstKind::Return { .. } = self.deref(ctx).kind {
+            // return instruction has no successors
+            Vec::new()
         } else {
             panic!("not a branch instruction")
         }
