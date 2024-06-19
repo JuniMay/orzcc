@@ -1,18 +1,16 @@
 use std::collections::HashMap;
 
-use super::{def_use::Usable, Context, Signature, Symbol, Ty, User};
+use super::{def_use::Usable, Context, Signature, Symbol, Ty, User, ValueData};
 use crate::{
     collections::{
         linked_list::LinkedListNodePtr,
-        storage::{ArenaPtr, BaseArenaPtr},
+        storage::{ArenaAlloc, ArenaFree, ArenaPtr, BaseArenaPtr},
     },
     impl_arena,
     ir::{Block, Constant, Value},
 };
 
 pub enum BinaryOp {}
-
-pub enum BinaryImmOp {}
 
 pub enum UnaryOp {}
 
@@ -21,12 +19,12 @@ pub enum UnaryOp {}
 /// Successor describes the destination block and the argument passing.
 pub struct Successor {
     /// The destination block.
-    block: Block,
+    pub(in crate::ir) block: Block,
     /// Argument mapping.
     ///
     /// This represents the parameter to argument mapping, the keys represent
     /// parameters, and the values represent arguments.
-    args: HashMap<Value, Value>,
+    pub(in crate::ir) args: HashMap<Value, Value>,
 }
 
 pub enum InstKind {
@@ -134,10 +132,10 @@ pub enum InstKind {
 }
 
 pub struct InstData {
-    /// Self reference.
-    this: Inst,
+    /// Result of this instruction.
+    results: Vec<Value>,
     /// The instruction kind.
-    kind: InstKind,
+    pub(in crate::ir) kind: InstKind,
     /// The next instruction.
     next: Option<Inst>,
     /// The previous instruction.
@@ -152,6 +150,23 @@ pub struct Inst(BaseArenaPtr<InstData>);
 impl_arena!(Context, InstData, Inst, insts);
 
 impl Inst {
+    pub fn new(ctx: &mut Context, kind: InstKind, result_tys: Vec<Ty>) -> Inst {
+        let inst = ctx.alloc(InstData {
+            results: Vec::new(),
+            kind,
+            next: None,
+            prev: None,
+            parent: None,
+        });
+
+        for (i, ty) in result_tys.into_iter().enumerate() {
+            let value = ctx.alloc(ValueData::new_inst_result(ty, inst, i));
+            inst.deref_mut(ctx).results.push(value);
+        }
+
+        inst
+    }
+
     pub fn is_terminator(self, ctx: &Context) -> bool {
         matches!(
             self.deref(ctx).kind,
@@ -184,6 +199,65 @@ impl Inst {
         } else {
             panic!("not a branch instruction")
         }
+    }
+
+    /// Free the instruction from the context.
+    ///
+    /// This method will also free all the result values of the instruction.
+    ///
+    /// # Panics
+    ///
+    /// - Panics if any result value is used by other instructions.
+    /// - Panics if the instruction is not unlink-ed.
+    ///
+    /// # See Also
+    ///
+    /// - [Inst::unlink]
+    /// - [Inst::remove]
+    pub fn drop(self, ctx: &mut Context) {
+        // check the uses of result values
+        for result in self.deref(ctx).results.iter() {
+            if !result.users(ctx).is_empty() {
+                panic!("cannot remove instruction because some result values are still in use");
+            }
+        }
+        // check if the instruction is unlinked
+        if self.container(ctx).is_some() {
+            panic!("cannot remove instruction because it is still linked");
+        }
+        // free all the result values
+        let results = self.deref_mut(ctx).results.drain(..).collect::<Vec<_>>();
+        for result in results {
+            result.drop(ctx);
+        }
+        // update the uses of blocks
+        for block in User::<Block>::uses(self, ctx) {
+            block.remove_user(ctx, self);
+        }
+        // update the uses of operands
+        for operand in User::<Value>::uses(self, ctx) {
+            operand.remove_user(ctx, self);
+        }
+        // free the instruction
+        ctx.free(self);
+    }
+
+    /// Unlink and drop the instruction.
+    ///
+    /// This method will unlink the instruction from the parent block and then
+    /// drop the instruction.
+    ///
+    /// # Panics
+    ///
+    /// Panics if any result value is used by other instructions.
+    ///
+    /// # See Also
+    ///
+    /// - [Inst::unlink]
+    /// - [Inst::drop]
+    pub fn remove(self, ctx: &mut Context) {
+        self.unlink(ctx);
+        self.drop(ctx);
     }
 }
 

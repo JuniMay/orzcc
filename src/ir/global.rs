@@ -31,7 +31,6 @@ impl From<String> for Symbol {
 /// Also, function declaration and definition are two different types in the
 /// framework, so one can distinguish them in compile time.
 pub struct FuncData {
-    this: Func,
     /// The name of the function.
     name: Symbol,
     /// The signature of the function.
@@ -50,8 +49,7 @@ impl_arena!(Context, FuncData, Func, funcs);
 
 impl Func {
     pub fn new(ctx: &mut Context, name: impl Into<Symbol>, sig: Signature) -> Func {
-        let func = ctx.alloc_with(|this| FuncData {
-            this,
+        let func = ctx.alloc(FuncData {
             name: name.into(),
             sig,
             head: None,
@@ -70,7 +68,7 @@ impl Func {
 impl CfgRegion for Func {
     type Node = Block;
 
-    fn entry_node(&self, arena: &Self::A) -> Self::Node {
+    fn entry_node(self, arena: &Self::A) -> Self::Node {
         self.head(arena).expect("entry block of function not found")
     }
 }

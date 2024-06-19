@@ -8,20 +8,34 @@ use std::collections::HashSet;
 
 use super::{def_use::Usable, inst::Inst, Context, Ty};
 use crate::{
-    collections::storage::{ArenaPtr, BaseArenaPtr},
+    collections::storage::{ArenaFree, ArenaPtr, BaseArenaPtr},
     impl_arena,
     ir::Block,
 };
 
 /// The kinds of a value.
 pub enum ValueKind {
-    InstResult { inst: Inst },
-    BlockParam { block: Block, idx: usize },
+    /// The value is the result of an instruction.
+    InstResult {
+        /// The source instruction.
+        inst: Inst,
+        /// The index of the result.
+        ///
+        /// Typically, an instruction can only have one result, but in some
+        /// cases, one instruction can have multiple results, so just in case we
+        /// need it in the future.
+        idx: usize,
+    },
+    /// The value is a block parameter.
+    BlockParam {
+        /// The block.
+        block: Block,
+        /// The index of the parameter in the parameter list.
+        idx: usize,
+    },
 }
 
 pub struct ValueData {
-    /// The self reference of the value.
-    this: Value,
     /// The type of the value.
     ty: Ty,
     /// The kind of the value.
@@ -34,11 +48,10 @@ impl ValueData {
     /// Create a new instruction result value data.
     ///
     /// This will just use the accepted instruction as the value.
-    pub(super) fn new_inst_result(this: Value, ty: Ty, inst: Inst) -> Self {
+    pub(in crate::ir) fn new_inst_result(ty: Ty, inst: Inst, idx: usize) -> Self {
         Self {
-            this,
             ty,
-            kind: ValueKind::InstResult { inst },
+            kind: ValueKind::InstResult { inst, idx },
             users: HashSet::new(),
         }
     }
@@ -46,9 +59,8 @@ impl ValueData {
     /// Create a new block parameter value data.
     ///
     /// This will just use the accepted block as the parent block.
-    pub(super) fn new_block_param(this: Value, ty: Ty, block: Block, idx: usize) -> Self {
+    pub(in crate::ir) fn new_block_param(ty: Ty, block: Block, idx: usize) -> Self {
         Self {
-            this,
             ty,
             kind: ValueKind::BlockParam { block, idx },
             users: HashSet::new(),
@@ -63,6 +75,26 @@ impl_arena!(Context, ValueData, Value, values);
 
 impl Value {
     pub fn ty(self, ctx: &Context) -> Ty { self.deref(ctx).ty }
+
+    /// Free the value from the context.
+    ///
+    /// # Panics
+    ///
+    /// - Panics if the value still has users.
+    /// - Panics if the value is a block parameter, use [Block::drop_param]
+    ///   instead.
+    ///
+    /// TODO: After adding a name allocator of values, we should also check if
+    /// the value has a name and free the name entry.
+    pub(in crate::ir) fn drop(self, ctx: &mut Context) {
+        if !Usable::<Inst>::users(self, ctx).is_empty() {
+            panic!("cannot remove a value that still has users.");
+        }
+        if let ValueKind::BlockParam { .. } = self.deref(ctx).kind {
+            panic!("cannot remove a block parameter value, use `Block::drop_param` instead.");
+        }
+        ctx.free(self);
+    }
 }
 
 impl Usable<Inst> for Value {

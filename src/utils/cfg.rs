@@ -14,7 +14,7 @@ pub trait CfgNode: ArenaPtr {
     ///
     /// Successors are easy to get from the branch instructions. But for
     /// predecessors, we need to traverse the whole control flow graph.
-    fn succs(&self, arena: &Self::A) -> Vec<Self>;
+    fn succs(self, arena: &Self::A) -> Vec<Self>;
 }
 
 /// A trait defining a region that contains control flow graph information.
@@ -24,16 +24,19 @@ pub trait CfgNode: ArenaPtr {
 /// regarded as a [CfgRegion].
 pub trait CfgRegion: ArenaPtr {
     /// The node type associated with the region.
-    type Node: CfgNode<A = Self::A, Region = Self>;
+    type Node: CfgNode<A = Self::A, Region = Self> + Hash;
 
     /// Get the entry node of the region.
-    fn entry_node(&self, arena: &Self::A) -> Self::Node;
+    fn entry_node(self, arena: &Self::A) -> Self::Node;
+
+    /// Generate the control flow information for the region.
+    fn cfg_info(self, arena: &Self::A) -> CfgInfo<Self::Node, Self> { CfgInfo::new(arena, self) }
 }
 
 /// Control flow graph information.
 pub struct CfgInfo<N, R>
 where
-    N: CfgNode + Hash,
+    N: CfgNode,
     R: CfgRegion<A = N::A, Node = N>,
 {
     /// The region associated with the control flow graph.

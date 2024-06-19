@@ -1,10 +1,10 @@
 use std::collections::HashSet;
 
-use super::{def_use::Usable, Func, Inst, Ty, Value, ValueData};
+use super::{def_use::Usable, Func, Inst, InstKind, Ty, Value, ValueData};
 use crate::{
     collections::{
         linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
-        storage::{ArenaAlloc, ArenaPtr, BaseArenaPtr},
+        storage::{ArenaAlloc, ArenaFree, ArenaPtr, BaseArenaPtr},
     },
     impl_arena,
     ir::Context,
@@ -13,8 +13,6 @@ use crate::{
 
 /// The data of a block.
 pub struct BlockData {
-    /// The self reference of the block.
-    this: Block,
     /// The parameters of the block.
     params: Vec<Value>,
     /// The users of the block.
@@ -39,8 +37,7 @@ impl_arena!(Context, BlockData, Block, blocks);
 impl Block {
     /// Create a new block with empty parameters.
     pub fn new(ctx: &mut Context) -> Block {
-        ctx.alloc_with(|this| BlockData {
-            this,
+        ctx.alloc(BlockData {
             params: Vec::new(),
             users: HashSet::new(),
             head: None,
@@ -63,7 +60,7 @@ impl Block {
     /// A value, which is the new parameter of the block.
     pub fn new_param(self, ctx: &mut Context, ty: Ty) -> Value {
         let idx = self.deref(ctx).params.len();
-        let value = ctx.alloc_with(|this| ValueData::new_block_param(this, ty, self, idx));
+        let value = ctx.alloc(ValueData::new_block_param(ty, self, idx));
         self.deref_mut(ctx).params.push(value);
         value
     }
@@ -82,12 +79,137 @@ impl Block {
         todo!("block split should also update the def-use and users of block parameters")
         // other
     }
+
+    /// Remove a parameter of the block and free it.
+    ///
+    /// This will also modify the instructions that refer to this block, and
+    /// update the uses of the passed argument.
+    ///
+    /// # Panics
+    ///
+    /// - Panics if the index is out of bounds.
+    /// - Panics if any users still use the parameter.
+    pub fn drop_param(self, ctx: &mut Context, idx: usize) {
+        let param = self.deref(ctx).params[idx];
+        if !param.users(ctx).is_empty() {
+            panic!("cannot remove block parameter because it is still in use");
+        }
+        self.deref_mut(ctx).params.remove(idx);
+        // check all the users of the block and remove the argument passing.
+        // also need to maintain the uses of the passed argument.
+        for inst in self.users(ctx) {
+            if !inst.is_terminator(ctx) {
+                unreachable!("block is used in a non-terminator instruction");
+            }
+            let mut args_to_modify = HashSet::new();
+            if let InstKind::Branch {
+                ref mut succs,
+                ref mut default,
+                ..
+            } = inst.deref_mut(ctx).kind
+            {
+                // a branch can have multiple successors, and successors can pass
+                // different arguments to the same parameter of the block.
+                //
+                // e.g.
+                //
+                // ```
+                // ^pred_of_bb:
+                //   %0 = iconst 0 : i1
+                //   %1 = iconst 1 : i1
+                //   br %cond, ^bb(%0), ^bb(%1)
+                //
+                // ^bb(%param: i1):
+                //   ...
+                // ```
+                for succ in succs.iter_mut() {
+                    if succ.block == self {
+                        let arg = succ.args.remove(&param).expect(
+                            "block parameter is not passed to the block in the terminator instruction",
+                        );
+                        args_to_modify.insert(arg);
+                    }
+                }
+                if let Some(default) = default {
+                    if default.block == self {
+                        let arg = default.args.remove(&param).expect(
+                            "block parameter is not passed to the block in the terminator instruction",
+                        );
+                        args_to_modify.insert(arg);
+                    }
+                }
+            }
+            // now update the uses of the passed argument
+            for arg in args_to_modify {
+                arg.remove_user(ctx, inst);
+            }
+        }
+        // now free the parameter
+        param.drop(ctx);
+    }
+
+    /// Free the block from the context.
+    ///
+    /// This will also free all the parameters of the block.
+    ///
+    /// # Panics
+    ///
+    /// - Panics if the block is still in use, i.e., some instructions still
+    ///  refer to this block and maybe this block still has predecessors.
+    /// - Panics if the block is not unlink-ed.
+    /// - Panics if any parameters are still in use.
+    ///
+    /// # See Also
+    ///
+    /// - [`Block::unlink`]
+    /// - [`Block::remove`]
+    /// - [`Block::drop_param`]
+    ///
+    /// TODO: After adding a name allocator of blocks, we should also free the
+    /// name of the block.
+    pub fn drop(self, ctx: &mut Context) {
+        if !self.users(ctx).is_empty() {
+            panic!("cannot drop block because it is still in use");
+        }
+        if self.container(ctx).is_some() {
+            panic!("cannot drop block because it is still linked");
+        }
+        for param in self.params(ctx) {
+            if !param.users(ctx).is_empty() {
+                panic!("cannot drop block because it has parameters that are still in use");
+            }
+        }
+
+        let params = self.deref_mut(ctx).params.drain(..).collect::<Vec<_>>();
+        for param in params {
+            param.drop(ctx);
+        }
+
+        ctx.free(self);
+    }
+
+    /// Unlink and drop the block.
+    ///
+    /// # Panics
+    ///
+    /// - Panics if the block is still in use.
+    /// - Panics if any parameters are still in use.
+    ///
+    /// # See Also
+    ///
+    /// - [`Block::drop`]
+    /// - [`Block::drop_param`]
+    /// - [`Block::unlink`]
+    pub fn remove(self, ctx: &mut Context) {
+        self.unlink(ctx);
+        self.drop(ctx);
+    }
 }
 
 impl CfgNode for Block {
     type Region = Func;
 
-    fn succs(&self, arena: &Self::A) -> Vec<Self> {
+    fn succs(self, arena: &Self::A) -> Vec<Self> {
         let tail_inst = self.tail(arena);
 
         if let Some(tail_inst) = tail_inst {
