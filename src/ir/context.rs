@@ -1,25 +1,30 @@
 use std::collections::HashMap;
 
 use super::{
-    global::{GlobalSlot, GlobalSlotData, SymbolKind},
-    inst::InstData,
+    name_alloc::NameAlloc,
+    Block,
     BlockData,
     Func,
     FuncData,
+    GlobalSlot,
+    GlobalSlotData,
+    InstData,
     Symbol,
+    SymbolKind,
+    TyData,
+    Value,
     ValueData,
 };
-use crate::{
-    collections::storage::{BaseArena, UniqueArena},
-    ir::TyData,
-};
+use crate::collections::storage::{BaseArena, UniqueArena};
 
 /// The context of the IR.
 ///
 /// A context can be understood as a container of all the data in the IR, or as
 /// the state when creating/modifying the IR.
-#[derive(Default)]
 pub struct Context {
+    // +-----------------+
+    // |    storages     |
+    // +-----------------+
     /// The unique storage of types.
     ///
     /// # Notes
@@ -27,19 +32,54 @@ pub struct Context {
     /// [ArenaFree](crate::collections::storage::ArenaFree) for types is not
     /// implemented for [Context], once a type is used, it should not be
     /// freed.
-    pub(in crate::ir) tys: UniqueArena<TyData>,
+    pub(super) tys: UniqueArena<TyData>,
     /// The storage of blocks
-    pub(in crate::ir) blocks: BaseArena<BlockData>,
+    pub(super) blocks: BaseArena<BlockData>,
     /// The storage of instructions
-    pub(in crate::ir) insts: BaseArena<InstData>,
+    pub(super) insts: BaseArena<InstData>,
     /// The storage of values.
-    pub(in crate::ir) values: BaseArena<ValueData>,
+    pub(super) values: BaseArena<ValueData>,
     /// The storage of functions.
-    pub(in crate::ir) funcs: BaseArena<FuncData>,
+    pub(super) funcs: BaseArena<FuncData>,
     /// The storage of global slots
-    pub(in crate::ir) global_slots: BaseArena<GlobalSlotData>,
+    pub(super) global_slots: BaseArena<GlobalSlotData>,
     /// The symbol defined in the context.
-    pub(in crate::ir) symbols: HashMap<Symbol, SymbolKind>,
+    pub(super) symbols: HashMap<Symbol, SymbolKind>,
+
+    // +-----------------+
+    // | name management |
+    // +-----------------+
+    /// The name of values.
+    pub(super) value_name_alloc: NameAlloc<Value>,
+    /// The name of blocks.
+    pub(super) block_name_alloc: NameAlloc<Block>,
+    // +-----------------+
+    // | debug interface |
+    // +-----------------+
+    // TODO: We also need a tool to add comment to instructions/blocks/functions.
+}
+
+impl Default for Context {
+    fn default() -> Self {
+        Self {
+            // +-----------------+
+            // |    storages     |
+            // +-----------------+
+            tys: UniqueArena::default(),
+            blocks: BaseArena::default(),
+            insts: BaseArena::default(),
+            values: BaseArena::default(),
+            funcs: BaseArena::default(),
+            global_slots: BaseArena::default(),
+            symbols: HashMap::new(),
+
+            // +-----------------+
+            // | name management |
+            // +-----------------+
+            value_name_alloc: NameAlloc::new(),
+            block_name_alloc: NameAlloc::new(),
+        }
+    }
 }
 
 impl Context {
@@ -53,7 +93,7 @@ impl Context {
     /// # See Also
     ///
     /// - [lookup_symbol](Self::lookup_symbol)
-    pub(in crate::ir) fn insert_func(&mut self, func: Func) {
+    pub(super) fn insert_func(&mut self, func: Func) {
         let symbol: Symbol = func.name(self).into();
         if self.symbols.contains_key(&symbol) {
             panic!("symbol {:?} is already defined", symbol);
@@ -61,7 +101,7 @@ impl Context {
         self.symbols.insert(symbol, SymbolKind::FuncDef(func));
     }
 
-    pub(in crate::ir) fn insert_global_slot(&mut self, slot: GlobalSlot) {
+    pub(super) fn insert_global_slot(&mut self, slot: GlobalSlot) {
         let symbol: Symbol = slot.name(self).into();
         if self.symbols.contains_key(&symbol) {
             panic!("symbol {:?} is already defined", symbol);

@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 
-use super::{def_use::Usable, Context, Signature, Symbol, Ty, User, ValueData};
+use super::{Block, Constant, Context, Signature, Symbol, Ty, Value, ValueData};
 use crate::{
     collections::{
         linked_list::LinkedListNodePtr,
         storage::{ArenaAlloc, ArenaFree, ArenaPtr, BaseArenaPtr},
     },
     impl_arena,
-    ir::{Block, Constant, Value},
+    utils::def_use::{Usable, User},
 };
 
 pub enum BinaryOp {}
@@ -19,12 +19,12 @@ pub enum UnaryOp {}
 /// Successor describes the destination block and the argument passing.
 pub struct Successor {
     /// The destination block.
-    pub(in crate::ir) block: Block,
+    pub(super) block: Block,
     /// Argument mapping.
     ///
     /// This represents the parameter to argument mapping, the keys represent
     /// parameters, and the values represent arguments.
-    pub(in crate::ir) args: HashMap<Value, Value>,
+    pub(super) args: HashMap<Value, Value>,
 }
 
 pub enum InstKind {
@@ -135,7 +135,7 @@ pub struct InstData {
     /// Result of this instruction.
     results: Vec<Value>,
     /// The instruction kind.
-    pub(in crate::ir) kind: InstKind,
+    pub(super) kind: InstKind,
     /// The next instruction.
     next: Option<Inst>,
     /// The previous instruction.
@@ -165,6 +165,34 @@ impl Inst {
         }
 
         inst
+    }
+
+    /// Create a new iconst instruction.
+    pub fn iconst(ctx: &mut Context, constant: impl Into<Constant>, ty: Ty) -> Inst {
+        Self::new(
+            ctx,
+            InstKind::IConst {
+                constant: constant.into(),
+            },
+            vec![ty],
+        )
+    }
+
+    /// Create a new fconst instruction.
+    pub fn fconst(ctx: &mut Context, constant: impl Into<Constant>, ty: Ty) -> Inst {
+        Self::new(
+            ctx,
+            InstKind::FConst {
+                constant: constant.into(),
+            },
+            vec![ty],
+        )
+    }
+
+    /// Create a new stack slot instruction.
+    pub fn stack_slot(ctx: &mut Context, size: u32) -> Inst {
+        let ty = Ty::index(ctx);
+        Self::new(ctx, InstKind::StackSlot { size }, vec![ty])
     }
 
     pub fn is_terminator(self, ctx: &Context) -> bool {
@@ -259,6 +287,8 @@ impl Inst {
         self.unlink(ctx);
         self.drop(ctx);
     }
+
+    pub fn results(self, ctx: &Context) -> &[Value] { &self.deref(ctx).results }
 }
 
 impl LinkedListNodePtr for Inst {

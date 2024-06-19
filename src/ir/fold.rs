@@ -28,5 +28,5 @@ impl FoldContext {
 
 impl Inst {
     /// Fold the instruction with a given constant folding context.
-    pub fn fold(self, ctx: &Context, fold_ctx: &mut FoldContext) -> Option<Constant> { todo!() }
+    pub fn fold(self, _ctx: &Context, _fold_ctx: &mut FoldContext) -> Option<Constant> { todo!() }
 }

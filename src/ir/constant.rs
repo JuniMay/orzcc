@@ -1,7 +1,5 @@
-use crate::{
-    collections::apint::ApInt,
-    ir::{Context, Ty},
-};
+use super::{Context, Ty};
+use crate::collections::apint::ApInt;
 
 /// A constant value in the IR.
 ///

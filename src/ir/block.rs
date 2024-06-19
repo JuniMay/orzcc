@@ -1,14 +1,13 @@
 use std::collections::HashSet;
 
-use super::{def_use::Usable, Func, Inst, InstKind, Ty, Value, ValueData};
+use super::{Context, Func, Inst, InstKind, Ty, Value, ValueData};
 use crate::{
     collections::{
         linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
         storage::{ArenaAlloc, ArenaFree, ArenaPtr, BaseArenaPtr},
     },
     impl_arena,
-    ir::Context,
-    utils::CfgNode,
+    utils::{cfg::CfgNode, def_use::Usable},
 };
 
 /// The data of a block.
@@ -164,9 +163,6 @@ impl Block {
     /// - [`Block::unlink`]
     /// - [`Block::remove`]
     /// - [`Block::drop_param`]
-    ///
-    /// TODO: After adding a name allocator of blocks, we should also free the
-    /// name of the block.
     pub fn drop(self, ctx: &mut Context) {
         if !self.users(ctx).is_empty() {
             panic!("cannot drop block because it is still in use");
@@ -185,6 +181,7 @@ impl Block {
             param.drop(ctx);
         }
 
+        ctx.block_name_alloc.remove_by_ptr(self);
         ctx.free(self);
     }
 
@@ -203,6 +200,55 @@ impl Block {
     pub fn remove(self, ctx: &mut Context) {
         self.unlink(ctx);
         self.drop(ctx);
+    }
+
+    /// Assign a name for the block.
+    ///
+    /// # Panics
+    ///
+    /// - Panics if the name is already assigned to another block.
+    /// - Panics if the name is empty.
+    /// - Panics if this block is already assigned a name.
+    ///
+    /// # See Also
+    ///
+    /// - [NameAlloc::assign_name](crate::ir::name_alloc::NameAlloc::assign_name)
+    pub fn assign_name(self, ctx: &mut Context, name: String) {
+        ctx.block_name_alloc.assign_name(self, name);
+    }
+
+    /// Allocate a name for the block
+    ///
+    /// # Parameters
+    ///
+    /// - `ctx`: The context.
+    /// - `prefix`: The prefix of the name.
+    ///
+    /// # Panics
+    ///
+    /// - Panics if this block is already assigned a name.
+    ///
+    /// # See Also
+    ///
+    /// - [NameAlloc::alloc_name](crate::ir::name_alloc::NameAlloc::alloc_name)
+    pub fn alloc_name(self, ctx: &mut Context, prefix: String) -> &String {
+        ctx.block_name_alloc.alloc_name(self, prefix)
+    }
+
+    /// Get the name of the block.
+    ///
+    /// # Returns
+    ///
+    /// - `Some(name)`: The name of the block.
+    /// - `None`: The block is not assigned/allocated a name yet.
+    pub fn name(self, ctx: &Context) -> Option<&String> { ctx.block_name_alloc.get_name(self) }
+
+    pub fn name_or_alloc(self, ctx: &mut Context, prefix: String) -> &String {
+        if self.name(ctx).is_none() {
+            self.alloc_name(ctx, prefix)
+        } else {
+            self.name(ctx).unwrap()
+        }
     }
 }
 

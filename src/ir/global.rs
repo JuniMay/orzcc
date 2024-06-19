@@ -1,12 +1,11 @@
-use super::{Block, Constant, Signature, Ty};
+use super::{Block, Constant, Context, Signature, Ty};
 use crate::{
     collections::{
         linked_list::LinkedListContainerPtr,
         storage::{ArenaAlloc, ArenaPtr, BaseArenaPtr},
     },
     impl_arena,
-    ir::Context,
-    utils::CfgRegion,
+    utils::cfg::CfgRegion,
 };
 
 #[derive(Debug, Hash, Clone, PartialEq, Eq)]
@@ -89,7 +88,6 @@ impl LinkedListContainerPtr<Block> for Func {
 
 /// Global memory slot.
 pub struct GlobalSlotData {
-    this: GlobalSlot,
     name: Symbol,
     ty: Ty,
     init: Option<Constant>,
@@ -102,8 +100,7 @@ impl_arena!(Context, GlobalSlotData, GlobalSlot, global_slots);
 
 impl GlobalSlot {
     pub fn new(ctx: &mut Context, name: impl Into<Symbol>, ty: Ty) -> GlobalSlot {
-        let slot = ctx.alloc_with(|this| GlobalSlotData {
-            this,
+        let slot = ctx.alloc(GlobalSlotData {
             name: name.into(),
             ty,
             init: None,

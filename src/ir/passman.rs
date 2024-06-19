@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use thiserror::Error;
 
-use crate::ir::Context;
+use super::Context;
 
 #[derive(Debug, Error)]
 pub enum PassErrorKind {
@@ -79,15 +79,15 @@ pub trait GlobalPassMut {
 pub trait AnalysisOutput {}
 
 /// The wrapper for an analysis output.
-pub struct AnalysisOutputObj(Box<dyn AnalysisOutput>);
+pub struct AnalysisOutputObj(pub Box<dyn AnalysisOutput>);
 
 pub trait AnalysisPass: GlobalPass<Output = AnalysisOutputObj> {}
 
 pub trait TransformPass: GlobalPassMut<Output = ()> {}
 
 pub struct PassManager {
-    analysis_passes: HashMap<&'static str, Box<dyn AnalysisPass>>,
-    transform_passes: HashMap<&'static str, Box<dyn TransformPass>>,
-    dependencies: HashMap<&'static str, Vec<&'static str>>,
-    analysis_cache: HashMap<&'static str, AnalysisOutputObj>,
+    _analysis_passes: HashMap<&'static str, Box<dyn AnalysisPass>>,
+    _transform_passes: HashMap<&'static str, Box<dyn TransformPass>>,
+    _dependencies: HashMap<&'static str, Vec<&'static str>>,
+    _analysis_cache: HashMap<&'static str, AnalysisOutputObj>,
 }

@@ -1,9 +1,7 @@
 use std::fmt;
 
-use crate::{
-    collections::storage::{ArenaAlloc, ArenaDeref, ArenaPtr, UniqueArenaPtr},
-    ir::Context,
-};
+use super::Context;
+use crate::collections::storage::{ArenaAlloc, ArenaDeref, ArenaPtr, UniqueArenaPtr};
 
 /// The type kinds.
 #[derive(Debug, Hash, Clone, PartialEq, Eq)]
@@ -177,7 +175,7 @@ impl Ty {
 
     pub fn float64(ctx: &mut Context) -> Self { ctx.alloc(TyData::Float64) }
 
-    pub fn pointer(ctx: &mut Context) -> Self { ctx.alloc(TyData::Index) }
+    pub fn index(ctx: &mut Context) -> Self { ctx.alloc(TyData::Index) }
 
     pub fn array(ctx: &mut Context, elem_ty: Ty, len: usize) -> Self {
         ctx.alloc(TyData::Array { elem_ty, len })
@@ -228,8 +226,8 @@ mod tests {
 
         assert_ne!(float32_1, float64_1); // float32 != float64
 
-        let pointer1 = Ty::pointer(&mut ctx);
-        let pointer2 = Ty::pointer(&mut ctx);
+        let pointer1 = Ty::index(&mut ctx);
+        let pointer2 = Ty::index(&mut ctx);
 
         assert_eq!(pointer1, pointer2);
 
@@ -273,7 +271,7 @@ mod tests {
         float64.display(&ctx, &mut s)?;
         assert_eq!(s, "f64");
 
-        let pointer = Ty::pointer(&mut ctx);
+        let pointer = Ty::index(&mut ctx);
         s.clear();
         pointer.display(&ctx, &mut s)?;
         assert_eq!(s, "index");

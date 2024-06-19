@@ -13,66 +13,67 @@
 
 use std::{collections::HashSet, hash::Hash};
 
-use super::Context;
 use crate::collections::storage::ArenaPtr;
 
 /// The [Usable] trait is used to describe a entity that can be used.
 ///
 /// # Type Parameters
 ///
-/// - `T`: The type of the users.
-pub trait Usable<T>: Sized + ArenaPtr + Eq + Hash
+/// - `T`: The type of the users, should be an arena pointer with the same
+///   arena.
+pub trait Usable<T>: Sized + ArenaPtr + Hash
 where
-    T: User<Self> + ArenaPtr,
+    T: User<Self> + ArenaPtr<A = Self::A>,
 {
     /// Get the users of this entity.
-    fn users(self, ctx: &Context) -> Vec<T>;
+    fn users(self, arena: &Self::A) -> Vec<T>;
 
     /// Add a user to this entity.
-    fn add_user(self, ctx: &mut Context, user: T);
+    fn add_user(self, arena: &mut Self::A, user: T);
 
     /// Remove a user from this entity.
-    fn remove_user(self, ctx: &mut Context, user: T);
+    fn remove_user(self, arena: &mut Self::A, user: T);
 }
 
 /// This trait is used to describe a entity that uses other entities.
 ///
 /// # Type Parameters
 ///
-/// - `T`: The type of the usable entities.
+/// - `T`: The type of the usable entities, should be an arena pointer with the
+///   same arena.
 pub trait User<T>: Sized + ArenaPtr
 where
-    T: Usable<Self> + ArenaPtr + Eq + Hash,
+    T: Usable<Self> + ArenaPtr<A = Self::A> + Hash,
 {
     /// Get all the used entities.
-    fn uses(self, ctx: &Context) -> Vec<T>;
+    fn uses(self, arena: &Self::A) -> Vec<T>;
 
     /// Replace a used entity with another entity.
-    fn replace(self, ctx: &mut Context, old: T, new: T);
+    fn replace(self, arena: &mut Self::A, old: T, new: T);
 
     /// Check if this entity uses a specific entity.
-    fn if_uses(self, ctx: &Context, usable: T) -> bool { self.uses(ctx).contains(&usable) }
+    fn if_uses(self, arena: &Self::A, usable: T) -> bool { self.uses(arena).contains(&usable) }
 
     /// Check if this entity uses any of the given entities.
-    fn if_uses_any(self, ctx: &Context, usables: &[T]) -> bool {
-        let lhs = self.uses(ctx).into_iter().collect::<HashSet<T>>();
+    fn if_uses_any(self, arena: &Self::A, usables: &[T]) -> bool {
+        let lhs = self.uses(arena).into_iter().collect::<HashSet<T>>();
         let rhs = usables.iter().cloned().collect::<HashSet<T>>();
         lhs.intersection(&rhs).next().is_some()
     }
 
     /// Check if this entity uses all of the given entities.
-    fn if_uses_all(self, ctx: &Context, usables: &[T]) -> bool {
-        let lhs = self.uses(ctx).into_iter().collect::<HashSet<T>>();
+    fn if_uses_all(self, arena: &Self::A, usables: &[T]) -> bool {
+        let lhs = self.uses(arena).into_iter().collect::<HashSet<T>>();
         let rhs = usables.iter().cloned().collect::<HashSet<T>>();
         lhs.is_superset(&rhs)
     }
 
     /// Replace a used entity with a closure that produces the new entity.
-    fn replace_with<F>(self, ctx: &mut Context, old: T, f: F)
+    fn replace_with<F>(self, arena: &mut Self::A, old: T, f: F)
     where
-        F: FnOnce(&mut Context, T) -> T,
+        F: FnOnce(&mut Self::A, T) -> T,
     {
-        let new = f(ctx, old);
-        self.replace(ctx, old, new);
+        let new = f(arena, old);
+        self.replace(arena, old, new);
     }
 }

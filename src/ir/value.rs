@@ -6,11 +6,11 @@
 
 use std::collections::HashSet;
 
-use super::{def_use::Usable, inst::Inst, Context, Ty};
+use super::{Block, Context, Inst, Ty};
 use crate::{
     collections::storage::{ArenaFree, ArenaPtr, BaseArenaPtr},
     impl_arena,
-    ir::Block,
+    utils::def_use::Usable,
 };
 
 /// The kinds of a value.
@@ -48,7 +48,7 @@ impl ValueData {
     /// Create a new instruction result value data.
     ///
     /// This will just use the accepted instruction as the value.
-    pub(in crate::ir) fn new_inst_result(ty: Ty, inst: Inst, idx: usize) -> Self {
+    pub(super) fn new_inst_result(ty: Ty, inst: Inst, idx: usize) -> Self {
         Self {
             ty,
             kind: ValueKind::InstResult { inst, idx },
@@ -59,7 +59,7 @@ impl ValueData {
     /// Create a new block parameter value data.
     ///
     /// This will just use the accepted block as the parent block.
-    pub(in crate::ir) fn new_block_param(ty: Ty, block: Block, idx: usize) -> Self {
+    pub(super) fn new_block_param(ty: Ty, block: Block, idx: usize) -> Self {
         Self {
             ty,
             kind: ValueKind::BlockParam { block, idx },
@@ -83,17 +83,64 @@ impl Value {
     /// - Panics if the value still has users.
     /// - Panics if the value is a block parameter, use [Block::drop_param]
     ///   instead.
-    ///
-    /// TODO: After adding a name allocator of values, we should also check if
-    /// the value has a name and free the name entry.
-    pub(in crate::ir) fn drop(self, ctx: &mut Context) {
+    pub(super) fn drop(self, ctx: &mut Context) {
         if !Usable::<Inst>::users(self, ctx).is_empty() {
             panic!("cannot remove a value that still has users.");
         }
         if let ValueKind::BlockParam { .. } = self.deref(ctx).kind {
             panic!("cannot remove a block parameter value, use `Block::drop_param` instead.");
         }
+        ctx.value_name_alloc.remove_by_ptr(self);
         ctx.free(self);
+    }
+
+    /// Assign a name for the value.
+    ///
+    /// # Panics
+    ///
+    /// - Panics if the name is already assigned to another value.
+    /// - Panics if the name is empty.
+    /// - Panics if this value is already assigned a name.
+    ///
+    /// # See Also
+    ///
+    /// - [NameAlloc::assign_name](crate::ir::name_alloc::NameAlloc::assign_name)
+    pub fn assign_name(self, ctx: &mut Context, name: String) {
+        ctx.value_name_alloc.assign_name(self, name);
+    }
+
+    /// Allocate a name for the value
+    ///
+    /// # Parameters
+    ///
+    /// - `ctx`: The context.
+    /// - `prefix`: The prefix of the name.
+    ///
+    /// # Panics
+    ///
+    /// - Panics if this value is already assigned a name.
+    ///
+    /// # See Also
+    ///
+    /// - [NameAlloc::alloc_name](crate::ir::name_alloc::NameAlloc::alloc_name)
+    pub fn alloc_name(self, ctx: &mut Context, prefix: String) -> &String {
+        ctx.value_name_alloc.alloc_name(self, prefix)
+    }
+
+    /// Get the name of the value.
+    ///
+    /// # Returns
+    ///
+    /// - `Some(name)`: The name of the value.
+    /// - `None`: The value is not assigned/allocated a name yet.
+    pub fn name(self, ctx: &Context) -> Option<&String> { ctx.value_name_alloc.get_name(self) }
+
+    pub fn name_or_alloc(self, ctx: &mut Context, prefix: String) -> &String {
+        if self.name(ctx).is_none() {
+            self.alloc_name(ctx, prefix)
+        } else {
+            self.name(ctx).unwrap()
+        }
     }
 }
 
