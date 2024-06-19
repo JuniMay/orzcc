@@ -8,6 +8,7 @@ use crate::{
     },
     impl_arena,
     ir::Context,
+    utils::CfgNode,
 };
 
 /// The data of a block.
@@ -80,6 +81,40 @@ impl Block {
         LinkedListNodePtr::insert_after(self, ctx, other);
         todo!("block split should also update the def-use and users of block parameters")
         // other
+    }
+}
+
+impl CfgNode for Block {
+    type Region = Func;
+
+    fn succs(&self, arena: &Self::A) -> Vec<Self> {
+        let tail_inst = self.tail(arena);
+
+        if let Some(tail_inst) = tail_inst {
+            if tail_inst.is_terminator(arena) {
+                tail_inst.succ_blocks(arena)
+            } else {
+                // check if next block requires no block params
+                let next_block = self
+                    .next(arena)
+                    .expect("block has neither terminator nor next block");
+                if next_block.params(arena).is_empty() {
+                    vec![next_block]
+                } else {
+                    panic!("block has no terminator but next block requires block params")
+                }
+            }
+        } else {
+            // check if next block requires no block params
+            let next_block = self
+                .next(arena)
+                .expect("block has no instruction and no next block");
+            if next_block.params(arena).is_empty() {
+                vec![next_block]
+            } else {
+                panic!("block has no instruction but next block requires block params")
+            }
+        }
     }
 }
 

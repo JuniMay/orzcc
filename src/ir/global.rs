@@ -6,6 +6,7 @@ use crate::{
     },
     impl_arena,
     ir::Context,
+    utils::CfgRegion,
 };
 
 #[derive(Debug, Hash, Clone, PartialEq, Eq)]
@@ -49,6 +50,14 @@ impl Func {
     pub fn name(self, ctx: &Context) -> &str { &self.deref(ctx).name.0 }
 
     pub fn sig(self, ctx: &Context) -> &Signature { &self.deref(ctx).sig }
+}
+
+impl CfgRegion for Func {
+    type Node = Block;
+
+    fn entry_node(&self, arena: &Self::A) -> Self::Node {
+        self.head(arena).expect("entry block of function not found")
+    }
 }
 
 impl LinkedListContainerPtr<Block> for Func {

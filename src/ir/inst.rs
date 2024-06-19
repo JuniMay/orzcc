@@ -148,6 +148,42 @@ pub struct Inst(BaseArenaPtr<InstData>);
 
 impl_arena!(Context, InstData, Inst, insts);
 
+impl Inst {
+    pub fn is_terminator(self, ctx: &Context) -> bool {
+        matches!(
+            self.deref(ctx).kind,
+            InstKind::Branch { .. } | InstKind::Return { .. }
+        )
+    }
+
+    /// Get the successor blocks of the branch instruction.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the instruction is not a branch instruction. Check with
+    /// [Inst::is_terminator] before calling this method.
+    ///
+    /// # See Also
+    ///
+    /// - [Inst::is_terminator]
+    pub fn succ_blocks(self, ctx: &Context) -> Vec<Block> {
+        if let InstKind::Branch {
+            ref succs,
+            ref default,
+            ..
+        } = self.deref(ctx).kind
+        {
+            let mut blocks = succs.iter().map(|s| s.block).collect::<Vec<_>>();
+            if let Some(default) = default {
+                blocks.push(default.block);
+            }
+            blocks
+        } else {
+            panic!("not a branch instruction")
+        }
+    }
+}
+
 impl LinkedListNodePtr for Inst {
     type ContainerPtr = Block;
 
