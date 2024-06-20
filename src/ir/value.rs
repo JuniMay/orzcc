@@ -84,7 +84,7 @@ impl Value {
     /// - Panics if the value is a block parameter, use [Block::drop_param]
     ///   instead.
     pub(super) fn drop(self, ctx: &mut Context) {
-        if !Usable::<Inst>::users(self, ctx).is_empty() {
+        if !Usable::users(self, ctx).is_empty() {
             panic!("cannot remove a value that still has users.");
         }
         if let ValueKind::BlockParam { .. } = self.deref(ctx).kind {
@@ -136,7 +136,9 @@ impl Value {
     }
 }
 
-impl Usable<Inst> for Value {
+impl Usable for Value {
+    type U = Inst;
+
     fn users(self, ctx: &Context) -> Vec<Inst> { self.deref(ctx).users.iter().copied().collect() }
 
     fn add_user(self, ctx: &mut Context, user: Inst) { self.deref_mut(ctx).users.insert(user); }

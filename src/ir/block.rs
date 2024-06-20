@@ -310,7 +310,9 @@ impl LinkedListNodePtr for Block {
     }
 }
 
-impl Usable<Inst> for Block {
+impl Usable for Block {
+    type U = Inst;
+
     fn users(self, ctx: &Context) -> Vec<Inst> { self.deref(ctx).users.iter().copied().collect() }
 
     fn add_user(self, ctx: &mut Context, user: Inst) { self.deref_mut(ctx).users.insert(user); }

@@ -17,24 +17,22 @@ use crate::collections::storage::ArenaPtr;
 
 /// The [Usable] trait is used to describe an entity that can be used.
 ///
-/// `A: Usable<B>` can be interpreted as *A can be used by B*.
-///
 /// # Type Parameters
 ///
 /// - `T`: The type of the users, should be an arena pointer with the same
 ///   arena.
-pub trait Usable<T>: Sized + ArenaPtr + Hash
-where
-    T: User<Self> + ArenaPtr<A = Self::A>,
-{
+pub trait Usable: Sized + ArenaPtr + Hash {
+    /// The type of the users of this entity.
+    type U: User<Self, A = Self::A>;
+
     /// Get the users of this entity.
-    fn users(self, arena: &Self::A) -> Vec<T>;
+    fn users(self, arena: &Self::A) -> Vec<Self::U>;
 
     /// Add a user to this entity.
-    fn add_user(self, arena: &mut Self::A, user: T);
+    fn add_user(self, arena: &mut Self::A, user: Self::U);
 
     /// Remove a user from this entity.
-    fn remove_user(self, arena: &mut Self::A, user: T);
+    fn remove_user(self, arena: &mut Self::A, user: Self::U);
 }
 
 /// This trait is used to describe a entity that uses other entities.
@@ -47,7 +45,7 @@ where
 ///   same arena.
 pub trait User<T>: Sized + ArenaPtr
 where
-    T: Usable<Self> + ArenaPtr<A = Self::A> + Hash,
+    T: Usable<U = Self, A = Self::A>,
 {
     /// Get all the used entities.
     fn all_uses(self, arena: &Self::A) -> Vec<T>;
