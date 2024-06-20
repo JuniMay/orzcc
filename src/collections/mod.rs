@@ -1,4 +1,4 @@
-//! Collection of infrastructure modules for the compiler.
+//! # Collection of Basic Data Structures
 //!
 //! This module contains the following submodules:
 //!

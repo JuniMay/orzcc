@@ -10,9 +10,132 @@ use crate::{
     utils::def_use::{Usable, User},
 };
 
-pub enum BinaryOp {}
+/// The integer comparison condition.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ICmpCond {
+    /// Equal.
+    Eq,
+    /// Not equal.
+    Ne,
+    /// Signed less than.
+    Slt,
+    /// Signed less than or equal.
+    Sle,
+    /// Unsigned less than.
+    Ult,
+    /// Unsigned less than or equal.
+    Ule,
+}
 
-pub enum UnaryOp {}
+/// The floating-point comparison condition.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum FCmpCond {
+    /// Ordered and equal.
+    OEq,
+    /// Ordered and not equal.
+    ONe,
+    /// Ordered and less than.
+    OLt,
+    /// Ordered and less than or equal.
+    OLe,
+    /// Unordered or equal.
+    UEq,
+    /// Unordered or not equal.
+    UNe,
+    /// Unordered or less than.
+    ULt,
+    /// Unordered or less than or equal.
+    ULe,
+}
+
+/// Integer binary operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum IBinaryOp {
+    /// Add.
+    Add,
+    /// Subtract.
+    Sub,
+    /// Multiply.
+    Mul,
+    /// Unsigned division.
+    UDiv,
+    /// Signed division.
+    SDiv,
+    /// Unsigned remainder.
+    URem,
+    /// Signed remainder.
+    SRem,
+    /// Bitwise and.
+    And,
+    /// Bitwise or.
+    Or,
+    /// Bitwise xor.
+    Xor,
+    /// Shift left.
+    Shl,
+    /// Logical shift right.
+    LShr,
+    /// Arithmetic shift right.
+    AShr,
+    /// Comparison.
+    Cmp(ICmpCond),
+}
+
+/// Floating-point binary operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum FBinaryOp {
+    /// Add.
+    Add,
+    /// Subtract.
+    Sub,
+    /// Multiply.
+    Mul,
+    /// Divide.
+    Div,
+    /// Remainder.
+    Rem,
+    /// Comparison.
+    Cmp(FCmpCond),
+}
+
+/// Integer unary operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum IUnaryOp {
+    /// Bitwise not.
+    Not,
+}
+
+/// Floating-point unary operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum FUnaryOp {
+    /// Negation.
+    Neg,
+}
+
+/// Cast operation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum CastOp {
+    /// Truncate.
+    Trunc,
+    /// Zero-extend.
+    ZExt,
+    /// Sign-extend.
+    SExt,
+    /// Float to unsigned integer.
+    FpToUi,
+    /// Float to signed integer.
+    FpToSi,
+    /// Unsigned integer to float.
+    UiToFp,
+    /// Signed integer to float.
+    SiToFp,
+    /// Bitcast.
+    ///
+    /// This also applies to index and integer cast.
+    Bitcast,
+    /// Float extension.
+    FpExt,
+}
 
 /// Successor of a branch instruction.
 ///
@@ -51,20 +174,46 @@ pub enum InstKind {
         /// can be decided when loading or storing the value.
         size: u32,
     },
-    /// Binary operation instruction.
-    Binary {
+    /// Integer binary instruction.
+    IBinary {
         /// The opcode of the binary operation.
-        op: BinaryOp,
+        op: IBinaryOp,
         /// The left-hand side value.
         lhs: Value,
         /// The right-hand side value.
         rhs: Value,
     },
-    /// Unary operation instruction.
-    Unary {
+    /// Floating-point binary instruction.
+    FBinary {
+        /// The opcode of the binary operation.
+        op: FBinaryOp,
+        /// The left-hand side value.
+        lhs: Value,
+        /// The right-hand side value.
+        rhs: Value,
+    },
+    /// Integer unary instruction.
+    IUnary {
         /// The opcode of the unary operation.
-        op: UnaryOp,
+        op: IUnaryOp,
         /// The value to apply the operation.
+        val: Value,
+    },
+    /// Floating-point unary instruction.
+    FUnary {
+        /// The opcode of the unary operation.
+        op: FUnaryOp,
+        /// The value to apply the operation.
+        val: Value,
+    },
+    /// The cast instruction.
+    ///
+    /// The type of the destination value is determined by the type of the
+    /// result value.
+    Cast {
+        /// The opcode of the cast operation.
+        op: CastOp,
+        /// The value to cast.
         val: Value,
     },
     /// Branch instruction.
@@ -421,8 +570,9 @@ impl User<Value> for Inst {
         use InstKind as Ik;
         match self.deref(ctx).kind {
             Ik::IConst { .. } | Ik::FConst { .. } | Ik::StackSlot { .. } => vec![],
-            Ik::Binary { lhs, rhs, .. } => vec![lhs, rhs],
-            Ik::Unary { val, .. } => vec![val],
+            Ik::IBinary { lhs, rhs, .. } | Ik::FBinary { lhs, rhs, .. } => vec![lhs, rhs],
+            Ik::IUnary { val, .. } | Ik::FUnary { val, .. } => vec![val],
+            Ik::Cast { val, .. } => vec![val],
             Ik::Branch {
                 cond,
                 ref succs,
@@ -462,7 +612,12 @@ impl User<Value> for Inst {
 
         match self.deref_mut(ctx).kind {
             Ik::IConst { .. } | Ik::FConst { .. } | Ik::StackSlot { .. } => {}
-            Ik::Binary {
+            Ik::IBinary {
+                ref mut lhs,
+                ref mut rhs,
+                ..
+            }
+            | Ik::FBinary {
                 ref mut lhs,
                 ref mut rhs,
                 ..
@@ -476,7 +631,13 @@ impl User<Value> for Inst {
                     replaced = true;
                 }
             }
-            Ik::Unary { ref mut val, .. } => {
+            Ik::IUnary { ref mut val, .. } | Ik::FUnary { ref mut val, .. } => {
+                if *val == old {
+                    *val = new;
+                    replaced = true;
+                }
+            }
+            Ik::Cast { ref mut val, .. } => {
                 if *val == old {
                     *val = new;
                     replaced = true;

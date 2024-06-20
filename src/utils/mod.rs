@@ -1,4 +1,4 @@
-//! # General Utilities
+//! # General Utilities and Infrastructure
 //!
 //! This module contains some abstracted data structures or algorithms that are
 //! applicable to the IR and backend target. The goal is to provide a unified

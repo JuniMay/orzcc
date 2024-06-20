@@ -48,7 +48,16 @@ impl Constant {
             }
             Constant::Simd(values) => {
                 let elem_ty = values.first().unwrap().get_ty(ctx);
-                Ty::simd(ctx, elem_ty, values.len())
+
+                let num_lanes = values.len();
+                assert!(
+                    num_lanes.is_power_of_two(),
+                    "SIMD constant must have a power of two lanes"
+                );
+                let exp = num_lanes.trailing_zeros();
+                assert!(exp <= 16, "SIMD constant must have at most 2^16 lanes");
+
+                Ty::simd(ctx, elem_ty, exp as u16)
             }
         }
     }
@@ -76,6 +85,12 @@ impl Constant {
         Constant::Struct(values, is_packed)
     }
 
+    /// Create a SIMD constant.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the number of lanes is not a power of two, or the number of
+    /// lanes is greater than 2^16.
     pub fn simd(ctx: &mut Context, values: Vec<Constant>) -> Self {
         if values.is_empty() {
             panic!("SIMD constant must have at least one element");
@@ -87,6 +102,14 @@ impl Constant {
                 panic!("SIMD constant must have elements of the same type");
             }
         }
+
+        let num_lanes = values.len();
+        assert!(
+            num_lanes.is_power_of_two(),
+            "SIMD constant must have a power of two lanes"
+        );
+        let exp = num_lanes.trailing_zeros();
+        assert!(exp <= 16, "SIMD constant must have at most 2^16 lanes");
 
         Constant::Simd(values)
     }

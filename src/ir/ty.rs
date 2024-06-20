@@ -26,13 +26,21 @@ pub enum TyData {
     /// object there, but index can also refer to offsets of addresses. So
     /// index can be more concise and maybe eliminate the requirement of the
     /// `getelementptr` operation.
+    ///
+    /// Question: Do we need to distinguish between `index` and `ptr`? Or do we
+    /// need to introduce a `memref` type? I don't think that is necessary,
+    /// because the main purpose of `index` is to represent a target-dependent
+    /// integer type. The IR is low-level enough to represent memory addresses
+    /// directly.
     Index,
     /// A SIMD type.
     Simd {
         /// The element type.
         elem_ty: Ty,
-        /// The number of elements in the SIMD type.
-        len: usize,
+        /// The exponential number of elements in the SIMD type.
+        ///
+        /// The number of elements in a SIMD type is usually a power of 2.
+        exp: u16,
     },
     /// An array type.
     Array {
@@ -111,10 +119,10 @@ impl Ty {
                 }
                 Ok(())
             }
-            TyData::Simd { elem_ty, len } => {
+            TyData::Simd { elem_ty, exp } => {
                 write!(f, "<")?;
                 elem_ty.display(ctx, f)?;
-                write!(f, "; {}>", len)
+                write!(f, "; {}>", exp)
             }
         }
     }
@@ -188,8 +196,18 @@ impl Ty {
         })
     }
 
-    pub fn simd(ctx: &mut Context, elem_ty: Ty, len: usize) -> Self {
-        ctx.alloc(TyData::Simd { elem_ty, len })
+    pub fn simd(ctx: &mut Context, elem_ty: Ty, exp: u16) -> Self {
+        ctx.alloc(TyData::Simd { elem_ty, exp })
+    }
+
+    /// Check if the type is integer or index.
+    pub fn is_integer_like(&self, ctx: &Context) -> bool {
+        matches!(self.deref(ctx), TyData::Integer(_) | TyData::Index)
+    }
+
+    /// Check if the type is float32 or float64.
+    pub fn is_float_like(&self, ctx: &Context) -> bool {
+        matches!(self.deref(ctx), TyData::Float32 | TyData::Float64)
     }
 }
 

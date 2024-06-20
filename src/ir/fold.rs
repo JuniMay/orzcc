@@ -26,7 +26,17 @@ impl FoldContext {
     pub fn set(&mut self, value: Value, constant: Constant) { self.values.insert(value, constant); }
 }
 
+pub enum FoldResult {
+    /// The results of the instruction is folded to constants.
+    ///
+    /// This is a list of constants, because the instruction may have multiple
+    /// results.
+    Constants(Vec<Constant>),
+    /// The results of the instruction is not folded.
+    NotFolded,
+}
+
 impl Inst {
     /// Fold the instruction with a given constant folding context.
-    pub fn fold(self, _ctx: &Context, _fold_ctx: &mut FoldContext) -> Option<Constant> { todo!() }
+    pub fn fold(self, _ctx: &Context, _fold_ctx: &mut FoldContext) -> FoldResult { todo!() }
 }
