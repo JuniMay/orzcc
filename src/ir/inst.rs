@@ -150,6 +150,17 @@ pub struct Successor {
     pub(super) args: HashMap<Value, Value>,
 }
 
+impl Successor {
+    pub fn new(block: Block) -> Self {
+        Self {
+            block,
+            args: HashMap::new(),
+        }
+    }
+
+    pub fn add_arg(&mut self, param: Value, arg: Value) { self.args.insert(param, arg); }
+}
+
 pub enum InstKind {
     /// Create a new value from a constant.
     ///
@@ -342,6 +353,95 @@ impl Inst {
     pub fn stack_slot(ctx: &mut Context, size: u32) -> Inst {
         let ty = Ty::index(ctx);
         Self::new(ctx, InstKind::StackSlot { size }, vec![ty])
+    }
+
+    pub fn ibinary(ctx: &mut Context, op: IBinaryOp, lhs: Value, rhs: Value) -> Inst {
+        use IBinaryOp as Op;
+
+        if !lhs.ty(ctx).is_integer_like(ctx) || !rhs.ty(ctx).is_integer_like(ctx) {
+            // ibinary only supports integer-like types
+            panic!("lhs and rhs must be integer-like types");
+        }
+
+        if lhs.ty(ctx) != rhs.ty(ctx) && !matches!(op, Op::Shl | Op::LShr | Op::AShr) {
+            // for non-shift operations, lhs and rhs must have the same type
+            panic!("lhs and rhs must have the same type");
+        }
+
+        let ty = match op {
+            Op::Add
+            | Op::Sub
+            | Op::Mul
+            | Op::UDiv
+            | Op::SDiv
+            | Op::URem
+            | Op::SRem
+            | Op::And
+            | Op::Or
+            | Op::Xor
+            | Op::Shl
+            | Op::LShr
+            | Op::AShr => lhs.ty(ctx),
+            Op::Cmp(_) => Ty::int(ctx, 1),
+        };
+
+        Self::new(ctx, InstKind::IBinary { op, lhs, rhs }, vec![ty])
+    }
+
+    pub fn fbinary(ctx: &mut Context, op: FBinaryOp, lhs: Value, rhs: Value) -> Inst {
+        use FBinaryOp as Op;
+
+        if !lhs.ty(ctx).is_float_like(ctx) || !rhs.ty(ctx).is_float_like(ctx) {
+            // fbinary only supports float-like types
+            panic!("lhs and rhs must be float-like types");
+        }
+
+        if lhs.ty(ctx) != rhs.ty(ctx) {
+            // lhs and rhs must have the same type
+            panic!("lhs and rhs must have the same type");
+        }
+
+        let ty = match op {
+            Op::Add | Op::Sub | Op::Mul | Op::Div | Op::Rem => lhs.ty(ctx),
+            Op::Cmp(_) => Ty::int(ctx, 1),
+        };
+
+        Self::new(ctx, InstKind::FBinary { op, lhs, rhs }, vec![ty])
+    }
+
+    pub fn iunary(ctx: &mut Context, op: IUnaryOp, val: Value) -> Inst {
+        use IUnaryOp as Op;
+
+        if !val.ty(ctx).is_integer_like(ctx) {
+            // iunary only supports integer-like types
+            panic!("val must be an integer-like type");
+        }
+
+        let ty = match op {
+            Op::Not => val.ty(ctx),
+        };
+
+        Self::new(ctx, InstKind::IUnary { op, val }, vec![ty])
+    }
+
+    pub fn funary(ctx: &mut Context, op: FUnaryOp, val: Value) -> Inst {
+        use FUnaryOp as Op;
+
+        if !val.ty(ctx).is_float_like(ctx) {
+            // funary only supports float-like types
+            panic!("val must be a float-like type");
+        }
+
+        let ty = match op {
+            Op::Neg => val.ty(ctx),
+        };
+
+        Self::new(ctx, InstKind::FUnary { op, val }, vec![ty])
+    }
+
+    pub fn cast(ctx: &mut Context, op: CastOp, val: Value, ty: Ty) -> Inst {
+        // TODO check if the cast is valid
+        Self::new(ctx, InstKind::Cast { op, val }, vec![ty])
     }
 
     pub fn is_terminator(self, ctx: &Context) -> bool {
