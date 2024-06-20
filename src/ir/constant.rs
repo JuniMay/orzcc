@@ -8,6 +8,8 @@ use crate::collections::apint::ApInt;
 pub enum Constant {
     /// Undefined value.
     Undef(Ty),
+    /// Zero initialized constant.
+    ZeroInit(Ty),
     /// An arbitrary precision integer.
     Integer(ApInt),
     /// A floating point number.
@@ -32,6 +34,7 @@ impl Constant {
     pub fn get_ty(&self, ctx: &mut Context) -> Ty {
         match self {
             Constant::Undef(ty) => *ty,
+            Constant::ZeroInit(ty) => *ty,
             Constant::Integer(apint) => Ty::int(ctx, apint.width() as u16),
             Constant::Float32(_) => Ty::float32(ctx),
             Constant::Float64(_) => Ty::float64(ctx),
@@ -48,6 +51,44 @@ impl Constant {
                 Ty::simd(ctx, elem_ty, values.len())
             }
         }
+    }
+
+    pub fn undef(ty: Ty) -> Self { Constant::Undef(ty) }
+
+    pub fn zero_init(ty: Ty) -> Self { Constant::ZeroInit(ty) }
+
+    pub fn array(ctx: &mut Context, values: Vec<Constant>) -> Self {
+        if values.is_empty() {
+            panic!("Array constant must have at least one element");
+        }
+
+        let ty = values.first().unwrap().get_ty(ctx);
+        for val in values.iter() {
+            if val.get_ty(ctx) != ty {
+                panic!("Array constant must have elements of the same type");
+            }
+        }
+
+        Constant::Array(values)
+    }
+
+    pub fn struct_(values: Vec<Constant>, is_packed: bool) -> Self {
+        Constant::Struct(values, is_packed)
+    }
+
+    pub fn simd(ctx: &mut Context, values: Vec<Constant>) -> Self {
+        if values.is_empty() {
+            panic!("SIMD constant must have at least one element");
+        }
+
+        let ty = values.first().unwrap().get_ty(ctx);
+        for val in values.iter() {
+            if val.get_ty(ctx) != ty {
+                panic!("SIMD constant must have elements of the same type");
+            }
+        }
+
+        Constant::Simd(values)
     }
 
     /// Get the constant as an [f32] number.
