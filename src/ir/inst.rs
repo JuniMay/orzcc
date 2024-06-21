@@ -1,3 +1,4 @@
+use core::fmt;
 use std::{collections::HashMap, vec};
 
 use super::{
@@ -38,6 +39,19 @@ pub enum ICmpCond {
     Ule,
 }
 
+impl fmt::Display for ICmpCond {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Eq => write!(f, "eq"),
+            Self::Ne => write!(f, "ne"),
+            Self::Slt => write!(f, "slt"),
+            Self::Sle => write!(f, "sle"),
+            Self::Ult => write!(f, "ult"),
+            Self::Ule => write!(f, "ule"),
+        }
+    }
+}
+
 /// The floating-point comparison condition.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FCmpCond {
@@ -57,6 +71,21 @@ pub enum FCmpCond {
     ULt,
     /// Unordered or less than or equal.
     ULe,
+}
+
+impl fmt::Display for FCmpCond {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::OEq => write!(f, "oeq"),
+            Self::ONe => write!(f, "one"),
+            Self::OLt => write!(f, "olt"),
+            Self::OLe => write!(f, "ole"),
+            Self::UEq => write!(f, "ueq"),
+            Self::UNe => write!(f, "une"),
+            Self::ULt => write!(f, "ult"),
+            Self::ULe => write!(f, "ule"),
+        }
+    }
 }
 
 /// Integer binary operation.
@@ -92,6 +121,27 @@ pub enum IBinaryOp {
     Cmp(ICmpCond),
 }
 
+impl fmt::Display for IBinaryOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Add => write!(f, "add"),
+            Self::Sub => write!(f, "sub"),
+            Self::Mul => write!(f, "mul"),
+            Self::UDiv => write!(f, "udiv"),
+            Self::SDiv => write!(f, "sdiv"),
+            Self::URem => write!(f, "urem"),
+            Self::SRem => write!(f, "srem"),
+            Self::And => write!(f, "and"),
+            Self::Or => write!(f, "or"),
+            Self::Xor => write!(f, "xor"),
+            Self::Shl => write!(f, "shl"),
+            Self::LShr => write!(f, "lshr"),
+            Self::AShr => write!(f, "ashr"),
+            Self::Cmp(cond) => write!(f, "icmp.{}", cond),
+        }
+    }
+}
+
 /// Floating-point binary operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FBinaryOp {
@@ -109,6 +159,19 @@ pub enum FBinaryOp {
     Cmp(FCmpCond),
 }
 
+impl fmt::Display for FBinaryOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Add => write!(f, "fadd"),
+            Self::Sub => write!(f, "fsub"),
+            Self::Mul => write!(f, "fmul"),
+            Self::Div => write!(f, "fdiv"),
+            Self::Rem => write!(f, "frem"),
+            Self::Cmp(cond) => write!(f, "fcmp.{}", cond),
+        }
+    }
+}
+
 /// Integer unary operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IUnaryOp {
@@ -116,11 +179,27 @@ pub enum IUnaryOp {
     Not,
 }
 
+impl fmt::Display for IUnaryOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Not => write!(f, "not"),
+        }
+    }
+}
+
 /// Floating-point unary operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FUnaryOp {
     /// Negation.
     Neg,
+}
+
+impl fmt::Display for FUnaryOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Neg => write!(f, "fneg"),
+        }
+    }
 }
 
 /// Cast operation.
@@ -150,6 +229,24 @@ pub enum CastOp {
     IndexToInt,
     /// Integer to index.
     IntToIndex,
+}
+
+impl fmt::Display for CastOp {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Trunc => write!(f, "trunc"),
+            Self::ZExt => write!(f, "zext"),
+            Self::SExt => write!(f, "sext"),
+            Self::FpToUi => write!(f, "fptoui"),
+            Self::FpToSi => write!(f, "fptosi"),
+            Self::UiToFp => write!(f, "uitofp"),
+            Self::SiToFp => write!(f, "sitofp"),
+            Self::Bitcast => write!(f, "bitcast"),
+            Self::FpExt => write!(f, "fpext"),
+            Self::IndexToInt => write!(f, "indextoint"),
+            Self::IntToIndex => write!(f, "inttoindex"),
+        }
+    }
 }
 
 /// Successor of a branch instruction.
@@ -446,9 +543,9 @@ impl Inst {
         // check the number of successors, and the type of the condition
         // - cond is none, only one succ is allowed
         // - cond is some:
-        //    - num succ < bitwidth of cond, last succ is the default succ
-        //    - num succ == bitwidth of cond, no default succ
-        //    - num succ > bitwidth of cond, not allowed
+        //    - num succ < 2 ** (bitwidth of cond), last succ is the default succ
+        //    - num succ == 2 ** (bitwidth of cond), no default succ
+        //    - num succ > 2 ** (bitwidth of cond), not allowed
         let num_succs = succs.len();
         let cond_ty = cond.map(|val| val.ty(ctx));
         match cond_ty {
@@ -456,7 +553,7 @@ impl Inst {
                 if !ty.is_integer(ctx) {
                     panic!("condition must be an integer-like type");
                 }
-                if num_succs > ty.bitwidth(ctx).unwrap() {
+                if num_succs > (1 << ty.bitwidth(ctx).unwrap()) {
                     panic!("too many successors for the condition");
                 }
             }
@@ -671,6 +768,8 @@ impl Inst {
     pub fn comment(self, ctx: &mut Context, pos: CommentPos, content: String) {
         ctx.comment_info.comment_inst(self, pos, content);
     }
+
+    pub fn result(self, ctx: &Context, idx: usize) -> Value { self.deref(ctx).results[idx] }
 }
 
 impl LinkedListNodePtr for Inst {
@@ -768,11 +867,19 @@ impl User<Block> for Inst {
 
 impl User<Value> for Inst {
     fn all_uses(self, ctx: &Context) -> Vec<Value> {
-        self.deref(ctx)
+        // in operands and successors
+        let mut uses = self
+            .deref(ctx)
             .operands
             .iter()
-            .map(|op| op.inner())
-            .collect()
+            .map(|opd| opd.inner())
+            .collect::<Vec<_>>();
+
+        for succ in self.deref(ctx).successors.iter() {
+            uses.extend(succ.args.values().map(|arg| arg.inner()));
+        }
+
+        uses
     }
 
     fn replace(self, ctx: &mut Context, old: Value, new: Value) {

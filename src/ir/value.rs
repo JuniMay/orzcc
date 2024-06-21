@@ -87,9 +87,6 @@ impl Value {
         if !Usable::users(self, ctx).is_empty() {
             panic!("cannot remove a value that still has users.");
         }
-        if let ValueKind::BlockParam { .. } = self.deref(ctx).kind {
-            panic!("cannot remove a block parameter value, use `Block::drop_param` instead.");
-        }
         ctx.value_name_alloc.remove_by_ptr(self);
         ctx.free(self);
     }
@@ -117,6 +114,17 @@ impl Value {
     /// - Panics if this value is already assigned a name.
     pub fn alloc_name(self, ctx: &mut Context, prefix: String) -> &String {
         ctx.value_name_alloc.alloc_name(self, prefix)
+    }
+
+    /// Get the index of the value.
+    ///
+    /// For an instruction result, this is the index in the result list, for a
+    /// block parameter, this is the index in the parameter list.
+    pub fn idx(self, ctx: &Context) -> usize {
+        match self.deref(ctx).kind {
+            ValueKind::InstResult { idx, .. } => idx,
+            ValueKind::BlockParam { idx, .. } => idx,
+        }
     }
 
     /// Get the name of the value.

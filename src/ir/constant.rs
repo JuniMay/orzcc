@@ -151,6 +151,12 @@ impl From<ApInt> for Constant {
     fn from(apint: ApInt) -> Self { Constant::Integer(apint) }
 }
 
+impl From<i32> for Constant {
+    fn from(value: i32) -> Self {
+        <Constant as From<ApInt>>::from(<ApInt as From<i32>>::from(value))
+    }
+}
+
 impl From<f32> for Constant {
     fn from(val: f32) -> Self { Constant::Float32(val.to_bits()) }
 }
