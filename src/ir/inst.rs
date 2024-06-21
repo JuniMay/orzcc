@@ -296,21 +296,12 @@ pub enum InstKind {
     /// The type of the destination value is determined by the type of the
     /// result value.
     Cast(CastOp),
+    /// Jump instruction.
+    Jump,
     /// Branch instruction.
-    ///
-    /// This instruction unifies the jump, br, and even switch.
-    ///
-    /// # Format
-    ///
-    /// The format of the branch instruction is:
-    ///
-    ///
-    /// # Notes
-    ///
-    /// The `br` mostly jumps to the first successor, when the condition is
-    /// true. However, when using this instruction, the first successor
-    /// corresponds to the false branch (cond is `0`).
-    Branch,
+    Br,
+    /// Switch instruction.
+    Switch { labels: Vec<Constant> },
     /// Call instruction.
     Call(Symbol),
     /// Call indirect instruction.
@@ -539,50 +530,134 @@ impl Inst {
         Self::new(ctx, InstKind::Cast(op), vec![ty], vec![val])
     }
 
-    pub fn branch(ctx: &mut Context, cond: Option<Value>, succs: Vec<(Block, Vec<Value>)>) -> Inst {
-        // check the number of successors, and the type of the condition
-        // - cond is none, only one succ is allowed
-        // - cond is some:
-        //    - num succ < 2 ** (bitwidth of cond), last succ is the default succ
-        //    - num succ == 2 ** (bitwidth of cond), no default succ
-        //    - num succ > 2 ** (bitwidth of cond), not allowed
-        let num_succs = succs.len();
-        let cond_ty = cond.map(|val| val.ty(ctx));
-        match cond_ty {
-            Some(ty) => {
-                if !ty.is_integer(ctx) {
-                    panic!("condition must be an integer-like type");
-                }
-                if num_succs > (1 << ty.bitwidth(ctx).unwrap()) {
-                    panic!("too many successors for the condition");
-                }
+    pub fn jump(ctx: &mut Context, target: Block, args: Vec<Value>) -> Inst {
+        let params = target.params(ctx).to_vec();
+        if params.len() != args.len() {
+            panic!("number of arguments does not match the target block's parameters");
+        }
+        for (arg, param) in args.iter().zip(params.iter()) {
+            if arg.ty(ctx) != param.ty(ctx) {
+                panic!("argument type does not match the target block's parameters");
             }
-            None => {
-                if num_succs != 1 {
-                    panic!("only one successor is allowed when the condition is not present");
+        }
+
+        let inst = Self::new(ctx, InstKind::Jump, vec![], vec![]);
+
+        let mut succ = Successor::new(Operand::new(ctx, target, inst));
+        for (param, arg) in params.into_iter().zip(args) {
+            let arg = Operand::new(ctx, arg, inst);
+            succ.add_arg(param, arg);
+        }
+        inst.deref_mut(ctx).successors = vec![succ];
+
+        inst
+    }
+
+    pub fn br(
+        ctx: &mut Context,
+        cond: Value,
+        then_block: Block,
+        then_args: Vec<Value>,
+        else_block: Block,
+        else_args: Vec<Value>,
+    ) -> Inst {
+        if cond.ty(ctx) != Ty::int(ctx, 1) {
+            panic!("condition must be an i1 type");
+        }
+
+        let then_params = then_block.params(ctx).to_vec();
+        if then_params.len() != then_args.len() {
+            panic!("number of arguments does not match the then block's parameters");
+        }
+        for (arg, param) in then_args.iter().zip(then_params.iter()) {
+            if arg.ty(ctx) != param.ty(ctx) {
+                panic!("argument type does not match the then block's parameters");
+            }
+        }
+
+        let else_params = else_block.params(ctx).to_vec();
+        if else_params.len() != else_args.len() {
+            panic!("number of arguments does not match the else block's parameters");
+        }
+        for (arg, param) in else_args.iter().zip(else_params.iter()) {
+            if arg.ty(ctx) != param.ty(ctx) {
+                panic!("argument type does not match the else block's parameters");
+            }
+        }
+
+        let inst = Self::new(ctx, InstKind::Br, vec![], vec![cond]);
+
+        let mut then_succ = Successor::new(Operand::new(ctx, then_block, inst));
+        for (param, arg) in then_params.into_iter().zip(then_args) {
+            let arg = Operand::new(ctx, arg, inst);
+            then_succ.add_arg(param, arg);
+        }
+
+        let mut else_succ = Successor::new(Operand::new(ctx, else_block, inst));
+        for (param, arg) in else_params.into_iter().zip(else_args) {
+            let arg = Operand::new(ctx, arg, inst);
+            else_succ.add_arg(param, arg);
+        }
+
+        inst.deref_mut(ctx).successors = vec![then_succ, else_succ];
+
+        inst
+    }
+
+    pub fn switch(
+        ctx: &mut Context,
+        cond: Value,
+        mut branches: Vec<(Option<Constant>, Block, Vec<Value>)>,
+    ) -> Inst {
+        for (_, dest, args) in branches.iter() {
+            let params = dest.params(ctx).to_vec();
+            if params.len() != args.len() {
+                panic!("number of arguments does not match the target block's parameters");
+            }
+            for (arg, param) in args.iter().zip(params.iter()) {
+                if arg.ty(ctx) != param.ty(ctx) {
+                    panic!("argument type does not match the target block's parameters");
                 }
             }
         }
 
-        let inst = Self::new(ctx, InstKind::Branch, vec![], cond.into_iter().collect());
-
-        let succs = succs
-            .into_iter()
-            .map(|(block, args)| {
-                let opd_block = Operand::new(ctx, block, inst);
-
-                let mut succ = Successor::new(opd_block);
-
-                let params = block.params(ctx).to_vec();
-
-                for (param, arg) in params.into_iter().zip(args) {
-                    let opd_arg = Operand::new(ctx, arg, inst);
-                    succ.add_arg(param, opd_arg);
+        for (i, (label, _, _)) in branches.iter().enumerate() {
+            match label {
+                Some(constant) => {
+                    if !constant.is_integer() {
+                        panic!("switch label must be an integer constant");
+                    }
                 }
+                None => {
+                    if i != branches.len() - 1 {
+                        panic!("default label must be the last branch");
+                    }
+                }
+            }
+        }
 
-                succ
-            })
-            .collect();
+        let mut labels = Vec::new();
+        let mut block_args = Vec::new();
+
+        for (label, dest, args) in branches.drain(..) {
+            if let Some(label) = label {
+                labels.push(label);
+            }
+            block_args.push((dest, args));
+        }
+
+        let inst = Self::new(ctx, InstKind::Switch { labels }, vec![], vec![cond]);
+
+        let mut succs = Vec::new();
+        for (dest, args) in block_args {
+            let params = dest.params(ctx).to_vec();
+            let mut succ = Successor::new(Operand::new(ctx, dest, inst));
+            for (param, arg) in params.into_iter().zip(args) {
+                let arg = Operand::new(ctx, arg, inst);
+                succ.add_arg(param, arg);
+            }
+            succs.push(succ);
+        }
 
         inst.deref_mut(ctx).successors = succs;
 
@@ -674,7 +749,7 @@ impl Inst {
     pub fn is_terminator(self, ctx: &Context) -> bool {
         matches!(
             self.deref(ctx).kind,
-            InstKind::Branch { .. } | InstKind::Return { .. }
+            InstKind::Jump | InstKind::Br | InstKind::Switch { .. } | InstKind::Return
         )
     }
 
@@ -888,6 +963,14 @@ impl User<Value> for Inst {
         for operand in self.deref_mut(ctx).operands.iter_mut() {
             if operand.set_inner_if_eq(old, new) {
                 replaced = true;
+            }
+        }
+
+        for succ in self.deref_mut(ctx).successors.iter_mut() {
+            for arg in succ.args.values_mut() {
+                if arg.set_inner_if_eq(old, new) {
+                    replaced = true;
+                }
             }
         }
 

@@ -89,13 +89,13 @@ fn test_ir_block_def_use_0() {
     //     %v2 = iconst 2 : f32
     //
     //     %dummy_cond = iconst 1 : i1
-    //     br %dummy_cond, ^bb1, ^bb2 // NOTE: should jump to ^bb2
+    //     br %dummy_cond, ^bb1, ^bb2
     // ^bb1:
     //      %v3 = add %v1, %v1 : i32
-    //      br ^merge(%v3, %v2)
+    //      jump ^merge(%v3, %v2)
     // ^bb2:
     //      %v4 = mul %v1, %v1 : i32
-    //      br ^merge(%v4, %v2)
+    //      jump ^merge(%v4, %v2)
     //
     // ^merge(%p1: i32, %p2: f32):
     //      %v5 = add %p1, %p1 : i32 // make sure p1 is used
@@ -130,11 +130,7 @@ fn test_ir_block_def_use_0() {
     let i_dummy_cond = Inst::iconst(&mut ctx, 1, boolean);
     let dummy_cond = i_dummy_cond.result(&ctx, 0);
 
-    let br = Inst::branch(
-        &mut ctx,
-        Some(dummy_cond),
-        vec![(bb1, vec![]), (bb2, vec![])],
-    );
+    let br = Inst::br(&mut ctx, dummy_cond, bb1, vec![], bb2, vec![]);
 
     assert_eq!(User::<Value>::all_uses(br, &ctx), vec![dummy_cond]);
     assert_eq!(User::<Block>::all_uses(br, &ctx), vec![bb1, bb2]);
@@ -150,35 +146,35 @@ fn test_ir_block_def_use_0() {
     let v3 = i3.result(&ctx, 0);
     let v4 = i4.result(&ctx, 0);
 
-    let br1 = Inst::branch(&mut ctx, None, vec![(merge, vec![v3, v2])]);
-    let br2 = Inst::branch(&mut ctx, None, vec![(merge, vec![v4, v2])]);
+    let jump1 = Inst::jump(&mut ctx, merge, vec![v3, v2]);
+    let jump2 = Inst::jump(&mut ctx, merge, vec![v4, v2]);
 
-    assert_eq!(User::<Value>::all_uses(br1, &ctx).len(), 2);
-    assert!(User::<Value>::all_uses(br1, &ctx).contains(&v3));
-    assert!(User::<Value>::all_uses(br1, &ctx).contains(&v2));
+    assert_eq!(User::<Value>::all_uses(jump1, &ctx).len(), 2);
+    assert!(User::<Value>::all_uses(jump1, &ctx).contains(&v3));
+    assert!(User::<Value>::all_uses(jump1, &ctx).contains(&v2));
 
-    assert_eq!(User::<Value>::all_uses(br2, &ctx).len(), 2);
-    assert!(User::<Value>::all_uses(br2, &ctx).contains(&v4));
-    assert!(User::<Value>::all_uses(br2, &ctx).contains(&v2));
+    assert_eq!(User::<Value>::all_uses(jump2, &ctx).len(), 2);
+    assert!(User::<Value>::all_uses(jump2, &ctx).contains(&v4));
+    assert!(User::<Value>::all_uses(jump2, &ctx).contains(&v2));
 
-    assert_eq!(User::<Block>::all_uses(br1, &ctx), vec![merge]);
-    assert_eq!(User::<Block>::all_uses(br2, &ctx), vec![merge]);
+    assert_eq!(User::<Block>::all_uses(jump1, &ctx), vec![merge]);
+    assert_eq!(User::<Block>::all_uses(jump2, &ctx), vec![merge]);
 
     bb1.push_back(&mut ctx, i3);
-    bb1.push_back(&mut ctx, br1);
+    bb1.push_back(&mut ctx, jump1);
 
     bb2.push_back(&mut ctx, i4);
-    bb2.push_back(&mut ctx, br2);
+    bb2.push_back(&mut ctx, jump2);
 
     let i5 = Inst::ibinary(&mut ctx, IBinaryOp::Add, p1, p1);
 
     assert!(bb1.users(&ctx).contains(&br));
     assert!(bb2.users(&ctx).contains(&br));
-    assert!(merge.users(&ctx).contains(&br1));
-    assert!(merge.users(&ctx).contains(&br2));
+    assert!(merge.users(&ctx).contains(&jump1));
+    assert!(merge.users(&ctx).contains(&jump2));
 
-    assert!(v2.users(&ctx).contains(&br1));
-    assert!(v2.users(&ctx).contains(&br2));
+    assert!(v2.users(&ctx).contains(&jump1));
+    assert!(v2.users(&ctx).contains(&jump2));
 
     assert!(p1.users(&ctx).contains(&i5));
     assert!(p2.users(&ctx).is_empty());
@@ -196,7 +192,6 @@ fn test_ir_block_def_use_0() {
 
     assert_eq!(entry.succs(&ctx), vec![bb1, bb2]);
     assert_eq!(bb1.succs(&ctx), vec![merge]);
-    assert_eq!(bb2.succs(&ctx), vec![merge]);
 }
 
 #[test]

@@ -9,6 +9,9 @@ pub enum Constant {
     /// Undefined value.
     Undef(Ty),
     /// Zero initialized constant.
+    ///
+    /// This can only be used as initializers. For constants in instructions,
+    /// use [Constant::Integer] instead.
     ZeroInit(Ty),
     /// An arbitrary precision integer.
     Integer(ApInt),
@@ -145,6 +148,8 @@ impl Constant {
             _ => None,
         }
     }
+
+    pub fn is_integer(&self) -> bool { matches!(self, Constant::Integer(_)) }
 }
 
 impl From<ApInt> for Constant {
