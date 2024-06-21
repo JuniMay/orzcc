@@ -65,12 +65,12 @@ pub enum TyData {
 /// types, so it is reasonable to make it standalone.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Signature {
-    ret: Ty,
-    params: Vec<Ty>,
+    pub(super) ret: Vec<Ty>,
+    pub(super) params: Vec<Ty>,
 }
 
 impl Signature {
-    pub fn new(params: Vec<Ty>, ret: Ty) -> Signature { Self { ret, params } }
+    pub fn new(params: Vec<Ty>, ret: Vec<Ty>) -> Signature { Self { ret, params } }
 
     pub fn display<T: fmt::Write>(&self, ctx: &Context, f: &mut T) -> fmt::Result {
         write!(f, "(")?;
@@ -81,7 +81,18 @@ impl Signature {
             }
         }
         write!(f, ") -> ")?;
-        self.ret.display(ctx, f)
+        if self.ret.len() == 1 {
+            self.ret[0].display(ctx, f)
+        } else {
+            write!(f, "(")?;
+            for (i, ret) in self.ret.iter().enumerate() {
+                ret.display(ctx, f)?;
+                if i + 1 < self.ret.len() {
+                    write!(f, ", ")?;
+                }
+            }
+            write!(f, ")")
+        }
     }
 }
 
@@ -201,13 +212,38 @@ impl Ty {
     }
 
     /// Check if the type is integer or index.
-    pub fn is_integer_like(&self, ctx: &Context) -> bool {
-        matches!(self.deref(ctx), TyData::Integer(_) | TyData::Index)
+    pub fn is_integer(&self, ctx: &Context) -> bool {
+        matches!(self.deref(ctx), TyData::Integer(_))
     }
 
     /// Check if the type is float32 or float64.
-    pub fn is_float_like(&self, ctx: &Context) -> bool {
+    pub fn is_float(&self, ctx: &Context) -> bool {
         matches!(self.deref(ctx), TyData::Float32 | TyData::Float64)
+    }
+
+    pub fn is_index(&self, ctx: &Context) -> bool { matches!(self.deref(ctx), TyData::Index) }
+
+    pub fn bitwidth(&self, ctx: &Context) -> Option<usize> {
+        match self.deref(ctx) {
+            TyData::Integer(bits) => Some(*bits as usize),
+            TyData::Float32 => Some(32),
+            TyData::Float64 => Some(64),
+            TyData::Index => None,
+            TyData::Void => None,
+            TyData::Array { elem_ty, len } => elem_ty.bitwidth(ctx).map(|bw| bw * len),
+            TyData::Struct { field_tys, .. } => {
+                let mut bw = 0;
+                for ty in field_tys {
+                    if let Some(ty_bw) = ty.bitwidth(ctx) {
+                        bw += ty_bw;
+                    } else {
+                        return None;
+                    }
+                }
+                Some(bw)
+            }
+            TyData::Simd { elem_ty, exp } => elem_ty.bitwidth(ctx).map(|bw| bw * (1 << exp)),
+        }
     }
 }
 
@@ -329,7 +365,7 @@ mod tests {
         let float32 = Ty::float32(&mut ctx);
         let void = Ty::void(&mut ctx);
 
-        let sig = Signature::new(vec![int32, float32], void);
+        let sig = Signature::new(vec![int32, float32], vec![void]);
         let mut s = String::new();
         sig.display(&ctx, &mut s).unwrap();
         assert_eq!(s, "(i32, f32) -> void");

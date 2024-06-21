@@ -1,13 +1,24 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, vec};
 
-use super::{debug::CommentPos, Block, Constant, Context, Signature, Symbol, Ty, Value, ValueData};
+use super::{
+    debug::CommentPos,
+    Block,
+    Constant,
+    Context,
+    Signature,
+    Symbol,
+    SymbolKind,
+    Ty,
+    Value,
+    ValueData,
+};
 use crate::{
     collections::{
         linked_list::LinkedListNodePtr,
         storage::{ArenaAlloc, ArenaFree, ArenaPtr, BaseArenaPtr},
     },
     impl_arena,
-    utils::def_use::{Usable, User},
+    utils::def_use::{Operand, Usable, User},
 };
 
 /// The integer comparison condition.
@@ -135,6 +146,10 @@ pub enum CastOp {
     Bitcast,
     /// Float extension.
     FpExt,
+    /// Index to integer.
+    IndexToInt,
+    /// Integer to index.
+    IntToIndex,
 }
 
 /// Successor of a branch instruction.
@@ -142,23 +157,23 @@ pub enum CastOp {
 /// Successor describes the destination block and the argument passing.
 pub struct Successor {
     /// The destination block.
-    pub(super) block: Block,
+    pub(super) block: Operand<Block>,
     /// Argument mapping.
     ///
     /// This represents the parameter to argument mapping, the keys represent
     /// parameters, and the values represent arguments.
-    pub(super) args: HashMap<Value, Value>,
+    pub(super) args: HashMap<Value, Operand<Value>>,
 }
 
 impl Successor {
-    pub fn new(block: Block) -> Self {
+    pub fn new(block: Operand<Block>) -> Self {
         Self {
             block,
             args: HashMap::new(),
         }
     }
 
-    pub fn add_arg(&mut self, param: Value, arg: Value) { self.args.insert(param, arg); }
+    pub fn add_arg(&mut self, param: Value, arg: Operand<Value>) { self.args.insert(param, arg); }
 }
 
 pub enum InstKind {
@@ -166,129 +181,51 @@ pub enum InstKind {
     ///
     /// Using an individual constant creation instruction is similar to MLIR and
     /// Cranelift IR.
-    IConst {
-        /// The constant value, expect to be [Constant::Integer]
-        constant: Constant,
-    },
+    IConst(Constant),
     /// Create a new value from a constant.
-    FConst {
-        /// The constant value, expect to be [Constant::Float32] or
-        /// [Constant::Float64]
-        constant: Constant,
-    },
+    FConst(Constant),
     /// Create a new value as a stack slot.
-    StackSlot {
-        /// The size of the stack slot.
-        ///
-        /// We don't represent the slot with type, but with size, as the size
-        /// is more important than the type in the stack allocation. The type
-        /// can be decided when loading or storing the value.
-        size: u32,
-    },
+    StackSlot(u32),
     /// Integer binary instruction.
-    IBinary {
-        /// The opcode of the binary operation.
-        op: IBinaryOp,
-        /// The left-hand side value.
-        lhs: Value,
-        /// The right-hand side value.
-        rhs: Value,
-    },
+    IBinary(IBinaryOp),
     /// Floating-point binary instruction.
-    FBinary {
-        /// The opcode of the binary operation.
-        op: FBinaryOp,
-        /// The left-hand side value.
-        lhs: Value,
-        /// The right-hand side value.
-        rhs: Value,
-    },
+    FBinary(FBinaryOp),
     /// Integer unary instruction.
-    IUnary {
-        /// The opcode of the unary operation.
-        op: IUnaryOp,
-        /// The value to apply the operation.
-        val: Value,
-    },
+    IUnary(IUnaryOp),
     /// Floating-point unary instruction.
-    FUnary {
-        /// The opcode of the unary operation.
-        op: FUnaryOp,
-        /// The value to apply the operation.
-        val: Value,
-    },
+    FUnary(FUnaryOp),
     /// The cast instruction.
     ///
     /// The type of the destination value is determined by the type of the
     /// result value.
-    Cast {
-        /// The opcode of the cast operation.
-        op: CastOp,
-        /// The value to cast.
-        val: Value,
-    },
+    Cast(CastOp),
     /// Branch instruction.
     ///
     /// This instruction unifies the jump, br, and even switch.
+    ///
+    /// # Format
+    ///
+    /// The format of the branch instruction is:
+    ///
     ///
     /// # Notes
     ///
     /// The `br` mostly jumps to the first successor, when the condition is
     /// true. However, when using this instruction, the first successor
     /// corresponds to the false branch (cond is `0`).
-    Branch {
-        /// The condition of the branch.
-        ///
-        /// The bit width of condition value must be equal or greater than
-        /// the number of successors.
-        cond: Option<Value>,
-        /// The successors of the branch.
-        succs: Vec<Successor>,
-        /// The default successor.
-        default: Option<Successor>,
-    },
+    Branch,
     /// Call instruction.
-    Call {
-        /// The callee symbol.
-        ///
-        /// This symbol can be used to lookup in the [Context] using
-        /// [Context::lookup_symbol].
-        callee: Symbol,
-        /// The arguments to the callee.
-        args: Vec<Value>,
-    },
+    Call(Symbol),
     /// Call indirect instruction.
-    CallIndirect {
-        /// The signature of the callee.
-        sig: Signature,
-        /// The callee value, should have a type of
-        /// [TyData::Index](crate::ir::TyData::Index).
-        callee: Value,
-        /// The arguments to the callee.
-        args: Vec<Value>,
-    },
+    CallIndirect(Signature),
     /// Return instruction.
-    Return {
-        /// The optional return value.
-        val: Option<Value>,
-    },
+    Return,
     /// Load instruction.
-    Load {
-        /// The type of the loaded value.
-        ty: Ty,
-        /// The memory to load from.
-        ///
-        /// This value should have a [TyData::Index](crate::ir::TyData::Index)
-        /// type.
-        mem: Value,
-    },
+    ///
+    /// The loaded type can be retrieved from the result value.
+    Load,
     /// Store instruction.
-    Store {
-        /// The value to store.
-        val: Value,
-        /// The memory to store to.
-        mem: Value,
-    },
+    Store,
 }
 
 pub struct InstData {
@@ -296,6 +233,11 @@ pub struct InstData {
     results: Vec<Value>,
     /// The instruction kind.
     pub(super) kind: InstKind,
+    /// The operands
+    pub(super) operands: Vec<Operand<Value>>,
+    /// The successors
+    pub(super) successors: Vec<Successor>,
+
     /// The next instruction.
     next: Option<Inst>,
     /// The previous instruction.
@@ -310,55 +252,54 @@ pub struct Inst(BaseArenaPtr<InstData>);
 impl_arena!(Context, InstData, Inst, insts);
 
 impl Inst {
-    pub fn new(ctx: &mut Context, kind: InstKind, result_tys: Vec<Ty>) -> Inst {
+    fn new(ctx: &mut Context, kind: InstKind, result_tys: Vec<Ty>, operands: Vec<Value>) -> Inst {
         let inst = ctx.alloc(InstData {
             results: Vec::new(),
             kind,
+
+            operands: Vec::new(),
+            successors: Vec::new(),
+
             next: None,
             prev: None,
             parent: None,
         });
+
+        let operands = operands
+            .into_iter()
+            .map(|val| Operand::new(ctx, val, inst))
+            .collect::<Vec<_>>();
 
         for (i, ty) in result_tys.into_iter().enumerate() {
             let value = ctx.alloc(ValueData::new_inst_result(ty, inst, i));
             inst.deref_mut(ctx).results.push(value);
         }
 
+        inst.deref_mut(ctx).operands = operands;
+
         inst
     }
 
     /// Create a new iconst instruction.
     pub fn iconst(ctx: &mut Context, constant: impl Into<Constant>, ty: Ty) -> Inst {
-        Self::new(
-            ctx,
-            InstKind::IConst {
-                constant: constant.into(),
-            },
-            vec![ty],
-        )
+        Self::new(ctx, InstKind::IConst(constant.into()), vec![ty], vec![])
     }
 
     /// Create a new fconst instruction.
     pub fn fconst(ctx: &mut Context, constant: impl Into<Constant>, ty: Ty) -> Inst {
-        Self::new(
-            ctx,
-            InstKind::FConst {
-                constant: constant.into(),
-            },
-            vec![ty],
-        )
+        Self::new(ctx, InstKind::FConst(constant.into()), vec![ty], vec![])
     }
 
     /// Create a new stack slot instruction.
     pub fn stack_slot(ctx: &mut Context, size: u32) -> Inst {
         let ty = Ty::index(ctx);
-        Self::new(ctx, InstKind::StackSlot { size }, vec![ty])
+        Self::new(ctx, InstKind::StackSlot(size), vec![ty], vec![])
     }
 
     pub fn ibinary(ctx: &mut Context, op: IBinaryOp, lhs: Value, rhs: Value) -> Inst {
         use IBinaryOp as Op;
 
-        if !lhs.ty(ctx).is_integer_like(ctx) || !rhs.ty(ctx).is_integer_like(ctx) {
+        if !lhs.ty(ctx).is_integer(ctx) || !rhs.ty(ctx).is_integer(ctx) {
             // ibinary only supports integer-like types
             panic!("lhs and rhs must be integer-like types");
         }
@@ -385,13 +326,13 @@ impl Inst {
             Op::Cmp(_) => Ty::int(ctx, 1),
         };
 
-        Self::new(ctx, InstKind::IBinary { op, lhs, rhs }, vec![ty])
+        Self::new(ctx, InstKind::IBinary(op), vec![ty], vec![lhs, rhs])
     }
 
     pub fn fbinary(ctx: &mut Context, op: FBinaryOp, lhs: Value, rhs: Value) -> Inst {
         use FBinaryOp as Op;
 
-        if !lhs.ty(ctx).is_float_like(ctx) || !rhs.ty(ctx).is_float_like(ctx) {
+        if !lhs.ty(ctx).is_float(ctx) || !rhs.ty(ctx).is_float(ctx) {
             // fbinary only supports float-like types
             panic!("lhs and rhs must be float-like types");
         }
@@ -406,13 +347,13 @@ impl Inst {
             Op::Cmp(_) => Ty::int(ctx, 1),
         };
 
-        Self::new(ctx, InstKind::FBinary { op, lhs, rhs }, vec![ty])
+        Self::new(ctx, InstKind::FBinary(op), vec![ty], vec![lhs, rhs])
     }
 
     pub fn iunary(ctx: &mut Context, op: IUnaryOp, val: Value) -> Inst {
         use IUnaryOp as Op;
 
-        if !val.ty(ctx).is_integer_like(ctx) {
+        if !val.ty(ctx).is_integer(ctx) {
             // iunary only supports integer-like types
             panic!("val must be an integer-like type");
         }
@@ -421,13 +362,13 @@ impl Inst {
             Op::Not => val.ty(ctx),
         };
 
-        Self::new(ctx, InstKind::IUnary { op, val }, vec![ty])
+        Self::new(ctx, InstKind::IUnary(op), vec![ty], vec![val])
     }
 
     pub fn funary(ctx: &mut Context, op: FUnaryOp, val: Value) -> Inst {
         use FUnaryOp as Op;
 
-        if !val.ty(ctx).is_float_like(ctx) {
+        if !val.ty(ctx).is_float(ctx) {
             // funary only supports float-like types
             panic!("val must be a float-like type");
         }
@@ -436,12 +377,201 @@ impl Inst {
             Op::Neg => val.ty(ctx),
         };
 
-        Self::new(ctx, InstKind::FUnary { op, val }, vec![ty])
+        Self::new(ctx, InstKind::FUnary(op), vec![ty], vec![val])
     }
 
     pub fn cast(ctx: &mut Context, op: CastOp, val: Value, ty: Ty) -> Inst {
-        // TODO check if the cast is valid
-        Self::new(ctx, InstKind::Cast { op, val }, vec![ty])
+        let val_ty = val.ty(ctx);
+
+        // TODO: support SIMD types
+        match op {
+            CastOp::Trunc => {
+                if !val_ty.is_integer(ctx) || !ty.is_integer(ctx) {
+                    panic!("trunc only supports integer-like types");
+                }
+                if val_ty.bitwidth(ctx).unwrap() <= ty.bitwidth(ctx).unwrap() {
+                    panic!("trunc only supports truncating to a smaller type");
+                }
+            }
+            CastOp::ZExt | CastOp::SExt => {
+                if !val_ty.is_integer(ctx) || !ty.is_integer(ctx) {
+                    panic!("zext only supports integer-like types");
+                }
+                if val_ty.bitwidth(ctx).unwrap() >= ty.bitwidth(ctx).unwrap() {
+                    panic!("zext only supports extending to a larger type");
+                }
+            }
+            CastOp::FpToUi | CastOp::FpToSi => {
+                if !val_ty.is_float(ctx) || !ty.is_integer(ctx) {
+                    panic!("fp_to_ui only supports float-like to integer-like types");
+                }
+            }
+            CastOp::UiToFp | CastOp::SiToFp => {
+                if !val_ty.is_integer(ctx) || !ty.is_float(ctx) {
+                    panic!("ui_to_fp only supports integer-like to float-like types");
+                }
+            }
+            CastOp::Bitcast => {
+                if val_ty.is_index(ctx) || ty.is_index(ctx) {
+                    panic!("bitcast does not support index types");
+                }
+                if val_ty.bitwidth(ctx).unwrap() != ty.bitwidth(ctx).unwrap() {
+                    panic!("bitcast only supports types with the same size");
+                }
+            }
+            CastOp::FpExt => {
+                if !val_ty.is_float(ctx) || !ty.is_float(ctx) {
+                    panic!("fp_ext only supports float-like types");
+                }
+                if val_ty.bitwidth(ctx).unwrap() >= ty.bitwidth(ctx).unwrap() {
+                    panic!("fp_ext only supports extending to a larger type");
+                }
+            }
+            CastOp::IndexToInt => {
+                if !val_ty.is_index(ctx) || !ty.is_integer(ctx) {
+                    panic!("index_to_int only supports index to integer-like types");
+                }
+            }
+            CastOp::IntToIndex => {
+                if !val_ty.is_integer(ctx) || !ty.is_index(ctx) {
+                    panic!("int_to_index only supports integer-like to index types");
+                }
+            }
+        }
+
+        Self::new(ctx, InstKind::Cast(op), vec![ty], vec![val])
+    }
+
+    pub fn branch(ctx: &mut Context, cond: Option<Value>, succs: Vec<(Block, Vec<Value>)>) -> Inst {
+        // check the number of successors, and the type of the condition
+        // - cond is none, only one succ is allowed
+        // - cond is some:
+        //    - num succ < bitwidth of cond, last succ is the default succ
+        //    - num succ == bitwidth of cond, no default succ
+        //    - num succ > bitwidth of cond, not allowed
+        let num_succs = succs.len();
+        let cond_ty = cond.map(|val| val.ty(ctx));
+        match cond_ty {
+            Some(ty) => {
+                if !ty.is_integer(ctx) {
+                    panic!("condition must be an integer-like type");
+                }
+                if num_succs > ty.bitwidth(ctx).unwrap() {
+                    panic!("too many successors for the condition");
+                }
+            }
+            None => {
+                if num_succs != 1 {
+                    panic!("only one successor is allowed when the condition is not present");
+                }
+            }
+        }
+
+        let inst = Self::new(ctx, InstKind::Branch, vec![], cond.into_iter().collect());
+
+        let succs = succs
+            .into_iter()
+            .map(|(block, args)| {
+                let opd_block = Operand::new(ctx, block, inst);
+
+                let mut succ = Successor::new(opd_block);
+
+                let params = block.params(ctx).to_vec();
+
+                for (param, arg) in params.into_iter().zip(args) {
+                    let opd_arg = Operand::new(ctx, arg, inst);
+                    succ.add_arg(param, opd_arg);
+                }
+
+                succ
+            })
+            .collect();
+
+        inst.deref_mut(ctx).successors = succs;
+
+        inst
+    }
+
+    pub fn call(ctx: &mut Context, symbol: Symbol, args: Vec<Value>, result_tys: Vec<Ty>) -> Inst {
+        if let Some(SymbolKind::FuncDef(func)) = ctx.lookup_symbol(symbol.clone()) {
+            let sig = func.sig(ctx);
+            if sig.params.len() != args.len() {
+                panic!("number of arguments does not match the function signature");
+            }
+            if sig.ret.len() != result_tys.len() {
+                panic!("number of results does not match the function signature");
+            }
+
+            for (arg, param) in args.iter().zip(sig.params.iter()) {
+                if arg.ty(ctx) != *param {
+                    panic!("argument type does not match the function signature");
+                }
+            }
+
+            for (result, ret) in result_tys.iter().zip(sig.ret.iter()) {
+                if *result != *ret {
+                    panic!("result type does not match the function signature");
+                }
+            }
+        } else {
+            panic!("symbol is not valid");
+        }
+
+        Self::new(ctx, InstKind::Call(symbol), result_tys, args)
+    }
+
+    pub fn call_indirect(
+        ctx: &mut Context,
+        sig: Signature,
+        func: Value,
+        args: Vec<Value>,
+        result_tys: Vec<Ty>,
+    ) -> Inst {
+        if sig.params.len() != args.len() {
+            panic!("number of arguments does not match the function signature");
+        }
+        if sig.ret.len() != result_tys.len() {
+            panic!("number of results does not match the function signature");
+        }
+
+        for (arg, param) in args.iter().zip(sig.params.iter()) {
+            if arg.ty(ctx) != *param {
+                panic!("argument type does not match the function signature");
+            }
+        }
+
+        for (result, ret) in result_tys.iter().zip(sig.ret.iter()) {
+            if *result != *ret {
+                panic!("result type does not match the function signature");
+            }
+        }
+
+        if func.ty(ctx) != Ty::index(ctx) {
+            panic!("function must be an index type");
+        }
+
+        let mut operands = vec![func];
+        operands.extend(args);
+
+        Self::new(ctx, InstKind::CallIndirect(sig), result_tys, operands)
+    }
+
+    pub fn return_(ctx: &mut Context, vals: Vec<Value>) -> Inst {
+        Self::new(ctx, InstKind::Return, vec![], vals)
+    }
+
+    pub fn load(ctx: &mut Context, ptr: Value, ty: Ty) -> Inst {
+        if !ptr.ty(ctx).is_index(ctx) {
+            panic!("ptr must be a pointer type");
+        }
+        Self::new(ctx, InstKind::Load, vec![ty], vec![ptr])
+    }
+
+    pub fn store(ctx: &mut Context, val: Value, ptr: Value) -> Inst {
+        if !ptr.ty(ctx).is_index(ctx) {
+            panic!("ptr must be a pointer type");
+        }
+        Self::new(ctx, InstKind::Store, vec![], vec![val, ptr])
     }
 
     pub fn is_terminator(self, ctx: &Context) -> bool {
@@ -462,23 +592,14 @@ impl Inst {
     ///
     /// - [Inst::is_terminator]
     pub fn succ_blocks(self, ctx: &Context) -> Vec<Block> {
-        if let InstKind::Branch {
-            ref succs,
-            ref default,
-            ..
-        } = self.deref(ctx).kind
-        {
-            let mut blocks = succs.iter().map(|s| s.block).collect::<Vec<_>>();
-            if let Some(default) = default {
-                blocks.push(default.block);
-            }
-            blocks
-        } else if let InstKind::Return { .. } = self.deref(ctx).kind {
-            // return instruction has no successors
-            Vec::new()
-        } else {
-            panic!("not a branch instruction")
+        if !self.is_terminator(ctx) {
+            panic!("instruction is not a terminator");
         }
+        self.deref(ctx)
+            .successors
+            .iter()
+            .map(|s| s.block.inner())
+            .collect()
     }
 
     /// Free the instruction from the context.
@@ -511,13 +632,18 @@ impl Inst {
             result.drop(ctx);
         }
         // update the uses of blocks
-        for block in User::<Block>::all_uses(self, ctx) {
-            block.remove_user(ctx, self);
+        let succs = self.deref_mut(ctx).successors.drain(..).collect::<Vec<_>>();
+        for mut succ in succs {
+            succ.args.drain().for_each(|(_, arg)| arg.drop(ctx));
+            succ.block.drop(ctx);
         }
+
         // update the uses of operands
-        for operand in User::<Value>::all_uses(self, ctx) {
-            operand.remove_user(ctx, self);
+        let opds = self.deref_mut(ctx).operands.drain(..).collect::<Vec<_>>();
+        for opd in opds {
+            opd.drop(ctx);
         }
+
         // free the instruction
         ctx.free(self);
     }
@@ -567,20 +693,11 @@ impl LinkedListNodePtr for Inst {
 
 impl User<Block> for Inst {
     fn all_uses(self, ctx: &Context) -> Vec<Block> {
-        // only append the block if this is a branch instruction
-        let mut uses = vec![];
-        if let InstKind::Branch {
-            ref succs,
-            ref default,
-            ..
-        } = self.deref(ctx).kind
-        {
-            uses.extend(succs.iter().map(|s| s.block));
-            if let Some(default) = default {
-                uses.push(default.block);
-            }
-        }
-        uses
+        self.deref(ctx)
+            .successors
+            .iter()
+            .map(|s| s.block.inner())
+            .collect()
     }
 
     fn replace(self, ctx: &mut Context, old: Block, new: Block) {
@@ -603,6 +720,12 @@ impl User<Block> for Inst {
             }
         }
 
+        if !self.is_terminator(ctx) {
+            // if the instruction is not a terminator, we don't need to do
+            // anything
+            return;
+        }
+
         // the mapping from old block parameters to new block parameters according to
         // the position/index in the parameter list.
         let param_mapping = old
@@ -615,41 +738,19 @@ impl User<Block> for Inst {
         let mut replaced = false;
 
         // now we can replace the block and the argument mapping params (keys)
-        if let InstKind::Branch {
-            ref mut succs,
-            ref mut default,
-            ..
-        } = self.deref_mut(ctx).kind
-        {
-            for succ in succs {
-                if succ.block == old {
-                    succ.block = new;
-                    succ.args = succ
-                        .args
-                        .iter()
-                        .map(|(old_param, arg)| {
-                            let new_param = param_mapping.get(old_param).unwrap();
-                            (*new_param, *arg)
-                        })
-                        .collect();
 
-                    replaced = true;
-                }
-            }
-            if let Some(ref mut succ) = default {
-                if succ.block == old {
-                    succ.block = new;
-                    succ.args = succ
-                        .args
-                        .iter()
-                        .map(|(old_param, arg)| {
-                            let new_param = param_mapping.get(old_param).unwrap();
-                            (*new_param, *arg)
-                        })
-                        .collect();
+        for succ in self.deref_mut(ctx).successors.iter_mut() {
+            if succ.block.set_inner_if_eq(old, new) {
+                succ.args = succ
+                    .args
+                    .drain()
+                    .map(|(old_param, arg)| {
+                        let new_param = param_mapping.get(&old_param).unwrap();
+                        (*new_param, arg)
+                    })
+                    .collect();
 
-                    replaced = true;
-                }
+                replaced = true;
             }
         }
 
@@ -667,162 +768,19 @@ impl User<Block> for Inst {
 
 impl User<Value> for Inst {
     fn all_uses(self, ctx: &Context) -> Vec<Value> {
-        use InstKind as Ik;
-        match self.deref(ctx).kind {
-            Ik::IConst { .. } | Ik::FConst { .. } | Ik::StackSlot { .. } => vec![],
-            Ik::IBinary { lhs, rhs, .. } | Ik::FBinary { lhs, rhs, .. } => vec![lhs, rhs],
-            Ik::IUnary { val, .. } | Ik::FUnary { val, .. } => vec![val],
-            Ik::Cast { val, .. } => vec![val],
-            Ik::Branch {
-                cond,
-                ref succs,
-                ref default,
-            } => {
-                let mut uses = vec![];
-                if let Some(cond) = cond {
-                    uses.push(cond);
-                }
-                // now append the arguments (values of the mapping)
-                for succ in succs {
-                    uses.extend(succ.args.values().cloned());
-                }
-                if let Some(default) = default {
-                    uses.extend(default.args.values().cloned());
-                }
-                uses
-            }
-            Ik::Call { ref args, .. } => args.clone(),
-            Ik::CallIndirect {
-                callee, ref args, ..
-            } => {
-                let mut uses = vec![callee];
-                uses.extend(args);
-                uses
-            }
-            Ik::Return { val } => val.into_iter().collect(),
-            Ik::Load { mem, .. } => vec![mem],
-            Ik::Store { val, mem } => vec![val, mem],
-        }
+        self.deref(ctx)
+            .operands
+            .iter()
+            .map(|op| op.inner())
+            .collect()
     }
 
     fn replace(self, ctx: &mut Context, old: Value, new: Value) {
-        use InstKind as Ik;
-
         let mut replaced = false;
 
-        match self.deref_mut(ctx).kind {
-            Ik::IConst { .. } | Ik::FConst { .. } | Ik::StackSlot { .. } => {}
-            Ik::IBinary {
-                ref mut lhs,
-                ref mut rhs,
-                ..
-            }
-            | Ik::FBinary {
-                ref mut lhs,
-                ref mut rhs,
-                ..
-            } => {
-                if *lhs == old {
-                    *lhs = new;
-                    replaced = true;
-                }
-                if *rhs == old {
-                    *rhs = new;
-                    replaced = true;
-                }
-            }
-            Ik::IUnary { ref mut val, .. } | Ik::FUnary { ref mut val, .. } => {
-                if *val == old {
-                    *val = new;
-                    replaced = true;
-                }
-            }
-            Ik::Cast { ref mut val, .. } => {
-                if *val == old {
-                    *val = new;
-                    replaced = true;
-                }
-            }
-            Ik::Branch {
-                ref mut cond,
-                ref mut succs,
-                ref mut default,
-            } => {
-                if let Some(ref mut cond) = cond {
-                    if *cond == old {
-                        *cond = new;
-                        replaced = true;
-                    }
-                }
-                for succ in succs {
-                    // remember that we need to replace the args, not the
-                    // params, i.e., replace the value of the mapping
-                    for arg in succ.args.values_mut() {
-                        if *arg == old {
-                            *arg = new;
-                            replaced = true;
-                        }
-                    }
-                }
-                if let Some(ref mut succ) = default {
-                    for arg in succ.args.values_mut() {
-                        if *arg == old {
-                            *arg = new;
-                            replaced = true;
-                        }
-                    }
-                }
-            }
-            Ik::Call { ref mut args, .. } => {
-                for arg in args {
-                    if *arg == old {
-                        *arg = new;
-                        replaced = true;
-                    }
-                }
-            }
-            Ik::CallIndirect {
-                ref mut callee,
-                ref mut args,
-                ..
-            } => {
-                if *callee == old {
-                    *callee = new;
-                    replaced = true;
-                }
-                for arg in args {
-                    if *arg == old {
-                        *arg = new;
-                        replaced = true;
-                    }
-                }
-            }
-            Ik::Return { ref mut val } => {
-                if let Some(val) = val {
-                    if *val == old {
-                        *val = new;
-                        replaced = true;
-                    }
-                }
-            }
-            Ik::Load { ref mut mem, .. } => {
-                if *mem == old {
-                    *mem = new;
-                    replaced = true;
-                }
-            }
-            Ik::Store {
-                ref mut val,
-                ref mut mem,
-            } => {
-                if *val == old {
-                    *val = new;
-                    replaced = true;
-                }
-                if *mem == old {
-                    *mem = new;
-                    replaced = true;
-                }
+        for operand in self.deref_mut(ctx).operands.iter_mut() {
+            if operand.set_inner_if_eq(old, new) {
+                replaced = true;
             }
         }
 

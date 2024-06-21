@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use super::{debug::CommentPos, Context, Func, Inst, InstKind, Ty, Value, ValueData};
+use super::{debug::CommentPos, Context, Func, Inst, Ty, Value, ValueData};
 use crate::{
     collections::{
         linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
@@ -101,46 +101,18 @@ impl Block {
                 unreachable!("block is used in a non-terminator instruction");
             }
             let mut args_to_modify = HashSet::new();
-            if let InstKind::Branch {
-                ref mut succs,
-                ref mut default,
-                ..
-            } = inst.deref_mut(ctx).kind
-            {
-                // a branch can have multiple successors, and successors can pass
-                // different arguments to the same parameter of the block.
-                //
-                // e.g.
-                //
-                // ```
-                // ^pred_of_bb:
-                //   %0 = iconst 0 : i1
-                //   %1 = iconst 1 : i1
-                //   br %cond, ^bb(%0), ^bb(%1)
-                //
-                // ^bb(%param: i1):
-                //   ...
-                // ```
-                for succ in succs.iter_mut() {
-                    if succ.block == self {
-                        let arg = succ.args.remove(&param).expect(
-                            "block parameter is not passed to the block in the terminator instruction",
-                        );
-                        args_to_modify.insert(arg);
-                    }
-                }
-                if let Some(default) = default {
-                    if default.block == self {
-                        let arg = default.args.remove(&param).expect(
-                            "block parameter is not passed to the block in the terminator instruction",
-                        );
-                        args_to_modify.insert(arg);
-                    }
+
+            for succ in inst.deref_mut(ctx).successors.iter_mut() {
+                if succ.block.inner() == self {
+                    let arg = succ.args.remove(&param).expect(
+                        "block parameter is not passed to the block in the terminator instruction",
+                    );
+                    args_to_modify.insert(arg);
                 }
             }
             // now update the uses of the passed argument
             for arg in args_to_modify {
-                arg.remove_user(ctx, inst);
+                arg.drop(ctx);
             }
         }
         // now free the parameter

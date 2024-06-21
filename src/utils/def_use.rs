@@ -29,6 +29,8 @@ pub trait Usable: Sized + ArenaPtr + Hash {
     fn users(self, arena: &Self::A) -> Vec<Self::U>;
 
     /// Add a user to this entity.
+    ///
+    /// If the user is already added, this function should do nothing.
     fn add_user(self, arena: &mut Self::A, user: Self::U);
 
     /// Remove a user from this entity.
@@ -77,5 +79,46 @@ where
     {
         let new = f(arena, old);
         self.replace(arena, old, new);
+    }
+}
+
+/// A reminder that the entity is a use.
+///
+/// This type will enforce the user is correctly added when constructing the
+/// operand.
+///
+/// As for the drop/replace, the user type can implement or maintain on its own.
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct Operand<T>
+where
+    T: Usable,
+{
+    used: T,
+    user: T::U,
+}
+
+impl<T> Operand<T>
+where
+    T: Usable,
+{
+    pub fn new(arena: &mut T::A, used: T, user: T::U) -> Self {
+        used.add_user(arena, user);
+        Self { used, user }
+    }
+
+    pub fn drop(self, arena: &mut T::A) { self.used.remove_user(arena, self.user); }
+
+    pub fn inner(&self) -> T { self.used }
+
+    pub fn inner_mut(&mut self) -> &mut T { &mut self.used }
+
+    #[inline(always)]
+    pub fn set_inner_if_eq(&mut self, old: T, new: T) -> bool {
+        if self.used == old {
+            self.used = new;
+            true
+        } else {
+            false
+        }
     }
 }
