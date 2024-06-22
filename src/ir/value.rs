@@ -36,6 +36,7 @@ pub enum ValueKind {
 }
 
 pub struct ValueData {
+    self_ptr: Value,
     /// The type of the value.
     ty: Ty,
     /// The kind of the value.
@@ -45,11 +46,14 @@ pub struct ValueData {
 }
 
 impl ValueData {
+    pub(super) fn self_ptr(&self) -> Value { self.self_ptr }
+
     /// Create a new instruction result value data.
     ///
     /// This will just use the accepted instruction as the value.
-    pub(super) fn new_inst_result(ty: Ty, inst: Inst, idx: usize) -> Self {
+    pub(super) fn new_inst_result(self_ptr: Value, ty: Ty, inst: Inst, idx: usize) -> Self {
         Self {
+            self_ptr,
             ty,
             kind: ValueKind::InstResult { inst, idx },
             users: HashSet::new(),
@@ -59,8 +63,9 @@ impl ValueData {
     /// Create a new block parameter value data.
     ///
     /// This will just use the accepted block as the parent block.
-    pub(super) fn new_block_param(ty: Ty, block: Block, idx: usize) -> Self {
+    pub(super) fn new_block_param(self_ptr: Value, ty: Ty, block: Block, idx: usize) -> Self {
         Self {
+            self_ptr,
             ty,
             kind: ValueKind::BlockParam { block, idx },
             users: HashSet::new(),
@@ -74,6 +79,8 @@ pub struct Value(BaseArenaPtr<ValueData>);
 impl_arena!(Context, ValueData, Value, values);
 
 impl Value {
+    pub(super) fn id(self) -> usize { self.0.index() }
+
     pub fn ty(self, ctx: &Context) -> Ty { self.deref(ctx).ty }
 
     /// Free the value from the context.
@@ -98,7 +105,7 @@ impl Value {
     /// - Panics if the name is already assigned to another value.
     /// - Panics if the name is empty.
     /// - Panics if this value is already assigned a name.
-    pub fn assign_name(self, ctx: &mut Context, name: String) {
+    pub fn assign_name(self, ctx: &mut Context, name: impl Into<String>) {
         ctx.value_name_alloc.assign_name(self, name);
     }
 
@@ -112,7 +119,7 @@ impl Value {
     /// # Panics
     ///
     /// - Panics if this value is already assigned a name.
-    pub fn alloc_name(self, ctx: &mut Context, prefix: String) -> &String {
+    pub fn alloc_name(self, ctx: &mut Context, prefix: impl Into<String>) -> &String {
         ctx.value_name_alloc.alloc_name(self, prefix)
     }
 
@@ -135,7 +142,7 @@ impl Value {
     /// - `None`: The value is not assigned/allocated a name yet.
     pub fn name(self, ctx: &Context) -> Option<&String> { ctx.value_name_alloc.get_name(self) }
 
-    pub fn name_or_alloc(self, ctx: &mut Context, prefix: String) -> &String {
+    pub fn name_or_alloc(self, ctx: &mut Context, prefix: impl Into<String>) -> &String {
         if self.name(ctx).is_none() {
             self.alloc_name(ctx, prefix)
         } else {

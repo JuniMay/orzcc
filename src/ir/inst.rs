@@ -271,6 +271,47 @@ impl Successor {
     }
 
     pub fn add_arg(&mut self, param: Value, arg: Operand<Value>) { self.args.insert(param, arg); }
+
+    pub fn display<'a>(&'a self, ctx: &'a Context) -> DisplaySuccessor<'a> {
+        DisplaySuccessor { ctx, succ: self }
+    }
+}
+
+pub struct DisplaySuccessor<'a> {
+    ctx: &'a Context,
+    succ: &'a Successor,
+}
+
+impl<'a> fmt::Display for DisplaySuccessor<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "^{}", self.succ.block.inner().name(self.ctx).unwrap())?;
+        if !self.succ.args.is_empty() {
+            write!(f, "(")?;
+
+            let params = self.succ.block.inner().params(self.ctx);
+
+            for (i, param) in params.iter().enumerate() {
+                if i > 0 {
+                    write!(f, ", ")?;
+                }
+
+                write!(
+                    f,
+                    "{}",
+                    self.succ
+                        .args
+                        .get(param)
+                        .unwrap()
+                        .inner()
+                        .name(self.ctx)
+                        .unwrap()
+                )?;
+            }
+
+            write!(f, ")")?;
+        }
+        Ok(())
+    }
 }
 
 pub enum InstKind {
@@ -305,18 +346,29 @@ pub enum InstKind {
     /// Call instruction.
     Call(Symbol),
     /// Call indirect instruction.
+    ///
+    /// The first operand is the function pointer, and the rest are arguments.
     CallIndirect(Signature),
     /// Return instruction.
     Return,
+    /// Get global symbol as local pinter.
+    ///
+    /// This applies to function and global slot.
+    GetGlobal(Symbol),
     /// Load instruction.
     ///
     /// The loaded type can be retrieved from the result value.
     Load,
     /// Store instruction.
+    ///
+    /// The first operand is the value to store, the second operand is the
+    /// address to store. This can be interpreted as `store value (to) address`.
     Store,
 }
 
 pub struct InstData {
+    self_ptr: Inst,
+
     /// Result of this instruction.
     results: Vec<Value>,
     /// The instruction kind.
@@ -334,6 +386,10 @@ pub struct InstData {
     parent: Option<Block>,
 }
 
+impl InstData {
+    pub fn self_ptr(&self) -> Inst { self.self_ptr }
+}
+
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
 pub struct Inst(BaseArenaPtr<InstData>);
 
@@ -341,7 +397,8 @@ impl_arena!(Context, InstData, Inst, insts);
 
 impl Inst {
     fn new(ctx: &mut Context, kind: InstKind, result_tys: Vec<Ty>, operands: Vec<Value>) -> Inst {
-        let inst = ctx.alloc(InstData {
+        let inst = ctx.alloc_with(|self_ptr| InstData {
+            self_ptr,
             results: Vec::new(),
             kind,
 
@@ -359,7 +416,8 @@ impl Inst {
             .collect::<Vec<_>>();
 
         for (i, ty) in result_tys.into_iter().enumerate() {
-            let value = ctx.alloc(ValueData::new_inst_result(ty, inst, i));
+            let value =
+                ctx.alloc_with(|self_ptr| ValueData::new_inst_result(self_ptr, ty, inst, i));
             inst.deref_mut(ctx).results.push(value);
         }
 
@@ -665,7 +723,7 @@ impl Inst {
     }
 
     pub fn call(ctx: &mut Context, symbol: Symbol, args: Vec<Value>, result_tys: Vec<Ty>) -> Inst {
-        if let Some(SymbolKind::FuncDef(func)) = ctx.lookup_symbol(symbol.clone()) {
+        if let Some(SymbolKind::FuncDef(func)) = ctx.lookup_symbol(&symbol) {
             let sig = func.sig(ctx);
             if sig.params.len() != args.len() {
                 panic!("number of arguments does not match the function signature");
@@ -744,6 +802,11 @@ impl Inst {
             panic!("ptr must be a pointer type");
         }
         Self::new(ctx, InstKind::Store, vec![], vec![val, ptr])
+    }
+
+    pub fn get_global(ctx: &mut Context, symbol: Symbol) -> Inst {
+        let index = Ty::index(ctx);
+        Self::new(ctx, InstKind::GetGlobal(symbol), vec![index], vec![])
     }
 
     pub fn is_terminator(self, ctx: &Context) -> bool {
@@ -845,6 +908,14 @@ impl Inst {
     }
 
     pub fn result(self, ctx: &Context, idx: usize) -> Value { self.deref(ctx).results[idx] }
+
+    pub fn display(self, ctx: &Context, debug: bool) -> DisplayInst<'_> {
+        DisplayInst {
+            ctx,
+            data: self.deref(ctx),
+            debug,
+        }
+    }
 }
 
 impl LinkedListNodePtr for Inst {
@@ -984,5 +1055,283 @@ impl User<Value> for Inst {
             // add this instruction to the users of the new value
             new.add_user(ctx, self);
         }
+    }
+}
+
+/// A temporary display instance.
+///
+/// This is used to make the arena pointer usable in [format!] macro.
+pub struct DisplayInst<'a> {
+    ctx: &'a Context,
+    data: &'a InstData,
+    debug: bool,
+}
+
+impl<'a> fmt::Display for DisplayInst<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use InstKind as Ik;
+
+        let mut end_comments = Vec::new();
+        let mut after_comments = Vec::new();
+
+        // check comments in the context
+        if let Some(comments) = self
+            .ctx
+            .comment_info
+            .get_inst_comments(self.data.self_ptr())
+        {
+            for (pos, content) in comments {
+                match pos {
+                    CommentPos::Before => {
+                        writeln!(f, "// {}", content)?;
+                    }
+                    CommentPos::AtEnd => {
+                        end_comments.push(content);
+                    }
+                    CommentPos::After => {
+                        after_comments.push(content);
+                    }
+                }
+            }
+        }
+
+        // first, print the results
+        // %v1, %v2, ... = ...
+        // if debug mode is on, print the internal arena id of each values
+        // %v1 /* 1 */, %v2 /* 2 */, ... = ...
+
+        if self.data.results.is_empty() {
+            if self.debug {
+                write!(f, "/* no result */ ")?;
+            }
+        } else {
+            for (i, result) in self.data.results.iter().enumerate() {
+                if i > 0 {
+                    write!(f, ", ")?;
+                }
+                write!(f, "%{}", result.name(self.ctx).unwrap())?;
+                if self.debug {
+                    write!(f, " /* {} */", result.id())?;
+                }
+            }
+            write!(f, " = ")?;
+        }
+
+        match &self.data.kind {
+            Ik::IConst(constant) => {
+                assert_eq!(self.data.results.len(), 1);
+                write!(f, "iconst {:x}", constant)?;
+            }
+            Ik::FConst(constant) => {
+                assert_eq!(self.data.results.len(), 1);
+                write!(f, "fconst {:x}", constant)?;
+            }
+            Ik::StackSlot(size) => {
+                assert_eq!(self.data.results.len(), 1);
+                let result_ty = self.data.results[0].ty(self.ctx);
+                assert!(result_ty.is_index(self.ctx));
+                write!(f, "stack_slot {}", size)?;
+            }
+            Ik::IBinary(op) => {
+                assert_eq!(self.data.results.len(), 1);
+                assert_eq!(self.data.operands.len(), 2);
+                write!(
+                    f,
+                    "{} %{}, %{}",
+                    op,
+                    self.data.operands[0].inner().name(self.ctx).unwrap(),
+                    self.data.operands[1].inner().name(self.ctx).unwrap(),
+                )?;
+            }
+            Ik::FBinary(op) => {
+                assert_eq!(self.data.results.len(), 1);
+                assert_eq!(self.data.operands.len(), 2);
+                write!(
+                    f,
+                    "{} %{}, %{}",
+                    op,
+                    self.data.operands[0].inner().name(self.ctx).unwrap(),
+                    self.data.operands[1].inner().name(self.ctx).unwrap(),
+                )?;
+            }
+            Ik::IUnary(op) => {
+                assert_eq!(self.data.results.len(), 1);
+                assert_eq!(self.data.operands.len(), 1);
+
+                write!(
+                    f,
+                    "{} %{}",
+                    op,
+                    self.data.operands[0].inner().name(self.ctx).unwrap(),
+                )?;
+            }
+            Ik::FUnary(op) => {
+                assert_eq!(self.data.results.len(), 1);
+                assert_eq!(self.data.operands.len(), 1);
+                write!(
+                    f,
+                    "{} %{}",
+                    op,
+                    self.data.operands[0].inner().name(self.ctx).unwrap(),
+                )?;
+            }
+            Ik::Cast(op) => {
+                assert_eq!(self.data.results.len(), 1);
+                assert_eq!(self.data.operands.len(), 1);
+                write!(
+                    f,
+                    "{} %{}",
+                    op,
+                    self.data.operands[0].inner().name(self.ctx).unwrap(),
+                )?;
+            }
+            Ik::Jump => {
+                assert_eq!(self.data.results.len(), 0);
+                assert_eq!(self.data.operands.len(), 0);
+                assert_eq!(self.data.successors.len(), 1);
+                write!(f, "jump {}", self.data.successors[0].display(self.ctx))?;
+            }
+            Ik::Br => {
+                assert_eq!(self.data.results.len(), 0);
+                assert_eq!(self.data.operands.len(), 1);
+                assert_eq!(self.data.successors.len(), 2);
+                write!(
+                    f,
+                    "br %{}, {}, {}",
+                    self.data.operands[0].inner().name(self.ctx).unwrap(),
+                    self.data.successors[0].display(self.ctx),
+                    self.data.successors[1].display(self.ctx)
+                )?;
+            }
+            Ik::Switch { labels } => {
+                // TODO: too many assertions, maybe an independent validation pass?
+                assert_eq!(self.data.results.len(), 0);
+                assert_eq!(self.data.operands.len(), 1);
+
+                assert!(!self.data.successors.is_empty());
+                assert!(
+                    self.data.successors.len() == labels.len()
+                        || self.data.successors.len() == labels.len() + 1
+                );
+
+                write!(
+                    f,
+                    "switch %{}, ",
+                    self.data.operands[0].inner().name(self.ctx).unwrap()
+                )?;
+                for (i, (label, succ)) in labels.iter().zip(self.data.successors.iter()).enumerate()
+                {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}: {}", label, succ.display(self.ctx))?;
+                }
+
+                if self.data.successors.len() == labels.len() + 1 {
+                    write!(
+                        f,
+                        ", default: {}",
+                        self.data.successors.last().unwrap().display(self.ctx)
+                    )?;
+                }
+            }
+            Ik::Call(callee) => {
+                write!(f, "call @{}(", callee)?;
+                for (i, arg) in self.data.operands.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "%{}", arg.inner().name(self.ctx).unwrap())?;
+                }
+                write!(f, ")")?;
+            }
+            Ik::CallIndirect(_) => {
+                assert!(!self.data.operands.is_empty());
+                write!(
+                    f,
+                    "call_indirect %{}(",
+                    self.data.operands[0].inner().name(self.ctx).unwrap()
+                )?;
+                for (i, arg) in self.data.operands.iter().skip(1).enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "%{}", arg.inner().name(self.ctx).unwrap())?;
+                }
+                write!(f, ")")?;
+            }
+            Ik::Return => {
+                write!(f, "ret")?;
+                if self.data.operands.len() <= 1 {
+                    write!(
+                        f,
+                        " %{}",
+                        self.data.operands[0].inner().name(self.ctx).unwrap()
+                    )?;
+                } else {
+                    write!(f, " (")?;
+                    for (i, opd) in self.data.operands.iter().enumerate() {
+                        if i > 0 {
+                            write!(f, ", ")?;
+                        }
+                        write!(f, "%{}", opd.inner().name(self.ctx).unwrap())?;
+                    }
+                    write!(f, ")")?;
+                }
+            }
+            Ik::GetGlobal(symbol) => {
+                write!(f, "get_global @{}", symbol)?;
+            }
+            Ik::Load => {
+                assert_eq!(self.data.results.len(), 1);
+                assert_eq!(self.data.operands.len(), 1);
+                write!(
+                    f,
+                    "load %{}",
+                    self.data.operands[0].inner().name(self.ctx).unwrap()
+                )?;
+            }
+            Ik::Store => {
+                assert_eq!(self.data.results.len(), 0);
+                assert_eq!(self.data.operands.len(), 2);
+                write!(
+                    f,
+                    "store %{}, %{}",
+                    self.data.operands[0].inner().name(self.ctx).unwrap(),
+                    self.data.operands[1].inner().name(self.ctx).unwrap()
+                )?;
+            }
+        }
+
+        // print the result types
+        if !self.data.results.is_empty() {
+            write!(f, " : ")?;
+            if self.data.results.len() == 1 {
+                write!(f, "{}", self.data.results[0].ty(self.ctx).display(self.ctx))?;
+            } else {
+                write!(f, "(")?;
+                for (i, value) in self.data.results.iter().enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", value.ty(self.ctx).display(self.ctx))?;
+                }
+                write!(f, ")")?;
+            }
+        }
+
+        for comment in end_comments.iter() {
+            write!(f, " /* {} */", comment)?;
+        }
+
+        if !end_comments.is_empty() {
+            writeln!(f)?;
+        }
+
+        for comment in after_comments {
+            writeln!(f, "// {}", comment)?;
+        }
+
+        Ok(())
     }
 }

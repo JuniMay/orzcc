@@ -125,7 +125,31 @@ impl Context {
     ///
     /// - `Some(symbol_kind)` if the symbol exists.
     /// - `None` if the symbol is not defined.
-    pub fn lookup_symbol(&mut self, symbol: impl Into<Symbol>) -> Option<&SymbolKind> {
-        self.symbols.get(&symbol.into())
+    pub fn lookup_symbol(&self, symbol: &Symbol) -> Option<&SymbolKind> { self.symbols.get(symbol) }
+
+    /// Allocate names for all the values and blocks in the context.
+    ///
+    /// Because we want to immutably emit the IR, we need to allocate names
+    /// before doing the emission.
+    pub fn alloc_all_names(&mut self) {
+        let values: Vec<Value> = self
+            .values
+            .iter()
+            .map(|(_, data)| data.self_ptr())
+            .collect();
+
+        for value in values {
+            value.name_or_alloc(self, "v");
+        }
+
+        let blocks: Vec<Block> = self
+            .blocks
+            .iter()
+            .map(|(_, data)| data.self_ptr())
+            .collect();
+
+        for block in blocks {
+            block.name_or_alloc(self, "bb");
+        }
     }
 }

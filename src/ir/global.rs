@@ -1,3 +1,5 @@
+use std::fmt;
+
 use super::{debug::CommentPos, Block, Constant, Context, Signature, Ty};
 use crate::{
     collections::{
@@ -23,6 +25,10 @@ impl Symbol {
     pub fn comment(&self, ctx: &mut Context, pos: CommentPos, content: String) {
         ctx.comment_info.comment_symbol(self.clone(), pos, content);
     }
+}
+
+impl fmt::Display for Symbol {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}", self.0) }
 }
 
 /// The data of a function.

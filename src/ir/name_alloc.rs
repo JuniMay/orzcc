@@ -54,7 +54,9 @@ where
     /// - Panics if the name is already assigned to another pointer.
     /// - Panics if the name is empty.
     /// - Panics if the pointer is already assigned a name.
-    pub(super) fn assign_name(&mut self, ptr: T, name: String) {
+    pub(super) fn assign_name(&mut self, ptr: T, name: impl Into<String>) {
+        let name = name.into();
+
         if self.name_to_ptr.contains_key(&name) {
             panic!("name {:?} is already assigned", name);
         }
@@ -88,10 +90,11 @@ where
     /// In order to avoid conflicts, the counter might increase multiple times
     /// to ensure that the name is unique. So under some extreme circumstances,
     /// this function might be very slow, **USE WITH CAUTION**.
-    pub(super) fn alloc_name(&mut self, ptr: T, prefix: String) -> &String {
+    pub(super) fn alloc_name(&mut self, ptr: T, prefix: impl Into<String>) -> &String {
         if self.ptr_to_name.contains_key(&ptr) {
             panic!("pointer is already assigned a name");
         }
+        let prefix: String = prefix.into();
         let counter = self.counters.entry(prefix.clone()).or_insert(0);
 
         let mut name = format!("{}{}", prefix, *counter);

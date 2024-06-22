@@ -1,3 +1,5 @@
+use core::fmt;
+
 use super::{Context, Ty};
 use crate::collections::apint::ApInt;
 
@@ -202,6 +204,108 @@ impl TryFrom<Constant> for f64 {
         match constant {
             Constant::Float64(val) => Ok(f64::from_bits(val)),
             _ => Err("trying to convert a non-float64 constant to f64"),
+        }
+    }
+}
+
+impl fmt::Display for Constant {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use Constant as C;
+        match self {
+            C::Undef(_) => write!(f, "undef"),
+            C::ZeroInit(_) => write!(f, "zeroinit"),
+            C::Integer(apint) => write!(f, "{}", apint),
+            C::Float32(bits) => write!(f, "{}", f32::from_bits(*bits)),
+            C::Float64(bits) => write!(f, "{}", f64::from_bits(*bits)),
+            C::Array(values) => {
+                write!(f, "[")?;
+                for (i, val) in values.iter().enumerate() {
+                    if i != 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", val)?;
+                }
+                write!(f, "]")
+            }
+            C::Struct(values, is_packed) => {
+                if *is_packed {
+                    write!(f, "<{{")?;
+                } else {
+                    write!(f, "{{ ")?;
+                }
+                for (i, val) in values.iter().enumerate() {
+                    if i != 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", val)?;
+                }
+                if *is_packed {
+                    write!(f, "}}>")
+                } else {
+                    write!(f, " }}")
+                }
+            }
+            C::Simd(values) => {
+                write!(f, "<")?;
+                for (i, val) in values.iter().enumerate() {
+                    if i != 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{}", val)?;
+                }
+                write!(f, ">")
+            }
+        }
+    }
+}
+
+impl fmt::LowerHex for Constant {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use Constant as C;
+        match self {
+            C::Undef(_) => write!(f, "undef"),
+            C::ZeroInit(_) => write!(f, "zeroinit"),
+            C::Integer(apint) => write!(f, "{:x}", apint),
+            C::Float32(bits) => write!(f, "{:#x}", bits),
+            C::Float64(bits) => write!(f, "{:#x}", bits),
+            C::Array(values) => {
+                write!(f, "[")?;
+                for (i, val) in values.iter().enumerate() {
+                    if i != 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{:x}", val)?;
+                }
+                write!(f, "]")
+            }
+            C::Struct(values, is_packed) => {
+                if *is_packed {
+                    write!(f, "<{{")?;
+                } else {
+                    write!(f, "{{ ")?;
+                }
+                for (i, val) in values.iter().enumerate() {
+                    if i != 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{:x}", val)?;
+                }
+                if *is_packed {
+                    write!(f, "}}>")
+                } else {
+                    write!(f, " }}")
+                }
+            }
+            C::Simd(values) => {
+                write!(f, "<")?;
+                for (i, val) in values.iter().enumerate() {
+                    if i != 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "{:x}", val)?;
+                }
+                write!(f, ">")
+            }
         }
     }
 }

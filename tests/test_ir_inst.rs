@@ -235,3 +235,34 @@ fn test_ir_replace_use_0() {
 
     assert_eq!(User::<Value>::all_uses(i4, &ctx), vec![v3, v1]);
 }
+
+#[test]
+fn test_ir_display_0() {
+    let mut ctx = Context::default();
+
+    let int = Ty::int(&mut ctx, 32);
+    let i1 = Inst::iconst(&mut ctx, 1, int);
+    let i2 = Inst::iconst(&mut ctx, 2, int);
+
+    let float = Ty::float32(&mut ctx);
+    let f1 = Inst::fconst(&mut ctx, 1.0f32, float);
+
+    let v2 = i2.result(&ctx, 0);
+    v2.assign_name(&mut ctx, "second");
+
+    ctx.alloc_all_names();
+
+    let s = format!("{}", i1.display(&ctx, true));
+    assert_eq!(s, "%v0 /* 0 */ = iconst 0x00000001i32 : i32");
+
+    let s = format!("{}", i2.display(&ctx, true));
+    assert_eq!(s, "%second /* 1 */ = iconst 0x00000002i32 : i32");
+
+    let s = format!("{}", f1.display(&ctx, true));
+    let hex_1_0 = format!("0x{:08x}", f32::to_bits(1.0));
+    // this is `v1` because i2 is assigned a name.
+    let expected = format!("%v1 /* 2 */ = fconst {} : f32", hex_1_0);
+    assert_eq!(s, expected);
+}
+
+// TODO: more tests on display

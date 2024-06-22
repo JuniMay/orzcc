@@ -12,6 +12,7 @@ use crate::{
 
 /// The data of a block.
 pub struct BlockData {
+    self_ptr: Block,
     /// The parameters of the block.
     params: Vec<Value>,
     /// The users of the block.
@@ -28,6 +29,10 @@ pub struct BlockData {
     parent: Option<Func>,
 }
 
+impl BlockData {
+    pub(super) fn self_ptr(&self) -> Block { self.self_ptr }
+}
+
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
 pub struct Block(BaseArenaPtr<BlockData>);
 
@@ -36,7 +41,8 @@ impl_arena!(Context, BlockData, Block, blocks);
 impl Block {
     /// Create a new block with empty parameters.
     pub fn new(ctx: &mut Context) -> Block {
-        ctx.alloc(BlockData {
+        ctx.alloc_with(|self_ptr| BlockData {
+            self_ptr,
             params: Vec::new(),
             users: HashSet::new(),
             head: None,
@@ -59,7 +65,7 @@ impl Block {
     /// A value, which is the new parameter of the block.
     pub fn new_param(self, ctx: &mut Context, ty: Ty) -> Value {
         let idx = self.deref(ctx).params.len();
-        let value = ctx.alloc(ValueData::new_block_param(ty, self, idx));
+        let value = ctx.alloc_with(|self_ptr| ValueData::new_block_param(self_ptr, ty, self, idx));
         self.deref_mut(ctx).params.push(value);
         value
     }
@@ -195,7 +201,7 @@ impl Block {
     /// # Panics
     ///
     /// - Panics if this block is already assigned a name.
-    pub fn alloc_name(self, ctx: &mut Context, prefix: String) -> &String {
+    pub fn alloc_name(self, ctx: &mut Context, prefix: impl Into<String>) -> &String {
         ctx.block_name_alloc.alloc_name(self, prefix)
     }
 
@@ -207,7 +213,7 @@ impl Block {
     /// - `None`: The block is not assigned/allocated a name yet.
     pub fn name(self, ctx: &Context) -> Option<&String> { ctx.block_name_alloc.get_name(self) }
 
-    pub fn name_or_alloc(self, ctx: &mut Context, prefix: String) -> &String {
+    pub fn name_or_alloc(self, ctx: &mut Context, prefix: impl Into<String>) -> &String {
         if self.name(ctx).is_none() {
             self.alloc_name(ctx, prefix)
         } else {

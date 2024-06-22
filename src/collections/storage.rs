@@ -393,7 +393,7 @@ impl<T> BaseArenaPtr<T> {
     /// # Returns
     ///
     /// A [usize] that represents the index of the object in the arena.
-    fn index(self) -> usize { self.index }
+    pub fn index(self) -> usize { self.index }
 }
 
 impl<T> ArenaPtr for BaseArenaPtr<T> {

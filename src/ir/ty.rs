@@ -69,25 +69,30 @@ pub struct Signature {
     pub(super) params: Vec<Ty>,
 }
 
-impl Signature {
-    pub fn new(params: Vec<Ty>, ret: Vec<Ty>) -> Signature { Self { ret, params } }
+pub struct DisplaySig<'a> {
+    ctx: &'a Context,
+    sig: &'a Signature,
+}
 
-    pub fn display<T: fmt::Write>(&self, ctx: &Context, f: &mut T) -> fmt::Result {
+impl<'a> fmt::Display for DisplaySig<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "(")?;
-        for (i, param) in self.params.iter().enumerate() {
-            param.display(ctx, f)?;
-            if i + 1 < self.params.len() {
+        for (i, param) in self.sig.params.iter().enumerate() {
+            write!(f, "{}", param.display(self.ctx))?;
+            if i + 1 < self.sig.params.len() {
                 write!(f, ", ")?;
             }
         }
+
         write!(f, ") -> ")?;
-        if self.ret.len() == 1 {
-            self.ret[0].display(ctx, f)
+
+        if self.sig.ret.len() == 1 {
+            write!(f, "{}", self.sig.ret[0].display(self.ctx))
         } else {
             write!(f, "(")?;
-            for (i, ret) in self.ret.iter().enumerate() {
-                ret.display(ctx, f)?;
-                if i + 1 < self.ret.len() {
+            for (i, ret) in self.sig.ret.iter().enumerate() {
+                write!(f, "{}", ret.display(self.ctx))?;
+                if i + 1 < self.sig.ret.len() {
                     write!(f, ", ")?;
                 }
             }
@@ -96,19 +101,29 @@ impl Signature {
     }
 }
 
-impl Ty {
-    /// Display the type.
-    pub fn display<T: fmt::Write>(&self, ctx: &Context, f: &mut T) -> fmt::Result {
-        match self.deref(ctx) {
+impl Signature {
+    pub fn new(params: Vec<Ty>, ret: Vec<Ty>) -> Signature { Self { ret, params } }
+
+    pub fn display<'a>(&'a self, ctx: &'a Context) -> DisplaySig<'a> {
+        DisplaySig { ctx, sig: self }
+    }
+}
+
+pub struct DisplayTy<'a> {
+    ctx: &'a Context,
+    data: &'a TyData,
+}
+
+impl<'a> fmt::Display for DisplayTy<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match &self.data {
             TyData::Void => write!(f, "void"),
             TyData::Integer(bits) => write!(f, "i{}", bits),
             TyData::Float32 => write!(f, "f32"),
             TyData::Float64 => write!(f, "f64"),
             TyData::Index => write!(f, "index"),
             TyData::Array { elem_ty, len } => {
-                write!(f, "[")?;
-                elem_ty.display(ctx, f)?;
-                write!(f, "; {}]", len)
+                write!(f, "[{}; {}]", elem_ty.display(self.ctx), len)
             }
             TyData::Struct {
                 field_tys,
@@ -119,7 +134,7 @@ impl Ty {
                 }
                 write!(f, "{{")?;
                 for (i, ty) in field_tys.iter().enumerate() {
-                    ty.display(ctx, f)?;
+                    write!(f, "{}", ty.display(self.ctx))?;
                     if i + 1 < field_tys.len() {
                         write!(f, ", ")?;
                     }
@@ -131,10 +146,17 @@ impl Ty {
                 Ok(())
             }
             TyData::Simd { elem_ty, exp } => {
-                write!(f, "<")?;
-                elem_ty.display(ctx, f)?;
-                write!(f, "; {}>", exp)
+                write!(f, "<{}; {}>", elem_ty.display(self.ctx), 1 << exp)
             }
+        }
+    }
+}
+
+impl Ty {
+    pub fn display(self, ctx: &Context) -> DisplayTy<'_> {
+        DisplayTy {
+            ctx,
+            data: self.deref(ctx),
         }
     }
 }
@@ -306,54 +328,48 @@ mod tests {
     fn test_ty_display() -> std::fmt::Result {
         let mut ctx = Context::default();
         let void = Ty::void(&mut ctx);
-        let mut s = String::new();
-        void.display(&ctx, &mut s)?;
+        let s = format!("{}", void.display(&ctx));
         assert_eq!(s, "void");
 
         let int32 = Ty::int(&mut ctx, 32);
-        s.clear();
-        int32.display(&ctx, &mut s)?;
+        let s = format!("{}", int32.display(&ctx));
         assert_eq!(s, "i32");
 
         let float32 = Ty::float32(&mut ctx);
-        s.clear();
-        float32.display(&ctx, &mut s)?;
+        let s = format!("{}", float32.display(&ctx));
         assert_eq!(s, "f32");
 
         let float64 = Ty::float64(&mut ctx);
-        s.clear();
-        float64.display(&ctx, &mut s)?;
+        let s = format!("{}", float64.display(&ctx));
         assert_eq!(s, "f64");
 
         let pointer = Ty::index(&mut ctx);
-        s.clear();
-        pointer.display(&ctx, &mut s)?;
+        let s = format!("{}", pointer.display(&ctx));
         assert_eq!(s, "index");
 
         let array = Ty::array(&mut ctx, int32, 10);
-        s.clear();
-        array.display(&ctx, &mut s)?;
+        let s = format!("{}", array.display(&ctx));
         assert_eq!(s, "[i32; 10]");
 
         let array_array = Ty::array(&mut ctx, array, 10);
-        s.clear();
-        array_array.display(&ctx, &mut s)?;
+        let s = format!("{}", array_array.display(&ctx));
         assert_eq!(s, "[[i32; 10]; 10]");
 
         let struct_ty = Ty::struct_(&mut ctx, vec![int32, float32], false);
-        s.clear();
-        struct_ty.display(&ctx, &mut s)?;
+        let s = format!("{}", struct_ty.display(&ctx));
         assert_eq!(s, "{i32, f32}");
 
         let packed_struct_ty = Ty::struct_(&mut ctx, vec![int32, float32], true);
-        s.clear();
-        packed_struct_ty.display(&ctx, &mut s)?;
+        let s = format!("{}", packed_struct_ty.display(&ctx));
         assert_eq!(s, "<{i32, f32}>");
 
-        let simd = Ty::simd(&mut ctx, int32, 4);
-        s.clear();
-        simd.display(&ctx, &mut s)?;
+        let simd0 = Ty::simd(&mut ctx, int32, 2);
+        let s = format!("{}", simd0.display(&ctx));
         assert_eq!(s, "<i32; 4>");
+
+        let simd1 = Ty::simd(&mut ctx, int32, 5);
+        let s = format!("{}", simd1.display(&ctx));
+        assert_eq!(s, "<i32; 32>");
 
         Ok(())
     }
@@ -366,8 +382,7 @@ mod tests {
         let void = Ty::void(&mut ctx);
 
         let sig = Signature::new(vec![int32, float32], vec![void]);
-        let mut s = String::new();
-        sig.display(&ctx, &mut s).unwrap();
+        let s = format!("{}", sig.display(&ctx));
         assert_eq!(s, "(i32, f32) -> void");
     }
 }

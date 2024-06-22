@@ -32,7 +32,7 @@ impl CommentInfo {
         self.symbols.entry(symbol).or_default().push((pos, content));
     }
 
-    pub(super) fn _get_inst_comments(&self, inst: Inst) -> Option<&[(CommentPos, String)]> {
+    pub(super) fn get_inst_comments(&self, inst: Inst) -> Option<&[(CommentPos, String)]> {
         self.insts.get(&inst).map(|v| v.as_slice())
     }
 
