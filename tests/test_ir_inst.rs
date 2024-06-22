@@ -338,7 +338,7 @@ fn test_ir_diaplay_0() {
 
     let s = format!("{}", func.display(&ctx, true));
 
-    let expected = include_str!("ir_display/snapshot_0.txt");
+    let expected = include_str!("ir_display/snapshot_0.orzir");
 
     assert_eq!(s, expected);
 }

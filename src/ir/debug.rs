@@ -41,6 +41,6 @@ impl CommentInfo {
     }
 
     pub(super) fn get_symbol_comments(&self, symbol: &Symbol) -> Option<&[(CommentPos, String)]> {
-        self.symbols.get(&symbol).map(|v| v.as_slice())
+        self.symbols.get(symbol).map(|v| v.as_slice())
     }
 }

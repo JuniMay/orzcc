@@ -10,10 +10,6 @@ mod value;
 
 pub mod debug;
 pub mod passman;
-
-#[cfg(feature = "ir-frontend")]
-pub mod frontend;
-
 pub use block::{Block, BlockData};
 pub use constant::Constant;
 pub use context::Context;
