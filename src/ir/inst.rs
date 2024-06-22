@@ -1262,7 +1262,10 @@ impl<'a> fmt::Display for DisplayInst<'a> {
             }
             Ik::Return => {
                 write!(f, "ret")?;
-                if self.data.operands.len() <= 1 {
+
+                if self.data.operands.is_empty() {
+                    write!(f, " void")?;
+                } else if self.data.operands.len() == 1 {
                     write!(
                         f,
                         " %{}",

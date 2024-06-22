@@ -3,5 +3,6 @@
 
 pub mod backend;
 pub mod collections;
+pub mod frontend;
 pub mod ir;
 pub mod utils;

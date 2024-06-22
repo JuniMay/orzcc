@@ -1,3 +1,4 @@
+use core::fmt;
 use std::collections::HashSet;
 
 use super::{debug::CommentPos, Context, Func, Inst, Ty, Value, ValueData};
@@ -187,7 +188,7 @@ impl Block {
     /// - Panics if the name is already assigned to another block.
     /// - Panics if the name is empty.
     /// - Panics if this block is already assigned a name.
-    pub fn assign_name(self, ctx: &mut Context, name: String) {
+    pub fn assign_name(self, ctx: &mut Context, name: impl Into<String>) {
         ctx.block_name_alloc.assign_name(self, name);
     }
 
@@ -224,6 +225,16 @@ impl Block {
     pub fn comment(self, ctx: &mut Context, pos: CommentPos, content: String) {
         ctx.comment_info.comment_block(self, pos, content);
     }
+
+    pub fn id(self) -> usize { self.0.index() }
+
+    pub fn display(self, ctx: &Context, debug: bool) -> DisplayBlock<'_> {
+        DisplayBlock {
+            ctx,
+            data: self.deref(ctx),
+            debug,
+        }
+    }
 }
 
 impl CfgNode for Block {
@@ -257,6 +268,87 @@ impl CfgNode for Block {
                 panic!("block has no instruction but next block requires block params")
             }
         }
+    }
+}
+
+pub struct DisplayBlock<'a> {
+    ctx: &'a Context,
+    data: &'a BlockData,
+    debug: bool,
+}
+
+impl fmt::Display for DisplayBlock<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut end_comments = Vec::new();
+        let mut after_comments = Vec::new();
+
+        // check comments in the context
+        if let Some(comments) = self
+            .ctx
+            .comment_info
+            .get_block_comments(self.data.self_ptr())
+        {
+            for (pos, content) in comments {
+                match pos {
+                    CommentPos::Before => {
+                        writeln!(f, "// {}", content)?;
+                    }
+                    CommentPos::AtEnd => {
+                        end_comments.push(content);
+                    }
+                    CommentPos::After => {
+                        after_comments.push(content);
+                    }
+                }
+            }
+        }
+
+        let name = self.data.self_ptr().name(self.ctx).unwrap();
+
+        write!(f, "^{}", name)?;
+
+        if self.debug {
+            write!(f, " /* {} */ ", self.data.self_ptr().id())?;
+        }
+
+        if self.data.params.is_empty() {
+            write!(f, ":")?;
+        } else {
+            write!(f, "(")?;
+            for (i, param) in self.data.params.iter().enumerate() {
+                if i != 0 {
+                    write!(f, ", ")?;
+                }
+                let name = param.name(self.ctx).unwrap();
+                let ty = param.ty(self.ctx);
+                write!(f, "{}: {}", name, ty.display(self.ctx))?;
+
+                if self.debug {
+                    write!(f, " /* {} */", param.id())?;
+                }
+            }
+            write!(f, "):")?;
+        }
+
+        for comment in end_comments.iter() {
+            write!(f, " /* {} */", comment)?;
+        }
+
+        if !end_comments.is_empty() {
+            writeln!(f)?;
+        }
+
+        for comment in after_comments {
+            writeln!(f, " /* {} */", comment)?;
+        }
+
+        writeln!(f)?;
+
+        for inst in self.data.self_ptr().iter(self.ctx) {
+            writeln!(f, "    {}", inst.display(self.ctx, self.debug))?;
+        }
+
+        Ok(())
     }
 }
 

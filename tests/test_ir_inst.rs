@@ -265,4 +265,82 @@ fn test_ir_display_0() {
     assert_eq!(s, expected);
 }
 
+#[test]
+fn test_ir_diaplay_0() {
+    let mut ctx = Context::default();
+
+    let int = Ty::int(&mut ctx, 32);
+    let boolean = Ty::int(&mut ctx, 1);
+    let float = Ty::float32(&mut ctx);
+    let void = Ty::void(&mut ctx);
+
+    let sig = Signature::new(vec![], vec![void]);
+    let func = Func::new(&mut ctx, "test", sig);
+
+    let entry = Block::new(&mut ctx);
+    let bb1 = Block::new(&mut ctx);
+    let bb2 = Block::new(&mut ctx);
+    let merge = Block::new(&mut ctx);
+
+    let p1 = merge.new_param(&mut ctx, int);
+    let p2 = merge.new_param(&mut ctx, float);
+
+    p1.assign_name(&mut ctx, "p1");
+    p2.assign_name(&mut ctx, "p2");
+
+    func.push_back(&mut ctx, entry);
+    func.push_back(&mut ctx, bb1);
+    func.push_back(&mut ctx, bb2);
+    func.push_back(&mut ctx, merge);
+
+    let i1 = Inst::iconst(&mut ctx, 1, int);
+    let i2 = Inst::fconst(&mut ctx, 2.0f32, float);
+
+    let v1 = i1.result(&ctx, 0);
+    let v2 = i2.result(&ctx, 0);
+
+    let i_dummy_cond = Inst::iconst(&mut ctx, 1, boolean);
+    let dummy_cond = i_dummy_cond.result(&ctx, 0);
+
+    dummy_cond.assign_name(&mut ctx, "dummy_cond");
+
+    let br = Inst::br(&mut ctx, dummy_cond, bb1, vec![], bb2, vec![]);
+
+    entry.push_back(&mut ctx, i1);
+    entry.push_back(&mut ctx, i2);
+    entry.push_back(&mut ctx, i_dummy_cond);
+    entry.push_back(&mut ctx, br);
+
+    let i3 = Inst::ibinary(&mut ctx, IBinaryOp::Add, v1, v1);
+    let i4 = Inst::ibinary(&mut ctx, IBinaryOp::Mul, v1, v1);
+
+    let v3 = i3.result(&ctx, 0);
+    let v4 = i4.result(&ctx, 0);
+
+    let jump1 = Inst::jump(&mut ctx, merge, vec![v3, v2]);
+    let jump2 = Inst::jump(&mut ctx, merge, vec![v4, v2]);
+
+    bb1.push_back(&mut ctx, i3);
+    bb1.push_back(&mut ctx, jump1);
+
+    bb2.push_back(&mut ctx, i4);
+    bb2.push_back(&mut ctx, jump2);
+
+    let i5 = Inst::ibinary(&mut ctx, IBinaryOp::Add, p1, p1);
+    let ret = Inst::return_(&mut ctx, vec![]);
+
+    merge.push_back(&mut ctx, i5);
+    merge.push_back(&mut ctx, ret);
+
+    merge.assign_name(&mut ctx, "merge");
+
+    ctx.alloc_all_names();
+
+    let s = format!("{}", func.display(&ctx, true));
+
+    let expected = include_str!("ir_display/snapshot_0.txt");
+
+    assert_eq!(s, expected);
+}
+
 // TODO: more tests on display

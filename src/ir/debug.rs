@@ -36,11 +36,11 @@ impl CommentInfo {
         self.insts.get(&inst).map(|v| v.as_slice())
     }
 
-    pub(super) fn _get_block_comments(&self, block: Block) -> Option<&[(CommentPos, String)]> {
+    pub(super) fn get_block_comments(&self, block: Block) -> Option<&[(CommentPos, String)]> {
         self.blocks.get(&block).map(|v| v.as_slice())
     }
 
-    pub(super) fn _get_symbol_comments(&self, symbol: Symbol) -> Option<&[(CommentPos, String)]> {
+    pub(super) fn get_symbol_comments(&self, symbol: &Symbol) -> Option<&[(CommentPos, String)]> {
         self.symbols.get(&symbol).map(|v| v.as_slice())
     }
 }

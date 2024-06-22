@@ -42,6 +42,7 @@ impl fmt::Display for Symbol {
 /// Also, function declaration and definition are two different types in the
 /// framework, so one can distinguish them in compile time.
 pub struct FuncData {
+    self_ptr: Func,
     /// The name of the function.
     name: Symbol,
     /// The signature of the function.
@@ -53,6 +54,10 @@ pub struct FuncData {
     tail: Option<Block>,
 }
 
+impl FuncData {
+    pub fn self_ptr(&self) -> Func { self.self_ptr }
+}
+
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
 pub struct Func(BaseArenaPtr<FuncData>);
 
@@ -60,7 +65,8 @@ impl_arena!(Context, FuncData, Func, funcs);
 
 impl Func {
     pub fn new(ctx: &mut Context, name: impl Into<Symbol>, sig: Signature) -> Func {
-        let func = ctx.alloc(FuncData {
+        let func = ctx.alloc_with(|self_ptr| FuncData {
+            self_ptr,
             name: name.into(),
             sig,
             head: None,
@@ -74,6 +80,16 @@ impl Func {
     pub fn name(self, ctx: &Context) -> &str { &self.deref(ctx).name.0 }
 
     pub fn sig(self, ctx: &Context) -> &Signature { &self.deref(ctx).sig }
+
+    pub fn display<'a>(&'a self, ctx: &'a Context, debug: bool) -> DisplayFunc<'a> {
+        DisplayFunc {
+            ctx,
+            data: self.deref(ctx),
+            debug,
+        }
+    }
+
+    pub fn id(self) -> usize { self.0.index() }
 }
 
 impl CfgRegion for Func {
@@ -81,6 +97,64 @@ impl CfgRegion for Func {
 
     fn entry_node(self, arena: &Self::A) -> Self::Node {
         self.head(arena).expect("entry block of function not found")
+    }
+}
+
+pub struct DisplayFunc<'a> {
+    ctx: &'a Context,
+    data: &'a FuncData,
+    debug: bool,
+}
+
+impl fmt::Display for DisplayFunc<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut end_comments = Vec::new();
+        let mut after_comments = Vec::new();
+
+        // check comments in the context
+        if let Some(comments) = self.ctx.comment_info.get_symbol_comments(&self.data.name) {
+            for (pos, content) in comments {
+                match pos {
+                    CommentPos::Before => {
+                        writeln!(f, "// {}", content)?;
+                    }
+                    CommentPos::AtEnd => {
+                        end_comments.push(content);
+                    }
+                    CommentPos::After => {
+                        after_comments.push(content);
+                    }
+                }
+            }
+        }
+
+        write!(f, "func @{}", self.data.name)?;
+
+        if self.debug {
+            write!(f, " /* {} */ ", self.data.self_ptr().id())?;
+        }
+
+        write!(f, "{} {{", self.data.sig.display(self.ctx))?;
+
+        for comment in end_comments.iter() {
+            write!(f, " /* {} */", comment)?;
+        }
+
+        if !end_comments.is_empty() {
+            writeln!(f)?;
+        }
+
+        for comment in after_comments.iter() {
+            writeln!(f, "// {}", comment)?;
+        }
+
+        writeln!(f)?;
+
+        for block in self.data.self_ptr().iter(self.ctx) {
+            writeln!(f, "{}", block.display(self.ctx, self.debug))?;
+        }
+
+        writeln!(f, "}}")
     }
 }
 
