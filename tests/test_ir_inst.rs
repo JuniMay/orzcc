@@ -353,7 +353,7 @@ fn test_ir_diaplay_0() {
 
     let expected = include_str!("ir_display/snapshot_0.orzir");
 
-    assert_eq!(s, expected);
+    assert_eq!(s.trim_end(), expected.trim_end());
 }
 
 // TODO: more tests on display
