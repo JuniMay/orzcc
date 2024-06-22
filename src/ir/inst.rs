@@ -958,6 +958,10 @@ impl User<Value> for Inst {
     }
 
     fn replace(self, ctx: &mut Context, old: Value, new: Value) {
+        if old.ty(ctx) != new.ty(ctx) {
+            panic!("incompatible value type for replacement");
+        }
+
         let mut replaced = false;
 
         for operand in self.deref_mut(ctx).operands.iter_mut() {
