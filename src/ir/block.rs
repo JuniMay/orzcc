@@ -222,8 +222,8 @@ impl Block {
         }
     }
 
-    pub fn comment(self, ctx: &mut Context, pos: CommentPos, content: String) {
-        ctx.comment_info.comment_block(self, pos, content);
+    pub fn comment(self, ctx: &mut Context, pos: CommentPos, content: impl Into<String>) {
+        ctx.comment_info.comment_block(self, pos, content.into());
     }
 
     pub fn id(self) -> usize { self.0.index() }

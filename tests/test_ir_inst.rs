@@ -1,6 +1,6 @@
 use orzcc::{
     collections::{linked_list::LinkedListContainerPtr, storage::ArenaPtr},
-    ir::{Block, Context, Func, IBinaryOp, Inst, Signature, Ty, Value},
+    ir::{debug::CommentPos, Block, Context, Func, IBinaryOp, Inst, Signature, Ty, Value},
     utils::{
         cfg::CfgNode,
         def_use::{Usable, User},
@@ -277,6 +277,19 @@ fn test_ir_diaplay_0() {
     let sig = Signature::new(vec![], vec![void]);
     let func = Func::new(&mut ctx, "test", sig);
 
+    func.comment(&mut ctx, CommentPos::Before, "Just a test function");
+    func.comment(
+        &mut ctx,
+        CommentPos::AtEnd,
+        "Just a test function comment at end",
+    );
+
+    func.comment(
+        &mut ctx,
+        CommentPos::After,
+        "Just a test function comment after",
+    );
+
     let entry = Block::new(&mut ctx);
     let bb1 = Block::new(&mut ctx);
     let bb2 = Block::new(&mut ctx);
@@ -336,7 +349,7 @@ fn test_ir_diaplay_0() {
 
     ctx.alloc_all_names();
 
-    let s = format!("{}", func.display(&ctx, true));
+    let s = format!("{}", ctx.display(true));
 
     let expected = include_str!("ir_display/snapshot_0.orzir");
 

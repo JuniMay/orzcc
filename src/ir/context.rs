@@ -1,3 +1,4 @@
+use core::fmt;
 use std::collections::HashMap;
 
 use super::{
@@ -104,7 +105,7 @@ impl Context {
     ///
     /// - [lookup_symbol](Self::lookup_symbol)
     pub(super) fn insert_func(&mut self, func: Func) {
-        let symbol: Symbol = func.name(self).into();
+        let symbol: Symbol = func.name(self).clone();
         if self.symbols.contains_key(&symbol) {
             panic!("symbol {:?} is already defined", symbol);
         }
@@ -126,6 +127,10 @@ impl Context {
     /// - `Some(symbol_kind)` if the symbol exists.
     /// - `None` if the symbol is not defined.
     pub fn lookup_symbol(&self, symbol: &Symbol) -> Option<&SymbolKind> { self.symbols.get(symbol) }
+
+    pub fn lookup_value(&self, name: &str) -> Option<Value> { self.value_name_alloc.get_ptr(name) }
+
+    pub fn lookup_block(&self, name: &str) -> Option<Block> { self.block_name_alloc.get_ptr(name) }
 
     /// Allocate names for all the values and blocks in the context.
     ///
@@ -151,5 +156,53 @@ impl Context {
         for block in blocks {
             block.name_or_alloc(self, "bb");
         }
+    }
+
+    pub fn display(&self, debug: bool) -> DisplayContext<'_> {
+        let mut slots = Vec::new();
+        let mut decls = Vec::new();
+        let mut funcs = Vec::new();
+
+        for (symbol, symbol_kind) in &self.symbols {
+            match symbol_kind {
+                SymbolKind::GlobalSlot(_) => slots.push(symbol),
+                SymbolKind::FuncDef(_) => funcs.push(symbol),
+                SymbolKind::FuncDecl(_) => decls.push(symbol),
+            }
+        }
+
+        DisplayContext {
+            ctx: self,
+            slots,
+            decls,
+            funcs,
+            debug,
+        }
+    }
+}
+
+pub struct DisplayContext<'a> {
+    ctx: &'a Context,
+    slots: Vec<&'a Symbol>,
+    decls: Vec<&'a Symbol>,
+    funcs: Vec<&'a Symbol>,
+    debug: bool,
+}
+
+impl fmt::Display for DisplayContext<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for symbol in self.slots.iter() {
+            writeln!(f, "{}", symbol.display(self.ctx, self.debug))?;
+        }
+
+        for symbol in self.decls.iter() {
+            writeln!(f, "{}", symbol.display(self.ctx, self.debug))?;
+        }
+
+        for symbol in self.funcs.iter() {
+            writeln!(f, "{}", symbol.display(self.ctx, self.debug))?;
+        }
+
+        Ok(())
     }
 }

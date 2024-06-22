@@ -33,7 +33,7 @@ where
 
     pub(super) fn get_name(&self, ptr: T) -> Option<&String> { self.ptr_to_name.get(&ptr) }
 
-    pub(super) fn _get_ptr(&self, name: &str) -> Option<&T> { self.name_to_ptr.get(name) }
+    pub(super) fn get_ptr(&self, name: &str) -> Option<T> { self.name_to_ptr.get(name).copied() }
 
     pub(super) fn _remove_by_name(&mut self, name: &str) -> Option<T> {
         let ptr = self.name_to_ptr.remove(name)?;

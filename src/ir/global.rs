@@ -22,8 +22,9 @@ impl From<String> for Symbol {
 }
 
 impl Symbol {
-    pub fn comment(&self, ctx: &mut Context, pos: CommentPos, content: String) {
-        ctx.comment_info.comment_symbol(self.clone(), pos, content);
+    pub fn comment(&self, ctx: &mut Context, pos: CommentPos, content: impl Into<String>) {
+        ctx.comment_info
+            .comment_symbol(self.clone(), pos, content.into());
     }
 }
 
@@ -77,7 +78,7 @@ impl Func {
         func
     }
 
-    pub fn name(self, ctx: &Context) -> &str { &self.deref(ctx).name.0 }
+    pub fn name(self, ctx: &Context) -> &Symbol { &self.deref(ctx).name }
 
     pub fn sig(self, ctx: &Context) -> &Signature { &self.deref(ctx).sig }
 
@@ -90,6 +91,10 @@ impl Func {
     }
 
     pub fn id(self) -> usize { self.0.index() }
+
+    pub fn comment(&self, ctx: &mut Context, pos: CommentPos, content: impl Into<String>) {
+        self.deref(ctx).name.clone().comment(ctx, pos, content);
+    }
 }
 
 impl CfgRegion for Func {
@@ -108,53 +113,19 @@ pub struct DisplayFunc<'a> {
 
 impl fmt::Display for DisplayFunc<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut end_comments = Vec::new();
-        let mut after_comments = Vec::new();
-
-        // check comments in the context
-        if let Some(comments) = self.ctx.comment_info.get_symbol_comments(&self.data.name) {
-            for (pos, content) in comments {
-                match pos {
-                    CommentPos::Before => {
-                        writeln!(f, "// {}", content)?;
-                    }
-                    CommentPos::AtEnd => {
-                        end_comments.push(content);
-                    }
-                    CommentPos::After => {
-                        after_comments.push(content);
-                    }
-                }
-            }
-        }
-
         write!(f, "func @{}", self.data.name)?;
 
         if self.debug {
             write!(f, " /* {} */ ", self.data.self_ptr().id())?;
         }
 
-        write!(f, "{} {{", self.data.sig.display(self.ctx))?;
-
-        for comment in end_comments.iter() {
-            write!(f, " /* {} */", comment)?;
-        }
-
-        if !end_comments.is_empty() {
-            writeln!(f)?;
-        }
-
-        for comment in after_comments.iter() {
-            writeln!(f, "// {}", comment)?;
-        }
-
-        writeln!(f)?;
+        writeln!(f, "{} {{", self.data.sig.display(self.ctx))?;
 
         for block in self.data.self_ptr().iter(self.ctx) {
             writeln!(f, "{}", block.display(self.ctx, self.debug))?;
         }
 
-        writeln!(f, "}}")
+        write!(f, "}}")
     }
 }
 
@@ -174,9 +145,14 @@ impl LinkedListContainerPtr<Block> for Func {
 
 /// Global memory slot.
 pub struct GlobalSlotData {
+    self_ptr: GlobalSlot,
     name: Symbol,
     ty: Ty,
-    init: Option<Constant>,
+    init: Constant,
+}
+
+impl GlobalSlotData {
+    pub fn self_ptr(&self) -> GlobalSlot { self.self_ptr }
 }
 
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
@@ -185,11 +161,17 @@ pub struct GlobalSlot(BaseArenaPtr<GlobalSlotData>);
 impl_arena!(Context, GlobalSlotData, GlobalSlot, global_slots);
 
 impl GlobalSlot {
-    pub fn new(ctx: &mut Context, name: impl Into<Symbol>, ty: Ty) -> GlobalSlot {
-        let slot = ctx.alloc(GlobalSlotData {
+    pub fn new(
+        ctx: &mut Context,
+        name: impl Into<Symbol>,
+        ty: Ty,
+        init: impl Into<Constant>,
+    ) -> GlobalSlot {
+        let slot = ctx.alloc_with(|self_ptr| GlobalSlotData {
+            self_ptr,
             name: name.into(),
             ty,
-            init: None,
+            init: init.into(),
         });
         ctx.insert_global_slot(slot);
         slot
@@ -199,7 +181,44 @@ impl GlobalSlot {
 
     pub fn ty(self, ctx: &Context) -> Ty { self.deref(ctx).ty }
 
-    pub fn init(self, ctx: &Context) -> Option<&Constant> { self.deref(ctx).init.as_ref() }
+    pub fn init(self, ctx: &Context) -> &Constant { &self.deref(ctx).init }
+
+    pub fn id(self) -> usize { self.0.index() }
+
+    pub fn display(self, ctx: &Context, debug: bool) -> DisplayGlobalSlot<'_> {
+        DisplayGlobalSlot {
+            ctx,
+            data: self.deref(ctx),
+            debug,
+        }
+    }
+
+    pub fn comment(&self, ctx: &mut Context, pos: CommentPos, content: impl Into<String>) {
+        self.deref(ctx).name.clone().comment(ctx, pos, content);
+    }
+}
+
+pub struct DisplayGlobalSlot<'a> {
+    ctx: &'a Context,
+    data: &'a GlobalSlotData,
+    debug: bool,
+}
+
+impl fmt::Display for DisplayGlobalSlot<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "slot @{}", self.data.name)?;
+
+        if self.debug {
+            write!(f, " /* {} */ ", self.data.self_ptr().id())?;
+        }
+
+        write!(
+            f,
+            " : {} = {}",
+            self.data.ty.display(self.ctx),
+            self.data.init
+        )
+    }
 }
 
 /// The entity that a symbol defines.
@@ -211,4 +230,72 @@ pub enum SymbolKind {
     GlobalSlot(GlobalSlot),
     /// A function declaration.
     FuncDecl(Signature),
+}
+
+impl Symbol {
+    pub fn display<'a>(&'a self, ctx: &'a Context, debug: bool) -> DisplaySymbol<'a> {
+        DisplaySymbol {
+            ctx,
+            symbol: self,
+            kind: ctx.lookup_symbol(self).unwrap(),
+            debug,
+        }
+    }
+}
+
+pub struct DisplaySymbol<'a> {
+    ctx: &'a Context,
+    symbol: &'a Symbol,
+    kind: &'a SymbolKind,
+    debug: bool,
+}
+
+impl fmt::Display for DisplaySymbol<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut end_comments = Vec::new();
+        let mut after_comments = Vec::new();
+
+        // check comments in the context
+        if let Some(comments) = self.ctx.comment_info.get_symbol_comments(self.symbol) {
+            for (pos, content) in comments {
+                match pos {
+                    CommentPos::Before => {
+                        writeln!(f, "// {}", content)?;
+                    }
+                    CommentPos::AtEnd => {
+                        end_comments.push(content);
+                    }
+                    CommentPos::After => {
+                        after_comments.push(content);
+                    }
+                }
+            }
+        }
+
+        match self.kind {
+            SymbolKind::FuncDef(func) => {
+                write!(f, "{}", func.display(self.ctx, self.debug))?;
+            }
+            SymbolKind::GlobalSlot(slot) => {
+                write!(f, "{}", slot.display(self.ctx, self.debug))?;
+            }
+            SymbolKind::FuncDecl(sig) => {
+                write!(f, "decl @{}{}", self.symbol, sig.display(self.ctx))?;
+            }
+        }
+
+        for comment in end_comments.iter() {
+            write!(f, " /* {} */", comment)?;
+        }
+
+        if !end_comments.is_empty() {
+            writeln!(f)?;
+        }
+
+        for comment in after_comments.iter() {
+            writeln!(f, "// {}", comment)?;
+        }
+
+        Ok(())
+    }
 }

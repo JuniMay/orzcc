@@ -903,8 +903,8 @@ impl Inst {
 
     pub fn results(self, ctx: &Context) -> &[Value] { &self.deref(ctx).results }
 
-    pub fn comment(self, ctx: &mut Context, pos: CommentPos, content: String) {
-        ctx.comment_info.comment_inst(self, pos, content);
+    pub fn comment(self, ctx: &mut Context, pos: CommentPos, content: impl Into<String>) {
+        ctx.comment_info.comment_inst(self, pos, content.into());
     }
 
     pub fn result(self, ctx: &Context, idx: usize) -> Value { self.deref(ctx).results[idx] }
