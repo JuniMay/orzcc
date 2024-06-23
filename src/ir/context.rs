@@ -11,6 +11,7 @@ use super::{
     GlobalSlot,
     GlobalSlotData,
     InstData,
+    Signature,
     Symbol,
     SymbolKind,
     TyData,
@@ -118,6 +119,13 @@ impl Context {
             panic!("symbol {:?} is already defined", symbol);
         }
         self.symbols.insert(symbol, SymbolKind::GlobalSlot(slot));
+    }
+
+    pub fn add_func_decl(&mut self, symbol: Symbol, sig: Signature) {
+        if self.symbols.contains_key(&symbol) {
+            panic!("symbol {:?} is already defined", symbol);
+        }
+        self.symbols.insert(symbol, SymbolKind::FuncDecl(sig));
     }
 
     /// Lookup a symbol in the context.

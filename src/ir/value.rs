@@ -6,9 +6,12 @@
 
 use std::collections::HashSet;
 
-use super::{Block, Context, Inst, Ty};
+use super::{Block, Context, Func, Inst, Ty};
 use crate::{
-    collections::storage::{ArenaFree, ArenaPtr, BaseArenaPtr},
+    collections::{
+        linked_list::LinkedListNodePtr,
+        storage::{ArenaFree, ArenaPtr, BaseArenaPtr},
+    },
     impl_arena,
     utils::def_use::Usable,
 };
@@ -147,6 +150,15 @@ impl Value {
             self.alloc_name(ctx, prefix)
         } else {
             self.name(ctx).unwrap()
+        }
+    }
+
+    pub fn parent_func(self, ctx: &Context) -> Func {
+        match self.deref(ctx).kind {
+            ValueKind::InstResult { inst, .. } => {
+                inst.container(ctx).unwrap().container(ctx).unwrap()
+            }
+            ValueKind::BlockParam { block, .. } => block.container(ctx).unwrap(),
         }
     }
 }

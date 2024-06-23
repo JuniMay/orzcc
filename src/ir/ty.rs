@@ -243,6 +243,10 @@ impl Ty {
         matches!(self.deref(ctx), TyData::Float32 | TyData::Float64)
     }
 
+    pub fn is_float32(&self, ctx: &Context) -> bool { matches!(self.deref(ctx), TyData::Float32) }
+
+    pub fn is_float64(&self, ctx: &Context) -> bool { matches!(self.deref(ctx), TyData::Float64) }
+
     pub fn is_index(&self, ctx: &Context) -> bool { matches!(self.deref(ctx), TyData::Index) }
 
     pub fn bitwidth(&self, ctx: &Context) -> Option<usize> {

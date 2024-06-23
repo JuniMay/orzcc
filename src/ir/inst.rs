@@ -52,6 +52,20 @@ impl fmt::Display for ICmpCond {
     }
 }
 
+impl From<&str> for ICmpCond {
+    fn from(s: &str) -> Self {
+        match s {
+            "eq" => Self::Eq,
+            "ne" => Self::Ne,
+            "slt" => Self::Slt,
+            "sle" => Self::Sle,
+            "ult" => Self::Ult,
+            "ule" => Self::Ule,
+            _ => panic!("invalid integer comparison condition: {}", s),
+        }
+    }
+}
+
 /// The floating-point comparison condition.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FCmpCond {
@@ -84,6 +98,22 @@ impl fmt::Display for FCmpCond {
             Self::UNe => write!(f, "une"),
             Self::ULt => write!(f, "ult"),
             Self::ULe => write!(f, "ule"),
+        }
+    }
+}
+
+impl From<&str> for FCmpCond {
+    fn from(s: &str) -> Self {
+        match s {
+            "oeq" => Self::OEq,
+            "one" => Self::ONe,
+            "olt" => Self::OLt,
+            "ole" => Self::OLe,
+            "ueq" => Self::UEq,
+            "une" => Self::UNe,
+            "ult" => Self::ULt,
+            "ule" => Self::ULe,
+            _ => panic!("invalid floating-point comparison condition: {}", s),
         }
     }
 }
@@ -187,6 +217,15 @@ impl fmt::Display for IUnaryOp {
     }
 }
 
+impl From<&str> for IUnaryOp {
+    fn from(s: &str) -> Self {
+        match s {
+            "not" => Self::Not,
+            _ => panic!("invalid integer unary operation: {}", s),
+        }
+    }
+}
+
 /// Floating-point unary operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FUnaryOp {
@@ -202,11 +241,22 @@ impl fmt::Display for FUnaryOp {
     }
 }
 
+impl From<&str> for FUnaryOp {
+    fn from(s: &str) -> Self {
+        match s {
+            "fneg" => Self::Neg,
+            _ => panic!("invalid floating-point unary operation: {}", s),
+        }
+    }
+}
+
 /// Cast operation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CastOp {
     /// Truncate.
     Trunc,
+    /// Floating point truncate.
+    FpTrunc,
     /// Zero-extend.
     ZExt,
     /// Sign-extend.
@@ -235,6 +285,7 @@ impl fmt::Display for CastOp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Trunc => write!(f, "trunc"),
+            Self::FpTrunc => write!(f, "fptrunc"),
             Self::ZExt => write!(f, "zext"),
             Self::SExt => write!(f, "sext"),
             Self::FpToUi => write!(f, "fptoui"),
@@ -245,6 +296,26 @@ impl fmt::Display for CastOp {
             Self::FpExt => write!(f, "fpext"),
             Self::IndexToInt => write!(f, "indextoint"),
             Self::IntToIndex => write!(f, "inttoindex"),
+        }
+    }
+}
+
+impl From<&str> for CastOp {
+    fn from(s: &str) -> Self {
+        match s {
+            "trunc" => Self::Trunc,
+            "fptrunc" => Self::FpTrunc,
+            "zext" => Self::ZExt,
+            "sext" => Self::SExt,
+            "fptoui" => Self::FpToUi,
+            "fptosi" => Self::FpToSi,
+            "uitofp" => Self::UiToFp,
+            "sitofp" => Self::SiToFp,
+            "bitcast" => Self::Bitcast,
+            "fpext" => Self::FpExt,
+            "indextoint" => Self::IndexToInt,
+            "inttoindex" => Self::IntToIndex,
+            _ => panic!("invalid cast operation: {}", s),
         }
     }
 }
@@ -549,12 +620,12 @@ impl Inst {
             }
             CastOp::FpToUi | CastOp::FpToSi => {
                 if !val_ty.is_float(ctx) || !ty.is_integer(ctx) {
-                    panic!("fp_to_ui only supports float-like to integer-like types");
+                    panic!("fptoui only supports float-like to integer-like types");
                 }
             }
             CastOp::UiToFp | CastOp::SiToFp => {
                 if !val_ty.is_integer(ctx) || !ty.is_float(ctx) {
-                    panic!("ui_to_fp only supports integer-like to float-like types");
+                    panic!("uitofp only supports integer-like to float-like types");
                 }
             }
             CastOp::Bitcast => {
@@ -567,20 +638,28 @@ impl Inst {
             }
             CastOp::FpExt => {
                 if !val_ty.is_float(ctx) || !ty.is_float(ctx) {
-                    panic!("fp_ext only supports float-like types");
+                    panic!("fpext only supports float-like types");
                 }
                 if val_ty.bitwidth(ctx).unwrap() >= ty.bitwidth(ctx).unwrap() {
-                    panic!("fp_ext only supports extending to a larger type");
+                    panic!("fpext only supports extending to a larger type");
+                }
+            }
+            CastOp::FpTrunc => {
+                if !val_ty.is_float(ctx) || !ty.is_float(ctx) {
+                    panic!("fptrunc only supports float-like types");
+                }
+                if val_ty.bitwidth(ctx).unwrap() <= ty.bitwidth(ctx).unwrap() {
+                    panic!("fptrunc only supports truncating to a smaller type");
                 }
             }
             CastOp::IndexToInt => {
                 if !val_ty.is_index(ctx) || !ty.is_integer(ctx) {
-                    panic!("index_to_int only supports index to integer-like types");
+                    panic!("indextoint only supports index to integer-like types");
                 }
             }
             CastOp::IntToIndex => {
                 if !val_ty.is_integer(ctx) || !ty.is_index(ctx) {
-                    panic!("int_to_index only supports integer-like to index types");
+                    panic!("inttoindex only supports integer-like to index types");
                 }
             }
         }
@@ -1245,11 +1324,12 @@ impl<'a> fmt::Display for DisplayInst<'a> {
                 }
                 write!(f, ")")?;
             }
-            Ik::CallIndirect(_) => {
+            Ik::CallIndirect(sig) => {
                 assert!(!self.data.operands.is_empty());
                 write!(
                     f,
-                    "call_indirect %{}(",
+                    "call_indirect {}, %{}(",
+                    sig.display(self.ctx),
                     self.data.operands[0].inner().name(self.ctx).unwrap()
                 )?;
                 for (i, arg) in self.data.operands.iter().skip(1).enumerate() {
