@@ -122,7 +122,7 @@ fn test_ir_block_def_use_0() {
     func.push_back(&mut ctx, merge);
 
     let i1 = Inst::iconst(&mut ctx, 1, int);
-    let i2 = Inst::fconst(&mut ctx, 2.0, float);
+    let i2 = Inst::fconst32(&mut ctx, 2.0, float);
 
     let v1 = i1.result(&ctx, 0);
     let v2 = i2.result(&ctx, 0);
@@ -245,7 +245,7 @@ fn test_ir_display_0() {
     let i2 = Inst::iconst(&mut ctx, 2, int);
 
     let float = Ty::float32(&mut ctx);
-    let f1 = Inst::fconst(&mut ctx, 1.0f32, float);
+    let f1 = Inst::fconst32(&mut ctx, 1.0f32, float);
 
     let v2 = i2.result(&ctx, 0);
     v2.assign_name(&mut ctx, "second");
@@ -307,7 +307,7 @@ fn test_ir_diaplay_0() {
     func.push_back(&mut ctx, merge);
 
     let i1 = Inst::iconst(&mut ctx, 1, int);
-    let i2 = Inst::fconst(&mut ctx, 2.0f32, float);
+    let i2 = Inst::fconst32(&mut ctx, 2.0f32, float);
 
     let v1 = i1.result(&ctx, 0);
     let v2 = i2.result(&ctx, 0);

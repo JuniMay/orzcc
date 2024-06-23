@@ -3,6 +3,7 @@ use std::{collections::HashMap, vec};
 
 use super::{
     debug::CommentPos,
+    source_loc::Span,
     Block,
     Constant,
     Context,
@@ -15,6 +16,7 @@ use super::{
 };
 use crate::{
     collections::{
+        apint::ApInt,
         linked_list::LinkedListNodePtr,
         storage::{ArenaAlloc, ArenaFree, ArenaPtr, BaseArenaPtr},
     },
@@ -341,6 +343,7 @@ impl Successor {
         }
     }
 
+    /// Add an argument mapping.
     pub fn add_arg(&mut self, param: Value, arg: Operand<Value>) { self.args.insert(param, arg); }
 
     pub fn display<'a>(&'a self, ctx: &'a Context) -> DisplaySuccessor<'a> {
@@ -455,6 +458,8 @@ pub struct InstData {
     prev: Option<Inst>,
     /// The parent block.
     parent: Option<Block>,
+
+    source_span: Span,
 }
 
 impl InstData {
@@ -479,6 +484,8 @@ impl Inst {
             next: None,
             prev: None,
             parent: None,
+
+            source_span: Span::default(),
         });
 
         let operands = operands
@@ -497,13 +504,25 @@ impl Inst {
         inst
     }
 
+    pub fn set_source_span(&self, ctx: &mut Context, span: impl Into<Span>) {
+        self.deref_mut(ctx).source_span = span.into();
+    }
+
+    pub fn source_span(self, ctx: &Context) -> Span { self.deref(ctx).source_span }
+
     /// Create a new iconst instruction.
-    pub fn iconst(ctx: &mut Context, constant: impl Into<Constant>, ty: Ty) -> Inst {
+    pub fn iconst(ctx: &mut Context, constant: impl Into<ApInt>, ty: Ty) -> Inst {
+        let constant: ApInt = constant.into();
         Self::new(ctx, InstKind::IConst(constant.into()), vec![ty], vec![])
     }
 
-    /// Create a new fconst instruction.
-    pub fn fconst(ctx: &mut Context, constant: impl Into<Constant>, ty: Ty) -> Inst {
+    /// Create a new fconst instruction for float32
+    pub fn fconst32(ctx: &mut Context, constant: f32, ty: Ty) -> Inst {
+        Self::new(ctx, InstKind::FConst(constant.into()), vec![ty], vec![])
+    }
+
+    /// Create a new fconst instruction for float64
+    pub fn fconst64(ctx: &mut Context, constant: f64, ty: Ty) -> Inst {
         Self::new(ctx, InstKind::FConst(constant.into()), vec![ty], vec![])
     }
 

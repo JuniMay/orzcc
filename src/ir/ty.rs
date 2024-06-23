@@ -1,6 +1,6 @@
 use std::fmt;
 
-use super::Context;
+use super::{source_loc::Span, Context};
 use crate::collections::storage::{ArenaAlloc, ArenaDeref, ArenaPtr, UniqueArenaPtr};
 
 /// The type kinds.
@@ -67,6 +67,8 @@ pub enum TyData {
 pub struct Signature {
     pub(super) ret: Vec<Ty>,
     pub(super) params: Vec<Ty>,
+
+    source_span: Span,
 }
 
 pub struct DisplaySig<'a> {
@@ -102,7 +104,17 @@ impl<'a> fmt::Display for DisplaySig<'a> {
 }
 
 impl Signature {
-    pub fn new(params: Vec<Ty>, ret: Vec<Ty>) -> Signature { Self { ret, params } }
+    pub fn new(params: Vec<Ty>, ret: Vec<Ty>) -> Signature {
+        Self {
+            ret,
+            params,
+            source_span: Span::default(),
+        }
+    }
+
+    pub fn set_source_span(&mut self, span: Span) { self.source_span = span; }
+
+    pub fn source_span(self) -> Span { self.source_span }
 
     pub fn display<'a>(&'a self, ctx: &'a Context) -> DisplaySig<'a> {
         DisplaySig { ctx, sig: self }

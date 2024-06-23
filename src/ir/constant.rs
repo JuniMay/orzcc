@@ -67,10 +67,13 @@ impl Constant {
         }
     }
 
+    /// Create an undefined constant.
     pub fn undef(ty: Ty) -> Self { Constant::Undef(ty) }
 
-    pub fn zero_init(ty: Ty) -> Self { Constant::ZeroInit(ty) }
+    /// Create a zero initialized constant.
+    pub fn zeroinit(ty: Ty) -> Self { Constant::ZeroInit(ty) }
 
+    /// Create an array constant.
     pub fn array(ctx: &mut Context, values: Vec<Constant>) -> Self {
         if values.is_empty() {
             panic!("Array constant must have at least one element");
@@ -86,6 +89,7 @@ impl Constant {
         Constant::Array(values)
     }
 
+    /// Create a struct constant.
     pub fn struct_(values: Vec<Constant>, is_packed: bool) -> Self {
         Constant::Struct(values, is_packed)
     }

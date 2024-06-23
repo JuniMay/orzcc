@@ -251,6 +251,27 @@ where
             curr_back: None,
         }
     }
+
+    /// Extend the linked list with the nodes from an iterator.
+    ///
+    /// # Parameters
+    ///
+    /// - `arena`: The arena to allocate the nodes.
+    /// - `iter`: The iterator of the nodes to extend.
+    ///
+    /// # Panics
+    ///
+    /// Panics if any node in the iterator is already in another container.
+    ///
+    /// # Notes
+    ///
+    /// The extension only applies to the unlinked nodes, for those linked, use
+    /// [merge](LinkedListContainerPtr::merge) to merge the linked list.
+    fn extend<I: IntoIterator<Item = NodePtr>>(self, arena: &mut Self::A, iter: I) {
+        for node in iter {
+            self.push_back(arena, node);
+        }
+    }
 }
 
 /// The iterator of a linked list.
@@ -453,6 +474,60 @@ pub trait LinkedListNodePtr: ArenaPtr {
         self.set_prev(arena, None);
         self.set_next(arena, None);
         self.set_container(arena, None);
+    }
+
+    /// Extend the linked list after the current node.
+    ///
+    /// # Parameters
+    ///
+    /// - `arena`: The arena to allocate the nodes.
+    /// - `iter`: The iterator of nodes to extend.
+    ///
+    /// # Panics
+    ///
+    /// - Panics if the current node does not belong to a container.
+    /// - Panics if any node to insert already belongs to a container.
+    ///
+    /// # Notes
+    ///
+    /// The order of the nodes in the iterator is preserved.
+    fn extend_after<I>(self, arena: &mut Self::A, iter: I)
+    where
+        I: IntoIterator<Item = Self>,
+    {
+        let mut current = self;
+        for node in iter {
+            current.insert_after(arena, node);
+            current = node;
+        }
+    }
+
+    /// Extend the linked list before the current node.
+    ///
+    /// # Parameters
+    ///
+    /// - `arena`: The arena to allocate the nodes.
+    /// - `iter`: The iterator of nodes to extend.
+    ///
+    /// # Panics
+    ///
+    /// - Panics if the current node does not belong to a container.
+    /// - Panics if any node to insert already belongs to a container.
+    ///
+    /// # Notes
+    ///
+    /// The order of the nodes in the iterator is reversed, i.e., inserting the
+    /// first node in the iterator will be placed before the current node, and
+    /// the second node will be placed before the first node, and so on.
+    fn extend_before<I>(self, arena: &mut Self::A, iter: I)
+    where
+        I: IntoIterator<Item = Self>,
+    {
+        let mut current = self;
+        for node in iter {
+            current.insert_before(arena, node);
+            current = node;
+        }
     }
 }
 

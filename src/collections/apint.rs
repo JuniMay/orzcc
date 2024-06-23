@@ -856,6 +856,24 @@ impl ApInt {
 
         remainder
     }
+
+    /// Convert the integer to little-endian bytes.
+    pub fn to_le_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(self.width / 8);
+        for chunk in self.chunks.iter() {
+            bytes.extend(chunk.to_le_bytes());
+        }
+        bytes
+    }
+
+    /// Convert the integer to big-endian bytes.
+    pub fn to_be_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::with_capacity(self.width / 8);
+        for chunk in self.chunks.iter().rev() {
+            bytes.extend(chunk.to_be_bytes());
+        }
+        bytes
+    }
 }
 
 impl From<f32> for ApInt {

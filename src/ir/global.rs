@@ -1,6 +1,6 @@
 use std::fmt;
 
-use super::{debug::CommentPos, Block, Constant, Context, Signature, Ty};
+use super::{debug::CommentPos, source_loc::Span, Block, Constant, Context, Signature, Ty};
 use crate::{
     collections::{
         linked_list::LinkedListContainerPtr,
@@ -53,6 +53,8 @@ pub struct FuncData {
     /// The tail block of the function, not necessarily the exit block in
     /// control flow.
     tail: Option<Block>,
+
+    source_span: Span,
 }
 
 impl FuncData {
@@ -72,11 +74,19 @@ impl Func {
             sig,
             head: None,
             tail: None,
+
+            source_span: Span::default(),
         });
         // establish the mapping from name to function
         ctx.insert_func(func);
         func
     }
+
+    pub fn set_source_span(self, ctx: &mut Context, span: Span) {
+        self.deref_mut(ctx).source_span = span;
+    }
+
+    pub fn source_span(self, ctx: &Context) -> Span { self.deref(ctx).source_span }
 
     pub fn name(self, ctx: &Context) -> &Symbol { &self.deref(ctx).name }
 

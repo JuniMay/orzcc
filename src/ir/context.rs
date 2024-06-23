@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use super::{
     debug::CommentInfo,
     name_alloc::NameAlloc,
+    source_loc::Source,
     Block,
     BlockData,
     Func,
@@ -64,6 +65,9 @@ pub struct Context {
     ///
     /// This is used to add human-readable comment when emitting the IR.
     pub(super) comment_info: CommentInfo,
+
+    // other information
+    pub(super) source: Source,
 }
 
 impl Default for Context {
@@ -90,11 +94,41 @@ impl Default for Context {
             // | debug interface |
             // +-----------------+
             comment_info: CommentInfo::default(),
+
+            source: Source::default(),
         }
     }
 }
 
 impl Context {
+    pub fn new_in_memory(name: impl Into<String>) -> Self {
+        Self {
+            // +-----------------+
+            // |    storages     |
+            // +-----------------+
+            tys: UniqueArena::default(),
+            blocks: BaseArena::default(),
+            insts: BaseArena::default(),
+            values: BaseArena::default(),
+            funcs: BaseArena::default(),
+            global_slots: BaseArena::default(),
+            symbols: HashMap::new(),
+
+            // +-----------------+
+            // | name management |
+            // +-----------------+
+            value_name_alloc: NameAlloc::new(),
+            block_name_alloc: NameAlloc::new(),
+
+            // +-----------------+
+            // | debug interface |
+            // +-----------------+
+            comment_info: CommentInfo::default(),
+
+            source: Source::in_memory(name),
+        }
+    }
+
     /// Insert function definition into the context and map the name.
     ///
     /// # Panics
@@ -127,6 +161,8 @@ impl Context {
         }
         self.symbols.insert(symbol, SymbolKind::FuncDecl(sig));
     }
+
+    pub fn source(&self) -> &Source { &self.source }
 
     /// Lookup a symbol in the context.
     ///

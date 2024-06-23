@@ -5,6 +5,7 @@ mod fold;
 mod global;
 mod inst;
 mod name_alloc;
+mod source_loc;
 mod ty;
 mod value;
 

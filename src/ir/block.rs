@@ -1,7 +1,7 @@
 use core::fmt;
 use std::collections::HashSet;
 
-use super::{debug::CommentPos, Context, Func, Inst, Ty, Value, ValueData};
+use super::{debug::CommentPos, source_loc::Span, Context, Func, Inst, Ty, Value, ValueData};
 use crate::{
     collections::{
         linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
@@ -28,6 +28,8 @@ pub struct BlockData {
     prev: Option<Block>,
     /// The parent function of the block.
     parent: Option<Func>,
+
+    source_span: Span,
 }
 
 impl BlockData {
@@ -51,8 +53,16 @@ impl Block {
             next: None,
             prev: None,
             parent: None,
+
+            source_span: Span::default(),
         })
     }
+
+    pub fn set_source_span(self, ctx: &mut Context, span: impl Into<Span>) {
+        self.deref_mut(ctx).source_span = span.into();
+    }
+
+    pub fn source_span(self, ctx: &Context) -> Span { self.deref(ctx).source_span }
 
     /// Create a new parameter of the block and append it to the block.
     ///
@@ -214,6 +224,7 @@ impl Block {
     /// - `None`: The block is not assigned/allocated a name yet.
     pub fn name(self, ctx: &Context) -> Option<&String> { ctx.block_name_alloc.get_name(self) }
 
+    /// Get the name or allocate a name for the block.
     pub fn name_or_alloc(self, ctx: &mut Context, prefix: impl Into<String>) -> &String {
         if self.name(ctx).is_none() {
             self.alloc_name(ctx, prefix)
@@ -222,12 +233,17 @@ impl Block {
         }
     }
 
+    /// Make a comment on the block.
     pub fn comment(self, ctx: &mut Context, pos: CommentPos, content: impl Into<String>) {
         ctx.comment_info.comment_block(self, pos, content.into());
     }
 
+    /// Get the arena pointer id of the block.
     pub fn id(self) -> usize { self.0.index() }
 
+    /// Display the block.
+    ///
+    /// This can be used with [fmt::Display] to display the block.
     pub fn display(self, ctx: &Context, debug: bool) -> DisplayBlock<'_> {
         DisplayBlock {
             ctx,
