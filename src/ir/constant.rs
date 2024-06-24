@@ -3,9 +3,71 @@ use core::fmt;
 use super::{Context, Ty};
 use crate::collections::apint::ApInt;
 
-/// A constant value in the IR.
+/// A float constant.
 ///
-/// Constant can be used to fold instructions in the IR.
+/// The integer in `iconst` can be represented with [ApInt], but for
+/// floating-point, the complex semantics for aribtrary precision is not
+/// supported yet, so just use a enum to represent the float constant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum FloatConstant {
+    Float32(u32),
+    Float64(u64),
+}
+
+impl From<f32> for FloatConstant {
+    fn from(f: f32) -> Self { Self::Float32(f.to_bits()) }
+}
+
+impl From<f64> for FloatConstant {
+    fn from(f: f64) -> Self { Self::Float64(f.to_bits()) }
+}
+
+impl TryFrom<FloatConstant> for f32 {
+    type Error = &'static str;
+
+    fn try_from(value: FloatConstant) -> Result<Self, Self::Error> {
+        match value {
+            FloatConstant::Float32(val) => Ok(f32::from_bits(val)),
+            _ => Err("constant is not a Float32"),
+        }
+    }
+}
+
+impl TryFrom<FloatConstant> for f64 {
+    type Error = &'static str;
+
+    fn try_from(value: FloatConstant) -> Result<Self, Self::Error> {
+        match value {
+            FloatConstant::Float64(val) => Ok(f64::from_bits(val)),
+            _ => Err("constant is not a Float64"),
+        }
+    }
+}
+
+impl fmt::Display for FloatConstant {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // output bits, in hex format
+        match self {
+            FloatConstant::Float32(val) => write!(f, "{}", f32::from_bits(*val)),
+            FloatConstant::Float64(val) => write!(f, "{}", f64::from_bits(*val)),
+        }
+    }
+}
+
+impl fmt::LowerHex for FloatConstant {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // output bits, in hex format
+        match self {
+            FloatConstant::Float32(val) => write!(f, "{:#x}", val),
+            FloatConstant::Float64(val) => write!(f, "{:#x}", val),
+        }
+    }
+}
+
+/// A global constant value in the IR.
+///
+/// For instructions like `iconst` or `fconst`, [ApInt] and [FloatConstant] are
+/// used instead.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Constant {
     /// Undefined value.

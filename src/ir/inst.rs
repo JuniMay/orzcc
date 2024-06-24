@@ -2,6 +2,7 @@ use core::fmt;
 use std::{collections::HashMap, vec};
 
 use super::{
+    constant::FloatConstant,
     debug::CommentPos,
     source_loc::Span,
     Block,
@@ -394,9 +395,11 @@ pub enum InstKind {
     ///
     /// Using an individual constant creation instruction is similar to MLIR and
     /// Cranelift IR.
-    IConst(Constant),
+    IConst(ApInt),
     /// Create a new value from a constant.
-    FConst(Constant),
+    ///
+    /// Currently, only f32 and f64 are supported.
+    FConst(FloatConstant),
     /// Create a new value as a stack slot.
     ///
     /// The result type is a pointer.
@@ -525,7 +528,6 @@ impl Inst {
 
     /// Create a new iconst instruction.
     pub fn iconst(ctx: &mut Context, constant: impl Into<ApInt>, ty: Ty) -> Inst {
-        let constant: ApInt = constant.into();
         Self::new(ctx, InstKind::IConst(constant.into()), vec![ty], vec![])
     }
 
