@@ -86,7 +86,7 @@ fn test_ir_block_def_use_0() {
     // func @test() -> void {
     // ^entry:
     //     %v1 = iconst 1 : i32
-    //     %v2 = iconst 2 : f32
+    //     %v2 = fconst 2 : f32
     //
     //     %dummy_cond = iconst 1 : i1
     //     br %dummy_cond, ^bb1, ^bb2

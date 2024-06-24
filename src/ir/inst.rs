@@ -411,6 +411,15 @@ pub enum InstKind {
     /// The type of the destination value is determined by the type of the
     /// result value.
     Cast(CastOp),
+    /// The offset instruction.
+    ///
+    /// This instruction is to calculate an index from a base index and a
+    /// calculated offset (must be integer).
+    ///
+    /// `offset` is equivalent to `getelementptr inbounds i8, %base, %offset` in
+    /// LLVM IR. The only difference is that `offset` makes the calculation of
+    /// the offset independent from the base pointer.
+    Offset,
     /// Jump instruction.
     Jump,
     /// Branch instruction.
@@ -684,6 +693,23 @@ impl Inst {
         }
 
         Self::new(ctx, InstKind::Cast(op), vec![ty], vec![val])
+    }
+
+    pub fn offset(ctx: &mut Context, base: Value, offset: Value) -> Inst {
+        if !base.ty(ctx).is_index(ctx) {
+            panic!("base must be an index type");
+        }
+
+        if !offset.ty(ctx).is_integer(ctx) {
+            panic!("offset must be an integer-like type");
+        }
+
+        Self::new(
+            ctx,
+            InstKind::Offset,
+            vec![base.ty(ctx)],
+            vec![base, offset],
+        )
     }
 
     pub fn jump(ctx: &mut Context, target: Block, args: Vec<Value>) -> Inst {
@@ -1281,6 +1307,16 @@ impl<'a> fmt::Display for DisplayInst<'a> {
                     "{} %{}",
                     op,
                     self.data.operands[0].inner().name(self.ctx).unwrap(),
+                )?;
+            }
+            Ik::Offset => {
+                assert_eq!(self.data.results.len(), 1);
+                assert_eq!(self.data.operands.len(), 2);
+                write!(
+                    f,
+                    "offset %{}, %{}",
+                    self.data.operands[0].inner().name(self.ctx).unwrap(),
+                    self.data.operands[1].inner().name(self.ctx).unwrap(),
                 )?;
             }
             Ik::Jump => {
