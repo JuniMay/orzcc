@@ -340,7 +340,7 @@ fn test_ir_diaplay_0() {
     bb2.push_back(&mut ctx, jump2);
 
     let i5 = Inst::ibinary(&mut ctx, IBinaryOp::Add, p1, p1);
-    let ret = Inst::return_(&mut ctx, vec![]);
+    let ret = Inst::ret(&mut ctx, vec![]);
 
     merge.push_back(&mut ctx, i5);
     merge.push_back(&mut ctx, ret);

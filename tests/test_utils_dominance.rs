@@ -6,47 +6,47 @@ mod common;
 #[test]
 fn test_dominance_0() {
     let mut arena = CfgContext::default();
-    let bb0 = CfgBlock::new(&mut arena);
     let bb1 = CfgBlock::new(&mut arena);
     let bb2 = CfgBlock::new(&mut arena);
     let bb3 = CfgBlock::new(&mut arena);
     let bb4 = CfgBlock::new(&mut arena);
+    let bb5 = CfgBlock::new(&mut arena);
 
-    //       bb0
-    //       / \
-    //      /   \
-    //    bb1   bb2
-    //    /       \
-    //  bb3 <---- bb4 <-+
-    //   |              |
-    //   |              |
-    //   +--------------+
+    //       5
+    //      / \
+    //     /   \
+    //    /     \
+    //   4       3
+    //   |       |
+    //   1 <---- 2
+    //   +------->
     //
+    // Ref: Figure 2 in "A Simple, Fast Dominance Algorithm" by Cooper et al.
 
-    bb0.add_succ(&mut arena, bb1);
-    bb0.add_succ(&mut arena, bb2);
-    bb1.add_succ(&mut arena, bb3);
-    bb2.add_succ(&mut arena, bb4);
+    bb5.add_succ(&mut arena, bb4);
+    bb5.add_succ(&mut arena, bb3);
 
-    bb3.add_succ(&mut arena, bb4);
-    bb4.add_succ(&mut arena, bb3);
+    bb4.add_succ(&mut arena, bb1);
 
-    let region = CfgFunc::new(&mut arena, bb0);
-    let cfg = region.cfg_info(&arena);
+    bb3.add_succ(&mut arena, bb2);
 
-    let mut dominance = Dominance::default();
+    bb1.add_succ(&mut arena, bb2);
+    bb2.add_succ(&mut arena, bb1);
 
-    dominance.compute(&arena, region, &cfg);
+    let func = CfgFunc::new(&mut arena, bb5);
+    let cfg = func.cfg_info(&arena);
 
-    assert_eq!(dominance.idom(bb0), None);
-    assert_eq!(dominance.idom(bb1), Some(bb0));
-    assert_eq!(dominance.idom(bb2), Some(bb0));
-    assert_eq!(dominance.idom(bb3), Some(bb0));
-    assert_eq!(dominance.idom(bb4), Some(bb0));
+    let dominance = Dominance::new(&arena, func, &cfg);
 
-    assert_eq!(dominance.frontier(bb0), &[]);
-    assert_eq!(dominance.frontier(bb1), &[bb3]);
-    assert_eq!(dominance.frontier(bb2), &[bb4]);
-    assert_eq!(dominance.frontier(bb3), &[bb4]);
-    assert_eq!(dominance.frontier(bb4), &[bb3]);
+    assert_eq!(dominance.idom(bb5), None);
+    assert_eq!(dominance.idom(bb4), Some(bb5));
+    assert_eq!(dominance.idom(bb3), Some(bb5));
+    assert_eq!(dominance.idom(bb2), Some(bb5));
+    assert_eq!(dominance.idom(bb1), Some(bb5));
+
+    assert_eq!(dominance.frontier(bb5), vec![]);
+    assert_eq!(dominance.frontier(bb4), vec![bb1]);
+    assert_eq!(dominance.frontier(bb3), vec![bb2]);
+    assert_eq!(dominance.frontier(bb2), vec![bb1]);
+    assert_eq!(dominance.frontier(bb1), vec![bb2]);
 }

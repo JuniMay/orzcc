@@ -79,6 +79,9 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         let mut event_node = None;
 
+        // because some nodes might be pushed earlier, we do not want to
+        // visit them again. so just pop until we find a node that is not
+        // visited or the event is not `Enter`.
         while let Some((event, node)) = self.dfs.stack.pop() {
             if event == Event::Enter && self.dfs.visited.contains(&node) {
                 continue;

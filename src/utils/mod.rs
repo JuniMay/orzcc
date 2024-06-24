@@ -8,4 +8,3 @@ pub mod cfg;
 pub mod def_use;
 pub mod dfs;
 pub mod dominance;
-pub mod numbering;

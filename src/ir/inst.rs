@@ -273,14 +273,15 @@ pub enum CastOp {
     SiToFp,
     /// Bitcast.
     ///
-    /// This also applies to index and integer cast.
+    /// This does not apply to pointer-int conversion, use [CastOp::PtrToInt] or
+    /// [CastOp::IntToPtr] instead.
     Bitcast,
     /// Float extension.
     FpExt,
-    /// Index to integer.
-    IndexToInt,
-    /// Integer to index.
-    IntToIndex,
+    /// Pointer to integer.
+    PtrToInt,
+    /// Integer to pointer.
+    IntToPtr,
 }
 
 impl fmt::Display for CastOp {
@@ -296,8 +297,8 @@ impl fmt::Display for CastOp {
             Self::SiToFp => write!(f, "sitofp"),
             Self::Bitcast => write!(f, "bitcast"),
             Self::FpExt => write!(f, "fpext"),
-            Self::IndexToInt => write!(f, "indextoint"),
-            Self::IntToIndex => write!(f, "inttoindex"),
+            Self::PtrToInt => write!(f, "ptrtoint"),
+            Self::IntToPtr => write!(f, "inttoptr"),
         }
     }
 }
@@ -315,8 +316,8 @@ impl From<&str> for CastOp {
             "sitofp" => Self::SiToFp,
             "bitcast" => Self::Bitcast,
             "fpext" => Self::FpExt,
-            "indextoint" => Self::IndexToInt,
-            "inttoindex" => Self::IntToIndex,
+            "ptrtoint" => Self::PtrToInt,
+            "inttoptr" => Self::IntToPtr,
             _ => panic!("invalid cast operation: {}", s),
         }
     }
@@ -397,6 +398,8 @@ pub enum InstKind {
     /// Create a new value from a constant.
     FConst(Constant),
     /// Create a new value as a stack slot.
+    ///
+    /// The result type is a pointer.
     StackSlot(u32),
     /// Integer binary instruction.
     IBinary(IBinaryOp),
@@ -413,7 +416,7 @@ pub enum InstKind {
     Cast(CastOp),
     /// The offset instruction.
     ///
-    /// This instruction is to calculate an index from a base index and a
+    /// This instruction is to calculate an index from a base pointer and a
     /// calculated offset (must be integer).
     ///
     /// `offset` is equivalent to `getelementptr inbounds i8, %base, %offset` in
@@ -433,10 +436,11 @@ pub enum InstKind {
     /// The first operand is the function pointer, and the rest are arguments.
     CallIndirect(Signature),
     /// Return instruction.
-    Return,
+    Ret,
     /// Get global symbol as local pinter.
     ///
-    /// This applies to function and global slot.
+    /// This applies to function and global slot. The corresponding instruction
+    /// in RISC-V is `LA`, i.e., load address (`LA` a pseudo instruction)
     GetGlobal(Symbol),
     /// Load instruction.
     ///
@@ -537,7 +541,7 @@ impl Inst {
 
     /// Create a new stack slot instruction.
     pub fn stack_slot(ctx: &mut Context, size: u32) -> Inst {
-        let ty = Ty::index(ctx);
+        let ty = Ty::ptr(ctx);
         Self::new(ctx, InstKind::StackSlot(size), vec![ty], vec![])
     }
 
@@ -657,8 +661,8 @@ impl Inst {
                 }
             }
             CastOp::Bitcast => {
-                if val_ty.is_index(ctx) || ty.is_index(ctx) {
-                    panic!("bitcast does not support index types");
+                if val_ty.is_ptr(ctx) || ty.is_ptr(ctx) {
+                    panic!("bitcast does not support pointer types");
                 }
                 if val_ty.bitwidth(ctx).unwrap() != ty.bitwidth(ctx).unwrap() {
                     panic!("bitcast only supports types with the same size");
@@ -680,14 +684,14 @@ impl Inst {
                     panic!("fptrunc only supports truncating to a smaller type");
                 }
             }
-            CastOp::IndexToInt => {
-                if !val_ty.is_index(ctx) || !ty.is_integer(ctx) {
-                    panic!("indextoint only supports index to integer-like types");
+            CastOp::PtrToInt => {
+                if !val_ty.is_ptr(ctx) || !ty.is_integer(ctx) {
+                    panic!("ptrtoint only supports pointer to integer-like types");
                 }
             }
-            CastOp::IntToIndex => {
-                if !val_ty.is_integer(ctx) || !ty.is_index(ctx) {
-                    panic!("inttoindex only supports integer-like to index types");
+            CastOp::IntToPtr => {
+                if !val_ty.is_integer(ctx) || !ty.is_ptr(ctx) {
+                    panic!("inttoptr only supports integer-like to pointer types");
                 }
             }
         }
@@ -696,8 +700,8 @@ impl Inst {
     }
 
     pub fn offset(ctx: &mut Context, base: Value, offset: Value) -> Inst {
-        if !base.ty(ctx).is_index(ctx) {
-            panic!("base must be an index type");
+        if !base.ty(ctx).is_ptr(ctx) {
+            panic!("base must be an pointer type");
         }
 
         if !offset.ty(ctx).is_integer(ctx) {
@@ -900,8 +904,8 @@ impl Inst {
             }
         }
 
-        if func.ty(ctx) != Ty::index(ctx) {
-            panic!("function must be an index type");
+        if !func.ty(ctx).is_ptr(ctx) {
+            panic!("function must be an pointer type");
         }
 
         let mut operands = vec![func];
@@ -910,33 +914,33 @@ impl Inst {
         Self::new(ctx, InstKind::CallIndirect(sig), result_tys, operands)
     }
 
-    pub fn return_(ctx: &mut Context, vals: Vec<Value>) -> Inst {
-        Self::new(ctx, InstKind::Return, vec![], vals)
+    pub fn ret(ctx: &mut Context, vals: Vec<Value>) -> Inst {
+        Self::new(ctx, InstKind::Ret, vec![], vals)
     }
 
     pub fn load(ctx: &mut Context, ptr: Value, ty: Ty) -> Inst {
-        if !ptr.ty(ctx).is_index(ctx) {
+        if !ptr.ty(ctx).is_ptr(ctx) {
             panic!("ptr must be a pointer type");
         }
         Self::new(ctx, InstKind::Load, vec![ty], vec![ptr])
     }
 
     pub fn store(ctx: &mut Context, val: Value, ptr: Value) -> Inst {
-        if !ptr.ty(ctx).is_index(ctx) {
+        if !ptr.ty(ctx).is_ptr(ctx) {
             panic!("ptr must be a pointer type");
         }
         Self::new(ctx, InstKind::Store, vec![], vec![val, ptr])
     }
 
     pub fn get_global(ctx: &mut Context, symbol: Symbol) -> Inst {
-        let index = Ty::index(ctx);
-        Self::new(ctx, InstKind::GetGlobal(symbol), vec![index], vec![])
+        let ptr = Ty::ptr(ctx);
+        Self::new(ctx, InstKind::GetGlobal(symbol), vec![ptr], vec![])
     }
 
     pub fn is_terminator(self, ctx: &Context) -> bool {
         matches!(
             self.deref(ctx).kind,
-            InstKind::Jump | InstKind::Br | InstKind::Switch { .. } | InstKind::Return
+            InstKind::Jump | InstKind::Br | InstKind::Switch { .. } | InstKind::Ret
         )
     }
 
@@ -1253,7 +1257,7 @@ impl<'a> fmt::Display for DisplayInst<'a> {
             Ik::StackSlot(size) => {
                 assert_eq!(self.data.results.len(), 1);
                 let result_ty = self.data.results[0].ty(self.ctx);
-                assert!(result_ty.is_index(self.ctx));
+                assert!(result_ty.is_ptr(self.ctx));
                 write!(f, "stack_slot {}", size)?;
             }
             Ik::IBinary(op) => {
@@ -1341,7 +1345,6 @@ impl<'a> fmt::Display for DisplayInst<'a> {
                 // TODO: too many assertions, maybe an independent validation pass?
                 assert_eq!(self.data.results.len(), 0);
                 assert_eq!(self.data.operands.len(), 1);
-
                 assert!(!self.data.successors.is_empty());
                 assert!(
                     self.data.successors.len() == labels.len()
@@ -1395,7 +1398,7 @@ impl<'a> fmt::Display for DisplayInst<'a> {
                 }
                 write!(f, ")")?;
             }
-            Ik::Return => {
+            Ik::Ret => {
                 write!(f, "ret")?;
 
                 if self.data.operands.is_empty() {

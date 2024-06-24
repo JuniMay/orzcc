@@ -17,22 +17,8 @@ pub enum TyData {
     Float32,
     /// An IEEE 754 double precision floating point number.
     Float64,
-    /// An index type.
-    ///
-    /// The width of index is target-dependent.
-    ///
-    /// This concept is borrowed from MLIR. There are nuances between `index`
-    /// and `ptr`. Pointer emphasizes that it points to a memory address and the
-    /// object there, but index can also refer to offsets of addresses. So
-    /// index can be more concise and maybe eliminate the requirement of the
-    /// `getelementptr` operation.
-    ///
-    /// Question: Do we need to distinguish between `index` and `ptr`? Or do we
-    /// need to introduce a `memref` type? I don't think that is necessary,
-    /// because the main purpose of `index` is to represent a target-dependent
-    /// integer type. The IR is low-level enough to represent memory addresses
-    /// directly.
-    Index,
+    /// A pointer type.
+    Ptr,
     /// A SIMD type.
     Simd {
         /// The element type.
@@ -133,7 +119,7 @@ impl<'a> fmt::Display for DisplayTy<'a> {
             TyData::Integer(bits) => write!(f, "i{}", bits),
             TyData::Float32 => write!(f, "f32"),
             TyData::Float64 => write!(f, "f64"),
-            TyData::Index => write!(f, "index"),
+            TyData::Ptr => write!(f, "ptr"),
             TyData::Array { elem_ty, len } => {
                 write!(f, "[{}; {}]", elem_ty.display(self.ctx), len)
             }
@@ -228,7 +214,7 @@ impl Ty {
 
     pub fn float64(ctx: &mut Context) -> Self { ctx.alloc(TyData::Float64) }
 
-    pub fn index(ctx: &mut Context) -> Self { ctx.alloc(TyData::Index) }
+    pub fn ptr(ctx: &mut Context) -> Self { ctx.alloc(TyData::Ptr) }
 
     pub fn array(ctx: &mut Context, elem_ty: Ty, len: usize) -> Self {
         ctx.alloc(TyData::Array { elem_ty, len })
@@ -245,7 +231,7 @@ impl Ty {
         ctx.alloc(TyData::Simd { elem_ty, exp })
     }
 
-    /// Check if the type is integer or index.
+    /// Check if the type is integer.
     pub fn is_integer(&self, ctx: &Context) -> bool {
         matches!(self.deref(ctx), TyData::Integer(_))
     }
@@ -259,14 +245,14 @@ impl Ty {
 
     pub fn is_float64(&self, ctx: &Context) -> bool { matches!(self.deref(ctx), TyData::Float64) }
 
-    pub fn is_index(&self, ctx: &Context) -> bool { matches!(self.deref(ctx), TyData::Index) }
+    pub fn is_ptr(&self, ctx: &Context) -> bool { matches!(self.deref(ctx), TyData::Ptr) }
 
     pub fn bitwidth(&self, ctx: &Context) -> Option<usize> {
         match self.deref(ctx) {
             TyData::Integer(bits) => Some(*bits as usize),
             TyData::Float32 => Some(32),
             TyData::Float64 => Some(64),
-            TyData::Index => None,
+            TyData::Ptr => None,
             TyData::Void => None,
             TyData::Array { elem_ty, len } => elem_ty.bitwidth(ctx).map(|bw| bw * len),
             TyData::Struct { field_tys, .. } => {
@@ -318,8 +304,8 @@ mod tests {
 
         assert_ne!(float32_1, float64_1); // float32 != float64
 
-        let pointer1 = Ty::index(&mut ctx);
-        let pointer2 = Ty::index(&mut ctx);
+        let pointer1 = Ty::ptr(&mut ctx);
+        let pointer2 = Ty::ptr(&mut ctx);
 
         assert_eq!(pointer1, pointer2);
 
@@ -359,9 +345,9 @@ mod tests {
         let s = format!("{}", float64.display(&ctx));
         assert_eq!(s, "f64");
 
-        let pointer = Ty::index(&mut ctx);
+        let pointer = Ty::ptr(&mut ctx);
         let s = format!("{}", pointer.display(&ctx));
-        assert_eq!(s, "index");
+        assert_eq!(s, "ptr");
 
         let array = Ty::array(&mut ctx, int32, 10);
         let s = format!("{}", array.display(&ctx));
