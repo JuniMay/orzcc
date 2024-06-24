@@ -77,7 +77,17 @@ where
     type Item = (Event, N);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (event, node) = self.dfs.stack.pop()?;
+        let mut event_node = None;
+
+        while let Some((event, node)) = self.dfs.stack.pop() {
+            if event == Event::Enter && self.dfs.visited.contains(&node) {
+                continue;
+            }
+            event_node = Some((event, node));
+            break;
+        }
+
+        let (event, node) = event_node?;
 
         if event == Event::Enter && self.dfs.visited.insert(node) {
             self.dfs.stack.push((Event::Leave, node));

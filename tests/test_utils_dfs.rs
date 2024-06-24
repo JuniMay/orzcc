@@ -66,7 +66,7 @@ fn test_dfs_0() {
             (Event::Leave, bb1),
             (Event::Enter, bb2),
             (Event::Leave, bb2),
-            (Event::Enter, bb4), // because bb4 was pushed when visiting bb0
+            // (Event::Enter, bb4), // bb4 should be skipped
             (Event::Leave, bb0)
         ]
     );
