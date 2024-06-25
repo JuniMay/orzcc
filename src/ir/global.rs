@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, hash::Hash};
 
 use super::{debug::CommentPos, source_loc::Span, Block, Constant, Context, Signature, Ty};
 use crate::{
@@ -10,22 +10,41 @@ use crate::{
     utils::cfg::CfgRegion,
 };
 
-#[derive(Debug, Hash, Clone, PartialEq, Eq)]
-pub struct Symbol(String);
+#[derive(Debug, Clone)]
+pub struct Symbol(String, Span);
+
+impl PartialEq for Symbol {
+    fn eq(&self, other: &Self) -> bool { self.0 == other.0 }
+}
+
+impl Eq for Symbol {}
+
+impl Hash for Symbol {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) { self.0.hash(state) }
+}
 
 impl From<&str> for Symbol {
-    fn from(s: &str) -> Self { Self(s.to_string()) }
+    fn from(s: &str) -> Self { Self(s.to_string(), Span::default()) }
 }
 
 impl From<String> for Symbol {
-    fn from(s: String) -> Self { Self(s) }
+    fn from(s: String) -> Self { Self(s, Span::default()) }
 }
 
 impl Symbol {
+    pub fn new(name: impl Into<String>) -> Symbol { Symbol(name.into(), Span::default()) }
+
     pub fn comment(&self, ctx: &mut Context, pos: CommentPos, content: impl Into<String>) {
         ctx.comment_info
             .comment_symbol(self.clone(), pos, content.into());
     }
+
+    pub fn with_source_span(mut self, span: Span) -> Self {
+        self.1 = span;
+        self
+    }
+
+    pub fn source_span(&self) -> Span { self.1 }
 }
 
 impl fmt::Display for Symbol {
@@ -307,5 +326,20 @@ impl fmt::Display for DisplaySymbol<'_> {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Symbol;
+    use crate::ir::source_loc::Span;
+
+    #[test]
+    fn test_symbol_equality() {
+        let sym1 = Symbol::new("symbol").with_source_span(Span::new(1.into(), 6.into()));
+        let sym2 = Symbol::new("symbol").with_source_span(Span::new(7.into(), 12.into()));
+
+        assert_ne!(sym1.source_span(), sym2.source_span());
+        assert_eq!(sym1, sym2);
     }
 }

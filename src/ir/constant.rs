@@ -1,5 +1,7 @@
 use core::fmt;
+use std::hash::Hash;
 
+use super::source_loc::Span;
 use crate::collections::apint::ApInt;
 
 /// A float constant.
@@ -63,12 +65,9 @@ impl fmt::LowerHex for FloatConstant {
     }
 }
 
-/// A global constant value in the IR.
-///
-/// For instructions like `iconst` or `fconst`, [ApInt] and [FloatConstant] are
-/// used instead.
+/// A global constant value kind in the IR.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Constant {
+pub enum ConstantKind {
     /// Undefined value.
     Undef,
     /// Zero initialized constant.
@@ -80,23 +79,54 @@ pub enum Constant {
     Bytes(Vec<u8>),
 }
 
+/// A global constant in IR.
+///
+/// For instructions like `iconst` or `fconst`, [ApInt] and [FloatConstant] are
+/// used instead.
+pub struct Constant(ConstantKind, Span);
+
+impl PartialEq for Constant {
+    fn eq(&self, other: &Self) -> bool { self.0 == other.0 }
+}
+
+impl Eq for Constant {}
+
+impl Hash for Constant {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) { self.0.hash(state) }
+}
+
+impl fmt::Debug for Constant {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Constant({:?}, {:?})", self.0, self.1)
+    }
+}
+
 impl Constant {
     /// Create an undefined constant.
-    pub fn undef() -> Self { Constant::Undef }
+    pub fn undef() -> Self { Self(ConstantKind::Undef, Span::default()) }
 
     /// Create a zero initialized constant.
-    pub fn zeroinit() -> Self { Constant::Zeroinit }
+    pub fn zeroinit() -> Self { Self(ConstantKind::Zeroinit, Span::default()) }
 
     /// Create a constant from bytes.
     ///
     /// If all bytes are zero, return [Constant::ZeroInit].
     pub fn bytes(bytes: Vec<u8>) -> Self {
         if bytes.iter().all(|&b| b == 0) {
-            Constant::Zeroinit
+            Self::zeroinit()
         } else {
-            Constant::Bytes(bytes)
+            Self(ConstantKind::Bytes(bytes), Span::default())
         }
     }
+
+    pub fn with_source_span(mut self, span: Span) -> Self {
+        self.1 = span;
+        self
+    }
+
+    pub fn source_span(&self) -> Span { self.1 }
+
+    pub fn kind(&self) -> &ConstantKind { &self.0 }
 }
 
 impl From<u8> for Constant {
@@ -182,11 +212,11 @@ impl From<ApInt> for Constant {
 
 impl fmt::Display for Constant {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use Constant as C;
-        match self {
-            C::Undef => write!(f, "undef"),
-            C::Zeroinit => write!(f, "zeroinit"),
-            C::Bytes(bytes) => {
+        use ConstantKind as Ck;
+        match self.kind() {
+            Ck::Undef => write!(f, "undef"),
+            Ck::Zeroinit => write!(f, "zeroinit"),
+            Ck::Bytes(bytes) => {
                 // format: [ 0x00, 0x01, ... ]
                 write!(f, "[")?;
                 for (i, byte) in bytes.iter().enumerate() {
@@ -198,5 +228,42 @@ impl fmt::Display for Constant {
                 write!(f, "]")
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_constant_display() {
+        let c = Constant::undef();
+        assert_eq!(format!("{}", c), "undef");
+
+        let c = Constant::zeroinit();
+        assert_eq!(format!("{}", c), "zeroinit");
+
+        let c = Constant::from(0x1234u16);
+        assert_eq!(format!("{}", c), "[0x34, 0x12]");
+
+        let c = Constant::from(0x12345678u32);
+        assert_eq!(format!("{}", c), "[0x78, 0x56, 0x34, 0x12]");
+
+        let apint =
+            ApInt::try_from("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
+                .unwrap();
+        let c = Constant::from(apint);
+
+        assert_eq!(
+            format!("{}", c),
+            concat!(
+                "[",
+                "0xef, 0xcd, 0xab, 0x90, 0x78, 0x56, 0x34, 0x12, ",
+                "0xef, 0xcd, 0xab, 0x90, 0x78, 0x56, 0x34, 0x12, ",
+                "0xef, 0xcd, 0xab, 0x90, 0x78, 0x56, 0x34, 0x12, ",
+                "0xef, 0xcd, 0xab, 0x90, 0x78, 0x56, 0x34, 0x12",
+                "]"
+            )
+        )
     }
 }

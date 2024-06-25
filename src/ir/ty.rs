@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, hash::Hash};
 
 use super::{source_loc::Span, Context};
 use crate::collections::storage::{ArenaAlloc, ArenaDeref, ArenaPtr, UniqueArenaPtr};
@@ -49,12 +49,28 @@ pub enum TyData {
 /// Yes, function does not has a type, but a signature representing its
 /// parameter and return types. The function type does not interact with other
 /// types, so it is reasonable to make it standalone.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]
 pub struct Signature {
     pub(super) ret: Vec<Ty>,
     pub(super) params: Vec<Ty>,
 
+    /// The source span of the signature.
+    ///
+    /// The source span will not be compared nor hashed.
     source_span: Span,
+}
+
+impl PartialEq for Signature {
+    fn eq(&self, other: &Self) -> bool { self.ret == other.ret && self.params == other.params }
+}
+
+impl Eq for Signature {}
+
+impl Hash for Signature {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.ret.hash(state);
+        self.params.hash(state);
+    }
 }
 
 pub struct DisplaySig<'a> {
@@ -98,9 +114,12 @@ impl Signature {
         }
     }
 
-    pub fn set_source_span(&mut self, span: Span) { self.source_span = span; }
+    pub fn with_source_span(mut self, span: Span) -> Self {
+        self.source_span = span;
+        self
+    }
 
-    pub fn source_span(self) -> Span { self.source_span }
+    pub fn source_span(&self) -> Span { self.source_span }
 
     pub fn display<'a>(&'a self, ctx: &'a Context) -> DisplaySig<'a> {
         DisplaySig { ctx, sig: self }
@@ -274,6 +293,7 @@ impl Ty {
 #[cfg(test)]
 mod tests {
     use crate::ir::{
+        source_loc::Span,
         ty::{Signature, Ty},
         Context,
     };
@@ -386,5 +406,21 @@ mod tests {
         let sig = Signature::new(vec![int32, float32], vec![void]);
         let s = format!("{}", sig.display(&ctx));
         assert_eq!(s, "(i32, f32) -> void");
+    }
+
+    #[test]
+    fn test_sig_equality() {
+        // test the equality under different spans
+        let mut ctx = Context::default();
+        let int32 = Ty::int(&mut ctx, 32);
+        let float32 = Ty::float32(&mut ctx);
+
+        let sig1 = Signature::new(vec![int32, float32], vec![])
+            .with_source_span(Span::new(3.into(), 20.into()));
+        let sig2 = Signature::new(vec![int32, float32], vec![])
+            .with_source_span(Span::new(5.into(), 22.into()));
+
+        assert_ne!(sig1.source_span(), sig2.source_span());
+        assert_eq!(sig1, sig2);
     }
 }

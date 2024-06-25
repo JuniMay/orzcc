@@ -67,6 +67,7 @@ pub struct Context {
     pub(super) comment_info: CommentInfo,
 
     // other information
+    /// The source of the IR.
     pub(super) source: Source,
 }
 

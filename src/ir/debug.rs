@@ -7,8 +7,12 @@ pub enum CommentPos {
     /// Before the line.
     Before,
     /// At the end of the line.
+    ///
+    /// For functions or any other entities that can span multiple lines, the
+    /// comment will be added after displaying the entity, without a
+    /// newline.
     AtEnd,
-    /// After the line.
+    /// After the last line of the entity.
     After,
 }
 
