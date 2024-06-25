@@ -6,7 +6,6 @@ use super::{
     debug::CommentPos,
     source_loc::Span,
     Block,
-    Constant,
     Context,
     Signature,
     Symbol,
@@ -431,7 +430,7 @@ pub enum InstKind {
     /// Branch instruction.
     Br,
     /// Switch instruction.
-    Switch { labels: Vec<Constant> },
+    Switch { labels: Vec<ApInt> },
     /// Call instruction.
     Call(Symbol),
     /// Call indirect instruction.
@@ -795,7 +794,7 @@ impl Inst {
     pub fn switch(
         ctx: &mut Context,
         cond: Value,
-        mut branches: Vec<(Option<Constant>, Block, Vec<Value>)>,
+        mut branches: Vec<(Option<ApInt>, Block, Vec<Value>)>,
     ) -> Inst {
         for (_, dest, args) in branches.iter() {
             let params = dest.params(ctx).to_vec();
@@ -811,16 +810,12 @@ impl Inst {
 
         for (i, (label, _, _)) in branches.iter().enumerate() {
             match label {
-                Some(constant) => {
-                    if !constant.is_integer() {
-                        panic!("switch label must be an integer constant");
-                    }
-                }
                 None => {
                     if i != branches.len() - 1 {
                         panic!("default label must be the last branch");
                     }
                 }
+                Some(_) => {}
             }
         }
 

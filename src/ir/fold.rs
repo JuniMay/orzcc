@@ -6,7 +6,14 @@
 
 use std::collections::HashMap;
 
-use super::{Constant, Context, Inst, Value};
+use super::{constant::FloatConstant, Context, Inst, Value};
+use crate::collections::apint::ApInt;
+
+pub enum FoldedConstant {
+    Integer(ApInt),
+    Float(FloatConstant),
+    // TODO: SIMD & struct support
+}
 
 /// The context of the constant folding.
 ///
@@ -15,15 +22,17 @@ use super::{Constant, Context, Inst, Value};
 #[derive(Default)]
 pub struct FoldContext {
     /// The folded constant values.
-    values: HashMap<Value, Constant>,
+    values: HashMap<Value, FoldedConstant>,
 }
 
 impl FoldContext {
     /// Lookup the constant value of the accepted value.
-    pub fn lookup(&self, value: Value) -> Option<&Constant> { self.values.get(&value) }
+    pub fn lookup(&self, value: Value) -> Option<&FoldedConstant> { self.values.get(&value) }
 
     /// Set the constant value of the accepted value.
-    pub fn set(&mut self, value: Value, constant: Constant) { self.values.insert(value, constant); }
+    pub fn set(&mut self, value: Value, constant: FoldedConstant) {
+        self.values.insert(value, constant);
+    }
 }
 
 pub enum FoldResult {
@@ -31,7 +40,7 @@ pub enum FoldResult {
     ///
     /// This is a list of constants, because the instruction may have multiple
     /// results.
-    Constants(Vec<Constant>),
+    Constants(Vec<FoldedConstant>),
     /// The results of the instruction is not folded.
     NotFolded,
 }
