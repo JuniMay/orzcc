@@ -72,8 +72,6 @@ pub struct FuncData {
     /// The tail block of the function, not necessarily the exit block in
     /// control flow.
     tail: Option<Block>,
-
-    source_span: Span,
 }
 
 impl FuncData {
@@ -93,19 +91,11 @@ impl Func {
             sig,
             head: None,
             tail: None,
-
-            source_span: Span::default(),
         });
         // establish the mapping from name to function
         ctx.insert_func(func);
         func
     }
-
-    pub fn set_source_span(self, ctx: &mut Context, span: Span) {
-        self.deref_mut(ctx).source_span = span;
-    }
-
-    pub fn source_span(self, ctx: &Context) -> Span { self.deref(ctx).source_span }
 
     pub fn name(self, ctx: &Context) -> &Symbol { &self.deref(ctx).name }
 
@@ -119,7 +109,7 @@ impl Func {
         }
     }
 
-    pub fn id(self) -> usize { self.0.index() }
+    pub fn id(self) -> usize { self.0.id() }
 
     pub fn comment(&self, ctx: &mut Context, pos: CommentPos, content: impl Into<String>) {
         self.deref(ctx).name.clone().comment(ctx, pos, content);
@@ -212,7 +202,7 @@ impl GlobalSlot {
 
     pub fn init(self, ctx: &Context) -> &Constant { &self.deref(ctx).init }
 
-    pub fn id(self) -> usize { self.0.index() }
+    pub fn id(self) -> usize { self.0.id() }
 
     pub fn display(self, ctx: &Context, debug: bool) -> DisplayGlobalSlot<'_> {
         DisplayGlobalSlot {

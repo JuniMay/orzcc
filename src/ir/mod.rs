@@ -5,12 +5,12 @@ mod fold;
 mod global;
 mod inst;
 mod name_alloc;
-mod source_loc;
 mod ty;
 mod value;
 
 pub mod debug;
 pub mod passman;
+pub mod source_loc;
 pub use block::{Block, BlockData};
 pub use constant::Constant;
 pub use context::Context;

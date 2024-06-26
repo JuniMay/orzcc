@@ -6,7 +6,7 @@
 
 use std::collections::HashSet;
 
-use super::{source_loc::Span, Block, Context, Func, Inst, Ty};
+use super::{Block, Context, Func, Inst, Ty};
 use crate::{
     collections::{
         linked_list::LinkedListNodePtr,
@@ -46,8 +46,6 @@ pub struct ValueData {
     kind: ValueKind,
     /// The users of the value.
     users: HashSet<Inst>,
-
-    source_span: Span,
 }
 
 impl ValueData {
@@ -62,8 +60,6 @@ impl ValueData {
             ty,
             kind: ValueKind::InstResult { inst, idx },
             users: HashSet::new(),
-
-            source_span: Span::default(),
         }
     }
 
@@ -76,8 +72,6 @@ impl ValueData {
             ty,
             kind: ValueKind::BlockParam { block, idx },
             users: HashSet::new(),
-
-            source_span: Span::default(),
         }
     }
 }
@@ -88,7 +82,7 @@ pub struct Value(BaseArenaPtr<ValueData>);
 impl_arena!(Context, ValueData, Value, values);
 
 impl Value {
-    pub(super) fn id(self) -> usize { self.0.index() }
+    pub(super) fn id(self) -> usize { self.0.id() }
 
     pub fn ty(self, ctx: &Context) -> Ty { self.deref(ctx).ty }
 
@@ -106,12 +100,6 @@ impl Value {
         ctx.value_name_alloc.remove_by_ptr(self);
         ctx.free(self);
     }
-
-    pub fn set_source_span(self, ctx: &mut Context, span: impl Into<Span>) {
-        self.deref_mut(ctx).source_span = span.into();
-    }
-
-    pub fn source_span(self, ctx: &Context) -> Span { self.deref(ctx).source_span }
 
     /// Assign a name for the value.
     ///

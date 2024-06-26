@@ -345,30 +345,30 @@ pub trait ArenaPtr: Copy + Sized + Eq {
 /// This can be understood as a handle, one can dereference it to get the
 /// reference (in the form of `&T`) to the object in the arena.
 pub struct BaseArenaPtr<T> {
-    index: usize,
+    id: usize,
     _marker: PhantomData<T>,
 }
 
 impl<T> fmt::Debug for BaseArenaPtr<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "BaseArenaPtr({})", self.index)
+        write!(f, "BaseArenaPtr({})", self.id)
     }
 }
 
 impl<T> PartialEq for BaseArenaPtr<T> {
-    fn eq(&self, other: &Self) -> bool { self.index == other.index }
+    fn eq(&self, other: &Self) -> bool { self.id == other.id }
 }
 
 impl<T> Eq for BaseArenaPtr<T> {}
 
 impl<T> Hash for BaseArenaPtr<T> {
-    fn hash<H: Hasher>(&self, state: &mut H) { self.index.hash(state); }
+    fn hash<H: Hasher>(&self, state: &mut H) { self.id.hash(state); }
 }
 
 impl<T> From<usize> for BaseArenaPtr<T> {
-    fn from(index: usize) -> Self {
+    fn from(id: usize) -> Self {
         BaseArenaPtr {
-            index,
+            id,
             _marker: PhantomData,
         }
     }
@@ -379,7 +379,7 @@ impl<T> Clone for BaseArenaPtr<T> {
     fn clone(&self) -> Self {
         // `Clone` will not be implemented for `T` when `T` is not `Clone`-able.
         BaseArenaPtr {
-            index: self.index,
+            id: self.id,
             _marker: PhantomData,
         }
     }
@@ -393,7 +393,7 @@ impl<T> BaseArenaPtr<T> {
     /// # Returns
     ///
     /// A [usize] that represents the index of the object in the arena.
-    pub fn index(self) -> usize { self.index }
+    pub fn id(self) -> usize { self.id }
 }
 
 impl<T> ArenaPtr for BaseArenaPtr<T> {
@@ -476,19 +476,19 @@ impl<T> ArenaAlloc<T, BaseArenaPtr<T>> for BaseArena<T> {
 
 impl<T> ArenaFree<T, BaseArenaPtr<T>> for BaseArena<T> {
     fn free(&mut self, ptr: BaseArenaPtr<T>) {
-        if let BaseArenaEntry::Vacant = self.pool[ptr.index()] {
+        if let BaseArenaEntry::Vacant = self.pool[ptr.id()] {
             panic!("the arena pointer is invalid, double free may occur")
         }
         // this will panic if the index is out of bounds
-        self.pool[ptr.index()] = BaseArenaEntry::Vacant;
+        self.pool[ptr.id()] = BaseArenaEntry::Vacant;
         // just push the index to the back of the queue
-        self.free.push_back(ptr.index());
+        self.free.push_back(ptr.id());
     }
 }
 
 impl<T> ArenaDeref<T, BaseArenaPtr<T>> for BaseArena<T> {
     fn try_deref(&self, ptr: BaseArenaPtr<T>) -> Option<&T> {
-        let entry = self.pool.get(ptr.index())?;
+        let entry = self.pool.get(ptr.id())?;
         match entry {
             BaseArenaEntry::Vacant => None,
             BaseArenaEntry::Occupied(val) => Some(val),
@@ -496,7 +496,7 @@ impl<T> ArenaDeref<T, BaseArenaPtr<T>> for BaseArena<T> {
     }
 
     fn try_deref_mut(&mut self, ptr: BaseArenaPtr<T>) -> Option<&mut T> {
-        let entry = self.pool.get_mut(ptr.index())?;
+        let entry = self.pool.get_mut(ptr.id())?;
         match entry {
             BaseArenaEntry::Vacant => None,
             BaseArenaEntry::Occupied(val) => Some(val),
@@ -635,8 +635,14 @@ where
     unique_map: HashMap<UniqueArenaHash, HashSet<BaseArenaPtr<T>>>,
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(PartialEq, Eq, Hash)]
 pub struct UniqueArenaPtr<T>(BaseArenaPtr<T>);
+
+impl<T> fmt::Debug for UniqueArenaPtr<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "UniqueArenaPtr({:?})", self.0.id())
+    }
+}
 
 #[allow(clippy::non_canonical_clone_impl)]
 impl<T> Clone for UniqueArenaPtr<T> {

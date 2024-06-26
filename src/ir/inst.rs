@@ -474,6 +474,10 @@ pub struct InstData {
     /// The parent block.
     parent: Option<Block>,
 
+    /// The span of this instruction.
+    ///
+    /// This covers from the start of the instruction to the end of the
+    /// instruction.
     source_span: Span,
 }
 

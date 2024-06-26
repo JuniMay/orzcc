@@ -29,6 +29,15 @@ pub struct BlockData {
     /// The parent function of the block.
     parent: Option<Func>,
 
+    /// The span of the block label.
+    ///
+    /// For example:
+    /// ```text
+    /// ^bb0 (%v1: i32):
+    /// ~~~~~~~~~~~~~~~~ --> This is the span of the block label.
+    /// ```
+    ///
+    /// Which means this does not cover the instructions in the block.
     source_span: Span,
 }
 
@@ -239,7 +248,7 @@ impl Block {
     }
 
     /// Get the arena pointer id of the block.
-    pub fn id(self) -> usize { self.0.index() }
+    pub fn id(self) -> usize { self.0.id() }
 
     /// Display the block.
     ///

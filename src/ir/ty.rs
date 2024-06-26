@@ -169,15 +169,6 @@ impl<'a> fmt::Display for DisplayTy<'a> {
     }
 }
 
-impl Ty {
-    pub fn display(self, ctx: &Context) -> DisplayTy<'_> {
-        DisplayTy {
-            ctx,
-            data: self.deref(ctx),
-        }
-    }
-}
-
 /// The type in IR.
 ///
 /// [Ty] is actually a wrapper of [UniqueArenaPtr] of [TyData], and can be
@@ -286,6 +277,13 @@ impl Ty {
                 Some(bw)
             }
             TyData::Simd { elem_ty, exp } => elem_ty.bitwidth(ctx).map(|bw| bw * (1 << exp)),
+        }
+    }
+
+    pub fn display(self, ctx: &Context) -> DisplayTy<'_> {
+        DisplayTy {
+            ctx,
+            data: self.deref(ctx),
         }
     }
 }
