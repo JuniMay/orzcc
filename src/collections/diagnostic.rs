@@ -18,6 +18,40 @@ pub struct DiagnosticContext {
 
 impl DiagnosticContext {
     pub fn snippets(&self) -> &[DiagnosticSnippet] { &self.snippets }
+
+    pub fn len(&self) -> usize { self.snippets.len() }
+
+    pub fn is_empty(&self) -> bool { self.snippets.is_empty() }
+
+    pub fn truncate(&mut self, len: usize) { self.snippets.truncate(len) }
+
+    pub fn push(&mut self, snippet: DiagnosticSnippet) { self.snippets.push(snippet) }
+
+    pub fn new() -> Self { Self::default() }
+
+    /// Render all the snippets in the context.
+    pub fn render(&mut self, src: &str, options: &RenderOptions) -> String {
+        let mut result = String::new();
+        for snippet in self.snippets.drain(..) {
+            let s = format!("{}", snippet.render(src, options));
+            result.push_str(s.as_str());
+        }
+        result
+    }
+
+    /// Merge another diagnostic context into this one.
+    pub fn merge(&mut self, other: &mut DiagnosticContext) {
+        self.snippets.append(&mut other.snippets);
+    }
+
+    /// Merge another diagnostic context with a filter.
+    pub fn merge_filter<F>(&mut self, other: DiagnosticContext, f: F)
+    where
+        F: Fn(&DiagnosticSnippet) -> bool,
+    {
+        self.snippets
+            .extend(other.snippets.into_iter().filter(|snippet| f(snippet)));
+    }
 }
 
 #[derive(Debug)]
@@ -141,6 +175,20 @@ impl Default for RenderOptions {
 
 impl RenderOptions {
     pub fn new(charset: CharSet, margin: usize) -> Self { Self { charset, margin } }
+
+    pub fn unicode() -> Self {
+        Self {
+            charset: UNICODE,
+            margin: 2,
+        }
+    }
+
+    pub fn unicode_round() -> Self {
+        Self {
+            charset: UNICODE_ROUND,
+            margin: 2,
+        }
+    }
 }
 
 /// Adiagnostic snippet.
@@ -227,7 +275,7 @@ impl fmt::Display for DiagnosticRenderer<'_> {
             // the start line number of this annotation
             let start_lineno = self.src[..annotation.span.start].lines().count().max(1);
             // the end line number of this annotation
-            let end_lineno = self.src[..annotation.span.end].lines().count();
+            let end_lineno = self.src[..annotation.span.end].lines().count().max(1);
 
             if start_lineno == end_lineno {
                 // this is an inline annotation
@@ -436,13 +484,7 @@ impl fmt::Display for DiagnosticRenderer<'_> {
                 writeln!(f)?;
                 write!(f, "{}{}{}", leading, " ".repeat(*pos), charset.lbottom)?;
 
-                let end = if line.len() > *pos {
-                    line.len() - *pos - 1
-                } else {
-                    0
-                };
-
-                for _ in 0..end {
+                for _ in 0..(line.len() - *pos) {
                     write!(f, "{}", charset.hbar)?;
                 }
                 writeln!(f, "{} {}", charset.hbar, annotation.message)?;
@@ -476,37 +518,6 @@ impl fmt::Display for DiagnosticRenderer<'_> {
         }
 
         Ok(())
-    }
-}
-
-impl DiagnosticContext {
-    pub fn new() -> Self { Self::default() }
-
-    /// Render all the snippets in the context.
-    pub fn render(&mut self, src: &str, options: &RenderOptions) -> String {
-        let mut result = String::new();
-        for snippet in self.snippets.drain(..) {
-            let s = format!("{}", snippet.render(src, options));
-            result.push_str(s.as_str());
-        }
-        result
-    }
-
-    /// Add a snippets
-    pub fn push(&mut self, snippet: DiagnosticSnippet) { self.snippets.push(snippet); }
-
-    /// Merge another diagnostic context into this one.
-    pub fn merge(&mut self, other: &mut DiagnosticContext) {
-        self.snippets.append(&mut other.snippets);
-    }
-
-    /// Merge another diagnostic context with a filter.
-    pub fn merge_if<F>(&mut self, other: DiagnosticContext, f: F)
-    where
-        F: Fn(&DiagnosticSnippet) -> bool,
-    {
-        self.snippets
-            .extend(other.snippets.into_iter().filter(|snippet| f(snippet)));
     }
 }
 
@@ -552,11 +563,11 @@ mod tests {
   2 | | |-,-->     println!("Hello, world!");
     | | | |        ~~~      ~~~~~~~~~~~~~~~
     | | | |        ||              |
-    | | | |        `-------------------------- expected `;`
+    | | | |        `--------------------------- expected `;`
     | | | |         |              |
-    | | | |         `------------------------- expected `;`
+    | | | |         `-------------------------- expected `;`
     | | | |                        |
-    | | | |                        `---------- THIS IS A STRING LITERAL
+    | | | |                        `----------- THIS IS A STRING LITERAL
   3 | |------> }
     : : : :
   7 | | | |--> // just a random comment
@@ -568,6 +579,34 @@ mod tests {
     | `------- expected `;`
     |
     = note: try adding a semicolon"#;
+        assert_eq!(rendered, expected);
+        println!("{}", rendered);
+    }
+
+    #[test]
+    fn test_empty() {
+        let src = "fn main() {";
+        let mut ctx = DiagnosticContext::new();
+        let snippet = DiagnosticSnippet::new(Severity::Error, "unexpected end of input");
+        ctx.push(snippet);
+
+        let rendered = ctx.render(
+            src,
+            &RenderOptions {
+                charset: ASCII,
+                margin: 2,
+            },
+        );
+        let rendered = rendered
+            .lines()
+            .map(|l| l.trim_end())
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        let expected = r#"   --> [Error] unexpected end of input
+    :
+    |"#;
+
         assert_eq!(rendered, expected);
         println!("{}", rendered);
     }
@@ -607,19 +646,19 @@ mod tests {
   1 |    fn main() {
     |    ~~        ~
     |    |         |
-    |    `----------- in the function
+    |    `------------ in the function
     |    |         |
-    |    `----------- in the function
+    |    `------------ in the function
     |    |         |
-    |    `----------- in the function
+    |    `------------ in the function
     |    |         |
-    |    `----------- in the function
+    |    `------------ in the function
     |              |
-    |              `- expected `}`
+    |              `-- expected `}`
     |              |
-    |              `- expected `}`
+    |              `-- expected `}`
     |              |
-    |              `- expected `}`
+    |              `-- expected `}`
     |
     = help: try adding a closing brace"#;
 
