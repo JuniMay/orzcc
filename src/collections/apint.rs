@@ -1021,7 +1021,7 @@ impl Ord for ApInt {
 
 #[derive(Debug, Error)]
 pub enum ApIntParseError {
-    #[error("invalid literal: {0}")]
+    #[error("invalid apint literal: {0}")]
     InvalidLiteral(String),
 
     #[error("integer out of range, expected width: {0}, actual width: {1}")]
@@ -1055,10 +1055,9 @@ impl TryFrom<&str> for ApInt {
 
         let (s, bits) = if let Some(idx) = s.find('i') {
             let (s, bits) = s.split_at(idx);
-            let width = bits
-                .trim_start_matches('i')
-                .parse::<usize>()
-                .map_err(|_| ApIntParseError::InvalidLiteral(s.to_string()))?;
+            let width = bits.trim_start_matches('i').parse::<usize>().map_err(|_| {
+                ApIntParseError::InvalidLiteral(format!("invalid integer width suffix `{}`", bits))
+            })?;
             (s, Some(width))
         } else {
             (s, None)

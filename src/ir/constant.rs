@@ -15,6 +15,18 @@ pub enum FloatConstant {
     Float64(u64),
 }
 
+impl FloatConstant {
+    /// Promote to a Float64, if it is a Float32.
+    pub fn promote(self) -> Self {
+        match self {
+            FloatConstant::Float32(val) => {
+                FloatConstant::Float64((f32::from_bits(val) as f64).to_bits())
+            }
+            FloatConstant::Float64(_) => self,
+        }
+    }
+}
+
 impl From<f32> for FloatConstant {
     fn from(f: f32) -> Self { Self::Float32(f.to_bits()) }
 }

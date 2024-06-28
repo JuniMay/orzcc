@@ -25,13 +25,13 @@ impl PReg {
 
 /// The virtual register.
 ///
-/// Let's hope the number of virtual registers does not exceed [usize::MAX].
-pub struct VReg(usize, RegKind);
+/// Let's hope the number of virtual registers does not exceed [u32::MAX].
+pub struct VReg(u32, RegKind);
 
 impl VReg {
-    pub fn new(num: usize, kind: RegKind) -> Self { Self(num, kind) }
+    pub fn new(num: u32, kind: RegKind) -> Self { Self(num, kind) }
 
-    pub fn num(&self) -> usize { self.0 }
+    pub fn num(&self) -> u32 { self.0 }
 
     pub fn kind(&self) -> RegKind { self.1 }
 }

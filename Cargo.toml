@@ -6,6 +6,10 @@ edition = "2021"
 [dependencies]
 thiserror = "1.0.61"
 
+regex = { version = "1.10.4", optional = true }
+hexponent = { version = "0.3.1", optional = true }
+lalrpop-util = { version = "0.20.2", features = ["lexer"], optional = true }
+
 [features]
 default = [
     "target-arm32",
@@ -21,4 +25,4 @@ target-arm64 = []
 target-riscv64 = []
 
 frontend-ir = []
-frontend-sysy = []
+frontend-sysy = ["dep:regex", "dep:hexponent", "dep:lalrpop-util"]

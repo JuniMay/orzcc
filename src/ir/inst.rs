@@ -389,6 +389,7 @@ impl<'a> fmt::Display for DisplaySuccessor<'a> {
     }
 }
 
+#[derive(Debug)]
 pub enum InstKind {
     /// Create a new value from a constant.
     ///

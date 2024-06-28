@@ -11,13 +11,13 @@ use std::{
 
 /// The context to store all diagnostic snippets.
 #[derive(Debug, Default)]
-pub struct DiagnosticContext {
+pub struct DiagnosticList {
     /// The snippets in the context.
-    snippets: Vec<DiagnosticSnippet>,
+    snippets: Vec<Diagnostic>,
 }
 
-impl DiagnosticContext {
-    pub fn snippets(&self) -> &[DiagnosticSnippet] { &self.snippets }
+impl DiagnosticList {
+    pub fn snippets(&self) -> &[Diagnostic] { &self.snippets }
 
     pub fn len(&self) -> usize { self.snippets.len() }
 
@@ -25,7 +25,7 @@ impl DiagnosticContext {
 
     pub fn truncate(&mut self, len: usize) { self.snippets.truncate(len) }
 
-    pub fn push(&mut self, snippet: DiagnosticSnippet) { self.snippets.push(snippet) }
+    pub fn push(&mut self, snippet: Diagnostic) { self.snippets.push(snippet) }
 
     pub fn new() -> Self { Self::default() }
 
@@ -40,14 +40,14 @@ impl DiagnosticContext {
     }
 
     /// Merge another diagnostic context into this one.
-    pub fn merge(&mut self, other: &mut DiagnosticContext) {
+    pub fn merge(&mut self, other: &mut DiagnosticList) {
         self.snippets.append(&mut other.snippets);
     }
 
     /// Merge another diagnostic context with a filter.
-    pub fn merge_filter<F>(&mut self, other: DiagnosticContext, f: F)
+    pub fn merge_filter<F>(&mut self, other: DiagnosticList, f: F)
     where
-        F: Fn(&DiagnosticSnippet) -> bool,
+        F: Fn(&Diagnostic) -> bool,
     {
         self.snippets
             .extend(other.snippets.into_iter().filter(|snippet| f(snippet)));
@@ -191,9 +191,9 @@ impl RenderOptions {
     }
 }
 
-/// Adiagnostic snippet.
+/// A diagnostic snippet.
 #[derive(Debug)]
-pub struct DiagnosticSnippet {
+pub struct Diagnostic {
     /// The severity of the diagnostic.
     severity: Severity,
     /// The optional code of the diagnostic.
@@ -206,7 +206,7 @@ pub struct DiagnosticSnippet {
     notes: Vec<(String, String)>,
 }
 
-impl DiagnosticSnippet {
+impl Diagnostic {
     pub fn new(severity: Severity, message: impl Into<String>) -> Self {
         Self {
             severity,
@@ -216,6 +216,10 @@ impl DiagnosticSnippet {
             notes: Vec::new(),
         }
     }
+
+    pub fn error(message: impl Into<String>) -> Self { Self::new(Severity::Error, message) }
+
+    pub fn warn(message: impl Into<String>) -> Self { Self::new(Severity::Warn, message) }
 
     /// Set the code of this diagnostic.
     pub fn code(mut self, code: impl Into<String>) -> Self {
@@ -248,7 +252,7 @@ impl DiagnosticSnippet {
 pub struct DiagnosticRenderer<'a> {
     src: &'a str,
     options: &'a RenderOptions,
-    snippet: DiagnosticSnippet,
+    snippet: Diagnostic,
 }
 
 impl fmt::Display for DiagnosticRenderer<'_> {
@@ -529,9 +533,9 @@ mod tests {
     fn test_diagnostic_context() {
         let src =
             "fn main() {\n    println!(\"Hello, world!\");\n}\n\n\n\n// just a random comment\n";
-        let mut ctx = DiagnosticContext::new();
+        let mut list = DiagnosticList::new();
 
-        let snippet = DiagnosticSnippet::new(Severity::Error, "expected `;`")
+        let snippet = Diagnostic::new(Severity::Error, "expected `;`")
             .code("E001")
             .annotate(16..17, "expected `;`")
             .annotate(17..18, "expected `;`")
@@ -541,9 +545,9 @@ mod tests {
             .annotate(4..40, "expected `;`")
             .annotate(20..53, "expected `;`");
 
-        ctx.push(snippet);
+        list.push(snippet);
 
-        let rendered = ctx.render(
+        let rendered = list.render(
             src,
             &RenderOptions {
                 charset: ASCII,
@@ -586,11 +590,11 @@ mod tests {
     #[test]
     fn test_empty() {
         let src = "fn main() {";
-        let mut ctx = DiagnosticContext::new();
-        let snippet = DiagnosticSnippet::new(Severity::Error, "unexpected end of input");
-        ctx.push(snippet);
+        let mut list = DiagnosticList::new();
+        let snippet = Diagnostic::new(Severity::Error, "unexpected end of input");
+        list.push(snippet);
 
-        let rendered = ctx.render(
+        let rendered = list.render(
             src,
             &RenderOptions {
                 charset: ASCII,
@@ -614,9 +618,9 @@ mod tests {
     #[test]
     fn test_0() {
         let src = "fn main() {";
-        let mut ctx = DiagnosticContext::new();
+        let mut list = DiagnosticList::new();
 
-        let snippet = DiagnosticSnippet::new(Severity::Error, "unexpected end of input")
+        let snippet = Diagnostic::new(Severity::Error, "unexpected end of input")
             .code("E001")
             .annotate(0..1, "in the function")
             .annotate(0..1, "in the function")
@@ -627,9 +631,9 @@ mod tests {
             .annotate(10..10, "expected `}`")
             .note("help", "try adding a closing brace".to_string());
 
-        ctx.push(snippet);
+        list.push(snippet);
 
-        let rendered = ctx.render(
+        let rendered = list.render(
             src,
             &RenderOptions {
                 charset: ASCII,

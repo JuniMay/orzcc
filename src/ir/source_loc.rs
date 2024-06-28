@@ -90,3 +90,7 @@ impl Span {
 impl From<(Loc, Loc)> for Span {
     fn from((start, end): (Loc, Loc)) -> Span { Span::new(start, end) }
 }
+
+impl From<(usize, usize)> for Span {
+    fn from((start, end): (usize, usize)) -> Span { Span::new(start.into(), end.into()) }
+}
