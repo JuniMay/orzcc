@@ -372,7 +372,7 @@ impl<'a> fmt::Display for DisplaySuccessor<'a> {
 
                 write!(
                     f,
-                    "{}",
+                    "%{}",
                     self.succ
                         .args
                         .get(param)
@@ -430,8 +430,6 @@ pub enum InstKind {
     Jump,
     /// Branch instruction.
     Br,
-    /// Switch instruction.
-    Switch { labels: Vec<ApInt> },
     /// Call instruction.
     Call(Symbol),
     /// Call indirect instruction.
@@ -796,62 +794,6 @@ impl Inst {
         inst
     }
 
-    pub fn switch(
-        ctx: &mut Context,
-        cond: Value,
-        mut branches: Vec<(Option<ApInt>, Block, Vec<Value>)>,
-    ) -> Inst {
-        for (_, dest, args) in branches.iter() {
-            let params = dest.params(ctx).to_vec();
-            if params.len() != args.len() {
-                panic!("number of arguments does not match the target block's parameters");
-            }
-            for (arg, param) in args.iter().zip(params.iter()) {
-                if arg.ty(ctx) != param.ty(ctx) {
-                    panic!("argument type does not match the target block's parameters");
-                }
-            }
-        }
-
-        for (i, (label, _, _)) in branches.iter().enumerate() {
-            match label {
-                None => {
-                    if i != branches.len() - 1 {
-                        panic!("default label must be the last branch");
-                    }
-                }
-                Some(_) => {}
-            }
-        }
-
-        let mut labels = Vec::new();
-        let mut block_args = Vec::new();
-
-        for (label, dest, args) in branches.drain(..) {
-            if let Some(label) = label {
-                labels.push(label);
-            }
-            block_args.push((dest, args));
-        }
-
-        let inst = Self::new(ctx, InstKind::Switch { labels }, vec![], vec![cond]);
-
-        let mut succs = Vec::new();
-        for (dest, args) in block_args {
-            let params = dest.params(ctx).to_vec();
-            let mut succ = Successor::new(Operand::new(ctx, dest, inst));
-            for (param, arg) in params.into_iter().zip(args) {
-                let arg = Operand::new(ctx, arg, inst);
-                succ.add_arg(param, arg);
-            }
-            succs.push(succ);
-        }
-
-        inst.deref_mut(ctx).successors = succs;
-
-        inst
-    }
-
     pub fn call(ctx: &mut Context, symbol: Symbol, args: Vec<Value>, result_tys: Vec<Ty>) -> Inst {
         if let Some(SymbolKind::FuncDef(func)) = ctx.lookup_symbol(&symbol) {
             let sig = func.sig(ctx);
@@ -942,7 +884,7 @@ impl Inst {
     pub fn is_terminator(self, ctx: &Context) -> bool {
         matches!(
             self.deref(ctx).kind,
-            InstKind::Jump | InstKind::Br | InstKind::Switch { .. } | InstKind::Ret
+            InstKind::Jump | InstKind::Br | InstKind::Ret
         )
     }
 
@@ -1342,37 +1284,6 @@ impl<'a> fmt::Display for DisplayInst<'a> {
                     self.data.successors[0].display(self.ctx),
                     self.data.successors[1].display(self.ctx)
                 )?;
-            }
-            Ik::Switch { labels } => {
-                // TODO: too many assertions, maybe an independent validation pass?
-                assert_eq!(self.data.results.len(), 0);
-                assert_eq!(self.data.operands.len(), 1);
-                assert!(!self.data.successors.is_empty());
-                assert!(
-                    self.data.successors.len() == labels.len()
-                        || self.data.successors.len() == labels.len() + 1
-                );
-
-                write!(
-                    f,
-                    "switch %{}, ",
-                    self.data.operands[0].inner().name(self.ctx).unwrap()
-                )?;
-                for (i, (label, succ)) in labels.iter().zip(self.data.successors.iter()).enumerate()
-                {
-                    if i > 0 {
-                        write!(f, ", ")?;
-                    }
-                    write!(f, "{}: {}", label, succ.display(self.ctx))?;
-                }
-
-                if self.data.successors.len() == labels.len() + 1 {
-                    write!(
-                        f,
-                        ", default: {}",
-                        self.data.successors.last().unwrap().display(self.ctx)
-                    )?;
-                }
             }
             Ik::Call(callee) => {
                 write!(f, "call @{}(", callee)?;

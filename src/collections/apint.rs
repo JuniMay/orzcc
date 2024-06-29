@@ -594,6 +594,12 @@ impl ApInt {
             width -= ApIntChunk::BITS as usize;
         }
         let num_chunks = self.chunks.len();
+        if num_chunks == 0 {
+            // add a zero chunk
+            self.chunks.push(0);
+            self.width = 1;
+            return; // just return with new width 1
+        }
         let last_chunk_width = ApIntChunk::BITS - self.chunks.last().unwrap().leading_zeros();
         let new_width = (num_chunks - 1) * ApIntChunk::BITS as usize + last_chunk_width as usize;
         self.width = new_width;

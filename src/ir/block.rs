@@ -346,7 +346,7 @@ impl fmt::Display for DisplayBlock<'_> {
                 }
                 let name = param.name(self.ctx).unwrap();
                 let ty = param.ty(self.ctx);
-                write!(f, "{}: {}", name, ty.display(self.ctx))?;
+                write!(f, "%{}: {}", name, ty.display(self.ctx))?;
 
                 if self.debug {
                     write!(f, " /* {} */", param.id())?;

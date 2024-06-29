@@ -1,13 +1,17 @@
-use std::cmp::Ordering;
+use std::{
+    fmt::{self, Debug},
+    iter::Peekable,
+    str::Chars,
+};
 
-use super::ast::{BlockRef, ParsingBlock, ParsingInst, SuccRef, ValueRef};
+use super::ast::*;
 use crate::{
     collections::{
         apint::ApInt,
-        diagnostic::Diagnostic,
-        parsec::{choice, just, rec, string, take_while1, until_str, Input, Parser, ParserCombine},
+        diagnostic::{Diagnostic, DiagnosticList},
     },
     ir::{
+        self,
         CastOp,
         Constant,
         Context,
@@ -15,1221 +19,1571 @@ use crate::{
         FCmpCond,
         FUnaryOp,
         FloatConstant,
-        GlobalSlot,
         IBinaryOp,
         ICmpCond,
         IUnaryOp,
         InstKind,
         Signature,
-        Span,
         Symbol,
         Ty,
     },
 };
 
-fn line_comment<'a>() -> impl Parser<Input<'a>, Context, Output = ()> {
-    string("//").and(until_str("\n")).and(just('\n')).discard()
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TokenKind {
+    /// A delimiter lexeme.
+    ///
+    /// In IR, the valid delimiters includes: `:`, `;`, `,`, `=`, `(`, `)`, `[`,
+    /// `]`, `{`, `}`, `<`, `>`, `<{`, `}>`, `.` and `->`.
+    ///
+    /// Note that `.` only appears in `icmp.xxx` or `fcmp.xxx` instructions.
+    Delimiter(String),
+    /// A block label, starting with `^`, followed by an identifier.
+    Label(String),
+    /// A value name, starting with `%`, followed by an identifier.
+    Value(String),
+    /// A symbol name, starting with `@`, followed by an identifier.
+    Symbol(String),
+    /// All other tokenized string, can be opcode or some literals.
+    Tokenized(String),
+    /// End of file.
+    Eof,
+
+    /// An invalid token.
+    Invalid(String),
 }
 
-fn block_comment<'a>() -> impl Parser<Input<'a>, Context, Output = ()> {
-    // let's just handle non-neasted block comments
-    string("/*")
-        .and(until_str("*/"))
-        .and(string("*/"))
-        .discard()
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct Span {
+    start: usize,
+    end: usize,
 }
 
-fn lexeme<'a>(s: impl Into<String>) -> impl Parser<Input<'a>, Context, Output = &'a str> {
-    any_blank()
-        .many()
-        .and_r(string(s))
-        .and_l(any_blank().many())
+impl fmt::Debug for Span {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}:{}", self.start, self.end)
+    }
 }
 
-fn any_blank<'a>() -> impl Parser<Input<'a>, Context, Output = ()> {
-    take_while1(|c| c.is_whitespace() || c == '\n')
-        .discard()
-        .or(line_comment())
-        .or(block_comment())
+impl Span {
+    pub fn new(start: usize, end: usize) -> Self { Self { start, end } }
 }
 
-fn delimiter<'a>(d: impl Into<String>) -> impl Parser<Input<'a>, Context, Output = &'a str> {
-    any_blank()
-        .many()
-        .and_r(string(d))
-        .and_l(any_blank().many())
+#[derive(Debug)]
+pub struct Token {
+    pub kind: TokenKind,
+    pub span: Span,
 }
 
-fn icmp_cond<'a>() -> impl Parser<Input<'a>, Context, Output = ICmpCond> {
-    choice((
-        string("eq").to(ICmpCond::Eq),
-        string("ne").to(ICmpCond::Ne),
-        string("slt").to(ICmpCond::Slt),
-        string("sle").to(ICmpCond::Sle),
-        string("ult").to(ICmpCond::Ult),
-        string("ule").to(ICmpCond::Ule),
-    ))
+impl From<Span> for std::ops::Range<usize> {
+    fn from(span: Span) -> Self { span.start..span.end }
 }
 
-fn fcmp_cond<'a>() -> impl Parser<Input<'a>, Context, Output = FCmpCond> {
-    choice((
-        string("oeq").to(FCmpCond::OEq),
-        string("one").to(FCmpCond::ONe),
-        string("olt").to(FCmpCond::OLt),
-        string("ole").to(FCmpCond::OLe),
-        string("ueq").to(FCmpCond::UEq),
-        string("une").to(FCmpCond::UNe),
-        string("ult").to(FCmpCond::ULt),
-        string("ule").to(FCmpCond::ULe),
-    ))
+pub struct TokenStream<'a> {
+    src: Peekable<Chars<'a>>,
+    peeked: Option<Token>,
+    offset: usize,
 }
 
-fn ibinary_op<'a>() -> impl Parser<Input<'a>, Context, Output = IBinaryOp> {
-    choice((
-        string("add").to(IBinaryOp::Add),
-        string("sub").to(IBinaryOp::Sub),
-        string("mul").to(IBinaryOp::Mul),
-        string("udiv").to(IBinaryOp::UDiv),
-        string("sdiv").to(IBinaryOp::SDiv),
-        string("urem").to(IBinaryOp::URem),
-        string("srem").to(IBinaryOp::SRem),
-        string("and").to(IBinaryOp::And),
-        string("or").to(IBinaryOp::Or),
-        string("xor").to(IBinaryOp::Xor),
-        string("shl").to(IBinaryOp::Shl),
-        string("lshr").to(IBinaryOp::LShr),
-        string("ashr").to(IBinaryOp::AShr),
-        string::<Context>("icmp")
-            .and(just('.'))
-            .and_r(icmp_cond())
-            .map(IBinaryOp::Cmp),
-    ))
-}
+impl<'a> TokenStream<'a> {
+    pub fn new(s: &'a str) -> Self {
+        Self {
+            src: s.chars().peekable(),
+            peeked: None,
+            offset: 0,
+        }
+    }
 
-fn fbinary_op<'a>() -> impl Parser<Input<'a>, Context, Output = FBinaryOp> {
-    choice((
-        string("fadd").to(FBinaryOp::Add),
-        string("fsub").to(FBinaryOp::Sub),
-        string("fmul").to(FBinaryOp::Mul),
-        string("fdiv").to(FBinaryOp::Div),
-        string("frem").to(FBinaryOp::Rem),
-        string::<Context>("fcmp")
-            .and(just('.'))
-            .and_r(fcmp_cond())
-            .map(FBinaryOp::Cmp),
-    ))
-}
+    fn peek_char(&mut self) -> Option<char> { self.src.peek().copied() }
 
-fn iunary_op<'a>() -> impl Parser<Input<'a>, Context, Output = IUnaryOp> {
-    string("not").to(IUnaryOp::Not)
-}
+    fn next_char(&mut self) -> Option<char> {
+        let c = self.src.next();
+        if let Some(c) = c {
+            self.offset += c.len_utf8();
+        }
+        c
+    }
 
-fn funary_op<'a>() -> impl Parser<Input<'a>, Context, Output = FUnaryOp> {
-    string("fneg").to(FUnaryOp::Neg)
-}
+    /// Skip the line comment begin with `//`
+    fn skip_line_comment(&mut self) {
+        while let Some(c) = self.next_char() {
+            if c == '\n' {
+                break;
+            }
+        }
+    }
 
-fn ty<'a>() -> impl Parser<Input<'a>, Context, Output = Ty> {
-    rec(|t| {
-        Box::new(choice((
-            string("ptr").map_with(|_, e| Ty::ptr(e.state)),
-            string("void").map_with(|_, e| Ty::void(e.state)),
-            string("f32").map_with(|_, e| Ty::float32(e.state)),
-            string("f64").map_with(|_, e| Ty::float64(e.state)),
-            just('i')
-                .and_r(take_while1(|ch| ch.is_ascii_digit()).spanned())
-                .then_with(|(s, start, end), e| {
-                    let bitwidth = s.parse::<u16>();
-                    match bitwidth {
-                        Ok(bitwidth) => Some(Ty::int(e.state, bitwidth)),
-                        Err(err) => {
-                            let snippet = Diagnostic::error("invalid integer bitwidth")
-                                .annotate(start..end, format!("invalid bitwidth literal: {}", err))
-                                .note(
-                                    "help",
-                                    format!("the bitwidth must be smaller than {}", u16::MAX),
+    fn skip_block_comment(&mut self, diag: &mut DiagnosticList) {
+        let mut depth = 1;
+        let start = self.offset;
+        while depth > 0 {
+            match self.next_char() {
+                Some('/') if self.peek_char() == Some('*') => {
+                    self.next_char();
+                    depth += 1;
+                }
+                Some('*') if self.peek_char() == Some('/') => {
+                    self.next_char();
+                    depth -= 1;
+                }
+                Some(_) => {}
+                None => {
+                    // report error and return
+                    let snippet = Diagnostic::error("unclosed block comment")
+                        .annotate(start..self.offset, "unclosed block comment")
+                        .annotate(self.offset..self.offset, "expected `*/` here");
+                    diag.push(snippet);
+                    return;
+                }
+            }
+        }
+    }
+
+    fn skip_whitespace(&mut self, diag: &mut DiagnosticList) {
+        while let Some(c) = self.peek_char() {
+            match c {
+                ' ' | '\t' | '\r' | '\n' => {
+                    self.next_char();
+                }
+                '/' => {
+                    let start = self.offset;
+                    let _ = self.next_char();
+                    match self.peek_char() {
+                        Some('/') => {
+                            self.next_char();
+                            self.skip_line_comment();
+                        }
+                        Some('*') => {
+                            self.next_char();
+                            self.skip_block_comment(diag);
+                        }
+                        _ => {
+                            // since `/` is invalid, report error and skip it
+                            let snippet = Diagnostic::error("unexpected character")
+                                .annotate(start..start, "invalid character `/`")
+                                .annotate(
+                                    self.offset..self.offset,
+                                    "expeced `/` or `*` here for comments",
                                 );
-                            e.add_diagnostic(snippet);
-                            None
+                            diag.push(snippet);
                         }
                     }
-                }),
-            // simd: < ty ; len >, len must be power of two, so the exp can be calculated
-            t.and_l(delimiter(';'))
-                .and(take_while1(|ch| ch.is_ascii_digit()).spanned())
-                .between(delimiter('<'), delimiter('>'))
-                .then_with(|(ty, (s, start, end)), e| {
-                    let len = s.parse::<u64>();
-                    match len {
-                        Ok(len) => {
-                            if len.is_power_of_two() {
-                                Some(Ty::simd(e.state, ty, len.trailing_zeros() as u16))
+                }
+                _ => break,
+            }
+        }
+    }
+
+    fn read_identifier(&mut self) -> String {
+        let mut s = String::new();
+        while let Some(c) = self.peek_char() {
+            if c.is_alphanumeric() || c == '_' || c == '.' {
+                s.push(c);
+                self.next_char();
+            } else {
+                break;
+            }
+        }
+        s
+    }
+
+    fn read_label(&mut self) -> Token {
+        let start = self.offset;
+        let _ = self.next_char();
+        let s = self.read_identifier();
+        Token {
+            kind: TokenKind::Label(s),
+            span: Span::new(start, self.offset),
+        }
+    }
+
+    fn read_value(&mut self) -> Token {
+        let start = self.offset;
+        let _ = self.next_char();
+        let s = self.read_identifier();
+        Token {
+            kind: TokenKind::Value(s),
+            span: Span::new(start, self.offset),
+        }
+    }
+
+    fn read_symbol(&mut self) -> Token {
+        let start = self.offset;
+        let _ = self.next_char();
+        let s = self.read_identifier();
+        Token {
+            kind: TokenKind::Symbol(s),
+            span: Span::new(start, self.offset),
+        }
+    }
+
+    fn read_tokenized(&mut self) -> Token {
+        let start = self.offset;
+        let s = self.read_identifier();
+        Token {
+            kind: TokenKind::Tokenized(s),
+            span: Span::new(start, self.offset),
+        }
+    }
+
+    pub fn peek(&mut self, diag: &mut DiagnosticList) -> &Token {
+        if let Some(ref token) = self.peeked {
+            return token;
+        }
+
+        self.skip_whitespace(diag);
+        let start = self.offset;
+
+        let token = match self.peek_char() {
+            Some('^') => self.read_label(),
+            Some('%') => self.read_value(),
+            Some('@') => self.read_symbol(),
+            Some('<') => {
+                // '<' or '<{'
+                let _ = self.next_char();
+                if self.peek_char() == Some('{') {
+                    self.next_char();
+                    Token {
+                        kind: TokenKind::Delimiter("<{".to_string()),
+                        span: Span::new(start, self.offset),
+                    }
+                } else {
+                    Token {
+                        kind: TokenKind::Delimiter("<".to_string()),
+                        span: Span::new(start, self.offset),
+                    }
+                }
+            }
+            Some('}') => {
+                // '}' or '}>'
+                let _ = self.next_char();
+                if self.peek_char() == Some('>') {
+                    self.next_char();
+                    Token {
+                        kind: TokenKind::Delimiter("}>".to_string()),
+                        span: Span::new(start, self.offset),
+                    }
+                } else {
+                    Token {
+                        kind: TokenKind::Delimiter("}".to_string()),
+                        span: Span::new(start, self.offset),
+                    }
+                }
+            }
+            Some('-') => {
+                // must be `->`, otherwise report error and recover
+                let _ = self.next_char();
+                if self.peek_char() == Some('>') {
+                    self.next_char();
+                    Token {
+                        kind: TokenKind::Delimiter("->".to_string()),
+                        span: Span::new(start, self.offset),
+                    }
+                } else {
+                    let snippet = Diagnostic::error("invalid character")
+                        .annotate(start..start, "unexpected character `-`")
+                        .annotate(self.offset..self.offset, "expected `>` here to be `->`");
+                    diag.push(snippet);
+                    Token {
+                        kind: TokenKind::Invalid("-".to_string()),
+                        span: Span::new(start, self.offset),
+                    }
+                }
+            }
+            Some(c) if c.is_alphanumeric() => self.read_tokenized(),
+            Some(c) if matches!(c, '(' | ')' | ',' | ';' | ':' | '=' | '[' | ']' | '{' | '>') => {
+                let _ = self.next_char();
+                Token {
+                    kind: TokenKind::Delimiter(c.to_string()),
+                    span: Span::new(start, self.offset),
+                }
+            }
+            Some(c) => {
+                self.next_char();
+                let snippet = Diagnostic::error("invalid character")
+                    .annotate(start..start, "invalid character");
+                diag.push(snippet);
+                Token {
+                    kind: TokenKind::Invalid(c.to_string()),
+                    span: Span::new(start, self.offset),
+                }
+            }
+            None => Token {
+                kind: TokenKind::Eof,
+                span: Span::new(start, start),
+            },
+        };
+
+        self.peeked = Some(token);
+        self.peeked.as_ref().unwrap()
+    }
+
+    pub fn next(&mut self, diag: &mut DiagnosticList) -> Token {
+        self.peek(diag);
+        self.peeked.take().unwrap()
+    }
+}
+
+pub struct Parser<'a> {
+    lexer: TokenStream<'a>,
+    diag: DiagnosticList,
+    ctx: Context,
+}
+
+impl<'a> Parser<'a> {
+    pub fn new(src: &'a str) -> Self {
+        Self {
+            lexer: TokenStream::new(src),
+            diag: DiagnosticList::new(),
+            ctx: Context::default(),
+        }
+    }
+
+    pub fn parse(mut self) -> (Vec<Item>, DiagnosticList, Context) {
+        let mut items = Vec::new();
+        while let Some(item) = self.parse_item() {
+            items.push(item);
+        }
+        (items, self.diag, self.ctx)
+    }
+
+    #[must_use]
+    fn expect_delimiter(&mut self, delimiter: impl Into<String>) -> Option<Token> {
+        let token = self.lexer.next(&mut self.diag);
+        let d = delimiter.into();
+        if let TokenKind::Delimiter(s) = &token.kind {
+            if s == &d {
+                return Some(token);
+            }
+        }
+        let snippet = Diagnostic::error("unexpected token")
+            .annotate(token.span.into(), format!("expected `{}`", d));
+        self.diag.push(snippet);
+        None
+    }
+
+    fn parse_item(&mut self) -> Option<Item> {
+        use TokenKind as Tk;
+
+        let token = self.lexer.next(&mut self.diag);
+        match token.kind {
+            Tk::Tokenized(s) => match s.as_ref() {
+                "slot" => {
+                    let slot = self.parse_slot()?;
+                    Some(Item::Slot(slot))
+                }
+                "decl" => {
+                    let decl = self.parse_decl()?;
+                    Some(Item::Decl(decl))
+                }
+                "func" => {
+                    let func = self.parse_func()?;
+                    Some(Item::Func(func))
+                }
+                _ => {
+                    let snippet = Diagnostic::error("unexpected token")
+                        .annotate(token.span.into(), "expected `slot`, `decl`, or `func`");
+                    self.diag.push(snippet);
+                    None
+                }
+            },
+            Tk::Delimiter(_) | Tk::Label(_) | Tk::Value(_) | Tk::Invalid(_) | Tk::Symbol(_) => {
+                let snippet = Diagnostic::error("unexpected token")
+                    .annotate(token.span.into(), "expected `slot`, `decl`, or `func`");
+                self.diag.push(snippet);
+                None
+            }
+            Tk::Eof => None,
+        }
+    }
+
+    fn parse_func(&mut self) -> Option<ParsingFunc> {
+        // func <name><sig> { <body> }
+        let start = self.lexer.offset;
+        let symbol = self.parse_symbol()?;
+        let sig = self.parse_sig()?;
+        let _ = self.expect_delimiter("{")?;
+
+        let mut blocks = Vec::new();
+
+        loop {
+            let token = self.lexer.peek(&mut self.diag);
+            if let TokenKind::Delimiter(ref s) = token.kind {
+                if s == "}" {
+                    break;
+                }
+            }
+
+            let block = self.parse_block();
+            if block.is_none() {
+                break; // TODO: maybe we can recover here.
+            }
+            blocks.push(block.unwrap());
+        }
+
+        let _ = self.expect_delimiter("}")?;
+
+        let end = self.lexer.offset;
+
+        Some(ParsingFunc {
+            name: symbol,
+            sig,
+            blocks,
+            span: ir::Span::from((start, end)),
+        })
+    }
+
+    fn parse_value(&mut self) -> Option<ValueRef> {
+        let token = self.lexer.next(&mut self.diag);
+        if let TokenKind::Value(s) = token.kind {
+            Some(ValueRef {
+                name: s,
+                span: ir::Span::from((token.span.start, token.span.end)),
+            })
+        } else {
+            let snippet =
+                Diagnostic::error("unexpected token").annotate(token.span.into(), "expected value");
+            self.diag.push(snippet);
+            None
+        }
+    }
+
+    fn parse_block(&mut self) -> Option<ParsingBlock> {
+        use TokenKind as Tk;
+
+        // parse the label and block arguments
+        // ^block (<value> : <ty>, ...) :
+        let start = self.lexer.offset;
+        let token = self.lexer.next(&mut self.diag);
+        let block = if let Tk::Label(s) = token.kind {
+            BlockRef {
+                name: s,
+                span: ir::Span::from((token.span.start, token.span.end)),
+            }
+        } else {
+            let snippet = Diagnostic::error("unexpected token")
+                .annotate(token.span.into(), "expected block label");
+            self.diag.push(snippet);
+            return None;
+        };
+
+        let mut params = Vec::new();
+        let token = self.lexer.peek(&mut self.diag);
+
+        if let Tk::Delimiter(ref s) = token.kind {
+            if s == "(" {
+                let _ = self.lexer.next(&mut self.diag);
+                loop {
+                    let value = self.parse_value()?;
+                    let _ = self.expect_delimiter(":")?;
+                    let ty = self.parse_ty()?;
+                    params.push((value, ty));
+
+                    let token = self.lexer.next(&mut self.diag);
+                    if let Tk::Delimiter(s) = token.kind {
+                        if s == "," {
+                            continue;
+                        } else if s == ")" {
+                            break;
+                        }
+                    } else {
+                        let snippet = Diagnostic::error("unexpected token")
+                            .annotate(token.span.into(), "expected `,` or `)`");
+                        self.diag.push(snippet);
+                        return None;
+                    }
+                }
+                let _ = self.expect_delimiter(":")?;
+            } else if s == ":" {
+                let _ = self.lexer.next(&mut self.diag);
+            } else {
+                let snippet = Diagnostic::error("unexpected token")
+                    .annotate(token.span.into(), "expected `:` or `(`");
+                self.diag.push(snippet);
+                return None;
+            }
+        }
+
+        let mut insts = Vec::new();
+        loop {
+            let token = self.lexer.peek(&mut self.diag);
+            match token.kind {
+                Tk::Delimiter(ref s) if s == "}" => {
+                    break;
+                }
+                Tk::Label(_) => {
+                    break;
+                }
+                Tk::Value(_) | Tk::Tokenized(_) => {
+                    let inst = self.parse_inst()?;
+                    insts.push(inst);
+                }
+                Tk::Delimiter(_) | Tk::Eof | Tk::Invalid(_) | Tk::Symbol(_) => {
+                    let snippet = Diagnostic::error("unexpected token")
+                        .annotate(token.span.into(), "expected instruction");
+                    self.diag.push(snippet);
+                    return None;
+                }
+            }
+        }
+
+        let end = self.lexer.offset;
+        Some(ParsingBlock {
+            block,
+            params,
+            insts,
+            span: ir::Span::from((start, end)),
+        })
+    }
+
+    fn parse_succ(&mut self) -> Option<SuccRef> {
+        use TokenKind as Tk;
+
+        // ^block ( %arg0, %arg1, ... ) or just ^block
+        let start = self.lexer.offset;
+        let token = self.lexer.next(&mut self.diag);
+        let block = if let Tk::Label(s) = token.kind {
+            BlockRef {
+                name: s,
+                span: ir::Span::from((token.span.start, token.span.end)),
+            }
+        } else {
+            let snippet = Diagnostic::error("unexpected token")
+                .annotate(token.span.into(), "expected block label");
+            self.diag.push(snippet);
+            return None;
+        };
+
+        let token = self.lexer.peek(&mut self.diag);
+        if let TokenKind::Delimiter(ref s) = token.kind {
+            if s == "(" {
+                let _ = self.lexer.next(&mut self.diag);
+                let mut args = Vec::new();
+                loop {
+                    let token = self.lexer.peek(&mut self.diag);
+                    if let Tk::Delimiter(ref s) = token.kind {
+                        if s == ")" {
+                            let _ = self.lexer.next(&mut self.diag);
+                            break;
+                        }
+                    }
+
+                    let value = self.parse_value()?;
+                    args.push(value);
+
+                    let token = self.lexer.peek(&mut self.diag);
+                    if let Tk::Delimiter(ref s) = token.kind {
+                        if s == "," {
+                            let _ = self.lexer.next(&mut self.diag);
+                            continue;
+                        }
+                    }
+                }
+                return Some(SuccRef {
+                    block,
+                    args,
+                    span: ir::Span::from((start, self.lexer.offset)),
+                });
+            }
+        }
+
+        Some(SuccRef {
+            block,
+            args: Vec::new(),
+            span: ir::Span::from((start, self.lexer.offset)),
+        })
+    }
+
+    fn parse_inst(&mut self) -> Option<ParsingInst> {
+        use InstKind as Ik;
+        use TokenKind as Tk;
+
+        // two formats:
+        // 1. %value, %value, ... = <op> %value, %value, ... : ( <ty>, ... ) | <ty>
+        // 2. <op> ...
+
+        let start = self.lexer.offset;
+
+        let token = self.lexer.peek(&mut self.diag);
+        let mut results = Vec::new();
+        let mut operands = Vec::new();
+        let mut result_tys = Vec::new();
+        let mut successors = Vec::new();
+
+        let kind = match token.kind {
+            Tk::Value(_) => {
+                loop {
+                    let value = self.parse_value()?;
+                    results.push(value);
+                    let token = self.lexer.next(&mut self.diag);
+                    if let Tk::Delimiter(ref s) = token.kind {
+                        if s == "," {
+                            continue;
+                        } else if s == "=" {
+                            break;
+                        }
+                    } else {
+                        let snippet = Diagnostic::error("unexpected token")
+                            .annotate(token.span.into(), "expected `,` or `=`");
+                        self.diag.push(snippet);
+                        return None;
+                    }
+                }
+
+                let token = self.lexer.next(&mut self.diag);
+
+                if let Tk::Tokenized(s) = token.kind {
+                    match s.as_ref() {
+                        "iconst" => {
+                            // iconst <apint>
+                            let token = self.lexer.next(&mut self.diag);
+                            if let Tk::Tokenized(s) = token.kind {
+                                let apint = ApInt::try_from(s);
+                                if let Ok(apint) = apint {
+                                    Ik::IConst(apint)
+                                } else {
+                                    let snippet = Diagnostic::error("invalid apint")
+                                        .annotate(token.span.into(), "invalid apint literal");
+                                    self.diag.push(snippet);
+                                    return None;
+                                }
                             } else {
-                                let snippet = Diagnostic::error("invalid simd length")
-                                    .annotate(
-                                        start..end,
-                                        format!("invalid simd length: {} is not power of two", len),
-                                    )
-                                    .note("help", "the length of simd must be power of two");
-                                e.add_diagnostic(snippet);
-                                None
+                                let snippet = Diagnostic::error("unexpected token")
+                                    .annotate(token.span.into(), "expected integer constant");
+                                self.diag.push(snippet);
+                                return None;
                             }
                         }
-                        Err(err) => {
-                            let snippet = Diagnostic::error("invalid simd length").annotate(
-                                start..end,
-                                format!("invalid simd length literal: {}", err),
-                            );
-                            e.add_diagnostic(snippet);
-                            None
+                        "fconst" => {
+                            // fconst <apfloat>
+                            let token = self.lexer.next(&mut self.diag);
+                            if let Tk::Tokenized(s) = token.kind {
+                                // trim 0x
+                                let s_lower = s.to_lowercase();
+                                let s = if let Some(s) = s_lower.strip_prefix("0x") {
+                                    s
+                                } else {
+                                    s_lower.as_str()
+                                };
+                                let bits = u32::from_str_radix(s, 16);
+                                if let Ok(bits) = bits {
+                                    Ik::FConst(FloatConstant::Float32(bits))
+                                } else {
+                                    // try parse as 64 bits
+                                    let bits = u64::from_str_radix(s, 16);
+                                    if let Ok(bits) = bits {
+                                        Ik::FConst(FloatConstant::Float64(bits))
+                                    } else {
+                                        let snippet = Diagnostic::error("invalid float constant")
+                                            .annotate(token.span.into(), "invalid float constant")
+                                            .note("note", "expect hexadecimal representation of float constant");
+                                        self.diag.push(snippet);
+                                        return None;
+                                    }
+                                }
+                            } else {
+                                let snippet = Diagnostic::error("unexpected token")
+                                    .annotate(token.span.into(), "expected float constant");
+                                self.diag.push(snippet);
+                                return None;
+                            }
                         }
-                    }
-                }),
-            // array: [ ty ; len ]
-            t.and_l(delimiter(';'))
-                .and(take_while1(|ch| ch.is_ascii_digit()).spanned())
-                .between(delimiter('['), delimiter(']'))
-                .then_with(|(ty, (s, start, end)), e| {
-                    let len = s.parse::<usize>();
-                    match len {
-                        Ok(len) => Some(Ty::array(e.state, ty, len)),
-                        Err(err) => {
-                            let snippet = Diagnostic::error("invalid array length").annotate(
-                                start..end,
-                                format!("invalid array length literal: {}", err),
-                            );
-                            e.add_diagnostic(snippet);
-                            None
+                        "stack_slot" => {
+                            // stack_slot <size>
+                            let token = self.lexer.next(&mut self.diag);
+                            if let Tk::Tokenized(s) = token.kind {
+                                // let size = s.parse::<u32>();
+                                let radix = if s.starts_with("0x") {
+                                    16
+                                } else if s.starts_with("0b") {
+                                    2
+                                } else if s.starts_with("0o") {
+                                    8
+                                } else {
+                                    10
+                                };
+                                let s = s.to_lowercase();
+                                let s = if s.starts_with("0x")
+                                    || s.starts_with("0b")
+                                    || s.starts_with("0o")
+                                {
+                                    &s[2..]
+                                } else {
+                                    &s
+                                };
+                                let size = u32::from_str_radix(s, radix);
+                                if let Ok(size) = size {
+                                    Ik::StackSlot(size)
+                                } else {
+                                    let snippet = Diagnostic::error("invalid apint")
+                                        .annotate(token.span.into(), "invalid apint literal");
+                                    self.diag.push(snippet);
+                                    return None;
+                                }
+                            } else {
+                                let snippet = Diagnostic::error("unexpected token")
+                                    .annotate(token.span.into(), "expected integer constant");
+                                self.diag.push(snippet);
+                                return None;
+                            }
                         }
-                    }
-                }),
-            // struct: { ty, ty, ty, ... }
-            t.sep_by(delimiter(','))
-                .between(delimiter('{'), delimiter('}'))
-                .map_with(|fields, e| Ty::struct_(e.state, fields, false)),
-            // packed struct: <{ ty, ty, ty, ... }>
-            t.sep_by(delimiter(','))
-                .between(delimiter("<{"), delimiter("}>"))
-                .map_with(|fields, e| Ty::struct_(e.state, fields, true)),
-        )))
-    })
-}
+                        "add" => Ik::IBinary(IBinaryOp::Add),
+                        "sub" => Ik::IBinary(IBinaryOp::Sub),
+                        "mul" => Ik::IBinary(IBinaryOp::Mul),
+                        "udiv" => Ik::IBinary(IBinaryOp::UDiv),
+                        "sdiv" => Ik::IBinary(IBinaryOp::SDiv),
+                        "urem" => Ik::IBinary(IBinaryOp::URem),
+                        "srem" => Ik::IBinary(IBinaryOp::SRem),
+                        "and" => Ik::IBinary(IBinaryOp::And),
+                        "or" => Ik::IBinary(IBinaryOp::Or),
+                        "xor" => Ik::IBinary(IBinaryOp::Xor),
+                        "shl" => Ik::IBinary(IBinaryOp::Shl),
+                        "lshr" => Ik::IBinary(IBinaryOp::LShr),
+                        "ashr" => Ik::IBinary(IBinaryOp::AShr),
+                        "icmp.eq" => Ik::IBinary(IBinaryOp::Cmp(ICmpCond::Eq)),
+                        "icmp.ne" => Ik::IBinary(IBinaryOp::Cmp(ICmpCond::Ne)),
+                        "icmp.slt" => Ik::IBinary(IBinaryOp::Cmp(ICmpCond::Slt)),
+                        "icmp.sle" => Ik::IBinary(IBinaryOp::Cmp(ICmpCond::Sle)),
+                        "icmp.ult" => Ik::IBinary(IBinaryOp::Cmp(ICmpCond::Ult)),
+                        "icmp.ule" => Ik::IBinary(IBinaryOp::Cmp(ICmpCond::Ule)),
+                        "fadd" => Ik::FBinary(FBinaryOp::Add),
+                        "fsub" => Ik::FBinary(FBinaryOp::Sub),
+                        "fmul" => Ik::FBinary(FBinaryOp::Mul),
+                        "fdiv" => Ik::FBinary(FBinaryOp::Div),
+                        "frem" => Ik::FBinary(FBinaryOp::Rem),
+                        "fcmp.oeq" => Ik::FBinary(FBinaryOp::Cmp(FCmpCond::OEq)),
+                        "fcmp.one" => Ik::FBinary(FBinaryOp::Cmp(FCmpCond::ONe)),
+                        "fcmp.olt" => Ik::FBinary(FBinaryOp::Cmp(FCmpCond::OLt)),
+                        "fcmp.ole" => Ik::FBinary(FBinaryOp::Cmp(FCmpCond::OLe)),
+                        "fcmp.ueq" => Ik::FBinary(FBinaryOp::Cmp(FCmpCond::UEq)),
+                        "fcmp.une" => Ik::FBinary(FBinaryOp::Cmp(FCmpCond::UNe)),
+                        "fcmp.ult" => Ik::FBinary(FBinaryOp::Cmp(FCmpCond::ULt)),
+                        "fcmp.ule" => Ik::FBinary(FBinaryOp::Cmp(FCmpCond::ULe)),
+                        "not" => Ik::IUnary(IUnaryOp::Not),
+                        "fneg" => Ik::FUnary(FUnaryOp::Neg),
+                        "trunc" => Ik::Cast(CastOp::Trunc),
+                        "fptrunc" => Ik::Cast(CastOp::FpTrunc),
+                        "zext" => Ik::Cast(CastOp::ZExt),
+                        "sext" => Ik::Cast(CastOp::SExt),
+                        "fptoui" => Ik::Cast(CastOp::FpToUi),
+                        "fptosi" => Ik::Cast(CastOp::FpToSi),
+                        "uitofp" => Ik::Cast(CastOp::UiToFp),
+                        "sitofp" => Ik::Cast(CastOp::SiToFp),
+                        "bitcast" => Ik::Cast(CastOp::Bitcast),
+                        "fpext" => Ik::Cast(CastOp::FpExt),
+                        "ptrtoint" => Ik::Cast(CastOp::PtrToInt),
+                        "inttoptr" => Ik::Cast(CastOp::IntToPtr),
+                        "load" => Ik::Load,
+                        "offset" => Ik::Offset,
+                        "get_global" => {
+                            let token = self.lexer.next(&mut self.diag);
+                            let symbol = if let Tk::Symbol(s) = token.kind {
+                                Symbol::new(s).with_source_span(ir::Span::from((
+                                    token.span.start,
+                                    token.span.end,
+                                )))
+                            } else {
+                                let snippet = Diagnostic::error("unexpected token")
+                                    .annotate(token.span.into(), "expected symbol");
+                                self.diag.push(snippet);
+                                return None;
+                            };
+                            Ik::GetGlobal(symbol)
+                        }
+                        "call" => {
+                            // call <symbol> ( <args>* )
+                            let token = self.lexer.next(&mut self.diag);
+                            let symbol = if let Tk::Symbol(s) = token.kind {
+                                Symbol::new(s).with_source_span(ir::Span::from((
+                                    token.span.start,
+                                    token.span.end,
+                                )))
+                            } else {
+                                let snippet = Diagnostic::error("unexpected token")
+                                    .annotate(token.span.into(), "expected symbol");
+                                self.diag.push(snippet);
+                                return None;
+                            };
+                            Ik::Call(symbol)
+                        }
+                        "call_indirect" => {
+                            // call_indirect <sig>, <callee> ( <args>* )
+                            let sig = self.parse_sig()?;
+                            self.expect_delimiter(",")?;
 
-fn apint<'a>() -> impl Parser<Input<'a>, Context, Output = ApInt> {
-    // apint can start with 0x, 0b, 0o or no prefix, and may ends with `iX` for
-    // explicit width we can just take when no whitspace is found, and parse
-    // with ApInt::try_from
-    take_while1(|ch| ch.is_alphanumeric())
-        .spanned()
-        .then_with(|(s, start, end), e| {
-            let apint = ApInt::try_from(s.as_str());
-            match apint {
-                Ok(apint) => Some(apint),
-                Err(err) => {
-                    let snippet =
-                        Diagnostic::error("invalid apint").annotate(start..end, format!("{}", err));
-                    e.add_diagnostic(snippet);
+                            Ik::CallIndirect(sig)
+                        }
+                        _ => {
+                            let snippet = Diagnostic::error("invalid opcode")
+                                .annotate(token.span.into(), "invalid opcode");
+                            self.diag.push(snippet);
+                            return None;
+                        }
+                    }
+                } else {
+                    let snippet = Diagnostic::error("unexpected token")
+                        .annotate(token.span.into(), "expected instruction");
+                    self.diag.push(snippet);
+                    return None;
+                }
+            }
+            Tk::Tokenized(ref s) => {
+                match s.as_ref() {
+                    "jump" => {
+                        let _ = self.lexer.next(&mut self.diag);
+                        let succ = self.parse_succ()?;
+
+                        successors.push(succ);
+
+                        Ik::Jump
+                    }
+                    "br" => {
+                        // br %cond, succ0, succ1
+                        let _ = self.lexer.next(&mut self.diag);
+                        let cond = self.parse_value()?;
+                        self.expect_delimiter(",")?;
+                        let succ0 = self.parse_succ()?;
+                        self.expect_delimiter(",")?;
+                        let succ1 = self.parse_succ()?;
+
+                        operands.push(cond);
+                        successors.push(succ0);
+                        successors.push(succ1);
+
+                        Ik::Br
+                    }
+                    "call" => {
+                        let _ = self.lexer.next(&mut self.diag);
+                        let token = self.lexer.next(&mut self.diag);
+                        let symbol = if let Tk::Symbol(s) = token.kind {
+                            Symbol::new(s).with_source_span(ir::Span::from((
+                                token.span.start,
+                                token.span.end,
+                            )))
+                        } else {
+                            let snippet = Diagnostic::error("unexpected token")
+                                .annotate(token.span.into(), "expected symbol");
+                            self.diag.push(snippet);
+                            return None;
+                        };
+
+                        Ik::Call(symbol)
+                    }
+                    "call_indirect" => {
+                        let _ = self.lexer.next(&mut self.diag);
+                        let sig = self.parse_sig()?;
+                        self.expect_delimiter(",")?;
+
+                        Ik::CallIndirect(sig)
+                    }
+                    "ret" => {
+                        let _ = self.lexer.next(&mut self.diag);
+                        // ret %val // handle later
+                        // ret
+                        // ret void // we need to consume this one
+                        let token = self.lexer.peek(&mut self.diag);
+                        if let Tk::Tokenized(ref s) = token.kind {
+                            if s == "void" {
+                                let _ = self.lexer.next(&mut self.diag);
+                            }
+                        }
+
+                        Ik::Ret
+                    }
+                    "store" => {
+                        let _ = self.lexer.next(&mut self.diag);
+                        Ik::Store
+                    }
+                    _ => {
+                        let snippet = Diagnostic::error("invalid opcode")
+                            .annotate(token.span.into(), "invalid opcode");
+                        self.diag.push(snippet);
+                        return None;
+                    }
+                }
+            }
+            Tk::Delimiter(_) | Tk::Eof | Tk::Invalid(_) | Tk::Label(_) | Tk::Symbol(_) => {
+                let snippet = Diagnostic::error("unexpected token")
+                    .annotate(token.span.into(), "expected instruction");
+                self.diag.push(snippet);
+                return None;
+            }
+        };
+
+        // operands and result types.
+        //
+        // for normal instructions, the format is
+        // %opd1, %opd2, %opd3, ...: %res_ty or ( %res_ty1, %res_ty2, ... )
+        //
+        // for call instructions, the format is
+        // ( %arg1, %arg2, ... ) : ( %res_ty1, %res_ty2, ... ) or %res_ty
+        //
+        // for call_indirect instructions, the format is
+        //
+        // %callee ( %arg1, %arg2, ... ) : ( %res_ty1, %res_ty2, ... ) or %res_ty
+
+        // maybe just allow any format, skip paren and comma.
+        //
+        let mut has_result_tys = false;
+        loop {
+            let token = self.lexer.peek(&mut self.diag);
+            match token.kind {
+                Tk::Value(_) => {
+                    let value = self.parse_value()?;
+                    operands.push(value);
+                }
+                Tk::Delimiter(ref s) => match s.as_ref() {
+                    "," | "(" | ")" => {
+                        self.lexer.next(&mut self.diag);
+                    }
+                    ":" => {
+                        self.lexer.next(&mut self.diag);
+                        has_result_tys = true;
+                        break;
+                    }
+                    _ => {
+                        break;
+                    }
+                },
+                Tk::Eof | Tk::Invalid(_) | Tk::Symbol(_) | Tk::Tokenized(_) | Tk::Label(_) => {
+                    break;
+                }
+            }
+        }
+
+        // parse result types
+        if has_result_tys {
+            let token = self.lexer.peek(&mut self.diag);
+            match token.kind {
+                Tk::Delimiter(ref s) => match s.as_ref() {
+                    "(" => {
+                        self.lexer.next(&mut self.diag);
+                        loop {
+                            let token = self.lexer.peek(&mut self.diag);
+                            match token.kind {
+                                Tk::Tokenized(_) => {
+                                    let ty = self.parse_ty()?;
+                                    result_tys.push(ty);
+                                }
+                                Tk::Delimiter(ref s) => match s.as_ref() {
+                                    "," => {
+                                        self.lexer.next(&mut self.diag);
+                                    }
+                                    ")" => {
+                                        self.lexer.next(&mut self.diag);
+                                        break;
+                                    }
+                                    _ => {
+                                        let snippet = Diagnostic::error("unexpected token")
+                                            .annotate(token.span.into(), "expected `,` or `)`");
+                                        self.diag.push(snippet);
+                                        return None;
+                                    }
+                                },
+                                Tk::Eof
+                                | Tk::Invalid(_)
+                                | Tk::Symbol(_)
+                                | Tk::Value(_)
+                                | Tk::Label(_) => {
+                                    let snippet = Diagnostic::error("unexpected token")
+                                        .annotate(token.span.into(), "expected value or delimiter");
+                                    self.diag.push(snippet);
+                                    return None;
+                                }
+                            }
+                        }
+                    }
+                    _ => {
+                        let ty = self.parse_ty()?;
+                        result_tys.push(ty);
+                    }
+                },
+                Tk::Tokenized(_) => {
+                    let ty = self.parse_ty()?;
+                    result_tys.push(ty);
+                }
+                Tk::Eof | Tk::Invalid(_) | Tk::Symbol(_) | Tk::Label(_) | Tk::Value(_) => {
+                    let snippet = Diagnostic::error("unexpected token")
+                        .annotate(token.span.into(), "expected value or delimiter");
+                    self.diag.push(snippet);
+                    return None;
+                }
+            }
+        }
+
+        Some(ParsingInst {
+            results,
+            kind,
+            operands,
+            successors,
+            result_tys,
+            span: ir::Span::from((start, self.lexer.offset)),
+        })
+    }
+
+    fn parse_decl(&mut self) -> Option<ParsingDecl> {
+        // decl <name><sig>
+        let start = self.lexer.offset;
+        let symbol = self.parse_symbol()?;
+        let sig = self.parse_sig()?;
+        let end = self.lexer.offset;
+
+        Some(ParsingDecl {
+            name: symbol,
+            sig,
+            span: ir::Span::from((start, end)),
+        })
+    }
+
+    fn parse_slot(&mut self) -> Option<ParsingSlot> {
+        // slot <name> : <ty> = <init>
+        let start = self.lexer.offset;
+
+        let symbol = self.parse_symbol()?;
+        let _ = self.expect_delimiter(":")?;
+        let ty = self.parse_ty()?;
+        let _ = self.expect_delimiter("=")?;
+        let init = self.parse_slot_init()?;
+
+        let end = self.lexer.offset;
+
+        Some(ParsingSlot {
+            name: symbol,
+            ty,
+            init,
+            span: ir::Span::from((start, end)),
+        })
+    }
+
+    fn parse_symbol(&mut self) -> Option<Symbol> {
+        let token = self.lexer.next(&mut self.diag);
+        if let TokenKind::Symbol(s) = token.kind {
+            let span = ir::Span::from((token.span.start, token.span.end));
+            let symbol = Symbol::new(s).with_source_span(span);
+            Some(symbol)
+        } else {
+            let snippet = Diagnostic::error("unexpected token")
+                .annotate(token.span.into(), "expected symbol starting with `@`");
+            self.diag.push(snippet);
+            None
+        }
+    }
+
+    fn parse_slot_init(&mut self) -> Option<Constant> {
+        use TokenKind as Tk;
+        let start = self.lexer.offset;
+        let token = self.lexer.next(&mut self.diag);
+        match token.kind {
+            Tk::Tokenized(s) => {
+                // undef or zeroinit
+                match s.as_ref() {
+                    "undef" => Some(
+                        Constant::undef()
+                            .with_source_span(ir::Span::from((start, self.lexer.offset))),
+                    ),
+                    "zeroinit" => Some(
+                        Constant::zeroinit()
+                            .with_source_span(ir::Span::from((start, self.lexer.offset))),
+                    ),
+                    _ => {
+                        let snippet = Diagnostic::error("unexpected token").annotate(
+                            token.span.into(),
+                            "expected `undef`, `zeroinit`, or byte list",
+                        );
+                        self.diag.push(snippet);
+                        None
+                    }
+                }
+            }
+            Tk::Delimiter(s) => {
+                // [ <bytes,> ]
+                if s == "[" {
+                    let mut bytes = Vec::new();
+                    loop {
+                        let token = self.lexer.next(&mut self.diag);
+                        if let Tk::Tokenized(s) = token.kind {
+                            // expect to be a 0x00..FF
+                            if let Some(byte) = s.strip_prefix("0x") {
+                                if let Ok(byte) = u8::from_str_radix(byte, 16) {
+                                    bytes.push(byte);
+                                } else {
+                                    let snippet = Diagnostic::error("invalid byte")
+                                        .annotate(token.span.into(), "invalid byte");
+                                    self.diag.push(snippet);
+                                    return None;
+                                }
+                            } else {
+                                let snippet = Diagnostic::error("invalid byte")
+                                    .annotate(token.span.into(), "invalid byte")
+                                    .annotate(
+                                        token.span.start..token.span.start,
+                                        "expect `0x` prefix",
+                                    );
+                                self.diag.push(snippet);
+                                return None;
+                            }
+                        } else if let Tk::Delimiter(s) = token.kind {
+                            if s == "]" {
+                                break;
+                            } else if s == "," {
+                                continue;
+                            }
+                        } else {
+                            let snippet = Diagnostic::error("unexpected token")
+                                .annotate(token.span.into(), "expected `,`, `]`, or a byte");
+                            self.diag.push(snippet);
+                            return None;
+                        }
+                    }
+
+                    Some(
+                        Constant::bytes(bytes)
+                            .with_source_span(ir::Span::from((start, self.lexer.offset))),
+                    )
+                } else {
+                    let snippet = Diagnostic::error("unexpected token")
+                        .annotate(token.span.into(), format!("expected `[` but got `{}`", s));
+                    self.diag.push(snippet);
                     None
                 }
             }
-        })
-}
-
-fn float<'a>() -> impl Parser<Input<'a>, Context, Output = FloatConstant> {
-    // float can be either 32 bits or 64 bits, the representation should be hex for
-    // precision
-    take_while1(|ch| !ch.is_whitespace())
-        .spanned()
-        .then_with(|(s, start, end), e| {
-            // strip `0x` or `0X`
-            let s = s.to_lowercase();
-            let s = s.trim_start_matches("0x");
-            let bits = u32::from_str_radix(s, 16);
-            match bits {
-                Ok(bits) => {
-                    let float = FloatConstant::Float32(bits);
-                    Some(float)
-                }
-                Err(_) => {
-                    // try parse as u64
-                    let bits = u64::from_str_radix(s, 16);
-                    match bits {
-                        Ok(bits) => {
-                            let float = FloatConstant::Float64(bits);
-                            Some(float)
-                        }
-                        Err(err) => {
-                            let snippet = Diagnostic::error( "invalid float")
-                                .annotate(start..end, format!("{}", err))
-                                .note(
-                                    "help",
-                                    "the float constant must be either 32 bits or 64 bits, and represented in binary format",
-                                );
-                            e.add_diagnostic(snippet);
-                            None
-                        }
-                    }
-                }
+            Tk::Label(_) | Tk::Value(_) | Tk::Eof | Tk::Invalid(_) | Tk::Symbol(_) => {
+                let snippet = Diagnostic::error("unexpected token")
+                    .annotate(token.span.into(), "unexpected token");
+                self.diag.push(snippet);
+                None
             }
-        })
-}
+        }
+    }
 
-fn identifier<'a>() -> impl Parser<Input<'a>, Context, Output = String> {
-    take_while1(|ch| ch.is_alphanumeric() || ch == '_')
-}
+    fn parse_ty(&mut self) -> Option<(Ty, ir::Span)> {
+        use TokenKind as Tk;
 
-fn value<'a>() -> impl Parser<Input<'a>, Context, Output = ValueRef> {
-    // %<ident>
-    any_blank()
-        .many()
-        .and_r(just('%'))
-        .and_r(identifier().spanned())
-        .map(|(name, start, end)| ValueRef {
-            name,
-            span: Span::from((start, end)),
-        })
-}
+        let start = self.lexer.offset;
+        let token = self.lexer.next(&mut self.diag);
+        // iX, f32, f64, void, ptr, < elem; len >, [ elem; len ], { elem0,
+        // elem1, ... }, <{ elem0, elem1, .. }>
 
-fn label<'a>() -> impl Parser<Input<'a>, Context, Output = BlockRef> {
-    // ^<ident>
-    any_blank()
-        .many()
-        .and_r(just('^'))
-        .and_r(identifier().spanned())
-        .map(|(name, start, end)| BlockRef {
-            name,
-            span: Span::from((start, end)),
-        })
-}
-
-fn symbol<'a>() -> impl Parser<Input<'a>, Context, Output = Symbol> {
-    // @<ident>
-    any_blank()
-        .many()
-        .and_r(just('@'))
-        .and_r(identifier().spanned())
-        .map(|(name, start, end)| Symbol::new(name).with_source_span(Span::from((start, end))))
-}
-
-fn global_init<'a>() -> impl Parser<Input<'a>, Context, Output = Constant> {
-    // undef | zeroinit | [ byte, byte, ... ]
-    //
-    // byte is a u8 literal
-    choice((
-        string("undef")
-            .spanned()
-            .map(|(_, start, end)| Constant::undef().with_source_span(Span::from((start, end)))),
-        string("zeroinit")
-            .spanned()
-            .map(|(_, start, end)| Constant::zeroinit().with_source_span(Span::from((start, end)))),
-        // [ byte, byte, ... ]
-        take_while1(|ch| ch.is_ascii_hexdigit() || ch == 'x' || ch == 'X')
-            .spanned()
-            .sep_by(delimiter(','))
-            .between(delimiter('['), delimiter(']'))
-            .spanned()
-            .then_with(|(bytes, start, end), e| {
-                let mut result: Vec<u8> = Vec::new();
-                for (s, start, end) in bytes {
-                    let s = s.to_lowercase();
-                    let s = s.trim_start_matches("0x");
-                    let byte = u8::from_str_radix(s, 16);
-                    match byte {
-                        Ok(byte) => result.push(byte),
-                        Err(err) => {
-                            let snippet = Diagnostic::error( "invalid byte")
-                                .annotate(start..end, format!("{}", err))
-                                .note("help", "each byte should be a u8 literal in hex format, with optional prefix");
-                            e.add_diagnostic(snippet);
+        let ty = match token.kind {
+            Tk::Tokenized(s) => {
+                if let Some(s) = s.strip_prefix('i') {
+                    // parse the bitwidth
+                    if let Ok(bits) = s.parse::<u16>() {
+                        Ty::int(&mut self.ctx, bits)
+                    } else {
+                        let snippet = Diagnostic::error("invalid integer")
+                            .annotate(token.span.into(), "invalid integer");
+                        self.diag.push(snippet);
+                        return None;
+                    }
+                } else {
+                    match s.as_ref() {
+                        "f32" => Ty::float32(&mut self.ctx),
+                        "f64" => Ty::float64(&mut self.ctx),
+                        "void" => Ty::void(&mut self.ctx),
+                        "ptr" => Ty::ptr(&mut self.ctx),
+                        _ => {
+                            let snippet = Diagnostic::error("unexpected token")
+                                .annotate(token.span.into(), "unexpected token");
+                            self.diag.push(snippet);
                             return None;
                         }
                     }
                 }
-                Some(Constant::bytes(result).with_source_span(Span::from((start, end))))
-            }),
-    ))
-}
+            }
+            Tk::Delimiter(s) => {
+                match s.as_ref() {
+                    "<" => {
+                        // < elem; len >
+                        let (elem_ty, _) = self.parse_ty()?;
+                        let _ = self.expect_delimiter(";")?;
+                        let token = self.lexer.next(&mut self.diag);
+                        let len = if let Tk::Tokenized(s) = token.kind {
+                            if let Ok(len) = s.parse::<u64>() {
+                                len
+                            } else {
+                                let snippet = Diagnostic::error("invalid integer")
+                                    .annotate(token.span.into(), "invalid integer");
+                                self.diag.push(snippet);
+                                return None;
+                            }
+                        } else {
+                            let snippet = Diagnostic::error("unexpected token")
+                                .annotate(token.span.into(), "expected length of the SIMD type");
+                            self.diag.push(snippet);
+                            return None;
+                        };
+                        let _ = self.expect_delimiter(">")?;
 
-fn slot<'a>() -> impl Parser<Input<'a>, Context, Output = GlobalSlot> {
-    lexeme("slot")
-        .and_r(symbol().spanned())
-        .and_l(delimiter(':'))
-        .and(ty())
-        .and_l(delimiter('='))
-        .and(global_init())
-        .then_with(|(((s, start, end), t), i), e| {
-            if e.state.lookup_symbol(&s).is_some() {
-                let snippet = Diagnostic::error("symbol already exists")
-                    .annotate(start..end, "symbol already exists");
-                e.add_diagnostic(snippet);
+                        if !len.is_power_of_two() {
+                            let snippet = Diagnostic::error("invalid length")
+                                .annotate(token.span.into(), "length must be a power of two");
+                            self.diag.push(snippet);
+                            return None;
+                        }
+
+                        Ty::simd(&mut self.ctx, elem_ty, len.trailing_zeros() as u16)
+                    }
+                    "[" => {
+                        // [ elem; len ]
+                        let (elem_ty, _) = self.parse_ty()?;
+                        let _ = self.expect_delimiter(";")?;
+                        let token = self.lexer.next(&mut self.diag);
+                        let len = if let Tk::Tokenized(s) = token.kind {
+                            if let Ok(len) = s.parse::<usize>() {
+                                len
+                            } else {
+                                let snippet = Diagnostic::error("invalid integer")
+                                    .annotate(token.span.into(), "invalid integer");
+                                self.diag.push(snippet);
+                                return None;
+                            }
+                        } else {
+                            let snippet = Diagnostic::error("unexpected token")
+                                .annotate(token.span.into(), "expected length of the array type");
+                            self.diag.push(snippet);
+                            return None;
+                        };
+                        let _ = self.expect_delimiter("]")?;
+
+                        Ty::array(&mut self.ctx, elem_ty, len)
+                    }
+                    "{" => {
+                        // { elem0, elem1, ... }
+                        let mut elems = Vec::new();
+                        loop {
+                            let (elem_ty, _) = self.parse_ty()?;
+                            elems.push(elem_ty);
+                            let token = self.lexer.next(&mut self.diag);
+                            if let Tk::Delimiter(s) = token.kind {
+                                match s.as_ref() {
+                                    "," => continue,
+                                    "}" => break,
+                                    _ => {}
+                                }
+                            }
+                            let snippet = Diagnostic::error("unexpected token")
+                                .annotate(token.span.into(), "expected `,` or `}`");
+                            self.diag.push(snippet);
+                        }
+                        Ty::struct_(&mut self.ctx, elems, false)
+                    }
+                    "<{" => {
+                        // <{ elem0, elem1, .. }>
+                        let mut elems = Vec::new();
+                        loop {
+                            let (elem_ty, _) = self.parse_ty()?;
+                            elems.push(elem_ty);
+                            let token = self.lexer.next(&mut self.diag);
+                            if let Tk::Delimiter(s) = token.kind {
+                                match s.as_ref() {
+                                    "," => continue,
+                                    "}>" => break,
+                                    _ => {}
+                                }
+                            }
+                            let snippet = Diagnostic::error("unexpected token")
+                                .annotate(token.span.into(), "expected `,` or `}>`");
+                            self.diag.push(snippet);
+                        }
+                        Ty::struct_(&mut self.ctx, elems, true)
+                    }
+                    _ => {
+                        let snippet = Diagnostic::error("unexpected token")
+                            .annotate(token.span.into(), "expected `<`, `[`, `{`, or `<{`");
+                        self.diag.push(snippet);
+                        return None;
+                    }
+                }
+            }
+            Tk::Label(_) | Tk::Value(_) | Tk::Eof | Tk::Invalid(_) | Tk::Symbol(_) => {
+                let snippet = Diagnostic::error("unexpected token")
+                    .annotate(token.span.into(), "expected type");
+                self.diag.push(snippet);
                 return None;
             }
-            let slot = GlobalSlot::new(e.state, s.clone(), t, i);
-            Some(slot)
-        })
-}
+        };
 
-fn decl<'a>() -> impl Parser<Input<'a>, Context, Output = ()> {
-    lexeme("decl")
-        .and_r(symbol().spanned())
-        .and_l(any_blank().many())
-        .and(signature())
-        .then_with(|((s, start, end), sig), e| {
-            if e.state.lookup_symbol(&s).is_some() {
-                let snippet = Diagnostic::error("symbol already exists")
-                    .annotate(start..end, "symbol already exists");
-                e.add_diagnostic(snippet);
+        let end = self.lexer.offset;
+        Some((ty, ir::Span::from((start, end))))
+    }
+
+    fn parse_sig(&mut self) -> Option<Signature> {
+        use TokenKind as Tk;
+
+        // ( <types,> ) -> <type> | ( <types,> ) -> ( <types,> )
+        let start = self.lexer.offset;
+        let _ = self.expect_delimiter("(")?;
+        let mut params = Vec::new();
+        loop {
+            let token = self.lexer.peek(&mut self.diag);
+            if let Tk::Delimiter(ref s) = token.kind {
+                if s == ")" {
+                    let _ = self.expect_delimiter(")").unwrap();
+                    break;
+                }
+            }
+            let (ty, _) = self.parse_ty()?;
+            params.push(ty);
+            let token = self.lexer.next(&mut self.diag);
+            if let Tk::Delimiter(s) = token.kind {
+                match s.as_ref() {
+                    "," => continue,
+                    ")" => break,
+                    _ => {}
+                }
+            }
+            let snippet = Diagnostic::error("unexpected token")
+                .annotate(token.span.into(), "expected `,` or `)`");
+            self.diag.push(snippet);
+            return None;
+        }
+        let _ = self.expect_delimiter("->")?;
+        // because the return type can be struct or simd, the delimiter should be
+        // handled separately, so peek here.
+        let token = self.lexer.peek(&mut self.diag);
+
+        let ret = match token.kind {
+            Tk::Delimiter(ref s) if s == "(" => {
+                let _ = self.expect_delimiter("(").unwrap();
+                let mut rets = Vec::new();
+                loop {
+                    let (ty, _) = self.parse_ty()?;
+                    rets.push(ty);
+                    let token = self.lexer.next(&mut self.diag);
+                    if let Tk::Delimiter(s) = token.kind {
+                        match s.as_ref() {
+                            "," => continue,
+                            ")" => break,
+                            _ => {}
+                        }
+                    }
+                    let snippet = Diagnostic::error("unexpected token")
+                        .annotate(token.span.into(), "expected `,` or `)`");
+                    self.diag.push(snippet);
+                    return None;
+                }
+                rets
+            }
+            Tk::Delimiter(_) | Tk::Tokenized(_) => {
+                let (ty, _) = self.parse_ty()?;
+                vec![ty]
+            }
+            Tk::Label(_) | Tk::Value(_) | Tk::Eof | Tk::Invalid(_) | Tk::Symbol(_) => {
+                let snippet = Diagnostic::error("unexpected token")
+                    .annotate(token.span.into(), "expected type or `(` for types");
+                self.diag.push(snippet);
                 return None;
             }
-            e.state.add_func_decl(s, sig);
-            Some(())
-        })
-}
+        };
 
-fn signature<'a>() -> impl Parser<Input<'a>, Context, Output = Signature> {
-    // (ty, ty, ...) -> ty or
-    // (ty, ty, ...) -> (ty, ty, ...)
-    // the parameter list can be empty
-    ty().sep_by(delimiter(','))
-        .between(delimiter('('), delimiter(')'))
-        .and_l(delimiter("->"))
-        .and(choice((
-            ty().map(|t| vec![t]),
-            ty().sep_by(delimiter(','))
-                .between(delimiter('('), delimiter(')')),
-        )))
-        .spanned()
-        .map(|((params, rets), start, end)| {
-            Signature::new(params, rets).with_source_span(Span::from((start, end)))
-        })
-}
+        let end = self.lexer.offset;
 
-fn block<'a>() -> impl Parser<Input<'a>, Context, Output = ParsingBlock> {
-    // ^<label> ( %param: ty, %param: ty, ... ):
-    //    <inst>
-    //    <inst>
-    //    ...
-    label()
-        .and(
-            value()
-                .and_l(delimiter(':'))
-                .and(ty())
-                .sep_by(delimiter(','))
-                .between(delimiter('('), delimiter(')')),
-        )
-        .and_l(delimiter(':'))
-        .map(|(label, params)| todo!())
+        let sig = Signature::new(params, ret).with_source_span(ir::Span::from((start, end)));
+        Some(sig)
+    }
 }
-
-fn successor<'a>() -> impl Parser<Input<'a>, Context, Output = SuccRef> {
-    // ^<label>( %arg, %arg, ... )
-    // the arguments are optional
-    label()
-        .and(
-            value()
-                .sep_by(delimiter(','))
-                .between(delimiter('('), delimiter(')'))
-                .optional(),
-        )
-        .spanned()
-        .map(|((block, args), start, end)| {
-            let args = args.unwrap_or_default();
-            SuccRef {
-                block,
-                args,
-                span: Span::from((start, end)),
-            }
-        })
-}
-
-fn cast_op<'a>() -> impl Parser<Input<'a>, Context, Output = CastOp> {
-    choice((
-        string("trunc").to(CastOp::Trunc),
-        string("fptrunc").to(CastOp::FpTrunc),
-        string("zext").to(CastOp::ZExt),
-        string("sext").to(CastOp::SExt),
-        string("fpext").to(CastOp::FpExt),
-        string("fptoui").to(CastOp::FpToUi),
-        string("fptosi").to(CastOp::FpToSi),
-        string("uitofp").to(CastOp::UiToFp),
-        string("sitofp").to(CastOp::SiToFp),
-        string("bitcast").to(CastOp::Bitcast),
-        string("ptrtoint").to(CastOp::PtrToInt),
-        string("inttoptr").to(CastOp::IntToPtr),
-    ))
-}
-
-fn iconst<'a>() -> impl Parser<Input<'a>, Context, Output = ParsingInst> {
-    // %dest = iconst <apint> : ty
-    value()
-        .and_l(delimiter('='))
-        .and_l(lexeme("iconst"))
-        .and(apint().spanned())
-        .and_l(delimiter(':'))
-        .and(ty().spanned())
-        .spanned()
-        .then_with(
-            |(((dest, (apint, int_start, int_end)), (ty, ty_start, ty_end)), start, end), e| {
-                let width = ty.bitwidth(e.state);
-                if width.is_none() {
-                    let snippet = Diagnostic::error("invalid type").annotate(
-                        ty_start..ty_end,
-                        format!("type {} is not a valid integer type", ty.display(e.state)),
-                    );
-                    e.add_diagnostic(snippet);
-                    return None;
-                }
-                let width = width.unwrap();
-                match apint.width().cmp(&width) {
-                    Ordering::Less => {
-                        // we can extend but report a warning
-                        let snippet = Diagnostic::warn("smaller integer width")
-                            .annotate(
-                                int_start..int_end,
-                                format!(
-                                    "integer width {} is smaller than {}",
-                                    apint.width(),
-                                    width
-                                ),
-                            )
-                            .annotate(ty_start..ty_end, "type declared here")
-                            .note("note", "zero extending the integer");
-                        e.add_diagnostic(snippet);
-                        let apint = apint.into_zeroext(width);
-                        Some(ParsingInst {
-                            results: vec![dest],
-                            kind: InstKind::IConst(apint),
-                            operands: vec![],
-                            successors: vec![],
-                            result_tys: vec![ty],
-                            span: Span::from((start, end)),
-                        })
-                    }
-                    Ordering::Greater => {
-                        let snippet = Diagnostic::error("invalid integer width")
-                            .annotate(
-                                int_start..int_end,
-                                format!("integer width {} is larger than {}", apint.width(), width),
-                            )
-                            .annotate(ty_start..ty_end, "type declared here");
-                        e.add_diagnostic(snippet);
-                        None
-                    }
-                    Ordering::Equal => Some(ParsingInst {
-                        results: vec![dest],
-                        kind: InstKind::IConst(apint),
-                        operands: vec![],
-                        successors: vec![],
-                        result_tys: vec![ty],
-                        span: Span::from((start, end)),
-                    }),
-                }
-            },
-        )
-}
-
-fn fconst<'a>() -> impl Parser<Input<'a>, Context, Output = ParsingInst> {
-    // %dest = fconst <float> : ty
-    value()
-        .and_l(delimiter('='))
-        .and_l(lexeme("fconst"))
-        .and(float().spanned())
-        .and_l(delimiter(':'))
-        .and(ty().spanned())
-        .spanned()
-        .then_with(
-            |(((dest, (f, f_start, f_end)), (ty, ty_start, ty_end)), start, end), e| {
-                match f {
-                    FloatConstant::Float32(bits) => {
-                        // check if the type is float32, if not, promote to float64
-                        if ty.is_float32(e.state) {
-                            Some(ParsingInst {
-                                results: vec![dest],
-                                kind: InstKind::FConst(FloatConstant::Float32(bits)),
-                                operands: vec![],
-                                successors: vec![],
-                                result_tys: vec![ty],
-                                span: Span::from((start, end)),
-                            })
-                        } else {
-                            let snippet = Diagnostic::warn("promoting float32 to float64")
-                                .annotate(f_start..f_end, "float32 constant promoted to float64")
-                                .annotate(ty_start..ty_end, "type declared here");
-                            e.add_diagnostic(snippet);
-                            Some(ParsingInst {
-                                results: vec![dest],
-                                kind: InstKind::FConst(f.promote()),
-                                operands: vec![],
-                                successors: vec![],
-                                result_tys: vec![ty],
-                                span: Span::from((start, end)),
-                            })
-                        }
-                    }
-                    FloatConstant::Float64(bits) => {
-                        if ty.is_float64(e.state) {
-                            Some(ParsingInst {
-                                results: vec![dest],
-                                kind: InstKind::FConst(FloatConstant::Float64(bits)),
-                                operands: vec![],
-                                successors: vec![],
-                                result_tys: vec![ty],
-                                span: Span::from((start, end)),
-                            })
-                        } else {
-                            let snippet = Diagnostic::error("invalid type").annotate(
-                                ty_start..ty_end,
-                                format!(
-                                    "type {} is not a valid floating point type given the constant",
-                                    ty.display(e.state)
-                                ),
-                            );
-                            e.add_diagnostic(snippet);
-                            None
-                        }
-                    }
-                }
-            },
-        )
-}
-
-fn offset<'a>() -> impl Parser<Input<'a>, Context, Output = ParsingInst> {
-    // %dest = offset %<base>, %<value> : ptr
-    value()
-        .and_l(delimiter('='))
-        .and_l(lexeme("offset"))
-        .and(value())
-        .and_l(delimiter(','))
-        .and(value())
-        .and_l(delimiter(':'))
-        .and(ty().spanned())
-        .spanned()
-        .then_with(
-            |((((dest, base), value), (ty, ty_start, ty_end)), start, end), e| {
-                if !ty.is_ptr(e.state) {
-                    let snippet = Diagnostic::error("invalid type")
-                        .annotate(
-                            ty_start..ty_end,
-                            format!("type {} is not a valid pointer type", ty.display(e.state)),
-                        )
-                        .note(
-                            "note",
-                            "expected a pointer type for the `offset` instruction",
-                        );
-                    e.add_diagnostic(snippet);
-                    return None;
-                }
-                Some(ParsingInst {
-                    results: vec![dest],
-                    kind: InstKind::Offset,
-                    operands: vec![base, value],
-                    successors: vec![],
-                    result_tys: vec![ty],
-                    span: Span::from((start, end)),
-                })
-            },
-        )
-}
-
-fn jump<'a>() -> impl Parser<Input<'a>, Context, Output = ParsingInst> {
-    // jump %<label>
-    lexeme("jump")
-        .and_r(successor())
-        .spanned()
-        .map(|(succ, start, end)| ParsingInst {
-            results: vec![],
-            kind: InstKind::Jump,
-            operands: vec![],
-            successors: vec![succ],
-            result_tys: vec![],
-            span: Span::from((start, end)),
-        })
-}
-
-fn branch<'a>() -> impl Parser<Input<'a>, Context, Output = ParsingInst> {
-    // branch %<cond>, <succ0>, <succ1>
-    lexeme("br")
-        .and_r(value())
-        .and_l(delimiter(','))
-        .and(successor())
-        .and_l(delimiter(','))
-        .and(successor())
-        .spanned()
-        .map(|(((cond, succ0), succ1), start, end)| ParsingInst {
-            results: vec![],
-            kind: InstKind::Br,
-            operands: vec![cond],
-            successors: vec![succ0, succ1],
-            result_tys: vec![],
-            span: Span::from((start, end)),
-        })
-}
-
-fn ret<'a>() -> impl Parser<Input<'a>, Context, Output = ParsingInst> {
-    // ret %<value>
-    // ret
-    // ret void
-    choice((
-        lexeme("ret")
-            .and_r(value())
-            .spanned()
-            .map(|(value, start, end)| ParsingInst {
-                results: vec![],
-                kind: InstKind::Ret,
-                operands: vec![value],
-                successors: vec![],
-                result_tys: vec![],
-                span: Span::from((start, end)),
-            }),
-        lexeme("ret")
-            .and_r(lexeme("void"))
-            .spanned()
-            .map(|(_, start, end)| ParsingInst {
-                results: vec![],
-                kind: InstKind::Ret,
-                operands: vec![],
-                successors: vec![],
-                result_tys: vec![],
-                span: Span::from((start, end)),
-            }),
-        lexeme("ret").spanned().map(|(_, start, end)| ParsingInst {
-            results: vec![],
-            kind: InstKind::Ret,
-            operands: vec![],
-            successors: vec![],
-            result_tys: vec![],
-            span: Span::from((start, end)),
-        }),
-    ))
-}
-
-fn switch<'a>() -> impl Parser<Input<'a>, Context, Output = ParsingInst> {
-    // switch %<cond>, apint0: succ0, apint1: succ1, ..., default: succ_default
-    lexeme("switch")
-        .and_r(value())
-        .and_l(delimiter(','))
-        .and(
-            apint()
-                .and_l(delimiter(':'))
-                .and(successor())
-                .map(|(apint, succ)| (apint, succ))
-                .sep_by(delimiter(',')),
-        )
-        .and(
-            delimiter(',')
-                .and_r(lexeme("default"))
-                .and(delimiter(':'))
-                .and_r(successor())
-                .optional(),
-        )
-        .spanned()
-        .map(|(((cond, cases), default), start, end)| {
-            let mut successors = vec![];
-            let mut case_labels = vec![];
-            for (apint, succ) in cases {
-                case_labels.push(apint);
-                successors.push(succ);
-            }
-            if let Some(default) = default {
-                successors.push(default);
-            }
-            ParsingInst {
-                results: vec![],
-                kind: InstKind::Switch {
-                    labels: case_labels,
-                },
-                operands: vec![cond],
-                successors,
-                result_tys: vec![],
-                span: Span::from((start, end)),
-            }
-        })
-}
-
-fn call<'a>() -> impl Parser<Input<'a>, Context, Output = ParsingInst> {
-    // %dest = call @<callee>(%<arg0>, %<arg1>, ...) : <ret_ty> | (<ret_ty0>,
-    // <ret_ty1>, ...)
-    //
-    // note that dest is optional, if the return type is void.
-    value()
-        .sep_by(delimiter(','))
-        .and_l(delimiter('='))
-        .optional()
-        .and(
-            lexeme("call")
-                .and_r(symbol())
-                .and(
-                    value()
-                        .sep_by(delimiter(','))
-                        .between(delimiter('('), delimiter(')')),
-                )
-                .and_l(delimiter(':'))
-                .and(choice((
-                    ty().map(|ty| vec![ty]),
-                    ty().sep_by(delimiter(','))
-                        .between(delimiter('('), delimiter(')')),
-                ))),
-        )
-        .spanned()
-        .map(
-            |((results, ((symbol, args), tys)), start, end)| ParsingInst {
-                results: results.unwrap_or_default(),
-                kind: InstKind::Call(symbol),
-                operands: args,
-                successors: vec![],
-                result_tys: tys,
-                span: Span::from((start, end)),
-            },
-        )
-}
-
-fn call_indirect<'a>() -> impl Parser<Input<'a>, Context, Output = ParsingInst> {
-    // call_indirect sig, %callee(%arg0, %arg1, ...) : <ret_ty> | (<ret_ty0>,
-    // <ret_ty1>, ...)
-    value()
-        .sep_by(delimiter(','))
-        .and_l(delimiter('='))
-        .optional()
-        .and(
-            lexeme("call_indirect")
-                .and_r(signature())
-                .and_l(delimiter(','))
-                .and(value())
-                .and(
-                    value()
-                        .sep_by(delimiter(','))
-                        .between(delimiter('('), delimiter(')')),
-                )
-                .and_l(delimiter(':'))
-                .and(choice((
-                    ty().map(|ty| vec![ty]),
-                    ty().sep_by(delimiter(','))
-                        .between(delimiter('('), delimiter(')')),
-                ))),
-        )
-        .spanned()
-        .map(|((results, (((sig, callee), args), tys)), start, end)| {
-            let mut operands = vec![callee];
-            operands.extend(args);
-            ParsingInst {
-                results: results.unwrap_or_default(),
-                kind: InstKind::CallIndirect(sig),
-                operands,
-                successors: vec![],
-                result_tys: tys,
-                span: Span::from((start, end)),
-            }
-        })
-}
-
-fn get_global<'a>() -> impl Parser<Input<'a>, Context, Output = ParsingInst> {
-    // %dest = get_global @<global> : ptr
-    value()
-        .and_l(delimiter('='))
-        .and(
-            lexeme("get_global")
-                .and_r(symbol())
-                .and_l(delimiter(':'))
-                .and(ty().spanned()),
-        )
-        .spanned()
-        .then_with(
-            |((dest, (symbol, (ty, ty_start, ty_end))), start, end), e| {
-                if !ty.is_ptr(e.state) {
-                    let snippet = Diagnostic::error("invalid result type")
-                        .annotate(ty_start..ty_end, "expected ptr for get_global instruction");
-                    e.add_diagnostic(snippet);
-                    return None;
-                }
-                Some(ParsingInst {
-                    results: vec![dest],
-                    kind: InstKind::GetGlobal(symbol),
-                    operands: vec![],
-                    successors: vec![],
-                    result_tys: vec![ty],
-                    span: Span::from((start, end)),
-                })
-            },
-        )
-}
-
-// TODO: a lot
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::collections::{
-        diagnostic::{DiagnosticList, RenderOptions},
-        parsec::{Extra, Parser},
-    };
+    use crate::collections::diagnostic::RenderOptions;
 
     #[test]
-    fn test_ibinary_op() {
-        let mut input = Input::new("add");
-        let parser = ibinary_op();
-        let mut diag = DiagnosticList::default();
-        let mut ctx = Context::default();
-        let mut extra = Extra::new(&mut diag, &mut ctx);
-        let result = parser.parse(&mut input, &mut extra);
-
-        assert_eq!(result, Some(IBinaryOp::Add));
-        assert_eq!(input.as_str(), "");
-
-        let mut input = Input::new("icmp.eq");
-        let parser = ibinary_op();
-        let mut diag = DiagnosticList::default();
-        let mut ctx = Context::default();
-        let mut extra = Extra::new(&mut diag, &mut ctx);
-        let result = parser.parse(&mut input, &mut extra);
-
-        assert_eq!(result, Some(IBinaryOp::Cmp(ICmpCond::Eq)));
-        assert_eq!(input.as_str(), "");
+    fn test_skip_line_comment() {
+        let mut diag = DiagnosticList::new();
+        let mut ts = TokenStream::new("// this is a line comment\na");
+        ts.skip_whitespace(&mut diag);
+        assert_eq!(ts.peek_char(), Some('a'));
     }
 
     #[test]
-    fn test_ty() {
-        let mut input = Input::new("i32");
-        let parser = ty();
-        let mut diag = DiagnosticList::default();
-        let mut ctx = Context::default();
-        let mut extra = Extra::new(&mut diag, &mut ctx);
-        let result = parser.parse(&mut input, &mut extra);
+    fn test_skip_block_comment() {
+        let mut diag = DiagnosticList::new();
+        let mut ts = TokenStream::new("/* this is a /* nested */ block comment */a");
+        ts.skip_whitespace(&mut diag);
+        assert_eq!(ts.peek_char(), Some('a'));
+    }
 
-        assert_eq!(result, Some(Ty::int(&mut ctx, 32)));
-        assert_eq!(input.as_str(), "");
+    #[test]
+    fn test_invalid_line_comment() {
+        let mut diag = DiagnosticList::new();
+        let mut ts = TokenStream::new("/a");
+        ts.skip_whitespace(&mut diag);
+        assert_eq!(ts.peek_char(), Some('a'));
+        assert_eq!(diag.len(), 1);
 
-        // invalid
-        let mut input = Input::new("i1145141919810");
-        let parser = ty();
-        let mut diag = DiagnosticList::default();
-        let mut ctx = Context::default();
-        let mut extra = Extra::new(&mut diag, &mut ctx);
-        let result = parser.parse(&mut input, &mut extra);
+        println!("{}", diag.render("/a", &RenderOptions::unicode_round()));
+    }
 
-        assert_eq!(result, None);
+    #[test]
+    fn test_unclosed_block_comment() {
+        let mut diag = DiagnosticList::new();
+        let mut ts = TokenStream::new("/* unclosed block\n comment");
+        ts.skip_whitespace(&mut diag);
+        assert_eq!(ts.peek_char(), None);
         assert_eq!(diag.len(), 1);
 
         println!(
             "{}",
-            diag.render("i1145141919810", &RenderOptions::unicode_round())
+            diag.render(
+                "/* unclosed block\n comment",
+                &RenderOptions::unicode_round()
+            )
         );
     }
 
     #[test]
-    fn test_comments() {
-        let mut input = Input::new("// this is a comment\na");
-        let parser = line_comment();
-        let mut diag = DiagnosticList::default();
-        let mut ctx = Context::default();
-        let mut extra = Extra::new(&mut diag, &mut ctx);
-        let result = parser.parse(&mut input, &mut extra);
-
-        assert_eq!(result, Some(()));
-        assert_eq!(input.as_str(), "a");
-
-        let mut input = Input::new("/* this is\n a comment */a");
-        let parser = block_comment();
-        let mut diag = DiagnosticList::default();
-        let mut ctx = Context::default();
-        let mut extra = Extra::new(&mut diag, &mut ctx);
-        let result = parser.parse(&mut input, &mut extra);
-
-        assert_eq!(result, Some(()));
-        assert_eq!(input.as_str(), "a");
+    fn test_read_label() {
+        let mut diag = DiagnosticList::new();
+        let mut ts = TokenStream::new("^label");
+        let token = ts.next(&mut diag);
+        assert_eq!(token.kind, TokenKind::Label("label".to_string()));
     }
 
     #[test]
-    fn test_semicolon() {
-        let mut input = Input::new("   /* 123 */ ; // 123\na");
-        let parser = delimiter(';');
-        let mut diag = DiagnosticList::default();
-        let mut ctx = Context::default();
-        let mut extra = Extra::new(&mut diag, &mut ctx);
-        let result = parser.parse(&mut input, &mut extra);
-
-        assert_eq!(result, Some(";"));
-        assert_eq!(input.as_str(), "a");
+    fn test_read_value() {
+        let mut diag = DiagnosticList::new();
+        let mut ts = TokenStream::new("%value");
+        let token = ts.next(&mut diag);
+        assert_eq!(token.kind, TokenKind::Value("value".to_string()));
     }
 
     #[test]
-    fn test_simd_ty() {
-        let mut input = Input::new("<i32; 4>");
-        let parser = ty();
-        let mut diag = DiagnosticList::default();
-        let mut ctx = Context::default();
-        let mut extra = Extra::new(&mut diag, &mut ctx);
-        let result = parser.parse(&mut input, &mut extra);
+    fn test_read_symbol() {
+        let mut diag = DiagnosticList::new();
+        let mut ts = TokenStream::new("@symbol");
+        let token = ts.next(&mut diag);
+        assert_eq!(token.kind, TokenKind::Symbol("symbol".to_string()));
+    }
 
-        let int = Ty::int(&mut ctx, 32);
-        let simd = Ty::simd(&mut ctx, int, 2);
-
-        assert_eq!(result, Some(simd));
-        assert_eq!(input.as_str(), "");
-
-        let mut input = Input::new("<i32; 3>");
-        let parser = ty();
-        let mut diag = DiagnosticList::default();
-        let mut ctx = Context::default();
-        let mut extra = Extra::new(&mut diag, &mut ctx);
-        let result = parser.parse(&mut input, &mut extra);
-
-        assert_eq!(result, None);
+    #[test]
+    fn test_invalid_chracter_0() {
+        let mut diag = DiagnosticList::new();
+        let mut ts = TokenStream::new("- - invalid!");
+        let token = ts.next(&mut diag);
+        assert_eq!(token.kind, TokenKind::Invalid("-".to_string()));
         assert_eq!(diag.len(), 1);
 
         println!(
             "{}",
-            diag.render("<i32; 3>", &RenderOptions::unicode_round())
+            diag.render("- - invalid!", &RenderOptions::unicode_round())
         );
     }
 
     #[test]
-    fn test_struct_ty() {
-        let mut input = Input::new("{i32, i32}");
-        let parser = ty();
-        let mut diag = DiagnosticList::default();
-        let mut ctx = Context::default();
-        let mut extra = Extra::new(&mut diag, &mut ctx);
-        let result = parser.parse(&mut input, &mut extra);
-
-        let int = Ty::int(&mut ctx, 32);
-        let struct_ty = Ty::struct_(&mut ctx, vec![int, int], false);
-
-        assert_eq!(result, Some(struct_ty));
-        assert_eq!(input.as_str(), "");
-
-        let mut input = Input::new("{i32, i32");
-        let parser = ty();
-        let mut diag = DiagnosticList::default();
-        let mut ctx = Context::default();
-        let mut extra = Extra::new(&mut diag, &mut ctx);
-        let result = parser.parse(&mut input, &mut extra);
-
-        assert_eq!(result, None);
-        assert_eq!(diag.len(), 1);
-        // this reports the last error (expect `<{`), but we want it to report `unclosed
-        // struct`
-        println!(
-            "{}",
-            diag.render("{i32, i32", &RenderOptions::unicode_round())
-        );
-    }
-
-    #[test]
-    fn test_apint() {
-        let mut input = Input::new("0x12345i32");
-        let parser = apint();
-        let mut diag = DiagnosticList::default();
-        let mut ctx = Context::default();
-        let mut extra = Extra::new(&mut diag, &mut ctx);
-        let result = parser.parse(&mut input, &mut extra);
-
-        assert_eq!(result, Some(ApInt::try_from("0x12345i32").unwrap()));
-
-        // failed to parse
-        let mut input = Input::new("0x12345i32i32");
-        let parser = apint();
-        let mut diag = DiagnosticList::default();
-        let mut ctx = Context::default();
-        let mut extra = Extra::new(&mut diag, &mut ctx);
-        let result = parser.parse(&mut input, &mut extra);
-
-        assert_eq!(result, None);
+    fn test_invalid_chracter_1() {
+        let mut diag = DiagnosticList::new();
+        let mut ts = TokenStream::new("! invalid!");
+        let token = ts.next(&mut diag);
+        assert_eq!(token.kind, TokenKind::Invalid("!".to_string()));
         assert_eq!(diag.len(), 1);
 
         println!(
             "{}",
-            diag.render("0x12345i32i32", &RenderOptions::unicode_round())
+            diag.render("! invalid!", &RenderOptions::unicode_round())
         );
     }
 
     #[test]
-    fn test_float() {
-        let mut input = Input::new("0x12343");
-        let parser = float();
-        let mut diag = DiagnosticList::default();
-        let mut ctx = Context::default();
-        let mut extra = Extra::new(&mut diag, &mut ctx);
-        let result = parser.parse(&mut input, &mut extra);
+    fn test_parse_slot_init() {
+        let mut parser = Parser::new("undef");
+        let constant = parser.parse_slot_init().unwrap();
 
-        assert_eq!(result, Some(FloatConstant::Float32(0x12343)));
+        assert_eq!(constant, Constant::undef());
 
-        // try a float64
-        let mut input = Input::new("0x1234567890");
-        let parser = float();
-        let mut diag = DiagnosticList::default();
-        let mut ctx = Context::default();
-        let mut extra = Extra::new(&mut diag, &mut ctx);
-        let result = parser.parse(&mut input, &mut extra);
+        let mut parser = Parser::new("zeroinit");
+        let constant = parser.parse_slot_init().unwrap();
 
-        assert_eq!(result, Some(FloatConstant::Float64(0x1234567890)));
+        assert_eq!(constant, Constant::zeroinit());
+
+        let mut parser = Parser::new("[ 0x00 ]");
+        let bytes = parser.parse_slot_init().unwrap();
+
+        assert_eq!(bytes, Constant::bytes(vec![0x00]));
+
+        let mut parser = Parser::new("[]");
+        let bytes = parser.parse_slot_init().unwrap();
+
+        assert_eq!(bytes, Constant::bytes(vec![]));
+
+        let mut parser = Parser::new("[ 0x00, 0x01, 0x02 ]");
+        let bytes = parser.parse_slot_init().unwrap();
+
+        assert_eq!(bytes, Constant::bytes(vec![0x00, 0x01, 0x02]));
     }
 
     #[test]
-    fn test_global_init() {
-        let mut input = Input::new("[ 0xef, 0xbe, 0xad, 0xde ]");
-        let parser = global_init();
-        let mut diag = DiagnosticList::default();
-        let mut ctx = Context::default();
-        let mut extra = Extra::new(&mut diag, &mut ctx);
-        let result = parser.parse(&mut input, &mut extra);
+    fn test_parse_simd_ty() {
+        let mut parser = Parser::new("i11451");
+        let (ty, _) = parser.parse_ty().unwrap();
+        let ctx = &mut parser.ctx;
 
-        assert_eq!(result, Some(Constant::bytes(vec![0xef, 0xbe, 0xad, 0xde])));
-        assert_eq!(input.as_str(), "");
+        assert_eq!(ty, Ty::int(ctx, 11451));
+
+        let mut parser = Parser::new("< f32; 128 >");
+        let (ty, _) = parser.parse_ty().unwrap();
+        let ctx = &mut parser.ctx;
+
+        let float32 = Ty::float32(ctx);
+        assert_eq!(ty, Ty::simd(ctx, float32, 7));
+
+        let mut parser = Parser::new("[ ptr  ; 128 ]");
+        let (ty, _) = parser.parse_ty().unwrap();
+        let ctx = &mut parser.ctx;
+
+        let ptr = Ty::ptr(ctx);
+        assert_eq!(ty, Ty::array(ctx, ptr, 128));
+
+        let mut parser = Parser::new("<{ i32, f32, [f64; 8], ptr, { i1, i8 } }> ");
+        let (ty, _) = parser.parse_ty().unwrap();
+        let ctx = &parser.ctx;
+
+        assert_eq!(
+            format!("{}", ty.display(ctx)),
+            "<{i32, f32, [f64; 8], ptr, {i1, i8}}>"
+        )
     }
 
     #[test]
-    fn test_signature() {
-        let src = "() -> void";
-        let mut input = Input::new(src);
-        let parser = signature();
-        let mut diag = DiagnosticList::default();
-        let mut ctx = Context::default();
-        let mut extra = Extra::new(&mut diag, &mut ctx);
-        let result = parser.parse(&mut input, &mut extra);
+    fn test_parse_signature() {
+        let mut parser = Parser::new("() -> void");
+        let sig = parser.parse_sig().unwrap();
+        let ctx = &mut parser.ctx;
 
-        let void = Ty::void(&mut ctx);
-        let sig = Signature::new(vec![], vec![void]);
-        assert_eq!(result, Some(sig));
+        assert_eq!(format!("{}", sig.display(ctx)), "() -> void");
 
-        let src = "(i32, f32) -> (i32, f32)";
-        let mut input = Input::new(src);
-        let parser = signature();
-        let mut diag = DiagnosticList::default();
-        let mut ctx = Context::default();
-        let mut extra = Extra::new(&mut diag, &mut ctx);
-        let result = parser.parse(&mut input, &mut extra);
+        let mut parser = Parser::new("(i32, f32) -> (f64, ptr)");
+        let sig = parser.parse_sig().unwrap();
+        let ctx = &mut parser.ctx;
 
-        let i32 = Ty::int(&mut ctx, 32);
-        let f32 = Ty::float32(&mut ctx);
-        let sig = Signature::new(vec![i32, f32], vec![i32, f32]);
+        assert_eq!(format!("{}", sig.display(ctx)), "(i32, f32) -> (f64, ptr)");
 
-        assert_eq!(result, Some(sig));
+        let mut parser = Parser::new(
+            "(i32, f32, [f64; 8], ptr, { i1, i8 }) -> <{ i32, f32, [f64; 8], ptr, { i1, i8 } }>",
+        );
+        let sig = parser.parse_sig().unwrap();
+        let ctx = &mut parser.ctx;
 
-        let src = "(i32, f32, <i32; 4>) -> i1";
-        let mut input = Input::new(src);
-        let parser = signature();
-        let mut diag = DiagnosticList::default();
-        let mut ctx = Context::default();
-        let mut extra = Extra::new(&mut diag, &mut ctx);
-        let result = parser.parse(&mut input, &mut extra);
-
-        let i1 = Ty::int(&mut ctx, 1);
-        let simd = Ty::simd(&mut ctx, i32, 2);
-        let sig = Signature::new(vec![i32, f32, simd], vec![i1]);
-
-        assert_eq!(result, Some(sig));
+        assert_eq!(
+            format!("{}", sig.display(ctx)),
+            // just to test parsing, array should not be passed by value
+            "(i32, f32, [f64; 8], ptr, {i1, i8}) -> <{i32, f32, [f64; 8], ptr, {i1, i8}}>"
+        );
     }
 
     #[test]
-    fn test_iconst() {
-        let src = "%dst = iconst 42 : i32";
-        let mut input = Input::new(src);
-        let parser = iconst();
-        let mut diag = DiagnosticList::default();
-        let mut ctx = Context::default();
-        let mut extra = Extra::new(&mut diag, &mut ctx);
-        let result = parser.parse(&mut input, &mut extra);
-        println!("{:#?}", result);
-        assert_eq!(diag.len(), 1);
-        println!("{}", diag.render(src, &RenderOptions::unicode_round()));
-    }
+    fn test_parse_decl() {
+        let src = "decl @foo() -> void";
 
-    #[test]
-    fn test_offset() {
-        let src = "%dst = offset %base , %val : ptr";
-        let mut input = Input::new(src);
-        let parser = offset();
-        let mut diag = DiagnosticList::default();
-        let mut ctx = Context::default();
-        let mut extra = Extra::new(&mut diag, &mut ctx);
-        let result = parser.parse(&mut input, &mut extra);
-        println!("{:#?}", result);
-        assert_eq!(diag.len(), 0);
-        println!("{}", diag.render(src, &RenderOptions::unicode_round()));
-    }
+        let mut parser = Parser::new(src);
+        let decl = parser.parse_item().unwrap();
 
-    #[test]
-    fn test_jump() {
-        let src = "jump ^dst (%v1, %v2)";
-        let mut input = Input::new(src);
-        let parser = jump();
-        let mut diag = DiagnosticList::default();
-        let mut ctx = Context::default();
-        let mut extra = Extra::new(&mut diag, &mut ctx);
-        let result = parser.parse(&mut input, &mut extra);
-        println!("{:#?}", result);
-        assert_eq!(diag.len(), 0);
-        println!("{}", diag.render(src, &RenderOptions::unicode_round()));
-    }
-
-    #[test]
-    fn test_call() {
-        let src = "%dst = call @dst (%v1, %v2) : i32";
-        let mut input = Input::new(src);
-        let parser = call();
-        let mut diag = DiagnosticList::default();
-        let mut ctx = Context::default();
-        let mut extra = Extra::new(&mut diag, &mut ctx);
-        let result = parser.parse(&mut input, &mut extra);
-        println!("{:#?}", result);
-        assert_eq!(diag.len(), 0);
-        println!("{}", diag.render(src, &RenderOptions::unicode_round()));
-    }
-
-    #[test]
-    fn test_branch() {
-        let src = "br %cond, ^dst0 (%v1, %v2), ^dst1 (%v3)";
-        let mut input = Input::new(src);
-        let parser = branch();
-        let mut diag = DiagnosticList::default();
-        let mut ctx = Context::default();
-        let mut extra = Extra::new(&mut diag, &mut ctx);
-        let result = parser.parse(&mut input, &mut extra);
-        println!("{:#?}", result);
-        assert_eq!(diag.len(), 0);
-        println!("{}", diag.render(src, &RenderOptions::unicode_round()));
-    }
-
-    #[test]
-    fn test_switch() {
-        let src = "switch %cond, 1: ^dst0 (%v1, %v2), 2: ^dst1 (%v3), default: ^dst2 (%v4)";
-        let mut input = Input::new(src);
-        let parser = switch();
-        let mut diag = DiagnosticList::default();
-        let mut ctx = Context::default();
-        let mut extra = Extra::new(&mut diag, &mut ctx);
-        let result = parser.parse(&mut input, &mut extra);
-        println!("{:#?}", result);
-        assert_eq!(diag.len(), 0);
-        println!("{}", diag.render(src, &RenderOptions::unicode_round()));
-        println!("{}", input.as_str());
-    }
-
-    #[test]
-    fn test_call_indirect() {
-        let src =
-            "%dst0, %dst1 = call_indirect (i32, f32) -> (i32, i1), %index (%v1, %v2) : (i32, i1)";
-        let mut input = Input::new(src);
-        let parser = call_indirect();
-        let mut diag = DiagnosticList::default();
-        let mut ctx = Context::default();
-        let mut extra = Extra::new(&mut diag, &mut ctx);
-        let result = parser.parse(&mut input, &mut extra);
-        println!("{:#?}", result);
-        assert_eq!(diag.len(), 0);
-        println!("{}", diag.render(src, &RenderOptions::unicode_round()));
-    }
-
-    #[test]
-    fn test_get_global() {
-        let src = "%dst = get_global @dst : ptr";
-        let mut input = Input::new(src);
-        let parser = get_global();
-        let mut diag = DiagnosticList::default();
-        let mut ctx = Context::default();
-        let mut extra = Extra::new(&mut diag, &mut ctx);
-        let result = parser.parse(&mut input, &mut extra);
-        println!("{:#?}", result);
-        assert_eq!(diag.len(), 0);
-        println!("{}", diag.render(src, &RenderOptions::unicode_round()));
+        if let Item::Decl(decl) = decl {
+            assert_eq!(decl.name, Symbol::new("foo"));
+            assert_eq!(format!("{}", decl.sig.display(&parser.ctx)), "() -> void");
+        } else {
+            panic!("expected decl");
+        }
     }
 }

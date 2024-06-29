@@ -1,4 +1,4 @@
-use crate::ir::{InstKind, Signature, Span, Symbol, Ty};
+use crate::ir::{Constant, InstKind, Signature, Span, Symbol, Ty};
 
 #[derive(Debug)]
 pub struct ValueRef {
@@ -25,7 +25,7 @@ pub struct ParsingInst {
     pub kind: InstKind,
     pub operands: Vec<ValueRef>,
     pub successors: Vec<SuccRef>,
-    pub result_tys: Vec<Ty>,
+    pub result_tys: Vec<(Ty, Span)>,
     pub span: Span,
 }
 
@@ -43,4 +43,26 @@ pub struct ParsingFunc {
     pub sig: Signature,
     pub blocks: Vec<ParsingBlock>,
     pub span: Span,
+}
+
+#[derive(Debug)]
+pub struct ParsingDecl {
+    pub name: Symbol,
+    pub sig: Signature,
+    pub span: Span,
+}
+
+#[derive(Debug)]
+pub struct ParsingSlot {
+    pub name: Symbol,
+    pub ty: (Ty, Span),
+    pub init: Constant,
+    pub span: Span,
+}
+
+#[derive(Debug)]
+pub enum Item {
+    Func(ParsingFunc),
+    Decl(ParsingDecl),
+    Slot(ParsingSlot),
 }
