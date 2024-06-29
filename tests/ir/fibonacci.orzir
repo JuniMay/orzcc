@@ -1,0 +1,34 @@
+
+// duplication, just for test.
+// decl @fib(i32) -> i32
+
+func @fib(i32) -> i32 {
+^bb0(%a: i32):
+    %zero = iconst 0 : i32
+    %one = iconst 1 : i32
+
+    %cmp0 = icmp.eq %a, %zero : i1
+
+    br %cmp0, ^ret(%zero), ^bb1
+
+^bb1:
+    %cmp1 = icmp.eq %a, %one : i1
+
+    br %cmp1, ^ret(%one), ^bb2
+
+^bb2:
+    %a_minus_1 = sub %a, %one : i32
+
+    %two = iconst 2 : i32
+    %a_minus_2 = sub %a, %two : i32
+
+    %call0 = call @fib(%a_minus_1) : i32
+    %call1 = call @fib(%a_minus_2) : i32
+
+    %val = add %call0, %call1 : i32
+
+    jump ^ret(%val)
+
+^ret(%res: i32):
+    ret %res
+}

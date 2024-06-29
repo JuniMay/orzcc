@@ -349,12 +349,12 @@ impl<'a> Parser<'a> {
     }
 
     /// Parse the source code and return the AST, diagnostics and context.
-    pub fn parse(mut self) -> (Vec<Item>, DiagnosticList, Context) {
+    pub fn parse(mut self) -> (Vec<Item>, Context, DiagnosticList) {
         let mut items = Vec::new();
         while let Some(item) = self.parse_item() {
             items.push(item);
         }
-        (items, self.diag, self.ctx)
+        (items, self.ctx, self.diag)
     }
 
     fn expect_delimiter(&mut self, delimiter: impl Into<String>) -> Option<Token> {

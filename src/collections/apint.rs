@@ -593,16 +593,14 @@ impl ApInt {
             self.chunks.pop();
             width -= ApIntChunk::BITS as usize;
         }
-        let num_chunks = self.chunks.len();
-        if num_chunks == 0 {
+        if self.chunks.is_empty() {
             // add a zero chunk
             self.chunks.push(0);
-            self.width = 1;
-            return; // just return with new width 1
         }
+        let num_chunks = self.chunks.len();
         let last_chunk_width = ApIntChunk::BITS - self.chunks.last().unwrap().leading_zeros();
         let new_width = (num_chunks - 1) * ApIntChunk::BITS as usize + last_chunk_width as usize;
-        self.width = new_width;
+        self.width = new_width.max(1); // the minimum width is 1bit.
     }
 
     /// Consumes the integer and return the shrunk integer.
@@ -1076,6 +1074,7 @@ impl TryFrom<&str> for ApInt {
                 .to_digit(radix)
                 .ok_or_else(|| ApIntParseError::InvalidLiteral(s.to_string()))?;
             apint.inplace_widening_umul_chunk(radix as ApIntChunk);
+
             let digit = ApInt::from(digit);
 
             if apint.width > digit.width {
@@ -1291,6 +1290,13 @@ mod tests {
     fn test_from_str_5() {
         let a = ApInt::try_from("0x00000001i32").unwrap();
         let expected = ApInt::from(1);
+        assert_eq!(a, expected);
+    }
+
+    #[test]
+    fn test_from_str_6() {
+        let a = ApInt::try_from("0").unwrap();
+        let expected = ApInt::zero(1);
         assert_eq!(a, expected);
     }
 
