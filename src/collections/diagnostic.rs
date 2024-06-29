@@ -457,7 +457,7 @@ impl fmt::Display for DiagnosticRenderer<'_> {
             for (start, end) in underlines.get(&lineno).unwrap() {
                 write!(f, "{}", " ".repeat(*start - prev_end))?;
 
-                for idx in *start..=*end {
+                for idx in *start..*end {
                     if annotation_pos.contains(&idx) {
                         write!(f, "{}", charset.underline_vbar)?;
                     } else {
@@ -465,7 +465,7 @@ impl fmt::Display for DiagnosticRenderer<'_> {
                     }
                 }
 
-                prev_end = *end + 1;
+                prev_end = *end;
             }
 
             writeln!(f)?;
@@ -539,7 +539,7 @@ mod tests {
             .code("E001")
             .annotate(16..17, "expected `;`")
             .annotate(17..18, "expected `;`")
-            .annotate(25..39, "THIS IS A STRING LITERAL")
+            .annotate(25..40, "THIS IS A STRING LITERAL")
             .note("note", "try adding a semicolon")
             .annotate(4..44, "expected `;`")
             .annotate(4..40, "expected `;`")
@@ -561,11 +561,12 @@ mod tests {
             .map(|l| l.trim_end())
             .collect::<Vec<_>>()
             .join("\n");
+        println!("{}", rendered);
 
         let expected = r#"   --> [E001] Error: expected `;`
   1 | ,-,----> fn main() {
   2 | | |-,-->     println!("Hello, world!");
-    | | | |        ~~~      ~~~~~~~~~~~~~~~
+    | | | |        ~~       ~~~~~~~~~~~~~~~
     | | | |        ||              |
     | | | |        `--------------------------- expected `;`
     | | | |         |              |
@@ -584,7 +585,6 @@ mod tests {
     |
     = note: try adding a semicolon"#;
         assert_eq!(rendered, expected);
-        println!("{}", rendered);
     }
 
     #[test]
@@ -606,13 +606,13 @@ mod tests {
             .map(|l| l.trim_end())
             .collect::<Vec<_>>()
             .join("\n");
+        println!("{}", rendered);
 
         let expected = r#"   --> [Error] unexpected end of input
     :
     |"#;
 
         assert_eq!(rendered, expected);
-        println!("{}", rendered);
     }
 
     #[test]
@@ -622,13 +622,13 @@ mod tests {
 
         let snippet = Diagnostic::new(Severity::Error, "unexpected end of input")
             .code("E001")
-            .annotate(0..1, "in the function")
-            .annotate(0..1, "in the function")
-            .annotate(0..1, "in the function")
-            .annotate(0..1, "in the function")
-            .annotate(10..10, "expected `}`")
-            .annotate(10..10, "expected `}`")
-            .annotate(10..10, "expected `}`")
+            .annotate(0..2, "in the function")
+            .annotate(0..2, "in the function")
+            .annotate(0..2, "in the function")
+            .annotate(0..2, "in the function")
+            .annotate(10..11, "expected `}`")
+            .annotate(10..11, "expected `}`")
+            .annotate(10..11, "expected `}`")
             .note("help", "try adding a closing brace".to_string());
 
         list.push(snippet);
@@ -646,17 +646,19 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
 
+        println!("{}", rendered);
+
         let expected = r#"   --> [E001] Error: unexpected end of input
   1 |    fn main() {
     |    ~~        ~
-    |    |         |
-    |    `------------ in the function
-    |    |         |
-    |    `------------ in the function
-    |    |         |
-    |    `------------ in the function
-    |    |         |
-    |    `------------ in the function
+    |     |        |
+    |     `----------- in the function
+    |     |        |
+    |     `----------- in the function
+    |     |        |
+    |     `----------- in the function
+    |     |        |
+    |     `----------- in the function
     |              |
     |              `-- expected `}`
     |              |
@@ -667,6 +669,5 @@ mod tests {
     = help: try adding a closing brace"#;
 
         assert_eq!(rendered, expected);
-        println!("{}", rendered);
     }
 }

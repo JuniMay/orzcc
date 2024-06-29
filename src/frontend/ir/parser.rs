@@ -79,6 +79,10 @@ impl From<Span> for std::ops::Range<usize> {
     fn from(span: Span) -> Self { span.start..span.end }
 }
 
+impl From<Span> for ir::Span {
+    fn from(span: Span) -> Self { ir::Span::from((span.start, span.end)) }
+}
+
 pub struct TokenStream<'a> {
     src: Peekable<Chars<'a>>,
     peeked: Option<Token>,
@@ -131,7 +135,7 @@ impl<'a> TokenStream<'a> {
                     // report error and return
                     let snippet = Diagnostic::error("unclosed block comment")
                         .annotate(start..self.offset, "unclosed block comment")
-                        .annotate(self.offset..self.offset, "expected `*/` here");
+                        .annotate(self.offset - 1..self.offset, "expected `*/` after this");
                     diag.push(snippet);
                     return;
                 }
@@ -161,10 +165,7 @@ impl<'a> TokenStream<'a> {
                             // since `/` is invalid, report error and skip it
                             let snippet = Diagnostic::error("unexpected character")
                                 .annotate(start..start, "invalid character `/`")
-                                .annotate(
-                                    self.offset..self.offset,
-                                    "expeced `/` or `*` here for comments",
-                                );
+                                .note("note", "only `//` or `/*` is allowed here");
                             diag.push(snippet);
                         }
                     }
@@ -281,8 +282,8 @@ impl<'a> TokenStream<'a> {
                     }
                 } else {
                     let snippet = Diagnostic::error("invalid character")
-                        .annotate(start..start, "unexpected character `-`")
-                        .annotate(self.offset..self.offset, "expected `>` here to be `->`");
+                        .annotate(start..start + 1, "unexpected character `-`")
+                        .annotate(self.offset..self.offset + 1, "expected `>` here to be `->`");
                     diag.push(snippet);
                     Token {
                         kind: TokenKind::Invalid("-".to_string()),
@@ -301,7 +302,7 @@ impl<'a> TokenStream<'a> {
             Some(c) => {
                 self.next_char();
                 let snippet = Diagnostic::error("invalid character")
-                    .annotate(start..start, "invalid character");
+                    .annotate(start..start + 1, "invalid character");
                 diag.push(snippet);
                 Token {
                     kind: TokenKind::Invalid(c.to_string()),
@@ -315,12 +316,18 @@ impl<'a> TokenStream<'a> {
         };
 
         self.peeked = Some(token);
+
+        // because this is a peek, so the offset should not be changed.
+        self.offset = start;
+
         self.peeked.as_ref().unwrap()
     }
 
     pub fn next(&mut self, diag: &mut DiagnosticList) -> Token {
         self.peek(diag);
-        self.peeked.take().unwrap()
+        let token = self.peeked.take().unwrap();
+        self.offset = token.span.end; // update offset
+        token
     }
 }
 
@@ -347,7 +354,6 @@ impl<'a> Parser<'a> {
         (items, self.diag, self.ctx)
     }
 
-    #[must_use]
     fn expect_delimiter(&mut self, delimiter: impl Into<String>) -> Option<Token> {
         let token = self.lexer.next(&mut self.diag);
         let d = delimiter.into();
@@ -360,6 +366,18 @@ impl<'a> Parser<'a> {
             .annotate(token.span.into(), format!("expected `{}`", d));
         self.diag.push(snippet);
         None
+    }
+
+    fn maybe_delimiter(&mut self, delimiter: impl Into<String>) -> bool {
+        let token = self.lexer.peek(&mut self.diag);
+        let d = delimiter.into();
+        if let TokenKind::Delimiter(s) = &token.kind {
+            if s == &d {
+                let _ = self.lexer.next(&mut self.diag);
+                return true;
+            }
+        }
+        false
     }
 
     fn parse_item(&mut self) -> Option<Item> {
@@ -400,12 +418,13 @@ impl<'a> Parser<'a> {
     fn parse_func(&mut self) -> Option<ParsingFunc> {
         // func <name><sig> { <body> }
         let start = self.lexer.offset;
+
         let symbol = self.parse_symbol()?;
         let sig = self.parse_sig()?;
+
         let _ = self.expect_delimiter("{")?;
 
         let mut blocks = Vec::new();
-
         loop {
             let token = self.lexer.peek(&mut self.diag);
             if let TokenKind::Delimiter(ref s) = token.kind {
@@ -413,7 +432,6 @@ impl<'a> Parser<'a> {
                     break;
                 }
             }
-
             let block = self.parse_block();
             if block.is_none() {
                 break; // TODO: maybe we can recover here.
@@ -438,7 +456,7 @@ impl<'a> Parser<'a> {
         if let TokenKind::Value(s) = token.kind {
             Some(ValueRef {
                 name: s,
-                span: ir::Span::from((token.span.start, token.span.end)),
+                span: token.span.into(),
             })
         } else {
             let snippet =
@@ -458,7 +476,7 @@ impl<'a> Parser<'a> {
         let block = if let Tk::Label(s) = token.kind {
             BlockRef {
                 name: s,
-                span: ir::Span::from((token.span.start, token.span.end)),
+                span: token.span.into(),
             }
         } else {
             let snippet = Diagnostic::error("unexpected token")
@@ -545,7 +563,7 @@ impl<'a> Parser<'a> {
         let block = if let Tk::Label(s) = token.kind {
             BlockRef {
                 name: s,
-                span: ir::Span::from((token.span.start, token.span.end)),
+                span: token.span.into(),
             }
         } else {
             let snippet = Diagnostic::error("unexpected token")
@@ -560,23 +578,15 @@ impl<'a> Parser<'a> {
                 let _ = self.lexer.next(&mut self.diag);
                 let mut args = Vec::new();
                 loop {
-                    let token = self.lexer.peek(&mut self.diag);
-                    if let Tk::Delimiter(ref s) = token.kind {
-                        if s == ")" {
-                            let _ = self.lexer.next(&mut self.diag);
-                            break;
-                        }
+                    if self.maybe_delimiter(")") {
+                        break;
                     }
 
                     let value = self.parse_value()?;
                     args.push(value);
 
-                    let token = self.lexer.peek(&mut self.diag);
-                    if let Tk::Delimiter(ref s) = token.kind {
-                        if s == "," {
-                            let _ = self.lexer.next(&mut self.diag);
-                            continue;
-                        }
+                    if self.maybe_delimiter(",") {
+                        continue;
                     }
                 }
                 return Some(SuccRef {
@@ -612,9 +622,11 @@ impl<'a> Parser<'a> {
 
         let kind = match token.kind {
             Tk::Value(_) => {
+                // parse the result names
                 loop {
                     let value = self.parse_value()?;
                     results.push(value);
+
                     let token = self.lexer.next(&mut self.diag);
                     if let Tk::Delimiter(ref s) = token.kind {
                         if s == "," {
@@ -630,10 +642,11 @@ impl<'a> Parser<'a> {
                     }
                 }
 
+                // opcode
                 let token = self.lexer.next(&mut self.diag);
-
                 if let Tk::Tokenized(s) = token.kind {
                     match s.as_ref() {
+                        // TODO: maybe support undef value.
                         "iconst" => {
                             // iconst <apint>
                             let token = self.lexer.next(&mut self.diag);
@@ -778,10 +791,7 @@ impl<'a> Parser<'a> {
                         "get_global" => {
                             let token = self.lexer.next(&mut self.diag);
                             let symbol = if let Tk::Symbol(s) = token.kind {
-                                Symbol::new(s).with_source_span(ir::Span::from((
-                                    token.span.start,
-                                    token.span.end,
-                                )))
+                                Symbol::new(s).with_source_span(token.span.into())
                             } else {
                                 let snippet = Diagnostic::error("unexpected token")
                                     .annotate(token.span.into(), "expected symbol");
@@ -794,10 +804,7 @@ impl<'a> Parser<'a> {
                             // call <symbol> ( <args>* )
                             let token = self.lexer.next(&mut self.diag);
                             let symbol = if let Tk::Symbol(s) = token.kind {
-                                Symbol::new(s).with_source_span(ir::Span::from((
-                                    token.span.start,
-                                    token.span.end,
-                                )))
+                                Symbol::new(s).with_source_span(token.span.into())
                             } else {
                                 let snippet = Diagnostic::error("unexpected token")
                                     .annotate(token.span.into(), "expected symbol");
@@ -923,7 +930,7 @@ impl<'a> Parser<'a> {
         // %callee ( %arg1, %arg2, ... ) : ( %res_ty1, %res_ty2, ... ) or %res_ty
 
         // maybe just allow any format, skip paren and comma.
-        //
+        // TODO: more strict parsing
         let mut has_result_tys = false;
         loop {
             let token = self.lexer.peek(&mut self.diag);
@@ -1058,8 +1065,7 @@ impl<'a> Parser<'a> {
     fn parse_symbol(&mut self) -> Option<Symbol> {
         let token = self.lexer.next(&mut self.diag);
         if let TokenKind::Symbol(s) = token.kind {
-            let span = ir::Span::from((token.span.start, token.span.end));
-            let symbol = Symbol::new(s).with_source_span(span);
+            let symbol = Symbol::new(s).with_source_span(token.span.into());
             Some(symbol)
         } else {
             let snippet = Diagnostic::error("unexpected token")
@@ -1077,14 +1083,8 @@ impl<'a> Parser<'a> {
             Tk::Tokenized(s) => {
                 // undef or zeroinit
                 match s.as_ref() {
-                    "undef" => Some(
-                        Constant::undef()
-                            .with_source_span(ir::Span::from((start, self.lexer.offset))),
-                    ),
-                    "zeroinit" => Some(
-                        Constant::zeroinit()
-                            .with_source_span(ir::Span::from((start, self.lexer.offset))),
-                    ),
+                    "undef" => Some(Constant::undef().with_source_span(token.span.into())),
+                    "zeroinit" => Some(Constant::zeroinit().with_source_span(token.span.into())),
                     _ => {
                         let snippet = Diagnostic::error("unexpected token").annotate(
                             token.span.into(),

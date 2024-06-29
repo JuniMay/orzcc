@@ -1272,6 +1272,29 @@ mod tests {
     }
 
     #[test]
+    fn test_from_str_4() {
+        let a =
+            ApInt::try_from("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
+                .unwrap();
+        let expected = ApInt::from(vec![
+            0x1234567890abcdefu64,
+            0x1234567890abcdefu64,
+            0x1234567890abcdefu64,
+            0x1234567890abcdefu64,
+        ])
+        .into_truncated(253)
+        .0;
+        assert_eq!(a, expected);
+    }
+
+    #[test]
+    fn test_from_str_5() {
+        let a = ApInt::try_from("0x00000001i32").unwrap();
+        let expected = ApInt::from(1);
+        assert_eq!(a, expected);
+    }
+
+    #[test]
     fn test_from_signed_0() {
         let a = ApInt::from(-1i8);
         assert_eq!(a.width, 8);
@@ -1297,22 +1320,6 @@ mod tests {
         let a = ApInt::from(-16i64);
         assert_eq!(a.width, 64);
         assert_eq!(a.chunks, vec![0xffff_ffff_ffff_fff0u64,]);
-    }
-
-    #[test]
-    fn test_from_str_4() {
-        let a =
-            ApInt::try_from("0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
-                .unwrap();
-        let expected = ApInt::from(vec![
-            0x1234567890abcdefu64,
-            0x1234567890abcdefu64,
-            0x1234567890abcdefu64,
-            0x1234567890abcdefu64,
-        ])
-        .into_truncated(253)
-        .0;
-        assert_eq!(a, expected);
     }
 
     #[test]
