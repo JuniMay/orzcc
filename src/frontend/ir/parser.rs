@@ -53,20 +53,12 @@ pub enum TokenKind {
     Invalid(String),
 }
 
+/// A span for parsing.
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub struct Span {
-    start: usize,
-    end: usize,
-}
+pub struct Span(usize, usize);
 
 impl fmt::Debug for Span {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}:{}", self.start, self.end)
-    }
-}
-
-impl Span {
-    pub fn new(start: usize, end: usize) -> Self { Self { start, end } }
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "{}:{}", self.0, self.1) }
 }
 
 #[derive(Debug)]
@@ -76,11 +68,11 @@ pub struct Token {
 }
 
 impl From<Span> for std::ops::Range<usize> {
-    fn from(span: Span) -> Self { span.start..span.end }
+    fn from(span: Span) -> Self { span.0..span.1 }
 }
 
 impl From<Span> for ir::Span {
-    fn from(span: Span) -> Self { ir::Span::from((span.start, span.end)) }
+    fn from(span: Span) -> Self { ir::Span::from((span.0, span.1)) }
 }
 
 pub struct TokenStream<'a> {
@@ -194,7 +186,7 @@ impl<'a> TokenStream<'a> {
         let s = self.read_identifier();
         Token {
             kind: TokenKind::Label(s),
-            span: Span::new(start, self.offset),
+            span: Span(start, self.offset),
         }
     }
 
@@ -204,7 +196,7 @@ impl<'a> TokenStream<'a> {
         let s = self.read_identifier();
         Token {
             kind: TokenKind::Value(s),
-            span: Span::new(start, self.offset),
+            span: Span(start, self.offset),
         }
     }
 
@@ -214,7 +206,7 @@ impl<'a> TokenStream<'a> {
         let s = self.read_identifier();
         Token {
             kind: TokenKind::Symbol(s),
-            span: Span::new(start, self.offset),
+            span: Span(start, self.offset),
         }
     }
 
@@ -223,10 +215,14 @@ impl<'a> TokenStream<'a> {
         let s = self.read_identifier();
         Token {
             kind: TokenKind::Tokenized(s),
-            span: Span::new(start, self.offset),
+            span: Span(start, self.offset),
         }
     }
 
+    /// Peek the next token without consuming it.
+    ///
+    /// This will not change the offset of the lexer. If any token is peeked,
+    /// this will return the last peeked token.
     pub fn peek(&mut self, diag: &mut DiagnosticList) -> &Token {
         if let Some(ref token) = self.peeked {
             return token;
@@ -246,12 +242,12 @@ impl<'a> TokenStream<'a> {
                     self.next_char();
                     Token {
                         kind: TokenKind::Delimiter("<{".to_string()),
-                        span: Span::new(start, self.offset),
+                        span: Span(start, self.offset),
                     }
                 } else {
                     Token {
                         kind: TokenKind::Delimiter("<".to_string()),
-                        span: Span::new(start, self.offset),
+                        span: Span(start, self.offset),
                     }
                 }
             }
@@ -262,12 +258,12 @@ impl<'a> TokenStream<'a> {
                     self.next_char();
                     Token {
                         kind: TokenKind::Delimiter("}>".to_string()),
-                        span: Span::new(start, self.offset),
+                        span: Span(start, self.offset),
                     }
                 } else {
                     Token {
                         kind: TokenKind::Delimiter("}".to_string()),
-                        span: Span::new(start, self.offset),
+                        span: Span(start, self.offset),
                     }
                 }
             }
@@ -278,7 +274,7 @@ impl<'a> TokenStream<'a> {
                     self.next_char();
                     Token {
                         kind: TokenKind::Delimiter("->".to_string()),
-                        span: Span::new(start, self.offset),
+                        span: Span(start, self.offset),
                     }
                 } else {
                     let snippet = Diagnostic::error("invalid character")
@@ -287,7 +283,7 @@ impl<'a> TokenStream<'a> {
                     diag.push(snippet);
                     Token {
                         kind: TokenKind::Invalid("-".to_string()),
-                        span: Span::new(start, self.offset),
+                        span: Span(start, self.offset),
                     }
                 }
             }
@@ -296,7 +292,7 @@ impl<'a> TokenStream<'a> {
                 let _ = self.next_char();
                 Token {
                     kind: TokenKind::Delimiter(c.to_string()),
-                    span: Span::new(start, self.offset),
+                    span: Span(start, self.offset),
                 }
             }
             Some(c) => {
@@ -306,12 +302,12 @@ impl<'a> TokenStream<'a> {
                 diag.push(snippet);
                 Token {
                     kind: TokenKind::Invalid(c.to_string()),
-                    span: Span::new(start, self.offset),
+                    span: Span(start, self.offset),
                 }
             }
             None => Token {
                 kind: TokenKind::Eof,
-                span: Span::new(start, start),
+                span: Span(start, start),
             },
         };
 
@@ -323,14 +319,19 @@ impl<'a> TokenStream<'a> {
         self.peeked.as_ref().unwrap()
     }
 
+    /// Consume the next token and return it.
+    ///
+    /// If there is a peeked token, this will return the peeked token and
+    /// consume it.
     pub fn next(&mut self, diag: &mut DiagnosticList) -> Token {
         self.peek(diag);
         let token = self.peeked.take().unwrap();
-        self.offset = token.span.end; // update offset
+        self.offset = token.span.1; // update offset
         token
     }
 }
 
+/// IR Parser.
 pub struct Parser<'a> {
     lexer: TokenStream<'a>,
     diag: DiagnosticList,
@@ -338,6 +339,7 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
+    /// Create a new parser with the source code.
     pub fn new(src: &'a str) -> Self {
         Self {
             lexer: TokenStream::new(src),
@@ -346,6 +348,7 @@ impl<'a> Parser<'a> {
         }
     }
 
+    /// Parse the source code and return the AST, diagnostics and context.
     pub fn parse(mut self) -> (Vec<Item>, DiagnosticList, Context) {
         let mut items = Vec::new();
         while let Some(item) = self.parse_item() {
@@ -605,6 +608,8 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_inst(&mut self) -> Option<ParsingInst> {
+        use FBinaryOp as Fb;
+        use IBinaryOp as Ib;
         use InstKind as Ik;
         use TokenKind as Tk;
 
@@ -740,38 +745,39 @@ impl<'a> Parser<'a> {
                                 return None;
                             }
                         }
-                        "add" => Ik::IBinary(IBinaryOp::Add),
-                        "sub" => Ik::IBinary(IBinaryOp::Sub),
-                        "mul" => Ik::IBinary(IBinaryOp::Mul),
-                        "udiv" => Ik::IBinary(IBinaryOp::UDiv),
-                        "sdiv" => Ik::IBinary(IBinaryOp::SDiv),
-                        "urem" => Ik::IBinary(IBinaryOp::URem),
-                        "srem" => Ik::IBinary(IBinaryOp::SRem),
-                        "and" => Ik::IBinary(IBinaryOp::And),
-                        "or" => Ik::IBinary(IBinaryOp::Or),
-                        "xor" => Ik::IBinary(IBinaryOp::Xor),
-                        "shl" => Ik::IBinary(IBinaryOp::Shl),
-                        "lshr" => Ik::IBinary(IBinaryOp::LShr),
-                        "ashr" => Ik::IBinary(IBinaryOp::AShr),
-                        "icmp.eq" => Ik::IBinary(IBinaryOp::Cmp(ICmpCond::Eq)),
-                        "icmp.ne" => Ik::IBinary(IBinaryOp::Cmp(ICmpCond::Ne)),
-                        "icmp.slt" => Ik::IBinary(IBinaryOp::Cmp(ICmpCond::Slt)),
-                        "icmp.sle" => Ik::IBinary(IBinaryOp::Cmp(ICmpCond::Sle)),
-                        "icmp.ult" => Ik::IBinary(IBinaryOp::Cmp(ICmpCond::Ult)),
-                        "icmp.ule" => Ik::IBinary(IBinaryOp::Cmp(ICmpCond::Ule)),
-                        "fadd" => Ik::FBinary(FBinaryOp::Add),
-                        "fsub" => Ik::FBinary(FBinaryOp::Sub),
-                        "fmul" => Ik::FBinary(FBinaryOp::Mul),
-                        "fdiv" => Ik::FBinary(FBinaryOp::Div),
-                        "frem" => Ik::FBinary(FBinaryOp::Rem),
-                        "fcmp.oeq" => Ik::FBinary(FBinaryOp::Cmp(FCmpCond::OEq)),
-                        "fcmp.one" => Ik::FBinary(FBinaryOp::Cmp(FCmpCond::ONe)),
-                        "fcmp.olt" => Ik::FBinary(FBinaryOp::Cmp(FCmpCond::OLt)),
-                        "fcmp.ole" => Ik::FBinary(FBinaryOp::Cmp(FCmpCond::OLe)),
-                        "fcmp.ueq" => Ik::FBinary(FBinaryOp::Cmp(FCmpCond::UEq)),
-                        "fcmp.une" => Ik::FBinary(FBinaryOp::Cmp(FCmpCond::UNe)),
-                        "fcmp.ult" => Ik::FBinary(FBinaryOp::Cmp(FCmpCond::ULt)),
-                        "fcmp.ule" => Ik::FBinary(FBinaryOp::Cmp(FCmpCond::ULe)),
+                        "undef" => Ik::Undef,
+                        "add" => Ik::IBinary(Ib::Add),
+                        "sub" => Ik::IBinary(Ib::Sub),
+                        "mul" => Ik::IBinary(Ib::Mul),
+                        "udiv" => Ik::IBinary(Ib::UDiv),
+                        "sdiv" => Ik::IBinary(Ib::SDiv),
+                        "urem" => Ik::IBinary(Ib::URem),
+                        "srem" => Ik::IBinary(Ib::SRem),
+                        "and" => Ik::IBinary(Ib::And),
+                        "or" => Ik::IBinary(Ib::Or),
+                        "xor" => Ik::IBinary(Ib::Xor),
+                        "shl" => Ik::IBinary(Ib::Shl),
+                        "lshr" => Ik::IBinary(Ib::LShr),
+                        "ashr" => Ik::IBinary(Ib::AShr),
+                        "icmp.eq" => Ik::IBinary(Ib::Cmp(ICmpCond::Eq)),
+                        "icmp.ne" => Ik::IBinary(Ib::Cmp(ICmpCond::Ne)),
+                        "icmp.slt" => Ik::IBinary(Ib::Cmp(ICmpCond::Slt)),
+                        "icmp.sle" => Ik::IBinary(Ib::Cmp(ICmpCond::Sle)),
+                        "icmp.ult" => Ik::IBinary(Ib::Cmp(ICmpCond::Ult)),
+                        "icmp.ule" => Ik::IBinary(Ib::Cmp(ICmpCond::Ule)),
+                        "fadd" => Ik::FBinary(Fb::Add),
+                        "fsub" => Ik::FBinary(Fb::Sub),
+                        "fmul" => Ik::FBinary(Fb::Mul),
+                        "fdiv" => Ik::FBinary(Fb::Div),
+                        "frem" => Ik::FBinary(Fb::Rem),
+                        "fcmp.oeq" => Ik::FBinary(Fb::Cmp(FCmpCond::OEq)),
+                        "fcmp.one" => Ik::FBinary(Fb::Cmp(FCmpCond::ONe)),
+                        "fcmp.olt" => Ik::FBinary(Fb::Cmp(FCmpCond::OLt)),
+                        "fcmp.ole" => Ik::FBinary(Fb::Cmp(FCmpCond::OLe)),
+                        "fcmp.ueq" => Ik::FBinary(Fb::Cmp(FCmpCond::UEq)),
+                        "fcmp.une" => Ik::FBinary(Fb::Cmp(FCmpCond::UNe)),
+                        "fcmp.ult" => Ik::FBinary(Fb::Cmp(FCmpCond::ULt)),
+                        "fcmp.ule" => Ik::FBinary(Fb::Cmp(FCmpCond::ULe)),
                         "not" => Ik::IUnary(IUnaryOp::Not),
                         "fneg" => Ik::FUnary(FUnaryOp::Neg),
                         "trunc" => Ik::Cast(CastOp::Trunc),
@@ -863,10 +869,7 @@ impl<'a> Parser<'a> {
                         let _ = self.lexer.next(&mut self.diag);
                         let token = self.lexer.next(&mut self.diag);
                         let symbol = if let Tk::Symbol(s) = token.kind {
-                            Symbol::new(s).with_source_span(ir::Span::from((
-                                token.span.start,
-                                token.span.end,
-                            )))
+                            Symbol::new(s).with_source_span(token.span.into())
                         } else {
                             let snippet = Diagnostic::error("unexpected token")
                                 .annotate(token.span.into(), "expected symbol");
@@ -1115,10 +1118,7 @@ impl<'a> Parser<'a> {
                             } else {
                                 let snippet = Diagnostic::error("invalid byte")
                                     .annotate(token.span.into(), "invalid byte")
-                                    .annotate(
-                                        token.span.start..token.span.start,
-                                        "expect `0x` prefix",
-                                    );
+                                    .annotate(token.span.0..token.span.0, "expect `0x` prefix");
                                 self.diag.push(snippet);
                                 return None;
                             }

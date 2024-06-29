@@ -94,3 +94,19 @@ impl From<(Loc, Loc)> for Span {
 impl From<(usize, usize)> for Span {
     fn from((start, end): (usize, usize)) -> Span { Span::new(start.into(), end.into()) }
 }
+
+impl From<Span> for std::ops::Range<usize> {
+    fn from(value: Span) -> Self {
+        let start = match value.start {
+            Loc::Source { idx } => idx,
+            Loc::None => panic!("span start is none"),
+        };
+
+        let end = match value.end {
+            Loc::Source { idx } => idx,
+            Loc::None => panic!("span end is none"),
+        };
+
+        start..end
+    }
+}

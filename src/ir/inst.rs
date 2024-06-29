@@ -1,5 +1,5 @@
 use core::fmt;
-use std::{collections::HashMap, vec};
+use std::collections::HashMap;
 
 use super::{
     constant::FloatConstant,
@@ -389,8 +389,9 @@ impl<'a> fmt::Display for DisplaySuccessor<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum InstKind {
+    Undef,
     /// Create a new value from a constant.
     ///
     /// Using an individual constant creation instruction is similar to MLIR and
@@ -490,7 +491,15 @@ pub struct Inst(BaseArenaPtr<InstData>);
 impl_arena!(Context, InstData, Inst, insts);
 
 impl Inst {
-    fn new(ctx: &mut Context, kind: InstKind, result_tys: Vec<Ty>, operands: Vec<Value>) -> Inst {
+    /// Create an instruction directly.
+    ///
+    /// This is a low-level function and should be **USED WITH CAUTION**.
+    pub(crate) fn new(
+        ctx: &mut Context,
+        kind: InstKind,
+        result_tys: Vec<Ty>,
+        operands: Vec<Value>,
+    ) -> Inst {
         let inst = ctx.alloc_with(|self_ptr| InstData {
             self_ptr,
             results: Vec::new(),
@@ -511,15 +520,28 @@ impl Inst {
             .map(|val| Operand::new(ctx, val, inst))
             .collect::<Vec<_>>();
 
-        for (i, ty) in result_tys.into_iter().enumerate() {
-            let value =
-                ctx.alloc_with(|self_ptr| ValueData::new_inst_result(self_ptr, ty, inst, i));
-            inst.deref_mut(ctx).results.push(value);
+        if result_tys.len() == 1 && result_tys[0].is_void(ctx) {
+            // not creating any result for void type
+        } else {
+            for (i, ty) in result_tys.into_iter().enumerate() {
+                if ty.is_void(ctx) {
+                    panic!("multiple results must not contain void type");
+                }
+                let value =
+                    ctx.alloc_with(|self_ptr| ValueData::new_inst_result(self_ptr, ty, inst, i));
+                inst.deref_mut(ctx).results.push(value);
+            }
         }
 
         inst.deref_mut(ctx).operands = operands;
-
         inst
+    }
+
+    /// Add successor to the instruction.
+    ///
+    /// This is a low-level function and should be **USED WITH CAUTION**.
+    pub(crate) fn add_successor(&self, ctx: &mut Context, succ: Successor) {
+        self.deref_mut(ctx).successors.push(succ);
     }
 
     pub fn set_source_span(&self, ctx: &mut Context, span: impl Into<Span>) {
@@ -528,18 +550,18 @@ impl Inst {
 
     pub fn source_span(self, ctx: &Context) -> Span { self.deref(ctx).source_span }
 
+    /// Create a new undef instruction.
+    pub fn undef(ctx: &mut Context, ty: Ty) -> Inst {
+        Self::new(ctx, InstKind::Undef, vec![ty], vec![])
+    }
+
     /// Create a new iconst instruction.
     pub fn iconst(ctx: &mut Context, constant: impl Into<ApInt>, ty: Ty) -> Inst {
         Self::new(ctx, InstKind::IConst(constant.into()), vec![ty], vec![])
     }
 
     /// Create a new fconst instruction for float32
-    pub fn fconst32(ctx: &mut Context, constant: f32, ty: Ty) -> Inst {
-        Self::new(ctx, InstKind::FConst(constant.into()), vec![ty], vec![])
-    }
-
-    /// Create a new fconst instruction for float64
-    pub fn fconst64(ctx: &mut Context, constant: f64, ty: Ty) -> Inst {
+    pub fn fconst(ctx: &mut Context, constant: impl Into<FloatConstant>, ty: Ty) -> Inst {
         Self::new(ctx, InstKind::FConst(constant.into()), vec![ty], vec![])
     }
 
@@ -1190,6 +1212,11 @@ impl<'a> fmt::Display for DisplayInst<'a> {
         }
 
         match &self.data.kind {
+            Ik::Undef => {
+                assert_eq!(self.data.results.len(), 1);
+                assert_eq!(self.data.operands.len(), 0);
+                write!(f, "undef")?;
+            }
             Ik::IConst(constant) => {
                 assert_eq!(self.data.results.len(), 1);
                 write!(f, "iconst {:x}", constant)?;

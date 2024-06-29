@@ -257,6 +257,8 @@ impl Ty {
 
     pub fn is_ptr(&self, ctx: &Context) -> bool { matches!(self.deref(ctx), TyData::Ptr) }
 
+    pub fn is_void(&self, ctx: &Context) -> bool { matches!(self.deref(ctx), TyData::Void) }
+
     pub fn bitwidth(&self, ctx: &Context) -> Option<usize> {
         match self.deref(ctx) {
             TyData::Integer(bits) => Some(*bits as usize),
