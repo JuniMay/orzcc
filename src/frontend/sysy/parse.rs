@@ -1,4 +1,7 @@
 use hexponent::FloatLiteral;
+use lalrpop_util::lalrpop_mod;
+
+lalrpop_mod!(#[allow(clippy::all)] pub parser, "/frontend/sysy/parser.rs");
 
 /// Parse a given hexadecimal float string into a f32.
 pub fn parse_hexadecimal_float(s: &str) -> f32 {

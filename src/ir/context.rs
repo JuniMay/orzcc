@@ -208,7 +208,7 @@ impl Context {
             .iter()
             .filter_map(|(_, symbol_kind)| match symbol_kind {
                 SymbolKind::FuncDef(func) => Some(*func),
-                _ => None,
+                SymbolKind::GlobalSlot(_) | SymbolKind::FuncDecl(_) => None,
             })
             .collect()
     }
