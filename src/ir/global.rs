@@ -23,12 +23,11 @@ impl Hash for Symbol {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) { self.0.hash(state) }
 }
 
-impl From<&str> for Symbol {
-    fn from(s: &str) -> Self { Self(s.to_string(), Span::default()) }
-}
-
-impl From<String> for Symbol {
-    fn from(s: String) -> Self { Self(s, Span::default()) }
+impl<T> From<T> for Symbol
+where
+    T: AsRef<str>,
+{
+    fn from(value: T) -> Self { Self(value.as_ref().to_string(), Span::default()) }
 }
 
 impl Symbol {

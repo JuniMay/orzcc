@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 
-use super::types::{Type, TypeKind as Tk};
-use crate::ir;
+use super::{
+    irgen::IrGenResult,
+    types::{Type, TypeKind as Tk},
+};
 
 #[derive(Debug, Clone)]
 pub enum ComptimeVal {
@@ -521,7 +523,7 @@ pub struct CompUnit {
 pub struct SymbolEntry {
     pub ty: Type,
     pub comptime: Option<ComptimeVal>,
-    pub ir_value: Option<ir::Value>,
+    pub ir_value: Option<IrGenResult>,
 }
 
 impl SymbolEntry {
@@ -543,7 +545,7 @@ pub struct SymbolTable {
 impl SymbolTable {
     pub fn enter_scope(&mut self) { self.stack.push(HashMap::new()); }
 
-    pub fn exit_scope(&mut self) { self.stack.pop(); }
+    pub fn leave_scope(&mut self) { self.stack.pop(); }
 
     pub fn insert(&mut self, name: impl Into<String>, entry: SymbolEntry) {
         self.stack.last_mut().unwrap().insert(name.into(), entry);
@@ -626,7 +628,7 @@ impl CompUnit {
             item.type_check(&mut symtable);
         }
 
-        symtable.exit_scope();
+        symtable.leave_scope();
     }
 }
 
@@ -670,7 +672,7 @@ impl Item {
                 body.type_check(symtable);
 
                 symtable.curr_ret_ty = None;
-                symtable.exit_scope();
+                symtable.leave_scope();
             }
         }
     }
@@ -799,7 +801,7 @@ impl Block {
             new_items.push(item);
         }
         self.items = new_items;
-        symtable.exit_scope();
+        symtable.leave_scope();
     }
 }
 

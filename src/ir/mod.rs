@@ -14,7 +14,7 @@ pub mod passes;
 pub mod passman;
 pub mod verify;
 pub use block::{Block, BlockData};
-pub use constant::{Constant, FloatConstant};
+pub use constant::{Constant, ConstantKind, FloatConstant};
 pub use context::Context;
 pub use fold::FoldContext;
 pub use global::{Func, FuncData, GlobalSlot, GlobalSlotData, Symbol, SymbolKind};

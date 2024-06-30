@@ -141,6 +141,10 @@ impl Constant {
     pub fn kind(&self) -> &ConstantKind { &self.0 }
 }
 
+impl From<bool> for Constant {
+    fn from(value: bool) -> Self { Constant::bytes(vec![value as u8]) }
+}
+
 impl From<u8> for Constant {
     fn from(value: u8) -> Self { Constant::bytes(vec![value]) }
 }
