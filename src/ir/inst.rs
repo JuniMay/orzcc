@@ -931,6 +931,42 @@ impl Inst {
             .collect()
     }
 
+    /// Add an argument to the successor block of the branch instruction.
+    ///
+    /// # Parameters
+    ///
+    /// - `ctx`: the context
+    /// - `block`: the block to pass the argument to
+    /// - `param`: the block parameter to pass the argument to
+    /// - `arg`: the argument to pass
+    ///
+    /// # Panics
+    ///
+    /// Panics if the instruction is not a branch instruction. Check with
+    /// [Inst::is_terminator] before calling this method.
+    pub fn add_succ_arg(self, ctx: &mut Context, block: Block, param: Value, arg: Value) {
+        if !self.is_terminator(ctx) {
+            panic!("instruction is not a terminator");
+        }
+
+        let mut count = 0;
+        for succ in self.deref(ctx).successors.iter() {
+            if succ.block.inner() == block {
+                count += 1; // borrow checker! we cannot create operands here
+            }
+        }
+        let mut operands = Vec::new();
+        for _ in 0..count {
+            let arg = Operand::new(ctx, arg, self);
+            operands.push(arg);
+        }
+        for succ in self.deref_mut(ctx).successors.iter_mut() {
+            if succ.block.inner() == block {
+                succ.add_arg(param, operands.pop().unwrap());
+            }
+        }
+    }
+
     /// Free the instruction from the context.
     ///
     /// This method will also free all the result values of the instruction.
@@ -995,13 +1031,24 @@ impl Inst {
         self.drop(ctx);
     }
 
+    /// Get all the results of this instruction,
     pub fn results(self, ctx: &Context) -> &[Value] { &self.deref(ctx).results }
 
+    /// Comment at this instruction.
     pub fn comment(self, ctx: &mut Context, pos: CommentPos, content: impl Into<String>) {
         ctx.comment_info.comment_inst(self, pos, content.into());
     }
 
+    /// Get the result at the given index.
     pub fn result(self, ctx: &Context, idx: usize) -> Value { self.deref(ctx).results[idx] }
+
+    /// Get the operand as value at the given index.
+    pub fn operand(self, ctx: &Context, idx: usize) -> Value {
+        self.deref(ctx).operands[idx].inner()
+    }
+
+    /// Get the kind of the instruction.
+    pub fn kind(self, ctx: &Context) -> &InstKind { &self.deref(ctx).kind }
 
     pub fn display(self, ctx: &Context, debug: bool) -> DisplayInst<'_> {
         DisplayInst {

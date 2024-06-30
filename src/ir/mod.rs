@@ -10,6 +10,7 @@ mod ty;
 mod value;
 
 pub mod debug;
+pub mod passes;
 pub mod passman;
 pub mod verify;
 pub use block::{Block, BlockData};

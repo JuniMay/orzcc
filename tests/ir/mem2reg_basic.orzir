@@ -1,0 +1,27 @@
+
+func @test_mem2reg(i32) -> i32 {
+^entry (%arg0: i32):
+    %0 = stack_slot 4 : ptr
+    %1 = stack_slot 4 : ptr
+    %2 = stack_slot 20 : ptr
+    %3 = stack_slot 4 : ptr
+
+    %zero = iconst 0 : i32
+    %cond = icmp.slt %zero, %arg0 : i1
+
+    br %cond, ^positive, ^negative
+
+^positive:
+    %one = iconst 1 : i32
+    store %one, %0
+    jump ^ret
+
+^negative:
+    %neg_one = iconst 0xFFFFFFFF : i32
+    store %neg_one, %0
+    jump ^ret
+
+^ret:
+    %val = load %0 : i32
+    ret %val
+}

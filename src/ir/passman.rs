@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 use thiserror::Error;
 
-use super::Context;
+use super::{Context, Func};
 
 #[derive(Debug, Error)]
 pub enum PassErrorKind {
@@ -57,6 +57,29 @@ impl PassError {
     }
 }
 
+/// A pass that can be run on a function.
+pub trait LocalPass {
+    /// The output of the pass.
+    type Output;
+
+    /// Run the pass on the given function.
+    fn run(&mut self, ctx: &Context, func: Func) -> PassResult<Self::Output>;
+}
+
+/// A pass that can be run on a function and modify it.
+pub trait LocalPassMut {
+    /// The output of the pass.
+    type Output;
+
+    /// Run the pass on the given function and maybe modify it.
+    ///
+    /// # Returns
+    ///
+    /// A tuple of the output of the pass and a boolean indicating whether the
+    /// IR has been modified.
+    fn run(&mut self, ctx: &mut Context, func: Func) -> PassResult<(Self::Output, bool)>;
+}
+
 /// A pass that can be run on a Context.
 pub trait GlobalPass {
     /// The output of the pass.
@@ -72,7 +95,12 @@ pub trait GlobalPassMut {
     type Output;
 
     /// Run the pass on the given Context and maybe modify it.
-    fn run(&mut self, ctx: &mut Context) -> PassResult<Self::Output>;
+    ///
+    /// # Returns
+    ///
+    /// A tuple of the output of the pass and a boolean indicating whether the
+    /// IR has been modified.
+    fn run(&mut self, ctx: &mut Context) -> PassResult<(Self::Output, bool)>;
 }
 
 /// The output of an analysis pass.

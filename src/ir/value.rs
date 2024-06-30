@@ -101,6 +101,8 @@ impl Value {
         ctx.free(self);
     }
 
+    pub fn kind(self, ctx: &Context) -> &ValueKind { &self.deref(ctx).kind }
+
     /// Assign a name for the value.
     ///
     /// # Panics

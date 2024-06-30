@@ -203,6 +203,16 @@ impl Context {
         }
     }
 
+    pub fn funcs(&self) -> Vec<Func> {
+        self.symbols
+            .iter()
+            .filter_map(|(_, symbol_kind)| match symbol_kind {
+                SymbolKind::FuncDef(func) => Some(*func),
+                _ => None,
+            })
+            .collect()
+    }
+
     pub fn display(&self, debug: bool) -> DisplayContext<'_> {
         let mut slots = Vec::new();
         let mut decls = Vec::new();
