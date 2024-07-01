@@ -905,6 +905,16 @@ impl From<Vec<ApIntChunk>> for ApInt {
     }
 }
 
+impl From<bool> for ApInt {
+    fn from(value: bool) -> Self {
+        if value {
+            ApInt::one(1)
+        } else {
+            ApInt::zero(1)
+        }
+    }
+}
+
 impl From<u8> for ApInt {
     fn from(value: u8) -> Self {
         let mut apint = ApInt::zero(8);

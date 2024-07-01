@@ -576,7 +576,11 @@ impl Inst {
 
         if !lhs.ty(ctx).is_integer(ctx) || !rhs.ty(ctx).is_integer(ctx) {
             // ibinary only supports integer-like types
-            panic!("lhs and rhs must be integer-like types");
+            panic!(
+                "lhs and rhs must be integer-like types, got {} and {}",
+                lhs.ty(ctx).display(ctx),
+                rhs.ty(ctx).display(ctx)
+            );
         }
 
         if lhs.ty(ctx) != rhs.ty(ctx) && !matches!(op, Op::Shl | Op::LShr | Op::AShr) {
@@ -816,29 +820,38 @@ impl Inst {
         inst
     }
 
-    pub fn call(ctx: &mut Context, symbol: Symbol, args: Vec<Value>, result_tys: Vec<Ty>) -> Inst {
-        if let Some(SymbolKind::FuncDef(func)) = ctx.lookup_symbol(&symbol) {
-            let sig = func.sig(ctx);
-            if sig.params.len() != args.len() {
-                panic!("number of arguments does not match the function signature");
-            }
-            if sig.ret.len() != result_tys.len() {
-                panic!("number of results does not match the function signature");
-            }
-
-            for (arg, param) in args.iter().zip(sig.params.iter()) {
-                if arg.ty(ctx) != *param {
-                    panic!("argument type does not match the function signature");
-                }
-            }
-
-            for (result, ret) in result_tys.iter().zip(sig.ret.iter()) {
-                if *result != *ret {
-                    panic!("result type does not match the function signature");
-                }
-            }
+    pub fn call(
+        ctx: &mut Context,
+        symbol: impl Into<Symbol>,
+        args: Vec<Value>,
+        result_tys: Vec<Ty>,
+    ) -> Inst {
+        let symbol = symbol.into();
+        let sig = if let Some(SymbolKind::FuncDef(func)) = ctx.lookup_symbol(&symbol) {
+            func.sig(ctx)
+        } else if let Some(SymbolKind::FuncDecl(sig)) = ctx.lookup_symbol(&symbol) {
+            sig
         } else {
             panic!("symbol is not valid");
+        };
+
+        if sig.params.len() != args.len() {
+            panic!("number of arguments does not match the function signature");
+        }
+        if sig.ret.len() != result_tys.len() {
+            panic!("number of results does not match the function signature");
+        }
+
+        for (arg, param) in args.iter().zip(sig.params.iter()) {
+            if arg.ty(ctx) != *param {
+                panic!("argument type does not match the function signature");
+            }
+        }
+
+        for (result, ret) in result_tys.iter().zip(sig.ret.iter()) {
+            if *result != *ret {
+                panic!("result type does not match the function signature");
+            }
         }
 
         Self::new(ctx, InstKind::Call(symbol), result_tys, args)
@@ -898,9 +911,9 @@ impl Inst {
         Self::new(ctx, InstKind::Store, vec![], vec![val, ptr])
     }
 
-    pub fn get_global(ctx: &mut Context, symbol: Symbol) -> Inst {
+    pub fn get_global(ctx: &mut Context, symbol: impl Into<Symbol>) -> Inst {
         let ptr = Ty::ptr(ctx);
-        Self::new(ctx, InstKind::GetGlobal(symbol), vec![ptr], vec![])
+        Self::new(ctx, InstKind::GetGlobal(symbol.into()), vec![ptr], vec![])
     }
 
     pub fn is_terminator(self, ctx: &Context) -> bool {

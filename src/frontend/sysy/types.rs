@@ -121,6 +121,8 @@ impl Type {
 
     pub fn is_ptr(&self) -> bool { matches!(self.kind(), TypeKind::Ptr(..)) }
 
+    pub fn is_void(&self) -> bool { matches!(self.kind(), TypeKind::Void) }
+
     pub fn unwrap_func(&self) -> (&[Type], &Type) {
         if let TypeKind::Func(params, ret) = self.kind() {
             (params, ret)

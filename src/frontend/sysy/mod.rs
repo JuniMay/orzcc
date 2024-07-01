@@ -5,6 +5,6 @@ mod preprocess;
 mod types;
 
 pub use ast::CompUnit;
-pub use irgen::{IrGen, IrGenContext};
+pub use irgen::irgen;
 pub use parse::parser::SysYParser;
 pub use preprocess::preprocess;

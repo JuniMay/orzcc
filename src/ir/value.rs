@@ -163,6 +163,10 @@ impl Value {
             ValueKind::BlockParam { block, .. } => block.container(ctx).unwrap(),
         }
     }
+
+    pub fn is_block_param(self, ctx: &Context) -> bool {
+        matches!(self.deref(ctx).kind, ValueKind::BlockParam { .. })
+    }
 }
 
 impl Usable for Value {

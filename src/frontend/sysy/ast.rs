@@ -1241,7 +1241,7 @@ impl Expr {
                     Tk::Int => expr = Expr::coercion(expr, Type::int()),
                     Tk::Float => expr = Expr::coercion(expr, Type::float()),
                     // for the parameter, e.g., int[] -> int*
-                    Tk::Ptr(_) => expr = Expr::coercion(expr, Type::ptr(ty.clone())),
+                    Tk::Ptr(_) => expr = Expr::coercion(expr, ty.clone()),
                     Tk::Array(..) | Tk::Func(..) | Tk::Void => {
                         unreachable!()
                     }

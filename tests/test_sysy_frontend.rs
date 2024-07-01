@@ -25,3 +25,12 @@ fn test_sysy_frontend_1() {
     ast.type_check();
     println!("{:#?}", ast);
 }
+
+#[test]
+fn test_sysy_frontend_80_chaos_token() {
+    let src = include_str!("sysy/functional/80_chaos_token.sy");
+    let src = sysy::preprocess(src);
+    let mut ast = SysYParser::new().parse(&src).unwrap();
+    ast.type_check();
+    println!("{:#?}", ast);
+}

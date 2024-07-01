@@ -156,7 +156,9 @@ impl Context {
         self.symbols.insert(symbol, SymbolKind::GlobalSlot(slot));
     }
 
-    pub fn add_func_decl(&mut self, symbol: Symbol, sig: Signature) {
+    pub fn add_func_decl(&mut self, symbol: impl Into<Symbol>, sig: Signature) {
+        let symbol = symbol.into();
+
         if self.symbols.contains_key(&symbol) {
             panic!("symbol {:?} is already defined", symbol);
         }
@@ -172,6 +174,13 @@ impl Context {
     /// - `Some(symbol_kind)` if the symbol exists.
     /// - `None` if the symbol is not defined.
     pub fn lookup_symbol(&self, symbol: &Symbol) -> Option<&SymbolKind> { self.symbols.get(symbol) }
+
+    pub fn lookup_func(&self, symbol: &Symbol) -> Option<Func> {
+        match self.lookup_symbol(symbol)? {
+            SymbolKind::FuncDef(func) => Some(*func),
+            SymbolKind::FuncDecl(_) | SymbolKind::GlobalSlot(_) => None,
+        }
+    }
 
     pub fn lookup_value(&self, name: &str) -> Option<Value> { self.value_name_alloc.get_ptr(name) }
 

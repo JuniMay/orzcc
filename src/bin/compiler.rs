@@ -13,4 +13,11 @@ fn main() {
     ast.type_check();
 
     println!("type check done");
+
+    let mut ir = sysy::irgen(&ast);
+
+    println!("irgen done");
+
+    ir.alloc_all_names();
+    println!("{}", ir.display(true));
 }
