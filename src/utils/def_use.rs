@@ -101,17 +101,44 @@ impl<T> Operand<T>
 where
     T: Usable,
 {
+    /// Create a new operand and add the user.
+    ///
+    /// # Parameters
+    ///
+    /// - `arena`: The arena of the entities.
+    /// - `used`: The used entity.
+    /// - `user`: The user entity.
+    ///
+    /// # Returns
+    ///
+    /// A new operand.
     pub fn new(arena: &mut T::A, used: T, user: T::U) -> Self {
         used.add_user(arena, user);
         Self { used, user }
     }
 
+    /// Drop the used entity.
+    ///
+    /// This will remove the user from the used entity.
+    ///
+    /// # Parameters
+    ///
+    /// - `arena`: The arena of the entities.
     pub fn drop(self, arena: &mut T::A) { self.used.remove_user(arena, self.user); }
 
+    /// Get the used entity.
     pub fn inner(&self) -> T { self.used }
 
-    pub fn inner_mut(&mut self) -> &mut T { &mut self.used }
-
+    /// Replace the used entity.
+    ///
+    /// This **WILL NOT** maintain the def-use chain but just for simplicity.
+    /// When implementing `User`, one must ensure the def-use chain is
+    /// maintained in [User::replace].
+    ///
+    /// # Parameters
+    ///
+    /// - `old`: The old entity.
+    /// - `new`: The new entity.
     #[inline(always)]
     pub fn set_inner_if_eq(&mut self, old: T, new: T) -> bool {
         if self.used == old {
