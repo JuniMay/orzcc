@@ -23,6 +23,32 @@ use crate::{
 /// The pass name of mem2reg.
 pub const MEM2REG: &str = "mem2reg";
 
+/// Mem2reg pass.
+///
+/// This pass will promote stack slots to registers.
+///
+/// In LLVM, this promotion will generate phi instructions.
+///
+/// ```llvm
+/// %dst:
+///     %x0 = phi [%val0, %pred0], [%val1, %pred1], ...
+/// ```
+///
+/// But since we use block parameters, the generated code will be like:
+///
+/// ```orzir
+/// ^pred0:
+///     //...
+///     br %cond, ^dst(%val0), ...
+/// ^pred1:
+///     //...
+///     br %cond, ^dst(%val1), ...
+/// ^dst(%x0): // type ignored
+///     //...
+/// ```
+///
+/// The algorithms are similar, block param form just hoists the moves to the
+/// predecessors.
 #[derive(Default)]
 pub struct Mem2reg {
     /// Variable set.

@@ -540,6 +540,7 @@ impl<'a> Parser<'a> {
                     insts.push(inst);
                 }
                 Tk::Delimiter(_) | Tk::Eof | Tk::Invalid(_) | Tk::Symbol(_) => {
+                    dbg!(token);
                     let snippet = Diagnostic::error("unexpected token")
                         .annotate(token.span.into(), "expected instruction");
                     self.diag.push(snippet);
@@ -620,6 +621,7 @@ impl<'a> Parser<'a> {
         let start = self.lexer.offset;
 
         let token = self.lexer.peek(&mut self.diag);
+
         let mut results = Vec::new();
         let mut operands = Vec::new();
         let mut result_tys = Vec::new();
@@ -651,7 +653,6 @@ impl<'a> Parser<'a> {
                 let token = self.lexer.next(&mut self.diag);
                 if let Tk::Tokenized(s) = token.kind {
                     match s.as_ref() {
-                        // TODO: maybe support undef value.
                         "iconst" => {
                             // iconst <apint>
                             let token = self.lexer.next(&mut self.diag);
@@ -919,6 +920,18 @@ impl<'a> Parser<'a> {
                 return None;
             }
         };
+
+        if matches!(kind, InstKind::Jump | InstKind::Br) {
+            // we've already parsed the succs and cond, so just return.
+            return Some(ParsingInst {
+                results,
+                kind,
+                operands,
+                successors,
+                result_tys,
+                span: ir::Span::from((start, self.lexer.offset)),
+            });
+        }
 
         // operands and result types.
         //

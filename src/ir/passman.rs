@@ -32,27 +32,27 @@ pub struct PassError {
 pub type PassResult<T> = Result<T, PassError>;
 
 impl PassError {
-    pub fn analysis_error(pass_name: String, err: Box<dyn std::error::Error>) -> Self {
+    pub fn analysis_error(pass_name: impl Into<String>, err: Box<dyn std::error::Error>) -> Self {
         Self {
             kind: PassErrorKind::AnalysisError,
             err,
-            pass_name,
+            pass_name: pass_name.into(),
         }
     }
 
-    pub fn transform_error(pass_name: String, err: Box<dyn std::error::Error>) -> Self {
+    pub fn transform_error(pass_name: impl Into<String>, err: Box<dyn std::error::Error>) -> Self {
         Self {
             kind: PassErrorKind::TransformError,
             err,
-            pass_name,
+            pass_name: pass_name.into(),
         }
     }
 
-    pub fn other(pass_name: String, err: Box<dyn std::error::Error>) -> Self {
+    pub fn other(pass_name: impl Into<String>, err: Box<dyn std::error::Error>) -> Self {
         Self {
             kind: PassErrorKind::Other,
             err,
-            pass_name,
+            pass_name: pass_name.into(),
         }
     }
 }

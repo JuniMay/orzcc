@@ -1,5 +1,5 @@
 /// The kind of a register.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum RegKind {
     /// The general purpose register.
     General,
@@ -13,6 +13,7 @@ pub enum RegKind {
 ///
 /// Cranelift uses a bit-encoded representation, but here just separate the
 /// register number and the kind.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PReg(u8, RegKind);
 
 impl PReg {
@@ -26,6 +27,7 @@ impl PReg {
 /// The virtual register.
 ///
 /// Let's hope the number of virtual registers does not exceed [u32::MAX].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct VReg(u32, RegKind);
 
 impl VReg {

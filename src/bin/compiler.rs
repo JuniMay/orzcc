@@ -1,23 +1,29 @@
 //! The compiler executable.
 
-use orzcc::frontend::sysy::{self, SysYParser};
-
 fn main() {
-    // stack overflow on debug mode, but release mode is fine
-    let src = include_str!("../../tests/sysy/functional/86_long_code2.sy");
-    let src = sysy::preprocess(src);
-    let mut ast = SysYParser::new().parse(&src).unwrap();
+    #[cfg(feature = "frontend-sysy")]
+    {
+        use orzcc::{
+            frontend::sysy::{self, SysYParser},
+            utils::cfg,
+        };
 
-    println!("parse done");
+        // stack overflow on debug mode, but release mode is fine
+        let src = include_str!("../../tests/sysy/functional/86_long_code2.sy");
+        let src = sysy::preprocess(src);
+        let mut ast = SysYParser::new().parse(&src).unwrap();
 
-    ast.type_check();
+        println!("parse done");
 
-    println!("type check done");
+        ast.type_check();
 
-    let mut ir = sysy::irgen(&ast);
+        println!("type check done");
 
-    println!("irgen done");
+        let mut ir = sysy::irgen(&ast);
 
-    ir.alloc_all_names();
-    println!("{}", ir.display(true));
+        println!("irgen done");
+
+        ir.alloc_all_names();
+        println!("{}", ir.display(true));
+    }
 }
