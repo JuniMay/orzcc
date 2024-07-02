@@ -149,7 +149,7 @@ impl Context {
     }
 
     pub(super) fn insert_global_slot(&mut self, slot: GlobalSlot) {
-        let symbol: Symbol = slot.name(self).into();
+        let symbol: Symbol = slot.name(self).clone();
         if self.symbols.contains_key(&symbol) {
             panic!("symbol {:?} is already defined", symbol);
         }
@@ -218,6 +218,26 @@ impl Context {
             .filter_map(|(_, symbol_kind)| match symbol_kind {
                 SymbolKind::FuncDef(func) => Some(*func),
                 SymbolKind::GlobalSlot(_) | SymbolKind::FuncDecl(_) => None,
+            })
+            .collect()
+    }
+
+    pub fn global_slots(&self) -> Vec<GlobalSlot> {
+        self.symbols
+            .iter()
+            .filter_map(|(_, symbol_kind)| match symbol_kind {
+                SymbolKind::GlobalSlot(slot) => Some(*slot),
+                SymbolKind::FuncDef(_) | SymbolKind::FuncDecl(_) => None,
+            })
+            .collect()
+    }
+
+    pub fn decls(&self) -> Vec<(Symbol, Signature)> {
+        self.symbols
+            .iter()
+            .filter_map(|(symbol, symbol_kind)| match symbol_kind {
+                SymbolKind::FuncDecl(sig) => Some((symbol.clone(), sig.clone())),
+                SymbolKind::GlobalSlot(_) | SymbolKind::FuncDef(_) => None,
             })
             .collect()
     }

@@ -15,7 +15,7 @@ pub enum RawData {
     /// Zero-initialized bytes of the data, declared in the bss section.
     ///
     /// The field is the size of the zero-initialized data.
-    Bss(u64),
+    Bss(usize),
 }
 
 pub struct MContext<I>
@@ -81,6 +81,10 @@ where
         writeln!(f, "\t.text")?;
         for (_, func_data) in self.mctx.funcs.iter() {
             let func = func_data.self_ptr();
+
+            if func.is_external(self.mctx) {
+                continue;
+            }
 
             writeln!(f, "\t.global {}", func.label(self.mctx))?;
             writeln!(f, "\t.align 1")?;

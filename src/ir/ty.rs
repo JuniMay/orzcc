@@ -259,13 +259,26 @@ impl Ty {
 
     pub fn is_void(&self, ctx: &Context) -> bool { matches!(self.deref(ctx), TyData::Void) }
 
+    /// Get the bitwidth of the type.
+    ///
+    /// # Parameters
+    ///
+    /// - `ctx`: The context.
+    ///
+    /// # Returns
+    ///
+    /// - If the type is/contains pointers, return `None`.
+    /// - If the type is/contains integers, return the bitwidth.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the type is/contains void.
     pub fn bitwidth(&self, ctx: &Context) -> Option<usize> {
         match self.deref(ctx) {
             TyData::Integer(bits) => Some(*bits as usize),
             TyData::Float32 => Some(32),
             TyData::Float64 => Some(64),
             TyData::Ptr => None,
-            TyData::Void => None,
             TyData::Array { elem_ty, len } => elem_ty.bitwidth(ctx).map(|bw| bw * len),
             TyData::Struct { field_tys, .. } => {
                 let mut bw = 0;
@@ -279,7 +292,80 @@ impl Ty {
                 Some(bw)
             }
             TyData::Simd { elem_ty, exp } => elem_ty.bitwidth(ctx).map(|bw| bw * (1 << exp)),
+            TyData::Void => unreachable!(
+                "should not get bitwidth of void, which only appears in function return type"
+            ),
         }
+    }
+
+    /// Get the bitwidth of the type.
+    ///
+    /// # Parameters
+    ///
+    /// - `ctx`: The context.
+    /// - `ptr_width`: The bitwidth of the pointer.
+    ///
+    /// # Returns
+    ///
+    /// The bitwidth of the type.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the type is/contains void.
+    pub fn bitwidth_with_ptr(&self, ctx: &Context, ptr_width: usize) -> usize {
+        match self.deref(ctx) {
+            TyData::Integer(bits) => *bits as usize,
+            TyData::Float32 => 32,
+            TyData::Float64 => 64,
+            TyData::Ptr => ptr_width,
+            TyData::Array { elem_ty, len } => elem_ty.bitwidth_with_ptr(ctx, ptr_width) * len,
+            TyData::Struct { field_tys, .. } => {
+                let mut bw = 0;
+                for ty in field_tys {
+                    bw += ty.bitwidth_with_ptr(ctx, ptr_width);
+                }
+                bw
+            }
+            TyData::Simd { elem_ty, exp } => elem_ty.bitwidth_with_ptr(ctx, ptr_width) * (1 << exp),
+            TyData::Void => unreachable!(
+                "should not get bitwidth of void, which only appears in function return type"
+            ),
+        }
+    }
+
+    /// Get the byte width of the type.
+    ///
+    /// # Parameters
+    ///
+    /// - `ctx`: The context.
+    ///
+    /// # Returns
+    ///
+    /// - If the type is/contains pointers, return `None`.
+    /// - If the type is/contains integers, return the byte width.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the type is/contains void.
+    pub fn bytewidth(&self, ctx: &Context) -> Option<usize> {
+        self.bitwidth(ctx).map(|bw| (bw + 7) / 8)
+    }
+
+    /// Get the byte width of the type.
+    ///
+    /// # Parameters
+    ///
+    /// - `ctx`: The context.
+    ///
+    /// # Returns
+    ///
+    /// The byte width of the type.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the type is/contains void.
+    pub fn bytewidth_with_ptr(&self, ctx: &Context, ptr_width: usize) -> usize {
+        (self.bitwidth_with_ptr(ctx, ptr_width) + 7) / 8
     }
 
     pub fn display(self, ctx: &Context) -> DisplayTy<'_> {

@@ -7,6 +7,7 @@ use crate::{
         linked_list::LinkedListContainerPtr,
         storage::{ArenaAlloc, ArenaDeref, ArenaFree, ArenaPtr, BaseArenaPtr},
     },
+    ir,
     utils::cfg::CfgRegion,
 };
 
@@ -38,10 +39,12 @@ pub struct MFuncData<I> {
     self_ptr: MFunc<I>,
 
     label: MLabel,
-
     stack_size: u64,
-
     saved_regs: HashSet<PReg>,
+
+    sig: ir::Signature,
+
+    is_external: bool,
 
     head: Option<MBlock<I>>,
     tail: Option<MBlock<I>>,
@@ -55,6 +58,7 @@ impl<I> MFuncData<I> {
 pub struct MFunc<I>(BaseArenaPtr<MFuncData<I>>);
 
 impl<I> Clone for MFunc<I> {
+    #[allow(clippy::non_canonical_clone_impl)]
     fn clone(&self) -> Self { Self(self.0) }
 }
 
@@ -70,16 +74,37 @@ where
 {
     pub fn label(self, arena: &MContext<I>) -> &MLabel { &self.deref(arena).label }
 
-    pub fn new(mctx: &mut MContext<I>, label: impl Into<MLabel>) -> Self {
+    pub fn new(mctx: &mut MContext<I>, label: impl Into<MLabel>, sig: ir::Signature) -> Self {
         mctx.alloc_with(|self_ptr| MFuncData {
             self_ptr,
             label: label.into(),
             stack_size: 0,
             saved_regs: HashSet::new(),
+            sig,
+            is_external: false,
             head: None,
             tail: None,
         })
     }
+
+    pub fn new_external(
+        mctx: &mut MContext<I>,
+        label: impl Into<MLabel>,
+        sig: ir::Signature,
+    ) -> Self {
+        mctx.alloc_with(|self_ptr| MFuncData {
+            self_ptr,
+            label: label.into(),
+            stack_size: 0,
+            saved_regs: HashSet::new(),
+            sig,
+            is_external: true,
+            head: None,
+            tail: None,
+        })
+    }
+
+    pub fn is_external(self, arena: &MContext<I>) -> bool { self.deref(arena).is_external }
 
     pub fn add_stack_size(&mut self, arena: &mut MContext<I>, size: u64) {
         self.deref_mut(arena).stack_size += size;

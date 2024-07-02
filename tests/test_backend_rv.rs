@@ -11,13 +11,18 @@ use orzcc::{
         RawData,
     },
     collections::linked_list::LinkedListContainerPtr,
+    ir::{Context, Signature, Ty},
 };
 
 #[test]
 fn test_backend_rv_basic() {
+    let mut ctx = Context::default();
     let mut mctx = MContext::default();
 
-    let func = MFunc::new(&mut mctx, "test");
+    let void = Ty::void(&mut ctx);
+    let sig = Signature::new(vec![], vec![void]);
+
+    let func = MFunc::new(&mut mctx, "test", sig);
     let block = MBlock::new(&mut mctx, ".entry");
 
     func.push_back(&mut mctx, block);

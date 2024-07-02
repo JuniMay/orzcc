@@ -195,7 +195,7 @@ impl GlobalSlot {
         slot
     }
 
-    pub fn name(self, ctx: &Context) -> &str { &self.deref(ctx).name.0 }
+    pub fn name(self, ctx: &Context) -> &Symbol { &self.deref(ctx).name }
 
     pub fn ty(self, ctx: &Context) -> Ty { self.deref(ctx).ty }
 
