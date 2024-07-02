@@ -3,7 +3,7 @@ use thiserror::Error;
 use crate::{
     collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
     ir::{
-        passman::{GlobalPassMut, LocalPassMut, PassError, PassResult},
+        passman::{GlobalPassMut, LocalPassMut, PassError, PassManager, PassResult, TransformPass},
         Block,
         Context,
         Func,
@@ -39,6 +39,13 @@ impl From<CfgCanonicalizeError> for PassError {
 /// terminator. And removes instructions after the terminator (if its results
 /// are not used).
 pub struct CfgCanonicalize;
+
+impl CfgCanonicalize {
+    pub fn register() {
+        let pass = Box::new(CfgCanonicalize);
+        PassManager::register_transform(CFG_CANONICALIZE, pass, vec![])
+    }
+}
 
 impl LocalPassMut for CfgCanonicalize {
     type Output = ();
@@ -104,3 +111,5 @@ impl GlobalPassMut for CfgCanonicalize {
         Ok(((), changed))
     }
 }
+
+impl TransformPass for CfgCanonicalize {}

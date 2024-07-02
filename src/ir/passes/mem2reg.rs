@@ -1,9 +1,10 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
+use super::control_flow::CfgCanonicalize;
 use crate::{
     collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
     ir::{
-        passman::{GlobalPassMut, LocalPassMut, PassResult, TransformPass},
+        passman::{GlobalPassMut, LocalPassMut, PassManager, PassResult, TransformPass},
         Block,
         Context,
         Func,
@@ -74,6 +75,11 @@ pub struct Mem2reg {
 }
 
 impl Mem2reg {
+    pub fn register() {
+        let pass = Box::new(Mem2reg::default());
+        PassManager::register_transform(MEM2REG, pass, vec![Box::new(CfgCanonicalize)])
+    }
+
     fn reset(&mut self) {
         self.vars.clear();
         self.def_blocks.clear();

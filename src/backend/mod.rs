@@ -1,3 +1,7 @@
+mod block;
+mod context;
+mod func;
+mod inst;
 mod lower;
 mod regs;
 

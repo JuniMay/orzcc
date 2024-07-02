@@ -2,4 +2,7 @@
 
 /.vscode/
 
+/tests/sysy/performance
+/tests/sysy/final_performance
+
 .DS_Store

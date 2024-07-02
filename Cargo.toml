@@ -6,6 +6,7 @@ edition = "2021"
 build = "build.rs"
 
 [dependencies]
+clap = "4.5.8"
 thiserror = "1.0.61"
 
 regex = { version = "1.10.4", optional = true }

@@ -3,7 +3,11 @@
 //! The pass manager is a module that provides a consistent interface for
 //! running and managing passes on a module.
 
-use std::collections::HashMap;
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    str::FromStr,
+};
 
 use thiserror::Error;
 
@@ -114,8 +118,118 @@ pub trait AnalysisPass: GlobalPass<Output = AnalysisOutputObj> {}
 pub trait TransformPass: GlobalPassMut<Output = ()> {}
 
 pub struct PassManager {
-    _analysis_passes: HashMap<&'static str, Box<dyn AnalysisPass>>,
-    _transform_passes: HashMap<&'static str, Box<dyn TransformPass>>,
-    _dependencies: HashMap<&'static str, Vec<&'static str>>,
-    _analysis_cache: HashMap<&'static str, AnalysisOutputObj>,
+    parameters: HashMap<&'static str, String>,
+    transform_passes: HashMap<&'static str, Box<dyn TransformPass>>,
+    dependencies: HashMap<&'static str, Vec<Box<dyn TransformPass>>>,
+}
+
+impl PassManager {
+    thread_local! {
+        static PM: RefCell<PassManager> = RefCell::new(PassManager::new());
+    }
+
+    fn new() -> Self {
+        Self {
+            parameters: HashMap::new(),
+            transform_passes: HashMap::new(),
+            dependencies: HashMap::new(),
+        }
+    }
+
+    pub fn add_parameter(name: &'static str) {
+        Self::PM.with(|pm| {
+            let mut pm = pm.borrow_mut();
+            pm.parameters.insert(name, String::new());
+        });
+    }
+
+    pub fn set_parameter(name: &str, value: String) {
+        Self::PM.with(|pm| {
+            let mut pm = pm.borrow_mut();
+            if let Some(param) = pm.parameters.get_mut(name) {
+                *param = value;
+            }
+        });
+    }
+
+    pub fn get_parameter<T: FromStr>(name: &str) -> Option<T> {
+        Self::PM.with(|pm| {
+            let pm = pm.borrow();
+            pm.parameters.get(name).and_then(|v| v.parse().ok())
+        })
+    }
+
+    pub fn get_cli_args() -> Vec<clap::Arg> {
+        Self::PM.with(|pm| {
+            let pm = pm.borrow();
+            let mut args = pm
+                .parameters
+                .keys()
+                .map(|name| clap::Arg::new(name).long(name))
+                .collect::<Vec<_>>();
+
+            for transform in pm.transform_passes.keys() {
+                args.push(
+                    clap::Arg::new(transform)
+                        .long(transform)
+                        .action(clap::ArgAction::Count),
+                );
+            }
+
+            args
+        })
+    }
+
+    pub fn get_transform_names() -> HashSet<String> {
+        Self::PM.with(|pm| {
+            let pm = pm.borrow();
+            pm.transform_passes
+                .keys()
+                .copied()
+                .map(String::from)
+                .collect()
+        })
+    }
+
+    pub fn get_parameter_names() -> HashSet<String> {
+        Self::PM.with(|pm| {
+            let pm = pm.borrow();
+            pm.parameters.keys().copied().map(String::from).collect()
+        })
+    }
+
+    pub fn register_transform(
+        name: &'static str,
+        pass: Box<dyn TransformPass>,
+        dependencies: Vec<Box<dyn TransformPass>>,
+    ) {
+        Self::PM.with(|pm| {
+            let mut pm = pm.borrow_mut();
+            pm.transform_passes.insert(name, pass);
+            pm.dependencies.insert(name, dependencies);
+        });
+    }
+
+    pub fn run_transform(name: &str, ctx: &mut Context, max_iter: usize) -> usize {
+        Self::PM.with(|pm| {
+            let mut pm = pm.borrow_mut();
+            let mut iter = 0;
+            for _ in 0..max_iter {
+                iter += 1;
+                let mut changed = false;
+                for pass in pm.dependencies.get_mut(name).unwrap() {
+                    let (_, local_changed) = GlobalPassMut::run(pass.as_mut(), ctx).unwrap();
+                    changed |= local_changed;
+                }
+                pm.transform_passes.get_mut(name).unwrap();
+                let transform = pm.transform_passes.get_mut(name).unwrap();
+                let (_, local_changed) = GlobalPassMut::run(transform.as_mut(), ctx).unwrap();
+                changed |= local_changed;
+                if !changed {
+                    break;
+                }
+            }
+            iter
+        })
+    }
 }

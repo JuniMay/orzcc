@@ -995,6 +995,42 @@ impl From<i64> for ApInt {
     }
 }
 
+impl From<ApInt> for u8 {
+    fn from(value: ApInt) -> Self {
+        if value.width > 8 {
+            panic!("integer too large to convert to u8")
+        }
+        value.chunks[0] as u8
+    }
+}
+
+impl From<ApInt> for u16 {
+    fn from(value: ApInt) -> Self {
+        if value.width > 16 {
+            panic!("integer too large to convert to u16")
+        }
+        value.chunks[0] as u16
+    }
+}
+
+impl From<ApInt> for u32 {
+    fn from(value: ApInt) -> Self {
+        if value.width > 32 {
+            panic!("integer too large to convert to u32")
+        }
+        value.chunks[0] as u32
+    }
+}
+
+impl From<ApInt> for u64 {
+    fn from(value: ApInt) -> Self {
+        if value.width > 64 {
+            panic!("integer too large to convert to u64")
+        }
+        value.chunks[0]
+    }
+}
+
 impl PartialOrd for ApInt {
     /// Compare two integers as unsigned integers.
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> { Some(self.cmp(other)) }
