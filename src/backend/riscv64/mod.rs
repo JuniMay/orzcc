@@ -1,4 +1,4 @@
-mod imm;
-mod inst;
-mod lower;
-mod regs;
+pub mod imm;
+pub mod inst;
+pub mod lower;
+pub mod regs;

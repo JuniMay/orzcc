@@ -1,17 +1,21 @@
-use std::collections::HashMap;
+use core::fmt;
 
 use super::{
     block::MBlockData,
     func::{MFuncData, MLabel},
-    inst::MInst,
+    inst::{DisplayMInst, MInst},
     RegKind,
     VReg,
 };
-use crate::collections::storage::BaseArena;
+use crate::collections::{linked_list::LinkedListContainerPtr, storage::BaseArena};
 
-pub struct RawData {
-    pub label: MLabel,
-    pub data: Vec<u8>,
+pub enum RawData {
+    /// Bytes of the data, declared in the data section.
+    Bytes(Vec<u8>),
+    /// Zero-initialized bytes of the data, declared in the bss section.
+    ///
+    /// The field is the size of the zero-initialized data.
+    Bss(u64),
 }
 
 pub struct MContext<I>
@@ -22,7 +26,7 @@ where
     pub(super) blocks: BaseArena<MBlockData<I>>,
     pub(super) funcs: BaseArena<MFuncData<I>>,
 
-    raw_data: Vec<RawData>,
+    raw_data: Vec<(MLabel, RawData)>,
 
     vreg_counter: u32,
 }
@@ -54,7 +58,70 @@ where
         vreg
     }
 
-    pub fn add_raw_data(&mut self, label: MLabel, data: Vec<u8>) {
-        self.raw_data.push(RawData { label, data });
+    pub fn add_raw_data(&mut self, label: impl Into<MLabel>, data: RawData) {
+        self.raw_data.push((label.into(), data));
+    }
+
+    pub fn display(&self) -> DisplayMContext<I> { DisplayMContext { mctx: self } }
+}
+
+pub struct DisplayMContext<'a, I>
+where
+    I: MInst,
+{
+    mctx: &'a MContext<I>,
+}
+
+impl<'a, I> fmt::Display for DisplayMContext<'a, I>
+where
+    I: DisplayMInst<'a>,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "\t.option pic")?;
+        writeln!(f, "\t.text")?;
+        for (_, func_data) in self.mctx.funcs.iter() {
+            let func = func_data.self_ptr();
+
+            writeln!(f, "\t.global {}", func.label(self.mctx))?;
+            writeln!(f, "\t.align 1")?;
+            writeln!(f, "\t.type {}, @function", func.label(self.mctx))?;
+            writeln!(f, "{}:", func.label(self.mctx))?;
+
+            for block in func.iter(self.mctx) {
+                writeln!(f, "{}:", block.label(self.mctx))?;
+                for inst in block.iter(self.mctx) {
+                    writeln!(f, "\t{}", inst.display(self.mctx))?;
+                }
+            }
+
+            writeln!(f)?;
+        }
+
+        for (label, raw_data) in self.mctx.raw_data.iter() {
+            writeln!(f, "\t.type {}, @object", label)?;
+            match raw_data {
+                RawData::Bytes(bytes) => {
+                    writeln!(f, "\t.data")?;
+                    writeln!(f, "\t.global {}", label)?;
+                    writeln!(f, "\t.align 2")?;
+                    writeln!(f, "{}:", label)?;
+                    for byte in bytes.iter() {
+                        writeln!(f, "\t.byte {}", byte)?;
+                    }
+                    writeln!(f)?;
+                }
+                RawData::Bss(size) => {
+                    writeln!(f, "\t.bss")?;
+                    writeln!(f, "\t.global {}", label)?;
+                    writeln!(f, "\t.align 2")?;
+                    writeln!(f, "{}:", label)?;
+                    writeln!(f, "\t.zero {}", size)?;
+                    writeln!(f)?;
+                }
+            }
+            writeln!(f)?;
+        }
+
+        Ok(())
     }
 }

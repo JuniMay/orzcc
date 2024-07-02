@@ -10,19 +10,28 @@ mem2reg 的 Pass 位于 `src/ir/passes` 下。
 
 ## Todo List
 
+### IR
+
 - [x] CFG Canonicalization
 - [x] mem2reg
-- [ ] CFG Simplification
-- [ ] Alias Analysis
+- [ ] Alias Analysis (basicaa)
+- [ ] Dead Code Elimination (maybe aggressive DCE)
 - [ ] Constant Folding & Propagation
+- [ ] CFG Simplification
+- [ ] Global2local
 - [ ] Function Inlining
 - [ ] Global Value Numbering
-- [ ] Dead Code Elimination (maybe aggressive DCE)
-- [ ] Loop Invariant Code Motion
-- [ ] Loop Unrolling
-- [ ] Scalar Evolution Analysis
 - [ ] Strength Reduction
   - [ ] Math Optimization
   - [ ] Multiplication Optimization
   - [ ] Division Optimization
+- [ ] Loop Invariant Code Motion
+- [ ] Loop Unrolling
+- [ ] Scalar Evolution Analysis
 - [ ] Tail Call Optimization
+
+### Backend
+
+- [ ] Register Allocation
+- [ ] Scheduling (for dual-issue)
+- [ ] Peephole Optimization

@@ -250,6 +250,12 @@ impl RvInst {
         (inst, rd)
     }
 
+    pub fn alu_rri(mctx: &mut MContext<Self>, op: AluOpRRI, rs: Reg, imm: Imm12) -> (Self, Reg) {
+        let rd: Reg = mctx.new_vreg(RegKind::General).into();
+        let inst = Self::build_alu_rri(mctx, op, rd, rs, imm);
+        (inst, rd)
+    }
+
     pub fn alu_rrr(mctx: &mut MContext<Self>, op: AluOpRRR, rs1: Reg, rs2: Reg) -> (Self, Reg) {
         let rd: Reg = mctx.new_vreg(RegKind::General).into();
         let inst = Self::build_alu_rrr(mctx, op, rd, rs1, rs2);
@@ -257,7 +263,34 @@ impl RvInst {
     }
 
     pub fn fpu_rr(mctx: &mut MContext<Self>, op: FpuOpRR, rm: Frm, rs: Reg) -> (Self, Reg) {
-        let rd: Reg = mctx.new_vreg(RegKind::Float).into();
+        let rd = match op {
+            FpuOpRR::FclassS
+            | FpuOpRR::FclassD
+            | FpuOpRR::FcvtWS
+            | FpuOpRR::FcvtWD
+            | FpuOpRR::FcvtWuS
+            | FpuOpRR::FcvtWuD
+            | FpuOpRR::FcvtLS
+            | FpuOpRR::FcvtLuS
+            | FpuOpRR::FcvtLD
+            | FpuOpRR::FcvtLuD
+            | FpuOpRR::FmvXW
+            | FpuOpRR::FmvXD => mctx.new_vreg(RegKind::General).into(),
+            FpuOpRR::FsqrtS
+            | FpuOpRR::FsqrtD
+            | FpuOpRR::FcvtSW
+            | FpuOpRR::FcvtSWu
+            | FpuOpRR::FcvtSL
+            | FpuOpRR::FcvtSLu
+            | FpuOpRR::FcvtDW
+            | FpuOpRR::FcvtDWu
+            | FpuOpRR::FcvtDL
+            | FpuOpRR::FcvtDLu
+            | FpuOpRR::FcvtSD
+            | FpuOpRR::FcvtDS
+            | FpuOpRR::FmvWX
+            | FpuOpRR::FmvDX => mctx.new_vreg(RegKind::Float).into(),
+        };
         let inst = Self::build_fpu_rr(mctx, op, rm, rd, rs);
         (inst, rd)
     }
@@ -269,7 +302,32 @@ impl RvInst {
         rs1: Reg,
         rs2: Reg,
     ) -> (Self, Reg) {
-        let rd: Reg = mctx.new_vreg(RegKind::Float).into();
+        let rd = match op {
+            FpuOpRRR::FaddS
+            | FpuOpRRR::FaddD
+            | FpuOpRRR::FsubS
+            | FpuOpRRR::FsubD
+            | FpuOpRRR::FmulS
+            | FpuOpRRR::FmulD
+            | FpuOpRRR::FdivS
+            | FpuOpRRR::FdivD
+            | FpuOpRRR::FminS
+            | FpuOpRRR::FminD
+            | FpuOpRRR::FmaxS
+            | FpuOpRRR::FmaxD
+            | FpuOpRRR::FsgnjS
+            | FpuOpRRR::FsgnjD
+            | FpuOpRRR::FsgnjnS
+            | FpuOpRRR::FsgnjnD
+            | FpuOpRRR::FsgnjxS
+            | FpuOpRRR::FsgnjxD => mctx.new_vreg(RegKind::Float).into(),
+            FpuOpRRR::FeqS
+            | FpuOpRRR::FeqD
+            | FpuOpRRR::FltS
+            | FpuOpRRR::FltD
+            | FpuOpRRR::FleS
+            | FpuOpRRR::FleD => mctx.new_vreg(RegKind::General).into(),
+        };
         let inst = Self::build_fpu_rrr(mctx, op, rm, rd, rs1, rs2);
         (inst, rd)
     }
@@ -288,7 +346,16 @@ impl RvInst {
     }
 
     pub fn load(mctx: &mut MContext<Self>, op: LoadOp, loc: MemLoc) -> (Self, Reg) {
-        let rd: Reg = mctx.new_vreg(RegKind::General).into();
+        let rd = match op {
+            LoadOp::Fld | LoadOp::Flw => mctx.new_vreg(RegKind::Float).into(),
+            LoadOp::Lb
+            | LoadOp::Lh
+            | LoadOp::Lw
+            | LoadOp::Ld
+            | LoadOp::Lbu
+            | LoadOp::Lhu
+            | LoadOp::Lwu => mctx.new_vreg(RegKind::General).into(),
+        };
         let inst = Self::build_load(mctx, op, rd, loc);
         (inst, rd)
     }

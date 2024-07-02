@@ -6,12 +6,15 @@ mod lower;
 mod regs;
 
 #[cfg(feature = "target-arm64")]
-mod arm64;
+pub mod arm64;
 
 #[cfg(feature = "target-arm32")]
-mod arm32;
+pub mod arm32;
 
 #[cfg(feature = "target-riscv64")]
-mod riscv64;
+pub mod riscv64;
 
+pub use block::MBlock;
+pub use context::{MContext, RawData};
+pub use func::MFunc;
 pub use regs::{PReg, RegKind, VReg};

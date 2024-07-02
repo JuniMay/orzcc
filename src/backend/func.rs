@@ -35,6 +35,8 @@ where
 }
 
 pub struct MFuncData<I> {
+    self_ptr: MFunc<I>,
+
     label: MLabel,
 
     stack_size: u64,
@@ -45,8 +47,22 @@ pub struct MFuncData<I> {
     tail: Option<MBlock<I>>,
 }
 
-#[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
+impl<I> MFuncData<I> {
+    pub fn self_ptr(&self) -> MFunc<I> { self.self_ptr }
+}
+
+#[derive(Debug, PartialEq, Eq)]
 pub struct MFunc<I>(BaseArenaPtr<MFuncData<I>>);
+
+impl<I> Clone for MFunc<I> {
+    fn clone(&self) -> Self { Self(self.0) }
+}
+
+impl<I> Copy for MFunc<I> {}
+
+impl<I> Hash for MFunc<I> {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) { self.0.hash(state) }
+}
 
 impl<I> MFunc<I>
 where
@@ -55,7 +71,8 @@ where
     pub fn label(self, arena: &MContext<I>) -> &MLabel { &self.deref(arena).label }
 
     pub fn new(mctx: &mut MContext<I>, label: impl Into<MLabel>) -> Self {
-        mctx.alloc(MFuncData {
+        mctx.alloc_with(|self_ptr| MFuncData {
+            self_ptr,
             label: label.into(),
             stack_size: 0,
             saved_regs: HashSet::new(),
