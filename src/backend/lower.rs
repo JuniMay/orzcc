@@ -80,7 +80,7 @@ pub enum MemLoc {
     ///
     /// The offset is relative to the frame pointer, i.e., the start of the
     /// saved registers.
-    IncomingParam { offset: i64 },
+    Incoming { offset: i64 },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -186,17 +186,26 @@ pub trait LowerSpec: Sized {
     type I: MInst;
 
     /// Get the stack alignment of the target.
+    ///
+    /// # Returns
+    ///
+    /// The stack alignment in bytes.
     fn stack_align() -> u32;
 
     /// Get the frame pointer register.
-    fn frame_pointer_reg() -> PReg;
+    fn frame_pointer() -> PReg;
 
     /// Get the stack pointer register.
-    fn stack_pointer_reg() -> PReg;
+    fn stack_pointer() -> PReg;
 
     /// Get the size of a pointer.
+    ///
+    /// # Returns
+    ///
+    /// The size of a pointer in bytes.
     fn pointer_size() -> usize;
 
+    /// Get the aligned size of the stack frame.
     fn total_stack_size(lower: &mut LowerContext<Self>, mfunc: MFunc<Self::I>) -> u64;
 
     /// Get the return register by the type.
@@ -268,13 +277,9 @@ pub trait LowerSpec: Sized {
 
     fn gen_get_global(lower: &mut LowerContext<Self>, label: MLabel, dst_ty: ir::Ty) -> MValue;
 
-    fn gen_arg_passing(lower: &mut LowerContext<Self>, args: Vec<MValue>) -> Vec<PReg>;
+    fn gen_outgoing(lower: &mut LowerContext<Self>, args: Vec<MValue>) -> Vec<PReg>;
 
-    fn gen_param_receiving(
-        lower: &mut LowerContext<Self>,
-        sig: &ir::Signature,
-        dsts: Vec<ir::Value>,
-    );
+    fn gen_incoming(lower: &mut LowerContext<Self>, sig: &ir::Signature, dsts: Vec<ir::Value>);
 
     fn gen_func_prologue(lower: &mut LowerContext<Self>, func: MFunc<Self::I>);
 
@@ -373,7 +378,7 @@ where
 
             let params = func.entry_node(self.ctx).params(self.ctx).to_vec();
             self.curr_block = Some(self.blocks[&func.entry_node(self.ctx)]);
-            S::gen_param_receiving(self, func.sig(self.ctx), params);
+            S::gen_incoming(self, func.sig(self.ctx), params);
 
             for block in func.iter(self.ctx) {
                 self.curr_block = Some(self.blocks[&block]);
@@ -383,23 +388,14 @@ where
             }
         }
 
-        // TODO: register allocation, mem loc modification, etc.
-        if self.config.omit_frame_pointer {
-            // if omit the frame pointer, we can modify the mem loc before
-            // register allocation, because we don't need to wait for the saved
-            // register to be determined, the offset of slots can be calculated
-            self.modify_mem_loc_for_slots();
-            // TODO: regalloc
-            self.modify_mem_loc_for_incoming_params();
-        } else {
-            // if not omit the frame pointer, we need to wait for the saved
-            // register to be determined, so we can't modify the mem loc before
-            // register allocation
+        // TODO: we can actually allocate the local slots from the end of the
+        // storage region, make the spilled slots under them (higher address)
+        // so we don't need to rely on the spilled size to determine the offset.
+        // In that way, we can allocate t0 after passing the arguments.
 
-            // TODO: regalloc
-            self.modify_mem_loc_for_slots();
-            self.modify_mem_loc_for_incoming_params();
-        }
+        // TODO: regalloc
+
+        self.adjust_offset();
 
         for func in self.ctx.funcs() {
             let mfunc = self.funcs[func.name(self.ctx)];
@@ -414,13 +410,12 @@ where
         }
     }
 
-    fn modify_mem_loc_for_slots(&mut self) {
+    fn adjust_offset(&mut self) {
         for func in self.ctx.funcs() {
             let mfunc = self.funcs[func.name(self.ctx)];
 
-            let slot_stack_size = mfunc.stack_size(&self.mctx) as i64;
-            let arg_stack_size = mfunc.arg_stack_size(&self.mctx) as i64;
-
+            let storage_size = mfunc.storage_stack_size(&self.mctx) as i64;
+            let outgoing_size = mfunc.outgoing_stack_size(&self.mctx) as i64;
             let total_stack_size = S::total_stack_size(self, mfunc) as i64;
 
             for block in func.iter(self.ctx) {
@@ -429,79 +424,39 @@ where
                 let mut curr_inst = mblock.head(&self.mctx);
 
                 while let Some(inst) = curr_inst {
+                    // because the target might modify the instruction sequence
                     let next_inst = inst.next(&self.mctx);
 
                     if self.config.omit_frame_pointer {
-                        inst.modify_mem_loc(
+                        inst.adjust_offset(
                             &mut self.mctx,
                             |mem_loc| match mem_loc {
-                                MemLoc::Slot { offset } => MemLoc::RegOffset {
-                                    base: S::stack_pointer_reg().into(),
-                                    offset: slot_stack_size + arg_stack_size + offset,
-                                },
-                                MemLoc::RegOffset { .. } => mem_loc,
-                                MemLoc::IncomingParam { .. } => mem_loc,
-                            },
-                            &self.config,
-                        );
-                    } else {
-                        inst.modify_mem_loc(
-                            &mut self.mctx,
-                            |mem_loc| match mem_loc {
-                                MemLoc::Slot { offset } => MemLoc::RegOffset {
-                                    base: S::frame_pointer_reg().into(),
-                                    offset: -(total_stack_size - slot_stack_size - arg_stack_size)
-                                        + offset,
-                                },
-                                MemLoc::RegOffset { .. } => mem_loc,
-                                MemLoc::IncomingParam { .. } => mem_loc,
-                            },
-                            &self.config,
-                        );
-                    }
-                    curr_inst = next_inst;
-                }
-            }
-        }
-    }
-
-    fn modify_mem_loc_for_incoming_params(&mut self) {
-        for func in self.ctx.funcs() {
-            let mfunc = self.funcs[func.name(self.ctx)];
-
-            let total_stack_size = S::total_stack_size(self, mfunc) as i64;
-
-            for block in func.iter(self.ctx) {
-                let mblock = self.blocks[&block];
-
-                let mut curr_inst = mblock.head(&self.mctx);
-
-                while let Some(inst) = curr_inst {
-                    let next_inst = inst.next(&self.mctx);
-
-                    if self.config.omit_frame_pointer {
-                        inst.modify_mem_loc(
-                            &mut self.mctx,
-                            |mem_loc| match mem_loc {
-                                MemLoc::Slot { .. } => mem_loc,
-                                MemLoc::RegOffset { .. } => mem_loc,
-                                MemLoc::IncomingParam { offset } => MemLoc::RegOffset {
-                                    base: S::stack_pointer_reg().into(),
+                                MemLoc::Slot { offset } => Some(MemLoc::RegOffset {
+                                    base: S::stack_pointer().into(),
+                                    offset: storage_size + outgoing_size + offset,
+                                }),
+                                MemLoc::Incoming { offset } => Some(MemLoc::RegOffset {
+                                    base: S::stack_pointer().into(),
                                     offset: total_stack_size + offset,
-                                },
+                                }),
+                                MemLoc::RegOffset { .. } => None,
                             },
                             &self.config,
                         );
                     } else {
-                        inst.modify_mem_loc(
+                        inst.adjust_offset(
                             &mut self.mctx,
                             |mem_loc| match mem_loc {
-                                MemLoc::Slot { .. } => mem_loc,
-                                MemLoc::RegOffset { .. } => mem_loc,
-                                MemLoc::IncomingParam { offset } => MemLoc::RegOffset {
-                                    base: S::frame_pointer_reg().into(),
+                                MemLoc::Slot { offset } => Some(MemLoc::RegOffset {
+                                    base: S::frame_pointer().into(),
+                                    offset: -(total_stack_size - storage_size - outgoing_size)
+                                        + offset, // offset is negative, so add
+                                }),
+                                MemLoc::Incoming { offset } => Some(MemLoc::RegOffset {
+                                    base: S::frame_pointer().into(),
                                     offset,
-                                },
+                                }),
+                                MemLoc::RegOffset { .. } => None,
                             },
                             &self.config,
                         );
@@ -533,13 +488,12 @@ where
             }
             Ik::StackSlot(size) => {
                 let ty = inst.result(self.ctx, 0).ty(self.ctx);
-                mfunc.add_stack_size(&mut self.mctx, *size as u64);
-                // TODO: check the type of the stack slot
+                mfunc.add_storage_stack_size(&mut self.mctx, *size as u64);
                 let mval = MValue::new_mem(
                     ty,
                     MemLoc::Slot {
                         // because the stack grows downward, we need to use negative offset
-                        offset: -(mfunc.stack_size(&self.mctx) as i64),
+                        offset: -(mfunc.storage_stack_size(&self.mctx) as i64),
                     },
                 );
                 self.lowered.insert(inst.result(self.ctx, 0), mval);
@@ -670,7 +624,7 @@ where
                     .map(|v| self.lowered[&v])
                     .collect();
 
-                let arg_regs = S::gen_arg_passing(self, args);
+                let arg_regs = S::gen_outgoing(self, args);
                 S::gen_call(self, mfunc, arg_regs);
 
                 if !inst.results(self.ctx).is_empty() {

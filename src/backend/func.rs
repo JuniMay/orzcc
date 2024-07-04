@@ -40,11 +40,11 @@ pub struct MFuncData<I> {
     self_ptr: MFunc<I>,
     /// The label of the function
     label: MLabel,
-    /// The stack size of local slots
-    stack_size: u64,
+    /// The stack size of local slots/variables.
+    storage_stack_size: u64,
     /// The stack size for argument passing in call instructions within the
-    /// function
-    arg_stack_size: u64,
+    /// function.
+    outgoing_stack_size: u64,
     /// The saved registers
     saved_regs: HashSet<PReg>,
     /// The signature of the function
@@ -85,8 +85,8 @@ where
         mctx.alloc_with(|self_ptr| MFuncData {
             self_ptr,
             label: label.into(),
-            stack_size: 0,
-            arg_stack_size: 0,
+            storage_stack_size: 0,
+            outgoing_stack_size: 0,
             saved_regs: HashSet::new(),
             sig,
             is_external: false,
@@ -103,8 +103,8 @@ where
         mctx.alloc_with(|self_ptr| MFuncData {
             self_ptr,
             label: label.into(),
-            stack_size: 0,
-            arg_stack_size: 0,
+            storage_stack_size: 0,
+            outgoing_stack_size: 0,
             saved_regs: HashSet::new(),
             sig,
             is_external: true,
@@ -117,24 +117,22 @@ where
 
     pub fn is_external(self, mctx: &MContext<I>) -> bool { self.deref(mctx).is_external }
 
-    pub fn add_stack_size(self, mctx: &mut MContext<I>, size: u64) {
-        self.deref_mut(mctx).stack_size += size;
+    pub fn add_storage_stack_size(self, mctx: &mut MContext<I>, size: u64) {
+        self.deref_mut(mctx).storage_stack_size += size;
     }
 
-    pub fn stack_size(self, mctx: &MContext<I>) -> u64 { self.deref(mctx).stack_size }
+    pub fn storage_stack_size(self, mctx: &MContext<I>) -> u64 {
+        self.deref(mctx).storage_stack_size
+    }
 
-    pub fn arg_stack_size(self, mctx: &MContext<I>) -> u64 { self.deref(mctx).arg_stack_size }
+    pub fn outgoing_stack_size(self, mctx: &MContext<I>) -> u64 {
+        self.deref(mctx).outgoing_stack_size
+    }
 
-    pub fn update_arg_stack_size(self, mctx: &mut MContext<I>, size: u64) {
-        if size > self.arg_stack_size(mctx) {
-            self.deref_mut(mctx).arg_stack_size = size;
+    pub fn update_outgoing_stack_size(self, mctx: &mut MContext<I>, size: u64) {
+        if size > self.outgoing_stack_size(mctx) {
+            self.deref_mut(mctx).outgoing_stack_size = size;
         }
-    }
-
-    pub fn total_stack_size(self, mctx: &MContext<I>) -> u64 {
-        let stack_size = self.stack_size(mctx);
-        let arg_stack_size = self.arg_stack_size(mctx);
-        stack_size + arg_stack_size
     }
 
     pub fn saved_regs(self, mctx: &MContext<I>) -> Vec<PReg> {

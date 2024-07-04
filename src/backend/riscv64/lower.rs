@@ -25,9 +25,9 @@ impl LowerSpec for RvLowerSpec {
 
     fn stack_align() -> u32 { 16 }
 
-    fn frame_pointer_reg() -> PReg { regs::fp() }
+    fn frame_pointer() -> PReg { regs::fp() }
 
-    fn stack_pointer_reg() -> PReg { regs::sp() }
+    fn stack_pointer() -> PReg { regs::sp() }
 
     fn pointer_size() -> usize { 8 }
 
@@ -43,7 +43,10 @@ impl LowerSpec for RvLowerSpec {
 
     fn total_stack_size(lower: &mut LowerContext<Self>, mfunc: MFunc<Self::I>) -> u64 {
         let saved_regs = mfunc.saved_regs(&lower.mctx);
-        mfunc.total_stack_size(&lower.mctx) + saved_regs.len() as u64 * 8
+        let raw = mfunc.storage_stack_size(&lower.mctx)
+            + mfunc.outgoing_stack_size(&lower.mctx)
+            + saved_regs.len() as u64 * 8;
+        (raw + 15) & !15
     }
 
     fn gen_move(lower: &mut LowerContext<Self>, dst: Reg, src: MValue) {
@@ -105,7 +108,7 @@ impl LowerSpec for RvLowerSpec {
                         curr_block.push_back(&mut lower.mctx, inst);
                     }
                 }
-                MemLoc::Slot { .. } | MemLoc::IncomingParam { .. } => {
+                MemLoc::Slot { .. } | MemLoc::Incoming { .. } => {
                     // we cannot get the actual offset now, so we must rely on future modification
                     // of load addr instruction.
                     let inst = RvInst::build_load_addr(&mut lower.mctx, dst, loc);
@@ -131,11 +134,6 @@ impl LowerSpec for RvLowerSpec {
 
         let x = if x.width() > bitwidth {
             // TODO: should be handled before lowering
-            // unreachable!(
-            //     "gen_iconst: bitwidth too small: {} < {}",
-            //     bitwidth,
-            //     x.width()
-            // );
             let (x, _) = x.clone().into_truncated(bitwidth);
             x
         } else {
@@ -1003,10 +1001,29 @@ impl LowerSpec for RvLowerSpec {
             MValueKind::Reg(reg) => reg,
             MValueKind::Imm(_) => unreachable!(),
             MValueKind::Mem(loc) => {
-                // load addr
-                let (inst, rd) = RvInst::load_addr(&mut lower.mctx, loc);
-                curr_block.push_back(&mut lower.mctx, inst);
-                rd
+                match loc {
+                    MemLoc::RegOffset { base, offset } => {
+                        if let Some(imm) = Imm12::try_from_i64(offset) {
+                            let (inst, rd) =
+                                RvInst::alu_rri(&mut lower.mctx, AluOpRRI::Addi, base, imm);
+                            curr_block.push_back(&mut lower.mctx, inst);
+                            rd
+                        } else {
+                            let (li, rd) = RvInst::li(&mut lower.mctx, offset as u64);
+                            curr_block.push_back(&mut lower.mctx, li);
+                            let (inst, rd) =
+                                RvInst::alu_rrr(&mut lower.mctx, AluOpRRR::Add, base, rd);
+                            curr_block.push_back(&mut lower.mctx, inst);
+                            rd
+                        }
+                    }
+                    MemLoc::Slot { .. } | MemLoc::Incoming { .. } => {
+                        // load addr because we cannot determine the offset
+                        let (inst, rd) = RvInst::load_addr(&mut lower.mctx, loc);
+                        curr_block.push_back(&mut lower.mctx, inst);
+                        rd
+                    }
+                }
             }
             MValueKind::Undef => return MValue::new_undef(ty),
         };
@@ -1076,7 +1093,7 @@ impl LowerSpec for RvLowerSpec {
         unimplemented!("indirect call")
     }
 
-    fn gen_arg_passing(lower: &mut LowerContext<Self>, args: Vec<MValue>) -> Vec<PReg> {
+    fn gen_outgoing(lower: &mut LowerContext<Self>, args: Vec<MValue>) -> Vec<PReg> {
         // TODO: maybe support more calling conventions
         let mut used_int_regs = 0;
         let mut used_fp_regs = 0;
@@ -1118,7 +1135,7 @@ impl LowerSpec for RvLowerSpec {
         lower
             .curr_func
             .unwrap()
-            .update_arg_stack_size(&mut lower.mctx, required_stack_size);
+            .update_outgoing_stack_size(&mut lower.mctx, required_stack_size);
 
         // the offset is calculated from the end of the stack frame
         // the first arg is at the end of the stack frame, so the offset is 0
@@ -1136,11 +1153,7 @@ impl LowerSpec for RvLowerSpec {
         arg_regs
     }
 
-    fn gen_param_receiving(
-        lower: &mut LowerContext<Self>,
-        _sig: &ir::Signature,
-        dsts: Vec<ir::Value>,
-    ) {
+    fn gen_incoming(lower: &mut LowerContext<Self>, _sig: &ir::Signature, dsts: Vec<ir::Value>) {
         let mut used_int_regs = 0;
         let mut used_fp_regs = 0;
 
@@ -1176,7 +1189,7 @@ impl LowerSpec for RvLowerSpec {
 
         let mut offset = 0i64;
         for dst in pass_by_stack {
-            let loc = MemLoc::IncomingParam { offset };
+            let loc = MemLoc::Incoming { offset };
             let mval = Self::gen_load(lower, dst.ty(lower.ctx), loc);
             lower.lowered.insert(dst, mval);
             let bytewidth =
@@ -1225,9 +1238,29 @@ impl LowerSpec for RvLowerSpec {
                 rd
             }
             MValueKind::Mem(loc) => {
-                let (inst, rd) = RvInst::load_addr(&mut lower.mctx, loc);
-                curr_block.push_back(&mut lower.mctx, inst);
-                rd
+                match loc {
+                    MemLoc::RegOffset { base, offset } => {
+                        if let Some(imm) = Imm12::try_from_i64(offset) {
+                            let (inst, rd) =
+                                RvInst::alu_rri(&mut lower.mctx, AluOpRRI::Addi, base, imm);
+                            curr_block.push_back(&mut lower.mctx, inst);
+                            rd
+                        } else {
+                            let (li, rd) = RvInst::li(&mut lower.mctx, offset as u64);
+                            curr_block.push_back(&mut lower.mctx, li);
+                            let (inst, rd) =
+                                RvInst::alu_rrr(&mut lower.mctx, AluOpRRR::Add, base, rd);
+                            curr_block.push_back(&mut lower.mctx, inst);
+                            rd
+                        }
+                    }
+                    MemLoc::Slot { .. } | MemLoc::Incoming { .. } => {
+                        // load addr because we cannot determine the offset
+                        let (inst, rd) = RvInst::load_addr(&mut lower.mctx, loc);
+                        curr_block.push_back(&mut lower.mctx, inst);
+                        rd
+                    }
+                }
             }
             MValueKind::Undef => return,
         };
@@ -1278,16 +1311,18 @@ impl LowerSpec for RvLowerSpec {
         //
         // store reg#n, total_stack_size - 8n(sp)
         //
-        // addi fp, sp, total_stack_size # TODO: if we omit fp, this is not needed
+        // addi fp, sp, total_stack_size # if we omit fp, this is not needed
 
         // this is the first block, we need to insert in reverse order
         let curr_block = lower.curr_block.unwrap();
 
+        if !lower.config.omit_frame_pointer {
+            func.add_saved_reg(&mut lower.mctx, regs::fp());
+        }
+
         let saved_regs = func.saved_regs(&lower.mctx);
 
         let total_stack_size = Self::total_stack_size(lower, func) as i64;
-        // aligned to 16 bytes
-        let total_stack_size = (total_stack_size + 15) & !15;
 
         let mut inst_buf = Vec::new();
 
@@ -1314,50 +1349,106 @@ impl LowerSpec for RvLowerSpec {
 
         let mut curr_offset = total_stack_size - 8;
         for reg in saved_regs {
+            // TODO: make this modular
             if let RegKind::General = reg.kind() {
-                let store = RvInst::store(
-                    &mut lower.mctx,
-                    StoreOp::Sd,
-                    reg.into(),
-                    MemLoc::RegOffset {
-                        base: sp.into(),
-                        offset: curr_offset,
-                    },
-                );
-                inst_buf.push(store);
+                if let Some(imm) = Imm12::try_from_i64(curr_offset) {
+                    let store = RvInst::store(
+                        &mut lower.mctx,
+                        StoreOp::Sd,
+                        reg.into(),
+                        MemLoc::RegOffset {
+                            base: sp.into(),
+                            offset: imm.as_i16() as i64,
+                        },
+                    );
+                    inst_buf.push(store);
+                } else {
+                    let t0 = regs::t0();
+                    let li = RvInst::build_li(&mut lower.mctx, t0.into(), curr_offset as u64);
+                    let add = RvInst::build_alu_rrr(
+                        &mut lower.mctx,
+                        AluOpRRR::Add,
+                        t0.into(),
+                        sp.into(),
+                        t0.into(),
+                    );
+                    let store = RvInst::store(
+                        &mut lower.mctx,
+                        StoreOp::Sd,
+                        reg.into(),
+                        MemLoc::RegOffset {
+                            base: t0.into(),
+                            offset: 0,
+                        },
+                    );
+                    inst_buf.push(li);
+                    inst_buf.push(add);
+                    inst_buf.push(store);
+                }
             } else if let RegKind::Float = reg.kind() {
-                let store = RvInst::store(
-                    &mut lower.mctx,
-                    StoreOp::Fsd,
-                    reg.into(),
-                    MemLoc::RegOffset {
-                        base: sp.into(),
-                        offset: curr_offset,
-                    },
-                );
-                inst_buf.push(store);
+                if let Some(imm) = Imm12::try_from_i64(curr_offset) {
+                    let store = RvInst::store(
+                        &mut lower.mctx,
+                        StoreOp::Fsd,
+                        reg.into(),
+                        MemLoc::RegOffset {
+                            base: sp.into(),
+                            offset: imm.as_i16() as i64,
+                        },
+                    );
+                    inst_buf.push(store);
+                } else {
+                    let t0 = regs::t0();
+                    let li = RvInst::build_li(&mut lower.mctx, t0.into(), curr_offset as u64);
+                    let add = RvInst::build_alu_rrr(
+                        &mut lower.mctx,
+                        AluOpRRR::Add,
+                        t0.into(),
+                        sp.into(),
+                        t0.into(),
+                    );
+                    let store = RvInst::store(
+                        &mut lower.mctx,
+                        StoreOp::Fsd,
+                        reg.into(),
+                        MemLoc::RegOffset {
+                            base: t0.into(),
+                            offset: 0,
+                        },
+                    );
+                    inst_buf.push(li);
+                    inst_buf.push(add);
+                    inst_buf.push(store);
+                }
             } else {
                 unimplemented!()
             }
             curr_offset -= 8;
         }
 
-        if let Some(imm) = Imm12::try_from_i64(total_stack_size) {
-            let addi =
-                RvInst::build_alu_rri(&mut lower.mctx, AluOpRRI::Addi, fp.into(), sp.into(), imm);
-            inst_buf.push(addi);
-        } else {
-            let t0 = regs::t0();
-            let li = RvInst::build_li(&mut lower.mctx, t0.into(), total_stack_size as u64);
-            let add = RvInst::build_alu_rrr(
-                &mut lower.mctx,
-                AluOpRRR::Add,
-                fp.into(),
-                sp.into(),
-                t0.into(),
-            );
-            inst_buf.push(li);
-            inst_buf.push(add);
+        if !lower.config.omit_frame_pointer {
+            if let Some(imm) = Imm12::try_from_i64(total_stack_size) {
+                let addi = RvInst::build_alu_rri(
+                    &mut lower.mctx,
+                    AluOpRRI::Addi,
+                    fp.into(),
+                    sp.into(),
+                    imm,
+                );
+                inst_buf.push(addi);
+            } else {
+                let t0 = regs::t0();
+                let li = RvInst::build_li(&mut lower.mctx, t0.into(), total_stack_size as u64);
+                let add = RvInst::build_alu_rrr(
+                    &mut lower.mctx,
+                    AluOpRRR::Add,
+                    fp.into(),
+                    sp.into(),
+                    t0.into(),
+                );
+                inst_buf.push(li);
+                inst_buf.push(add);
+            }
         }
 
         for inst in inst_buf.into_iter().rev() {
@@ -1370,8 +1461,6 @@ impl LowerSpec for RvLowerSpec {
         let saved_regs = func.saved_regs(&lower.mctx);
 
         let total_stack_size = Self::total_stack_size(lower, func) as i64;
-        // aligned to 16 bytes
-        let total_stack_size = (total_stack_size + 15) & !15;
 
         // load reg#0, total_stack_size - 8(sp)
         // load reg#1, total_stack_size - 16(sp)
@@ -1387,27 +1476,75 @@ impl LowerSpec for RvLowerSpec {
 
         for reg in saved_regs {
             if let RegKind::General = reg.kind() {
-                let load = RvInst::build_load(
-                    &mut lower.mctx,
-                    LoadOp::Ld,
-                    reg.into(),
-                    MemLoc::RegOffset {
-                        base: sp.into(),
-                        offset: curr_offset,
-                    },
-                );
-                curr_block.push_back(&mut lower.mctx, load);
+                if let Some(imm) = Imm12::try_from_i64(curr_offset) {
+                    let load = RvInst::build_load(
+                        &mut lower.mctx,
+                        LoadOp::Ld,
+                        reg.into(),
+                        MemLoc::RegOffset {
+                            base: sp.into(),
+                            offset: imm.as_i16() as i64,
+                        },
+                    );
+                    curr_block.push_back(&mut lower.mctx, load);
+                } else {
+                    let t0 = regs::t0();
+                    let li = RvInst::build_li(&mut lower.mctx, t0.into(), curr_offset as u64);
+                    let add = RvInst::build_alu_rrr(
+                        &mut lower.mctx,
+                        AluOpRRR::Add,
+                        t0.into(),
+                        sp.into(),
+                        t0.into(),
+                    );
+                    let load = RvInst::build_load(
+                        &mut lower.mctx,
+                        LoadOp::Ld,
+                        reg.into(),
+                        MemLoc::RegOffset {
+                            base: t0.into(),
+                            offset: 0,
+                        },
+                    );
+                    curr_block.push_back(&mut lower.mctx, li);
+                    curr_block.push_back(&mut lower.mctx, add);
+                    curr_block.push_back(&mut lower.mctx, load);
+                }
             } else if let RegKind::Float = reg.kind() {
-                let load = RvInst::build_load(
-                    &mut lower.mctx,
-                    LoadOp::Fld,
-                    reg.into(),
-                    MemLoc::RegOffset {
-                        base: sp.into(),
-                        offset: curr_offset,
-                    },
-                );
-                curr_block.push_back(&mut lower.mctx, load);
+                if let Some(imm) = Imm12::try_from_i64(curr_offset) {
+                    let load = RvInst::build_load(
+                        &mut lower.mctx,
+                        LoadOp::Fld,
+                        reg.into(),
+                        MemLoc::RegOffset {
+                            base: sp.into(),
+                            offset: imm.as_i16() as i64,
+                        },
+                    );
+                    curr_block.push_back(&mut lower.mctx, load);
+                } else {
+                    let t0 = regs::t0();
+                    let li = RvInst::build_li(&mut lower.mctx, t0.into(), curr_offset as u64);
+                    let add = RvInst::build_alu_rrr(
+                        &mut lower.mctx,
+                        AluOpRRR::Add,
+                        t0.into(),
+                        sp.into(),
+                        t0.into(),
+                    );
+                    let load = RvInst::build_load(
+                        &mut lower.mctx,
+                        LoadOp::Fld,
+                        reg.into(),
+                        MemLoc::RegOffset {
+                            base: t0.into(),
+                            offset: 0,
+                        },
+                    );
+                    curr_block.push_back(&mut lower.mctx, li);
+                    curr_block.push_back(&mut lower.mctx, add);
+                    curr_block.push_back(&mut lower.mctx, load);
+                }
             } else {
                 unimplemented!()
             }

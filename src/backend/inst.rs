@@ -24,9 +24,9 @@ pub trait MInst:
 
     fn succs(self, mctx: &MContext<Self>) -> Vec<MBlock<Self>>;
 
-    fn modify_mem_loc<F>(self, mctx: &mut MContext<Self>, f: F, config: &LowerConfig)
+    fn adjust_offset<F>(self, mctx: &mut MContext<Self>, f: F, config: &LowerConfig)
     where
-        F: FnOnce(MemLoc) -> MemLoc;
+        F: FnOnce(MemLoc) -> Option<MemLoc>;
 
     fn remove(self, mctx: &mut MContext<Self>) {
         self.unlink(mctx);

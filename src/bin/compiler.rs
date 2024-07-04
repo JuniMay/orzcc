@@ -67,7 +67,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut lower_ctx: LowerContext<RvLowerSpec> = LowerContext::new(
             &ir,
             LowerConfig {
-                omit_frame_pointer: true,
+                omit_frame_pointer: false,
             },
         );
         lower_ctx.lower();

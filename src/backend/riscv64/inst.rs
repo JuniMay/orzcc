@@ -487,7 +487,7 @@ impl<'a> fmt::Display for DisplayRvInst<'a> {
         use RvInstKind as Ik;
 
         match &self.inst.deref(self.mctx).kind {
-            Ik::Li { rd, imm } => write!(f, "li {}, {:#016x}", regs::display(*rd), imm),
+            Ik::Li { rd, imm } => write!(f, "li {}, {:#018x}", regs::display(*rd), imm),
             Ik::AluRR { op, rd, rs } => {
                 write!(f, "{} {}, {}", op, regs::display(*rd), regs::display(*rs))
             }
@@ -562,7 +562,9 @@ impl<'a> fmt::Display for DisplayRvInst<'a> {
                     MemLoc::RegOffset { base, offset } => {
                         format!("{}({})", offset, regs::display(*base))
                     }
-                    _ => unreachable!("mem loc should be modified to reg offset"),
+                    MemLoc::Slot { .. } | MemLoc::Incoming { .. } => {
+                        unreachable!("mem loc should be modified to reg offset")
+                    }
                 };
                 write!(f, "{} {}, {}", op, regs::display(*rd), slot)
             }
@@ -571,7 +573,9 @@ impl<'a> fmt::Display for DisplayRvInst<'a> {
                     MemLoc::RegOffset { base, offset } => {
                         format!("{}({})", offset, regs::display(*base))
                     }
-                    _ => unreachable!("mem loc should be modified to reg offset"),
+                    MemLoc::Slot { .. } | MemLoc::Incoming { .. } => {
+                        unreachable!("mem loc should be modified to reg offset")
+                    }
                 };
                 write!(f, "{} {}, {}", op, regs::display(*src), slot)
             }
@@ -1051,15 +1055,7 @@ impl MInst for RvInst {
             Ik::FpuRRRR { rs1, rs2, rs3, .. } => vec![*rs1, *rs2, *rs3],
             Ik::Load { loc, .. } => match loc {
                 MemLoc::RegOffset { base, .. } => vec![*base],
-                MemLoc::Slot { .. } => {
-                    if config.omit_frame_pointer {
-                        // this location should be modified into reg offset
-                        unreachable!()
-                    } else {
-                        vec![regs::fp().into()]
-                    }
-                }
-                MemLoc::IncomingParam { .. } => {
+                MemLoc::Slot { .. } | MemLoc::Incoming { .. } => {
                     if config.omit_frame_pointer {
                         vec![regs::sp().into()]
                     } else {
@@ -1073,15 +1069,7 @@ impl MInst for RvInst {
                     MemLoc::RegOffset { base, .. } => uses.push(*base),
                     // XXX: Slot will use a frame pointer to index local variables
                     // but if it is omitted, it will fall back to the stack pointer
-                    MemLoc::Slot { .. } => {
-                        if config.omit_frame_pointer {
-                            // this location should be modified into reg offset
-                            unreachable!()
-                        } else {
-                            uses.push(regs::fp().into());
-                        }
-                    }
-                    MemLoc::IncomingParam { .. } => {
+                    MemLoc::Slot { .. } | MemLoc::Incoming { .. } => {
                         if config.omit_frame_pointer {
                             uses.push(regs::sp().into());
                         } else {
@@ -1098,15 +1086,7 @@ impl MInst for RvInst {
             Ik::La { .. } => vec![],
             Ik::LoadAddr { loc, .. } => match loc {
                 MemLoc::RegOffset { base, .. } => vec![*base],
-                MemLoc::Slot { .. } => {
-                    if config.omit_frame_pointer {
-                        // this location should be modified into reg offset
-                        unreachable!()
-                    } else {
-                        vec![regs::fp().into()]
-                    }
-                }
-                MemLoc::IncomingParam { .. } => {
+                MemLoc::Slot { .. } | MemLoc::Incoming { .. } => {
                     if config.omit_frame_pointer {
                         vec![regs::sp().into()]
                     } else {
@@ -1160,46 +1140,37 @@ impl MInst for RvInst {
         }
     }
 
-    fn modify_mem_loc<F>(self, mctx: &mut MContext<Self>, f: F, config: &LowerConfig)
+    fn adjust_offset<F>(self, mctx: &mut MContext<Self>, f: F, _config: &LowerConfig)
     where
-        F: FnOnce(MemLoc) -> MemLoc,
+        F: FnOnce(MemLoc) -> Option<MemLoc>,
     {
-        // TODO: modify load, store & load addr, maybe remove this instruction, add
-        // other instructions, etc.
-
         use RvInstKind as Ik;
 
         let (old_loc, new_loc) = match self.kind(mctx) {
             Ik::Load { loc, .. } => (*loc, f(*loc)),
             Ik::Store { loc, .. } => (*loc, f(*loc)),
             Ik::LoadAddr { loc, .. } => (*loc, f(*loc)),
-            _ => return,
+            Ik::Li { .. }
+            | Ik::AluRR { .. }
+            | Ik::AluRRI { .. }
+            | Ik::AluRRR { .. }
+            | Ik::FpuRR { .. }
+            | Ik::FpuRRR { .. }
+            | Ik::FpuRRRR { .. }
+            | Ik::Ret
+            | Ik::Call { .. }
+            | Ik::J { .. }
+            | Ik::Br { .. }
+            | Ik::La { .. } => return,
         };
 
-        let new_loc = match (old_loc, new_loc) {
-            (MemLoc::Slot { .. }, MemLoc::RegOffset { base, offset }) => {
-                if Imm12::try_from_i64(offset).is_none() {
-                    if config.omit_frame_pointer {
-                        let (li, rd) = Self::li(mctx, offset as u64);
-                        self.insert_before(mctx, li);
-                        MemLoc::RegOffset {
-                            base: rd,
-                            offset: 0,
-                        }
-                    } else {
-                        let t0 = regs::t0();
-                        let li = Self::build_li(mctx, t0.into(), offset as u64);
-                        self.insert_before(mctx, li);
-                        MemLoc::RegOffset {
-                            base: t0.into(),
-                            offset: 0,
-                        }
-                    }
-                } else {
-                    MemLoc::RegOffset { base, offset }
-                }
-            }
-            (MemLoc::IncomingParam { .. }, MemLoc::RegOffset { base, offset }) => {
+        if new_loc.is_none() {
+            // no modification is needed
+            return;
+        }
+
+        let new_loc = match (old_loc, new_loc.unwrap()) {
+            (MemLoc::Slot { .. } | MemLoc::Incoming { .. }, MemLoc::RegOffset { base, offset }) => {
                 if Imm12::try_from_i64(offset).is_none() {
                     let t0 = regs::t0();
                     let li = Self::build_li(mctx, t0.into(), offset as u64);
@@ -1212,7 +1183,7 @@ impl MInst for RvInst {
                     MemLoc::RegOffset { base, offset }
                 }
             }
-            _ => new_loc,
+            _ => unreachable!(),
         };
 
         match &mut self.deref_mut(mctx).kind {
@@ -1221,8 +1192,6 @@ impl MInst for RvInst {
             Ik::LoadAddr { rd, .. } => {
                 // we need to remove this instruction and replace with addi or add
                 match new_loc {
-                    MemLoc::IncomingParam { .. } => {}
-                    MemLoc::Slot { .. } => {}
                     MemLoc::RegOffset { base, offset } => {
                         let rd = *rd;
                         let addi = Self::build_alu_rri(
@@ -1235,9 +1204,21 @@ impl MInst for RvInst {
                         self.insert_before(mctx, addi);
                         self.remove(mctx);
                     }
+                    MemLoc::Slot { .. } | MemLoc::Incoming { .. } => unreachable!(),
                 }
             }
-            _ => unreachable!(),
+            Ik::Li { .. }
+            | Ik::AluRR { .. }
+            | Ik::AluRRI { .. }
+            | Ik::AluRRR { .. }
+            | Ik::FpuRR { .. }
+            | Ik::FpuRRR { .. }
+            | Ik::FpuRRRR { .. }
+            | Ik::Ret
+            | Ik::Call { .. }
+            | Ik::J { .. }
+            | Ik::Br { .. }
+            | Ik::La { .. } => unreachable!(),
         }
     }
 }
