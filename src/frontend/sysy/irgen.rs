@@ -242,7 +242,7 @@ impl IrGenContext {
                             if is_float {
                                 ir::Inst::fbinary(
                                     &mut self.ctx,
-                                    ir::FBinaryOp::Cmp(ir::FCmpCond::OLt),
+                                    ir::FBinaryOp::Cmp(ir::FCmpCond::ULt),
                                     lhs,
                                     rhs,
                                 )
@@ -259,7 +259,7 @@ impl IrGenContext {
                             if is_float {
                                 ir::Inst::fbinary(
                                     &mut self.ctx,
-                                    ir::FBinaryOp::Cmp(ir::FCmpCond::OLt),
+                                    ir::FBinaryOp::Cmp(ir::FCmpCond::ULt),
                                     rhs,
                                     lhs,
                                 )
@@ -276,7 +276,7 @@ impl IrGenContext {
                             if is_float {
                                 ir::Inst::fbinary(
                                     &mut self.ctx,
-                                    ir::FBinaryOp::Cmp(ir::FCmpCond::OLe),
+                                    ir::FBinaryOp::Cmp(ir::FCmpCond::ULe),
                                     lhs,
                                     rhs,
                                 )
@@ -293,7 +293,7 @@ impl IrGenContext {
                             if is_float {
                                 ir::Inst::fbinary(
                                     &mut self.ctx,
-                                    ir::FBinaryOp::Cmp(ir::FCmpCond::OLe),
+                                    ir::FBinaryOp::Cmp(ir::FCmpCond::ULe),
                                     rhs,
                                     lhs,
                                 )
@@ -310,7 +310,7 @@ impl IrGenContext {
                             if is_float {
                                 ir::Inst::fbinary(
                                     &mut self.ctx,
-                                    ir::FBinaryOp::Cmp(ir::FCmpCond::OEq),
+                                    ir::FBinaryOp::Cmp(ir::FCmpCond::UEq),
                                     lhs,
                                     rhs,
                                 )
@@ -327,7 +327,7 @@ impl IrGenContext {
                             let cmp = if is_float {
                                 ir::Inst::fbinary(
                                     &mut self.ctx,
-                                    ir::FBinaryOp::Cmp(ir::FCmpCond::OEq),
+                                    ir::FBinaryOp::Cmp(ir::FCmpCond::UEq),
                                     lhs,
                                     rhs,
                                 )
@@ -608,7 +608,7 @@ impl IrGenContext {
 
                         let fcmp = ir::Inst::fbinary(
                             &mut self.ctx,
-                            ir::FBinaryOp::Cmp(ir::FCmpCond::ONe),
+                            ir::FBinaryOp::Cmp(ir::FCmpCond::UNe),
                             val,
                             zero,
                         );

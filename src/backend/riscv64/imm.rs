@@ -21,15 +21,26 @@ impl Imm12 {
 
     pub fn try_from_u64(x: u64) -> Option<Self> { Self::try_from_i64(x as i64) }
 
-    pub fn try_from_apint(x: ApInt) -> Option<Self> {
-        // we need to check the absolute value of x
-        let (x, _) = x.into_abs();
-        let x = x.into_shrunk();
-        // the highest bit must be zero, so less equal to 11
-        if x.width() <= 11 {
-            Some(Imm12(u16::from(x)))
+    pub fn try_from_apint(x: &ApInt) -> Option<Self> {
+        // we need to consider several cases:
+        // 1. x's width is smaller or equal to 12, then we just take the lower 12 bits
+        // 2. x's width is larger than 12, we require the apint is msb extended
+        //   1. bits 12.. are all zeros, then we just take the lower 12 bits
+        //   2. bits 12.. are all ones, then we just take the lower 12 bits
+        //   3. otherwise, we return None
+
+        if x.width() <= 12 {
+            Some(Imm12(u16::from(x.clone())))
         } else {
-            None
+            let (abs, _) = x.clone().into_abs();
+            let abs = abs.into_shrunk();
+
+            if abs.width() <= 11 {
+                let bits = x.clone().into_truncated(12).0;
+                Some(Imm12(u16::from(bits)))
+            } else {
+                None
+            }
         }
     }
 

@@ -1,4 +1,9 @@
-use super::{block::MBlock, context::MContext, regs::Reg};
+use super::{
+    block::MBlock,
+    context::MContext,
+    lower::{LowerConfig, MemLoc},
+    regs::Reg,
+};
 use crate::collections::{
     linked_list::LinkedListNodePtr,
     storage::{ArenaAlloc, ArenaDeref, ArenaFree, ArenaPtr, BaseArenaPtr},
@@ -9,15 +14,24 @@ pub trait MInst:
 {
     fn from_ptr(ptr: BaseArenaPtr<Self::T>) -> Self;
 
-    fn ptr(&self) -> BaseArenaPtr<Self::T>;
+    fn ptr(self) -> BaseArenaPtr<Self::T>;
 
-    fn uses(&self, mctx: &MContext<Self>) -> Vec<Reg>;
+    fn uses(self, mctx: &MContext<Self>, config: &LowerConfig) -> Vec<Reg>;
 
-    fn defs(&self, mctx: &MContext<Self>) -> Vec<Reg>;
+    fn defs(self, mctx: &MContext<Self>, config: &LowerConfig) -> Vec<Reg>;
 
-    fn is_terminator(&self, mctx: &MContext<Self>) -> bool;
+    fn is_terminator(self, mctx: &MContext<Self>) -> bool;
 
-    fn succs(&self, mctx: &MContext<Self>) -> Vec<MBlock<Self>>;
+    fn succs(self, mctx: &MContext<Self>) -> Vec<MBlock<Self>>;
+
+    fn modify_mem_loc<F>(self, mctx: &mut MContext<Self>, f: F, config: &LowerConfig)
+    where
+        F: FnOnce(MemLoc) -> MemLoc;
+
+    fn remove(self, mctx: &mut MContext<Self>) {
+        self.unlink(mctx);
+        mctx.free(self);
+    }
 }
 
 pub trait DisplayMInst<'a>: MInst {

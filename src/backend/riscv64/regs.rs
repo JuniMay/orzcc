@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::backend::{regs::Reg, PReg, RegKind, VReg};
+use crate::backend::{regs::Reg, PReg, RegKind};
 
 pub const fn zero() -> PReg { PReg::new(0, RegKind::General) }
 
@@ -224,3 +224,45 @@ pub fn display(reg: Reg) -> String {
         Reg::V(reg) => format!("{}", reg),
     }
 }
+
+pub const INT_ARG_REGS: [PReg; 8] = [a0(), a1(), a2(), a3(), a4(), a5(), a6(), a7()];
+
+pub const FP_ARG_REGS: [PReg; 8] = [fa0(), fa1(), fa2(), fa3(), fa4(), fa5(), fa6(), fa7()];
+
+pub const CALLER_SAVED_REGS: [PReg; 35] = [
+    t0(),
+    t1(),
+    t2(),
+    t3(),
+    t4(),
+    t5(),
+    t6(),
+    a0(),
+    a1(),
+    a2(),
+    a3(),
+    a4(),
+    a5(),
+    a6(),
+    a7(),
+    ft0(),
+    ft1(),
+    ft2(),
+    ft3(),
+    ft4(),
+    ft5(),
+    ft6(),
+    ft7(),
+    ft8(),
+    ft9(),
+    ft10(),
+    ft11(),
+    fa0(),
+    fa1(),
+    fa2(),
+    fa3(),
+    fa4(),
+    fa5(),
+    fa6(),
+    fa7(),
+];

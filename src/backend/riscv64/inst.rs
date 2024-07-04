@@ -7,8 +7,9 @@ use crate::{
         context::MContext,
         func::{MFunc, MLabel},
         inst::{DisplayMInst, MInst},
-        lower::MemLoc,
+        lower::{LowerConfig, MemLoc},
         regs::Reg,
+        PReg,
         RegKind,
     },
     collections::{
@@ -162,7 +163,18 @@ impl RvInst {
     }
 
     pub fn build_la(mctx: &mut MContext<Self>, rd: Reg, label: MLabel) -> Self {
-        let kind = RvInstKind::LoadAddr { rd, label };
+        let kind = RvInstKind::La { rd, label };
+        let data = RvInstData {
+            kind,
+            next: None,
+            prev: None,
+            parent: None,
+        };
+        mctx.alloc(data)
+    }
+
+    pub fn build_load_addr(mctx: &mut MContext<Self>, rd: Reg, loc: MemLoc) -> Self {
+        let kind = RvInstKind::LoadAddr { rd, loc };
         let data = RvInstData {
             kind,
             next: None,
@@ -194,8 +206,8 @@ impl RvInst {
         mctx.alloc(data)
     }
 
-    pub fn call(mctx: &mut MContext<Self>, func: MFunc<Self>) -> Self {
-        let kind = RvInstKind::Call { func };
+    pub fn call(mctx: &mut MContext<Self>, func: MFunc<Self>, arg_regs: Vec<PReg>) -> Self {
+        let kind = RvInstKind::Call { func, arg_regs };
         let data = RvInstData {
             kind,
             next: None,
@@ -238,9 +250,9 @@ impl RvInst {
         mctx.alloc(data)
     }
 
-    pub fn li(mctx: &mut MContext<Self>, label: MLabel) -> (Self, Reg) {
+    pub fn li(mctx: &mut MContext<Self>, imm: impl Into<u64>) -> (Self, Reg) {
         let rd: Reg = mctx.new_vreg(RegKind::General).into();
-        let inst = Self::build_la(mctx, rd, label);
+        let inst = Self::build_li(mctx, rd, imm);
         (inst, rd)
     }
 
@@ -365,6 +377,12 @@ impl RvInst {
         let inst = Self::build_la(mctx, rd, label);
         (inst, rd)
     }
+
+    pub fn load_addr(mctx: &mut MContext<Self>, loc: MemLoc) -> (Self, Reg) {
+        let rd: Reg = mctx.new_vreg(RegKind::General).into();
+        let inst = Self::build_load_addr(mctx, rd, loc);
+        (inst, rd)
+    }
 }
 
 pub enum RvInstKind {
@@ -423,6 +441,7 @@ pub enum RvInstKind {
     Ret,
     Call {
         func: MFunc<RvInst>,
+        arg_regs: Vec<PReg>,
     },
     J {
         block: MBlock<RvInst>,
@@ -433,9 +452,20 @@ pub enum RvInstKind {
         rs2: Reg,
         block: MBlock<RvInst>,
     },
-    LoadAddr {
+    La {
         rd: Reg,
         label: MLabel,
+    },
+    /// Load the address of a memory location into a register.
+    ///
+    /// Because we don't know the place of local slots in the memory, so we must
+    /// create such a forward reference to load the address of a local slot.
+    /// After generating all code (and register allocation), we should modify
+    /// all the [MemLoc::Slot] into [MemLoc::RegOffset] and make this into a
+    /// addi or li + add sequence.
+    LoadAddr {
+        rd: Reg,
+        loc: MemLoc,
     },
 }
 
@@ -532,9 +562,7 @@ impl<'a> fmt::Display for DisplayRvInst<'a> {
                     MemLoc::RegOffset { base, offset } => {
                         format!("{}({})", offset, regs::display(*base))
                     }
-                    MemLoc::Slot { offset } => {
-                        format!("{}({})", offset, regs::display(regs::sp().into()))
-                    }
+                    _ => unreachable!("mem loc should be modified to reg offset"),
                 };
                 write!(f, "{} {}, {}", op, regs::display(*rd), slot)
             }
@@ -543,14 +571,12 @@ impl<'a> fmt::Display for DisplayRvInst<'a> {
                     MemLoc::RegOffset { base, offset } => {
                         format!("{}({})", offset, regs::display(*base))
                     }
-                    MemLoc::Slot { offset } => {
-                        format!("{}({})", offset, regs::display(regs::sp().into()))
-                    }
+                    _ => unreachable!("mem loc should be modified to reg offset"),
                 };
                 write!(f, "{} {}, {}", op, regs::display(*src), slot)
             }
             Ik::Ret => write!(f, "ret"),
-            Ik::Call { func } => write!(f, "call {}", func.label(self.mctx)),
+            Ik::Call { func, .. } => write!(f, "call {}", func.label(self.mctx)),
             Ik::J { block } => write!(f, "j {}", block.label(self.mctx)),
             Ik::Br {
                 op,
@@ -567,63 +593,10 @@ impl<'a> fmt::Display for DisplayRvInst<'a> {
                     block.label(self.mctx)
                 )
             }
-            Ik::LoadAddr { rd, label } => write!(f, "la {}, {}", regs::display(*rd), label),
-        }
-    }
-}
-
-pub enum PseudoLoadOp {
-    Lw,
-    Ld,
-}
-
-impl fmt::Display for PseudoLoadOp {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            PseudoLoadOp::Lw => write!(f, "lw"),
-            PseudoLoadOp::Ld => write!(f, "ld"),
-        }
-    }
-}
-
-pub enum PseudoStoreOp {
-    Sw,
-    Sd,
-}
-
-impl fmt::Display for PseudoStoreOp {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            PseudoStoreOp::Sw => write!(f, "sw"),
-            PseudoStoreOp::Sd => write!(f, "sd"),
-        }
-    }
-}
-
-pub enum PseudoFLoadOp {
-    Flw,
-    Fld,
-}
-
-impl fmt::Display for PseudoFLoadOp {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            PseudoFLoadOp::Flw => write!(f, "flw"),
-            PseudoFLoadOp::Fld => write!(f, "fld"),
-        }
-    }
-}
-
-pub enum PseudoFStoreOp {
-    Fsw,
-    Fsd,
-}
-
-impl fmt::Display for PseudoFStoreOp {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            PseudoFStoreOp::Fsw => write!(f, "fsw"),
-            PseudoFStoreOp::Fsd => write!(f, "fsd"),
+            Ik::La { rd, label } => write!(f, "la {}, {}", regs::display(*rd), label),
+            Ik::LoadAddr { .. } => {
+                unreachable!("load addr should be converted to li + add or addi")
+            }
         }
     }
 }
@@ -1063,9 +1036,9 @@ impl fmt::Display for Frm {
 impl MInst for RvInst {
     fn from_ptr(ptr: BaseArenaPtr<Self::T>) -> Self { Self(ptr) }
 
-    fn ptr(&self) -> BaseArenaPtr<Self::T> { self.0 }
+    fn ptr(self) -> BaseArenaPtr<Self::T> { self.0 }
 
-    fn uses(&self, mctx: &MContext<Self>) -> Vec<Reg> {
+    fn uses(self, mctx: &MContext<Self>, config: &LowerConfig) -> Vec<Reg> {
         use RvInstKind as Ik;
 
         match &self.deref(mctx).kind {
@@ -1078,7 +1051,21 @@ impl MInst for RvInst {
             Ik::FpuRRRR { rs1, rs2, rs3, .. } => vec![*rs1, *rs2, *rs3],
             Ik::Load { loc, .. } => match loc {
                 MemLoc::RegOffset { base, .. } => vec![*base],
-                MemLoc::Slot { .. } => vec![regs::fp().into()],
+                MemLoc::Slot { .. } => {
+                    if config.omit_frame_pointer {
+                        // this location should be modified into reg offset
+                        unreachable!()
+                    } else {
+                        vec![regs::fp().into()]
+                    }
+                }
+                MemLoc::IncomingParam { .. } => {
+                    if config.omit_frame_pointer {
+                        vec![regs::sp().into()]
+                    } else {
+                        vec![regs::fp().into()]
+                    }
+                }
             },
             Ik::Store { src, loc, .. } => {
                 let mut uses = vec![*src];
@@ -1086,22 +1073,51 @@ impl MInst for RvInst {
                     MemLoc::RegOffset { base, .. } => uses.push(*base),
                     // XXX: Slot will use a frame pointer to index local variables
                     // but if it is omitted, it will fall back to the stack pointer
-                    MemLoc::Slot { .. } => uses.push(regs::fp().into()),
+                    MemLoc::Slot { .. } => {
+                        if config.omit_frame_pointer {
+                            // this location should be modified into reg offset
+                            unreachable!()
+                        } else {
+                            uses.push(regs::fp().into());
+                        }
+                    }
+                    MemLoc::IncomingParam { .. } => {
+                        if config.omit_frame_pointer {
+                            uses.push(regs::sp().into());
+                        } else {
+                            uses.push(regs::fp().into());
+                        }
+                    }
                 }
                 uses
             }
             Ik::Ret => vec![],
-            Ik::Call { func } => {
-                // TODO: we need to get the registers from the calling convention
-                todo!()
-            }
+            Ik::Call { arg_regs, .. } => arg_regs.iter().map(|r| (*r).into()).collect(),
             Ik::J { .. } => vec![],
             Ik::Br { rs1, rs2, .. } => vec![*rs1, *rs2],
-            Ik::LoadAddr { .. } => vec![],
+            Ik::La { .. } => vec![],
+            Ik::LoadAddr { loc, .. } => match loc {
+                MemLoc::RegOffset { base, .. } => vec![*base],
+                MemLoc::Slot { .. } => {
+                    if config.omit_frame_pointer {
+                        // this location should be modified into reg offset
+                        unreachable!()
+                    } else {
+                        vec![regs::fp().into()]
+                    }
+                }
+                MemLoc::IncomingParam { .. } => {
+                    if config.omit_frame_pointer {
+                        vec![regs::sp().into()]
+                    } else {
+                        vec![regs::fp().into()]
+                    }
+                }
+            },
         }
     }
 
-    fn defs(&self, mctx: &MContext<Self>) -> Vec<Reg> {
+    fn defs(self, mctx: &MContext<Self>, _config: &LowerConfig) -> Vec<Reg> {
         use RvInstKind as Ik;
 
         match &self.deref(mctx).kind {
@@ -1115,20 +1131,24 @@ impl MInst for RvInst {
             Ik::Load { rd, .. } => vec![*rd],
             Ik::Store { .. } => vec![],
             Ik::Ret => vec![],
-            Ik::Call { .. } => vec![],
+            Ik::Call { .. } => regs::CALLER_SAVED_REGS
+                .iter()
+                .map(|r| (*r).into())
+                .collect(),
             Ik::J { .. } => vec![],
             Ik::Br { .. } => vec![],
+            Ik::La { rd, .. } => vec![*rd],
             Ik::LoadAddr { rd, .. } => vec![*rd],
         }
     }
 
-    fn is_terminator(&self, mctx: &MContext<Self>) -> bool {
+    fn is_terminator(self, mctx: &MContext<Self>) -> bool {
         use RvInstKind as Ik;
 
         matches!(&self.deref(mctx).kind, Ik::J { .. } | Ik::Br { .. })
     }
 
-    fn succs(&self, mctx: &MContext<Self>) -> Vec<MBlock<Self>> {
+    fn succs(self, mctx: &MContext<Self>) -> Vec<MBlock<Self>> {
         use RvInstKind as Ik;
 
         if let Ik::J { block } = &self.deref(mctx).kind {
@@ -1137,6 +1157,87 @@ impl MInst for RvInst {
             vec![*block]
         } else {
             vec![]
+        }
+    }
+
+    fn modify_mem_loc<F>(self, mctx: &mut MContext<Self>, f: F, config: &LowerConfig)
+    where
+        F: FnOnce(MemLoc) -> MemLoc,
+    {
+        // TODO: modify load, store & load addr, maybe remove this instruction, add
+        // other instructions, etc.
+
+        use RvInstKind as Ik;
+
+        let (old_loc, new_loc) = match self.kind(mctx) {
+            Ik::Load { loc, .. } => (*loc, f(*loc)),
+            Ik::Store { loc, .. } => (*loc, f(*loc)),
+            Ik::LoadAddr { loc, .. } => (*loc, f(*loc)),
+            _ => return,
+        };
+
+        let new_loc = match (old_loc, new_loc) {
+            (MemLoc::Slot { .. }, MemLoc::RegOffset { base, offset }) => {
+                if Imm12::try_from_i64(offset).is_none() {
+                    if config.omit_frame_pointer {
+                        let (li, rd) = Self::li(mctx, offset as u64);
+                        self.insert_before(mctx, li);
+                        MemLoc::RegOffset {
+                            base: rd,
+                            offset: 0,
+                        }
+                    } else {
+                        let t0 = regs::t0();
+                        let li = Self::build_li(mctx, t0.into(), offset as u64);
+                        self.insert_before(mctx, li);
+                        MemLoc::RegOffset {
+                            base: t0.into(),
+                            offset: 0,
+                        }
+                    }
+                } else {
+                    MemLoc::RegOffset { base, offset }
+                }
+            }
+            (MemLoc::IncomingParam { .. }, MemLoc::RegOffset { base, offset }) => {
+                if Imm12::try_from_i64(offset).is_none() {
+                    let t0 = regs::t0();
+                    let li = Self::build_li(mctx, t0.into(), offset as u64);
+                    self.insert_before(mctx, li);
+                    MemLoc::RegOffset {
+                        base: t0.into(),
+                        offset: 0,
+                    }
+                } else {
+                    MemLoc::RegOffset { base, offset }
+                }
+            }
+            _ => new_loc,
+        };
+
+        match &mut self.deref_mut(mctx).kind {
+            Ik::Load { loc, .. } => *loc = new_loc,
+            Ik::Store { loc, .. } => *loc = new_loc,
+            Ik::LoadAddr { rd, .. } => {
+                // we need to remove this instruction and replace with addi or add
+                match new_loc {
+                    MemLoc::IncomingParam { .. } => {}
+                    MemLoc::Slot { .. } => {}
+                    MemLoc::RegOffset { base, offset } => {
+                        let rd = *rd;
+                        let addi = Self::build_alu_rri(
+                            mctx,
+                            AluOpRRI::Addi,
+                            rd,
+                            base,
+                            Imm12::try_from_i64(offset).unwrap(),
+                        );
+                        self.insert_before(mctx, addi);
+                        self.remove(mctx);
+                    }
+                }
+            }
+            _ => unreachable!(),
         }
     }
 }

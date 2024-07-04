@@ -350,6 +350,10 @@ impl Successor {
     pub fn display<'a>(&'a self, ctx: &'a Context) -> DisplaySuccessor<'a> {
         DisplaySuccessor { ctx, succ: self }
     }
+
+    pub fn block(&self) -> Block { self.block.inner() }
+
+    pub fn args(&self) -> &HashMap<Value, Operand<Value>> { &self.args }
 }
 
 pub struct DisplaySuccessor<'a> {
@@ -1059,6 +1063,17 @@ impl Inst {
     pub fn operand(self, ctx: &Context, idx: usize) -> Value {
         self.deref(ctx).operands[idx].inner()
     }
+
+    pub fn operands(self, ctx: &Context) -> Vec<Value> {
+        self.deref(ctx)
+            .operands
+            .iter()
+            .map(|opd| opd.inner())
+            .collect()
+    }
+
+    /// Get the successor at the given index.
+    pub fn succ(self, ctx: &Context, idx: usize) -> &Successor { &self.deref(ctx).successors[idx] }
 
     /// Get the kind of the instruction.
     pub fn kind(self, ctx: &Context) -> &InstKind { &self.deref(ctx).kind }

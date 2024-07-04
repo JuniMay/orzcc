@@ -1,12 +1,15 @@
 //! The compiler executable.
 
 use clap::{Arg, Command};
-use orzcc::ir::{
-    passes::{
-        control_flow::CfgCanonicalize,
-        mem2reg::{Mem2reg, MEM2REG},
+use orzcc::{
+    backend::{riscv64::lower::RvLowerSpec, LowerConfig, LowerContext},
+    ir::{
+        passes::{
+            control_flow::CfgCanonicalize,
+            mem2reg::{Mem2reg, MEM2REG},
+        },
+        passman::PassManager,
     },
-    passman::PassManager,
 };
 
 struct CliCommand {
@@ -60,6 +63,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Some(emit_ir) = &cmd.emit_ir {
             std::fs::write(emit_ir, format!("{}", ir.display(true)))?;
         }
+
+        let mut lower_ctx: LowerContext<RvLowerSpec> = LowerContext::new(
+            &ir,
+            LowerConfig {
+                omit_frame_pointer: false,
+            },
+        );
+        lower_ctx.lower();
+        let mctx = lower_ctx.finish();
+
+        std::fs::write(cmd.output, format!("{}", mctx.display()))?;
     }
 
     Ok(())

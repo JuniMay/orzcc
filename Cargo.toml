@@ -23,7 +23,7 @@ default = [
     "target-riscv64",
 
     "frontend-ir",
-    # "frontend-sysy", # too slow, disable temporarily
+    "frontend-sysy", # too slow, disable temporarily
 ]
 
 target-arm32 = []

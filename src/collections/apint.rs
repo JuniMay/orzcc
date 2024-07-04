@@ -589,7 +589,8 @@ impl ApInt {
     /// 1s in the integer.
     pub fn shrink_to_fit(&mut self) {
         let mut width = self.width;
-        while width > 1 && self.chunks.last().unwrap() == &0 {
+        // FIXME: still buggy
+        while width > 1 && !self.chunks.is_empty() && self.chunks.last().unwrap() == &0 {
             self.chunks.pop();
             width -= ApIntChunk::BITS as usize;
         }

@@ -1,7 +1,7 @@
 use core::fmt;
 
 /// The kind of a register.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum RegKind {
     /// The general purpose register.
     General,
@@ -17,11 +17,20 @@ pub enum Reg {
     V(VReg),
 }
 
+impl Reg {
+    pub fn kind(&self) -> RegKind {
+        match self {
+            Reg::P(preg) => preg.kind(),
+            Reg::V(vreg) => vreg.kind(),
+        }
+    }
+}
+
 /// The physical register.
 ///
 /// Cranelift uses a bit-encoded representation, but here just separate the
 /// register number and the kind.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct PReg(u8, RegKind);
 
 impl PReg {

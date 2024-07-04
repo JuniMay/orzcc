@@ -124,6 +124,10 @@ impl Signature {
     pub fn display<'a>(&'a self, ctx: &'a Context) -> DisplaySig<'a> {
         DisplaySig { ctx, sig: self }
     }
+
+    pub fn ret_tys(&self) -> &[Ty] { &self.ret }
+
+    pub fn param_tys(&self) -> &[Ty] { &self.params }
 }
 
 pub struct DisplayTy<'a> {
