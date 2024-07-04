@@ -314,11 +314,14 @@ where
             for block in func.iter(self.ctx) {
                 let mblock = MBlock::new(
                     &mut self.mctx,
-                    block.name(self.ctx).cloned().unwrap_or_else(|| {
-                        let label = format!("__machbb_{}", self.label_counter);
-                        self.label_counter += 1;
-                        label
-                    }),
+                    format!(
+                        ".{}",
+                        block.name(self.ctx).cloned().unwrap_or_else(|| {
+                            let label = format!("__machbb_{}", self.label_counter);
+                            self.label_counter += 1;
+                            label
+                        })
+                    ),
                 );
                 mfunc.push_back(&mut self.mctx, mblock);
                 self.blocks.insert(block, mblock);
@@ -633,7 +636,7 @@ where
                     MValueKind::Undef => return,
                 };
 
-                let val = inst.operand(self.ctx, 1);
+                let val = inst.operand(self.ctx, 0);
                 S::gen_store(self, self.lowered[&val], mem_loc);
             }
             Ik::Jump => {

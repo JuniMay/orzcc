@@ -123,7 +123,7 @@ impl LowerSpec for RvLowerSpec {
             panic!("gen_iconst: expected integer type, got {:?}", ty);
         }
 
-        let bitwidth = ty.bitwidth_with_ptr(lower.ctx, Self::pointer_size());
+        let bitwidth = ty.bitwidth_with_ptr(lower.ctx, Self::pointer_size() * 8);
 
         if bitwidth > 64 {
             unimplemented!("gen_iconst: bitwidth > 64: {}", bitwidth);
@@ -1189,7 +1189,7 @@ impl LowerSpec for RvLowerSpec {
     fn gen_load(lower: &mut LowerContext<Self>, ty: ir::Ty, mem_loc: MemLoc) -> MValue {
         let curr_block = lower.curr_block.unwrap();
 
-        let bitwidth = ty.bitwidth_with_ptr(lower.ctx, Self::pointer_size());
+        let bitwidth = ty.bitwidth_with_ptr(lower.ctx, Self::pointer_size() * 8);
         if ty.is_integer(lower.ctx) || ty.is_ptr(lower.ctx) {
             let op = match bitwidth {
                 0..=8 => LoadOp::Lb,
@@ -1232,8 +1232,9 @@ impl LowerSpec for RvLowerSpec {
             MValueKind::Undef => return,
         };
 
-        let bitwidth = val.ty().bitwidth_with_ptr(lower.ctx, Self::pointer_size());
-        dbg!(bitwidth);
+        let bitwidth = val
+            .ty()
+            .bitwidth_with_ptr(lower.ctx, Self::pointer_size() * 8);
         if val.ty().is_integer(lower.ctx) || val.ty().is_ptr(lower.ctx) {
             let op = match bitwidth {
                 0..=8 => StoreOp::Sb,

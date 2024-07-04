@@ -917,10 +917,10 @@ impl IrGen for Decl {
                         .expect("global def expected to have constant initializer");
                     let size = init.ty().bytewidth();
                     let stack_slot = ir::Inst::stack_slot(&mut irgen.ctx, size as u32);
-                    stack_slot.result(&irgen.ctx, 0).assign_name(
+                    stack_slot.result(&irgen.ctx, 0).alloc_name(
                         &mut irgen.ctx,
                         format!(
-                            "__SLOT_CONST_{}_{}",
+                            "__SLOT_CONST_{}_{}_",
                             irgen.curr_func_name.as_ref().unwrap(),
                             ident
                         ),
@@ -1011,10 +1011,10 @@ impl IrGen for Decl {
                     let init = init.as_ref().unwrap();
                     let size = init.ty().bytewidth();
                     let stack_slot = ir::Inst::stack_slot(&mut irgen.ctx, size as u32);
-                    stack_slot.result(&irgen.ctx, 0).assign_name(
+                    stack_slot.result(&irgen.ctx, 0).alloc_name(
                         &mut irgen.ctx,
                         format!(
-                            "__SLOT_VAR_{}_{}",
+                            "__SLOT_VAR_{}_{}_",
                             irgen.curr_func_name.as_ref().unwrap(),
                             ident
                         ),
@@ -1272,15 +1272,15 @@ impl IrGen for Stmt {
             Stmt::Block(block) => block.irgen(irgen),
             Stmt::If(cond, then_stmt, else_stmt) => {
                 let br_entry = ir::Block::new(&mut irgen.ctx);
-                br_entry.alloc_name(&mut irgen.ctx, "if.entry");
+                br_entry.alloc_name(&mut irgen.ctx, "if.entry_");
                 irgen.curr_func.unwrap().push_back(&mut irgen.ctx, br_entry);
                 irgen.curr_block = Some(br_entry);
 
                 let then_block = ir::Block::new(&mut irgen.ctx);
-                then_block.alloc_name(&mut irgen.ctx, "if.then");
+                then_block.alloc_name(&mut irgen.ctx, "if.then_");
 
                 let else_block = ir::Block::new(&mut irgen.ctx);
-                else_block.alloc_name(&mut irgen.ctx, "if.else");
+                else_block.alloc_name(&mut irgen.ctx, "if.else_");
 
                 let cond = irgen.gen_local_expr(cond).unwrap();
                 let br = ir::Inst::br(
@@ -1295,7 +1295,7 @@ impl IrGen for Stmt {
                 irgen.curr_block.unwrap().push_back(&mut irgen.ctx, br);
 
                 let exit_block = ir::Block::new(&mut irgen.ctx);
-                exit_block.alloc_name(&mut irgen.ctx, "if.exit");
+                exit_block.alloc_name(&mut irgen.ctx, "if.exit_");
 
                 // then block
                 irgen
@@ -1339,14 +1339,14 @@ impl IrGen for Stmt {
             }
             Stmt::While(cond, loop_stmt) => {
                 let loop_entry = ir::Block::new(&mut irgen.ctx);
-                loop_entry.alloc_name(&mut irgen.ctx, "while.entry");
+                loop_entry.alloc_name(&mut irgen.ctx, "while.entry_");
                 irgen
                     .curr_func
                     .unwrap()
                     .push_back(&mut irgen.ctx, loop_entry);
 
                 let loop_exit = ir::Block::new(&mut irgen.ctx);
-                loop_exit.alloc_name(&mut irgen.ctx, "while.exit");
+                loop_exit.alloc_name(&mut irgen.ctx, "while.exit_");
 
                 irgen.loop_entry_stack.push(loop_entry);
                 irgen.loop_exit_stack.push(loop_exit);
@@ -1355,7 +1355,7 @@ impl IrGen for Stmt {
                 let cond = irgen.gen_local_expr(cond).unwrap();
 
                 let loop_body = ir::Block::new(&mut irgen.ctx);
-                loop_body.alloc_name(&mut irgen.ctx, "while.body");
+                loop_body.alloc_name(&mut irgen.ctx, "while.body_");
 
                 let br = ir::Inst::br(
                     &mut irgen.ctx,
