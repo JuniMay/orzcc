@@ -1,0 +1,895 @@
+slot @__GLOBAL_CONST_TWO_PI /* 6 */  : f32 = [0xdb, 0x0f, 0xc9, 0x40]
+slot @__GLOBAL_CONST_MAX_DIM_X /* 0 */  : i32 = [0x08, 0x00, 0x00, 0x00]
+slot @__GLOBAL_CONST_EPSILON /* 7 */  : f32 = [0xbd, 0x37, 0x86, 0x35]
+slot @__GLOBAL_VAR_test_block /* 2 */  : [[f32; 8]; 8] = undef
+slot @__GLOBAL_VAR_test_dct /* 3 */  : [[f32; 8]; 8] = undef
+slot @__GLOBAL_CONST_PI /* 5 */  : f32 = [0xdb, 0x0f, 0x49, 0x40]
+slot @__GLOBAL_VAR_test_idct /* 4 */  : [[f32; 8]; 8] = undef
+slot @__GLOBAL_CONST_MAX_DIM_Y /* 1 */  : i32 = [0x08, 0x00, 0x00, 0x00]
+decl @memcpy(ptr, ptr, i32) -> void
+decl @putint(i32) -> void
+decl @getfarray(ptr) -> i32
+decl @putfloat(f32) -> void
+decl @getint() -> i32
+decl @getarray(ptr) -> i32
+decl @getch() -> i32
+decl @putarray(i32, ptr) -> void
+decl @_sysy_stoptime(i32) -> void
+decl @putch(i32) -> void
+decl @getfloat() -> f32
+decl @putfarray(i32, ptr) -> void
+decl @memset(ptr, i32, i32) -> void
+decl @_sysy_starttime(i32) -> void
+func @idct /* 7 */ (ptr, ptr, i32, i32) -> void {
+^bb16 /* 54 */ (%__PARAM_idct_mat: ptr /* 265 */, %__PARAM_idct_dct_mat: ptr /* 266 */, %__PARAM_idct_n: i32 /* 267 */, %__PARAM_idct_m: i32 /* 268 */):
+    %__SLOT_VAR_idct_j_0 /* 308 */ = stack_slot 4 : ptr
+    %__SLOT_VAR_idct_i_0 /* 307 */ = stack_slot 4 : ptr
+    %__SLOT_VAR_idct_v_0 /* 276 */ = stack_slot 4 : ptr
+    %__SLOT_VAR_idct_u_0 /* 271 */ = stack_slot 4 : ptr
+    %__SLOT_PARAM_idct_m /* 270 */ = stack_slot 4 : ptr
+    %__SLOT_PARAM_idct_n /* 269 */ = stack_slot 4 : ptr
+    /* no result */ store %__PARAM_idct_n, %__SLOT_PARAM_idct_n
+    /* no result */ store %__PARAM_idct_m, %__SLOT_PARAM_idct_m
+    %v232 /* 272 */ = iconst 0x00000000i32 : i32
+    /* no result */ store %v232, %__SLOT_VAR_idct_u_0
+
+^while.entry_6 /* 56 */ :
+    %v233 /* 273 */ = load %__SLOT_VAR_idct_u_0 : i32
+    %v234 /* 274 */ = load %__SLOT_PARAM_idct_n : i32
+    %v235 /* 275 */ = icmp.slt %v233, %v234 : i1
+    /* no result */ br %v235, ^while.body_6, ^while.exit_6
+
+^while.body_6 /* 58 */ :
+    %v236 /* 277 */ = iconst 0x00000000i32 : i32
+    /* no result */ store %v236, %__SLOT_VAR_idct_v_0
+
+^while.entry_7 /* 59 */ :
+    %v237 /* 278 */ = load %__SLOT_VAR_idct_v_0 : i32
+    %v238 /* 279 */ = load %__SLOT_PARAM_idct_m : i32
+    %v239 /* 280 */ = icmp.slt %v237, %v238 : i1
+    /* no result */ br %v239, ^while.body_7, ^while.exit_7
+
+^while.body_7 /* 61 */ :
+    %v240 /* 281 */ = iconst 0x00000000i32 : i32
+    %v241 /* 282 */ = load %__SLOT_VAR_idct_u_0 : i32
+    %v242 /* 283 */ = iconst 0x00000020i32 : i32
+    %v243 /* 284 */ = mul %v241, %v242 : i32
+    %v244 /* 285 */ = add %v240, %v243 : i32
+    %v245 /* 286 */ = load %__SLOT_VAR_idct_v_0 : i32
+    %v246 /* 287 */ = iconst 0x00000004i32 : i32
+    %v247 /* 288 */ = mul %v245, %v246 : i32
+    %v248 /* 289 */ = add %v244, %v247 : i32
+    %v249 /* 290 */ = offset %__PARAM_idct_mat, %v248 : ptr
+    %v250 /* 291 */ = iconst 0x00000001i32 : i32
+    %v251 /* 292 */ = sitofp %v250 : f32
+    %v252 /* 293 */ = fconst 0x40800000 : f32
+    %v253 /* 294 */ = fdiv %v251, %v252 : f32
+    %v254 /* 295 */ = iconst 0x00000000i32 : i32
+    %v255 /* 296 */ = iconst 0x00000000i32 : i32
+    %v256 /* 297 */ = iconst 0x00000020i32 : i32
+    %v257 /* 298 */ = mul %v255, %v256 : i32
+    %v258 /* 299 */ = add %v254, %v257 : i32
+    %v259 /* 300 */ = iconst 0x00000000i32 : i32
+    %v260 /* 301 */ = iconst 0x00000004i32 : i32
+    %v261 /* 302 */ = mul %v259, %v260 : i32
+    %v262 /* 303 */ = add %v258, %v261 : i32
+    %v263 /* 304 */ = offset %__PARAM_idct_dct_mat, %v262 : ptr
+    %v264 /* 305 */ = load %v263 : f32
+    %v265 /* 306 */ = fmul %v253, %v264 : f32
+    /* no result */ store %v265, %v249
+    %v266 /* 309 */ = iconst 0x00000001i32 : i32
+    /* no result */ store %v266, %__SLOT_VAR_idct_i_0
+
+^while.entry_8 /* 62 */ :
+    %v267 /* 310 */ = load %__SLOT_VAR_idct_i_0 : i32
+    %v268 /* 311 */ = load %__SLOT_PARAM_idct_n : i32
+    %v269 /* 312 */ = icmp.slt %v267, %v268 : i1
+    /* no result */ br %v269, ^while.body_8, ^while.exit_8
+
+^while.body_8 /* 64 */ :
+    %v270 /* 313 */ = iconst 0x00000000i32 : i32
+    %v271 /* 314 */ = load %__SLOT_VAR_idct_u_0 : i32
+    %v272 /* 315 */ = iconst 0x00000020i32 : i32
+    %v273 /* 316 */ = mul %v271, %v272 : i32
+    %v274 /* 317 */ = add %v270, %v273 : i32
+    %v275 /* 318 */ = load %__SLOT_VAR_idct_v_0 : i32
+    %v276 /* 319 */ = iconst 0x00000004i32 : i32
+    %v277 /* 320 */ = mul %v275, %v276 : i32
+    %v278 /* 321 */ = add %v274, %v277 : i32
+    %v279 /* 322 */ = offset %__PARAM_idct_mat, %v278 : ptr
+    %v280 /* 323 */ = iconst 0x00000000i32 : i32
+    %v281 /* 324 */ = load %__SLOT_VAR_idct_u_0 : i32
+    %v282 /* 325 */ = iconst 0x00000020i32 : i32
+    %v283 /* 326 */ = mul %v281, %v282 : i32
+    %v284 /* 327 */ = add %v280, %v283 : i32
+    %v285 /* 328 */ = load %__SLOT_VAR_idct_v_0 : i32
+    %v286 /* 329 */ = iconst 0x00000004i32 : i32
+    %v287 /* 330 */ = mul %v285, %v286 : i32
+    %v288 /* 331 */ = add %v284, %v287 : i32
+    %v289 /* 332 */ = offset %__PARAM_idct_mat, %v288 : ptr
+    %v290 /* 333 */ = load %v289 : f32
+    %v291 /* 334 */ = iconst 0x00000001i32 : i32
+    %v292 /* 335 */ = sitofp %v291 : f32
+    %v293 /* 336 */ = fconst 0x40000000 : f32
+    %v294 /* 337 */ = fdiv %v292, %v293 : f32
+    %v295 /* 338 */ = iconst 0x00000000i32 : i32
+    %v296 /* 339 */ = load %__SLOT_VAR_idct_i_0 : i32
+    %v297 /* 340 */ = iconst 0x00000020i32 : i32
+    %v298 /* 341 */ = mul %v296, %v297 : i32
+    %v299 /* 342 */ = add %v295, %v298 : i32
+    %v300 /* 343 */ = iconst 0x00000000i32 : i32
+    %v301 /* 344 */ = iconst 0x00000004i32 : i32
+    %v302 /* 345 */ = mul %v300, %v301 : i32
+    %v303 /* 346 */ = add %v299, %v302 : i32
+    %v304 /* 347 */ = offset %__PARAM_idct_dct_mat, %v303 : ptr
+    %v305 /* 348 */ = load %v304 : f32
+    %v306 /* 349 */ = fmul %v294, %v305 : f32
+    %v307 /* 350 */ = fadd %v290, %v306 : f32
+    /* no result */ store %v307, %v279
+    %v308 /* 351 */ = load %__SLOT_VAR_idct_i_0 : i32
+    %v309 /* 352 */ = iconst 0x00000001i32 : i32
+    %v310 /* 353 */ = add %v308, %v309 : i32
+    /* no result */ store %v310, %__SLOT_VAR_idct_i_0
+    /* no result */ jump ^while.entry_8
+
+^while.exit_8 /* 63 */ :
+    %v311 /* 354 */ = iconst 0x00000001i32 : i32
+    /* no result */ store %v311, %__SLOT_VAR_idct_j_0
+
+^while.entry_9 /* 65 */ :
+    %v312 /* 355 */ = load %__SLOT_VAR_idct_j_0 : i32
+    %v313 /* 356 */ = load %__SLOT_PARAM_idct_m : i32
+    %v314 /* 357 */ = icmp.slt %v312, %v313 : i1
+    /* no result */ br %v314, ^while.body_9, ^while.exit_9
+
+^while.body_9 /* 67 */ :
+    %v315 /* 358 */ = iconst 0x00000000i32 : i32
+    %v316 /* 359 */ = load %__SLOT_VAR_idct_u_0 : i32
+    %v317 /* 360 */ = iconst 0x00000020i32 : i32
+    %v318 /* 361 */ = mul %v316, %v317 : i32
+    %v319 /* 362 */ = add %v315, %v318 : i32
+    %v320 /* 363 */ = load %__SLOT_VAR_idct_v_0 : i32
+    %v321 /* 364 */ = iconst 0x00000004i32 : i32
+    %v322 /* 365 */ = mul %v320, %v321 : i32
+    %v323 /* 366 */ = add %v319, %v322 : i32
+    %v324 /* 367 */ = offset %__PARAM_idct_mat, %v323 : ptr
+    %v325 /* 368 */ = iconst 0x00000000i32 : i32
+    %v326 /* 369 */ = load %__SLOT_VAR_idct_u_0 : i32
+    %v327 /* 370 */ = iconst 0x00000020i32 : i32
+    %v328 /* 371 */ = mul %v326, %v327 : i32
+    %v329 /* 372 */ = add %v325, %v328 : i32
+    %v330 /* 373 */ = load %__SLOT_VAR_idct_v_0 : i32
+    %v331 /* 374 */ = iconst 0x00000004i32 : i32
+    %v332 /* 375 */ = mul %v330, %v331 : i32
+    %v333 /* 376 */ = add %v329, %v332 : i32
+    %v334 /* 377 */ = offset %__PARAM_idct_mat, %v333 : ptr
+    %v335 /* 378 */ = load %v334 : f32
+    %v336 /* 379 */ = iconst 0x00000001i32 : i32
+    %v337 /* 380 */ = sitofp %v336 : f32
+    %v338 /* 381 */ = fconst 0x40000000 : f32
+    %v339 /* 382 */ = fdiv %v337, %v338 : f32
+    %v340 /* 383 */ = iconst 0x00000000i32 : i32
+    %v341 /* 384 */ = iconst 0x00000000i32 : i32
+    %v342 /* 385 */ = iconst 0x00000020i32 : i32
+    %v343 /* 386 */ = mul %v341, %v342 : i32
+    %v344 /* 387 */ = add %v340, %v343 : i32
+    %v345 /* 388 */ = load %__SLOT_VAR_idct_j_0 : i32
+    %v346 /* 389 */ = iconst 0x00000004i32 : i32
+    %v347 /* 390 */ = mul %v345, %v346 : i32
+    %v348 /* 391 */ = add %v344, %v347 : i32
+    %v349 /* 392 */ = offset %__PARAM_idct_dct_mat, %v348 : ptr
+    %v350 /* 393 */ = load %v349 : f32
+    %v351 /* 394 */ = fmul %v339, %v350 : f32
+    %v352 /* 395 */ = fadd %v335, %v351 : f32
+    /* no result */ store %v352, %v324
+    %v353 /* 396 */ = load %__SLOT_VAR_idct_j_0 : i32
+    %v354 /* 397 */ = iconst 0x00000001i32 : i32
+    %v355 /* 398 */ = add %v353, %v354 : i32
+    /* no result */ store %v355, %__SLOT_VAR_idct_j_0
+    /* no result */ jump ^while.entry_9
+
+^while.exit_9 /* 66 */ :
+    %v356 /* 399 */ = iconst 0x00000001i32 : i32
+    /* no result */ store %v356, %__SLOT_VAR_idct_i_0
+
+^while.entry_10 /* 68 */ :
+    %v357 /* 400 */ = load %__SLOT_VAR_idct_i_0 : i32
+    %v358 /* 401 */ = load %__SLOT_PARAM_idct_n : i32
+    %v359 /* 402 */ = icmp.slt %v357, %v358 : i1
+    /* no result */ br %v359, ^while.body_10, ^while.exit_10
+
+^while.body_10 /* 70 */ :
+    %v360 /* 403 */ = iconst 0x00000001i32 : i32
+    /* no result */ store %v360, %__SLOT_VAR_idct_j_0
+
+^while.entry_11 /* 71 */ :
+    %v361 /* 404 */ = load %__SLOT_VAR_idct_j_0 : i32
+    %v362 /* 405 */ = load %__SLOT_PARAM_idct_m : i32
+    %v363 /* 406 */ = icmp.slt %v361, %v362 : i1
+    /* no result */ br %v363, ^while.body_11, ^while.exit_11
+
+^while.body_11 /* 73 */ :
+    %v364 /* 407 */ = iconst 0x00000000i32 : i32
+    %v365 /* 408 */ = load %__SLOT_VAR_idct_u_0 : i32
+    %v366 /* 409 */ = iconst 0x00000020i32 : i32
+    %v367 /* 410 */ = mul %v365, %v366 : i32
+    %v368 /* 411 */ = add %v364, %v367 : i32
+    %v369 /* 412 */ = load %__SLOT_VAR_idct_v_0 : i32
+    %v370 /* 413 */ = iconst 0x00000004i32 : i32
+    %v371 /* 414 */ = mul %v369, %v370 : i32
+    %v372 /* 415 */ = add %v368, %v371 : i32
+    %v373 /* 416 */ = offset %__PARAM_idct_mat, %v372 : ptr
+    %v374 /* 417 */ = iconst 0x00000000i32 : i32
+    %v375 /* 418 */ = load %__SLOT_VAR_idct_u_0 : i32
+    %v376 /* 419 */ = iconst 0x00000020i32 : i32
+    %v377 /* 420 */ = mul %v375, %v376 : i32
+    %v378 /* 421 */ = add %v374, %v377 : i32
+    %v379 /* 422 */ = load %__SLOT_VAR_idct_v_0 : i32
+    %v380 /* 423 */ = iconst 0x00000004i32 : i32
+    %v381 /* 424 */ = mul %v379, %v380 : i32
+    %v382 /* 425 */ = add %v378, %v381 : i32
+    %v383 /* 426 */ = offset %__PARAM_idct_mat, %v382 : ptr
+    %v384 /* 427 */ = load %v383 : f32
+    %v385 /* 428 */ = iconst 0x00000000i32 : i32
+    %v386 /* 429 */ = load %__SLOT_VAR_idct_i_0 : i32
+    %v387 /* 430 */ = iconst 0x00000020i32 : i32
+    %v388 /* 431 */ = mul %v386, %v387 : i32
+    %v389 /* 432 */ = add %v385, %v388 : i32
+    %v390 /* 433 */ = load %__SLOT_VAR_idct_j_0 : i32
+    %v391 /* 434 */ = iconst 0x00000004i32 : i32
+    %v392 /* 435 */ = mul %v390, %v391 : i32
+    %v393 /* 436 */ = add %v389, %v392 : i32
+    %v394 /* 437 */ = offset %__PARAM_idct_dct_mat, %v393 : ptr
+    %v395 /* 438 */ = load %v394 : f32
+    %v396 /* 439 */ = get_global @__GLOBAL_CONST_PI : ptr
+    %v397 /* 440 */ = load %v396 : f32
+    %v398 /* 441 */ = load %__SLOT_PARAM_idct_n : i32
+    %v399 /* 442 */ = sitofp %v398 : f32
+    %v400 /* 443 */ = fdiv %v397, %v399 : f32
+    %v401 /* 444 */ = load %__SLOT_VAR_idct_u_0 : i32
+    %v402 /* 445 */ = sitofp %v401 : f32
+    %v403 /* 446 */ = fconst 0x3f800000 : f32
+    %v404 /* 447 */ = fconst 0x40000000 : f32
+    %v405 /* 448 */ = fdiv %v403, %v404 : f32
+    %v406 /* 449 */ = fadd %v402, %v405 : f32
+    %v407 /* 450 */ = fmul %v400, %v406 : f32
+    %v408 /* 451 */ = load %__SLOT_VAR_idct_i_0 : i32
+    %v409 /* 452 */ = sitofp %v408 : f32
+    %v410 /* 453 */ = fmul %v407, %v409 : f32
+    %v411 /* 454 */ = call @my_cos(%v410) : f32
+    %v412 /* 455 */ = fmul %v395, %v411 : f32
+    %v413 /* 456 */ = get_global @__GLOBAL_CONST_PI : ptr
+    %v414 /* 457 */ = load %v413 : f32
+    %v415 /* 458 */ = load %__SLOT_PARAM_idct_m : i32
+    %v416 /* 459 */ = sitofp %v415 : f32
+    %v417 /* 460 */ = fdiv %v414, %v416 : f32
+    %v418 /* 461 */ = load %__SLOT_VAR_idct_v_0 : i32
+    %v419 /* 462 */ = sitofp %v418 : f32
+    %v420 /* 463 */ = fconst 0x3f800000 : f32
+    %v421 /* 464 */ = fconst 0x40000000 : f32
+    %v422 /* 465 */ = fdiv %v420, %v421 : f32
+    %v423 /* 466 */ = fadd %v419, %v422 : f32
+    %v424 /* 467 */ = fmul %v417, %v423 : f32
+    %v425 /* 468 */ = load %__SLOT_VAR_idct_j_0 : i32
+    %v426 /* 469 */ = sitofp %v425 : f32
+    %v427 /* 470 */ = fmul %v424, %v426 : f32
+    %v428 /* 471 */ = call @my_cos(%v427) : f32
+    %v429 /* 472 */ = fmul %v412, %v428 : f32
+    %v430 /* 473 */ = fadd %v384, %v429 : f32
+    /* no result */ store %v430, %v373
+    %v431 /* 474 */ = load %__SLOT_VAR_idct_j_0 : i32
+    %v432 /* 475 */ = iconst 0x00000001i32 : i32
+    %v433 /* 476 */ = add %v431, %v432 : i32
+    /* no result */ store %v433, %__SLOT_VAR_idct_j_0
+    /* no result */ jump ^while.entry_11
+
+^while.exit_11 /* 72 */ :
+    %v434 /* 477 */ = load %__SLOT_VAR_idct_i_0 : i32
+    %v435 /* 478 */ = iconst 0x00000001i32 : i32
+    %v436 /* 479 */ = add %v434, %v435 : i32
+    /* no result */ store %v436, %__SLOT_VAR_idct_i_0
+    /* no result */ jump ^while.entry_10
+
+^while.exit_10 /* 69 */ :
+    %v437 /* 480 */ = iconst 0x00000000i32 : i32
+    %v438 /* 481 */ = load %__SLOT_VAR_idct_u_0 : i32
+    %v439 /* 482 */ = iconst 0x00000020i32 : i32
+    %v440 /* 483 */ = mul %v438, %v439 : i32
+    %v441 /* 484 */ = add %v437, %v440 : i32
+    %v442 /* 485 */ = load %__SLOT_VAR_idct_v_0 : i32
+    %v443 /* 486 */ = iconst 0x00000004i32 : i32
+    %v444 /* 487 */ = mul %v442, %v443 : i32
+    %v445 /* 488 */ = add %v441, %v444 : i32
+    %v446 /* 489 */ = offset %__PARAM_idct_mat, %v445 : ptr
+    %v447 /* 490 */ = iconst 0x00000000i32 : i32
+    %v448 /* 491 */ = load %__SLOT_VAR_idct_u_0 : i32
+    %v449 /* 492 */ = iconst 0x00000020i32 : i32
+    %v450 /* 493 */ = mul %v448, %v449 : i32
+    %v451 /* 494 */ = add %v447, %v450 : i32
+    %v452 /* 495 */ = load %__SLOT_VAR_idct_v_0 : i32
+    %v453 /* 496 */ = iconst 0x00000004i32 : i32
+    %v454 /* 497 */ = mul %v452, %v453 : i32
+    %v455 /* 498 */ = add %v451, %v454 : i32
+    %v456 /* 499 */ = offset %__PARAM_idct_mat, %v455 : ptr
+    %v457 /* 500 */ = load %v456 : f32
+    %v458 /* 501 */ = fconst 0x40000000 : f32
+    %v459 /* 502 */ = fmul %v457, %v458 : f32
+    %v460 /* 503 */ = load %__SLOT_PARAM_idct_n : i32
+    %v461 /* 504 */ = sitofp %v460 : f32
+    %v462 /* 505 */ = fdiv %v459, %v461 : f32
+    %v463 /* 506 */ = fconst 0x40000000 : f32
+    %v464 /* 507 */ = fmul %v462, %v463 : f32
+    %v465 /* 508 */ = load %__SLOT_PARAM_idct_m : i32
+    %v466 /* 509 */ = sitofp %v465 : f32
+    %v467 /* 510 */ = fdiv %v464, %v466 : f32
+    /* no result */ store %v467, %v446
+    %v468 /* 511 */ = load %__SLOT_VAR_idct_v_0 : i32
+    %v469 /* 512 */ = iconst 0x00000001i32 : i32
+    %v470 /* 513 */ = add %v468, %v469 : i32
+    /* no result */ store %v470, %__SLOT_VAR_idct_v_0
+    /* no result */ jump ^while.entry_7
+
+^while.exit_7 /* 60 */ :
+    %v471 /* 514 */ = load %__SLOT_VAR_idct_u_0 : i32
+    %v472 /* 515 */ = iconst 0x00000001i32 : i32
+    %v473 /* 516 */ = add %v471, %v472 : i32
+    /* no result */ store %v473, %__SLOT_VAR_idct_u_0
+    /* no result */ jump ^while.entry_6
+
+^while.exit_6 /* 57 */ :
+
+^bb17 /* 55 */ :
+    /* no result */ ret void
+
+}
+func @write_mat /* 5 */ (ptr, i32, i32) -> void {
+^bb12 /* 32 */ (%__PARAM_write_mat_mat: ptr /* 102 */, %__PARAM_write_mat_n: i32 /* 103 */, %__PARAM_write_mat_m: i32 /* 104 */):
+    %__SLOT_VAR_write_mat_j_0 /* 123 */ = stack_slot 4 : ptr
+    %__SLOT_VAR_write_mat_i_0 /* 107 */ = stack_slot 4 : ptr
+    %__SLOT_PARAM_write_mat_m /* 106 */ = stack_slot 4 : ptr
+    %__SLOT_PARAM_write_mat_n /* 105 */ = stack_slot 4 : ptr
+    /* no result */ store %__PARAM_write_mat_n, %__SLOT_PARAM_write_mat_n
+    /* no result */ store %__PARAM_write_mat_m, %__SLOT_PARAM_write_mat_m
+    %v86 /* 108 */ = iconst 0x00000000i32 : i32
+    /* no result */ store %v86, %__SLOT_VAR_write_mat_i_0
+
+^while.entry_0 /* 34 */ :
+    %v87 /* 109 */ = load %__SLOT_VAR_write_mat_i_0 : i32
+    %v88 /* 110 */ = load %__SLOT_PARAM_write_mat_n : i32
+    %v89 /* 111 */ = icmp.slt %v87, %v88 : i1
+    /* no result */ br %v89, ^while.body_0, ^while.exit_0
+
+^while.body_0 /* 36 */ :
+    %v90 /* 112 */ = iconst 0x00000000i32 : i32
+    %v91 /* 113 */ = load %__SLOT_VAR_write_mat_i_0 : i32
+    %v92 /* 114 */ = iconst 0x00000020i32 : i32
+    %v93 /* 115 */ = mul %v91, %v92 : i32
+    %v94 /* 116 */ = add %v90, %v93 : i32
+    %v95 /* 117 */ = iconst 0x00000000i32 : i32
+    %v96 /* 118 */ = iconst 0x00000004i32 : i32
+    %v97 /* 119 */ = mul %v95, %v96 : i32
+    %v98 /* 120 */ = add %v94, %v97 : i32
+    %v99 /* 121 */ = offset %__PARAM_write_mat_mat, %v98 : ptr
+    %v100 /* 122 */ = load %v99 : f32
+    /* no result */ call @putfloat(%v100)
+    %v101 /* 124 */ = iconst 0x00000001i32 : i32
+    /* no result */ store %v101, %__SLOT_VAR_write_mat_j_0
+
+^while.entry_1 /* 37 */ :
+    %v102 /* 125 */ = load %__SLOT_VAR_write_mat_j_0 : i32
+    %v103 /* 126 */ = load %__SLOT_PARAM_write_mat_m : i32
+    %v104 /* 127 */ = icmp.slt %v102, %v103 : i1
+    /* no result */ br %v104, ^while.body_1, ^while.exit_1
+
+^while.body_1 /* 39 */ :
+    %v105 /* 128 */ = iconst 0x00000020i32 : i32
+    /* no result */ call @putch(%v105)
+    %v106 /* 129 */ = iconst 0x00000000i32 : i32
+    %v107 /* 130 */ = load %__SLOT_VAR_write_mat_i_0 : i32
+    %v108 /* 131 */ = iconst 0x00000020i32 : i32
+    %v109 /* 132 */ = mul %v107, %v108 : i32
+    %v110 /* 133 */ = add %v106, %v109 : i32
+    %v111 /* 134 */ = load %__SLOT_VAR_write_mat_j_0 : i32
+    %v112 /* 135 */ = iconst 0x00000004i32 : i32
+    %v113 /* 136 */ = mul %v111, %v112 : i32
+    %v114 /* 137 */ = add %v110, %v113 : i32
+    %v115 /* 138 */ = offset %__PARAM_write_mat_mat, %v114 : ptr
+    %v116 /* 139 */ = load %v115 : f32
+    /* no result */ call @putfloat(%v116)
+    %v117 /* 140 */ = load %__SLOT_VAR_write_mat_j_0 : i32
+    %v118 /* 141 */ = iconst 0x00000001i32 : i32
+    %v119 /* 142 */ = add %v117, %v118 : i32
+    /* no result */ store %v119, %__SLOT_VAR_write_mat_j_0
+    /* no result */ jump ^while.entry_1
+
+^while.exit_1 /* 38 */ :
+    %v120 /* 143 */ = iconst 0x0000000ai32 : i32
+    /* no result */ call @putch(%v120)
+    %v121 /* 144 */ = load %__SLOT_VAR_write_mat_i_0 : i32
+    %v122 /* 145 */ = iconst 0x00000001i32 : i32
+    %v123 /* 146 */ = add %v121, %v122 : i32
+    /* no result */ store %v123, %__SLOT_VAR_write_mat_i_0
+    /* no result */ jump ^while.entry_0
+
+^while.exit_0 /* 35 */ :
+    %v124 /* 147 */ = iconst 0x0000000ai32 : i32
+    /* no result */ call @putch(%v124)
+
+^bb13 /* 33 */ :
+    /* no result */ ret void
+
+}
+func @my_fabs /* 0 */ (f32) -> f32 {
+^bb0 /* 0 */ (%__PARAM_my_fabs_x: f32 /* 0 */):
+    %__RET_my_fabs /* 2 */ = stack_slot 4 : ptr
+    %__SLOT_PARAM_my_fabs_x /* 1 */ = stack_slot 4 : ptr
+    /* no result */ store %__PARAM_my_fabs_x, %__SLOT_PARAM_my_fabs_x
+
+^if.entry_0 /* 2 */ :
+    %v0 /* 3 */ = load %__SLOT_PARAM_my_fabs_x : f32
+    %v1 /* 4 */ = iconst 0x00000000i32 : i32
+    %v2 /* 5 */ = sitofp %v1 : f32
+    %v3 /* 6 */ = fcmp.ult %v2, %v0 : i1
+    /* no result */ br %v3, ^if.then_0, ^if.else_0
+
+^if.then_0 /* 3 */ :
+    %v4 /* 7 */ = load %__SLOT_PARAM_my_fabs_x : f32
+    /* no result */ store %v4, %__RET_my_fabs
+    /* no result */ jump ^bb1
+
+^if.else_0 /* 4 */ :
+    /* no result */ jump ^if.exit_0
+
+^if.exit_0 /* 5 */ :
+    %v5 /* 8 */ = load %__SLOT_PARAM_my_fabs_x : f32
+    %v6 /* 9 */ = fneg %v5 : f32
+    /* no result */ store %v6, %__RET_my_fabs
+    /* no result */ jump ^bb1
+
+^bb1 /* 1 */ :
+    %v7 /* 10 */ = load %__RET_my_fabs : f32
+    /* no result */ ret %v7
+
+}
+func @my_sin_impl /* 2 */ (f32) -> f32 {
+^bb4 /* 8 */ (%__PARAM_my_sin_impl_x: f32 /* 28 */):
+    %__RET_my_sin_impl /* 30 */ = stack_slot 4 : ptr
+    %__SLOT_PARAM_my_sin_impl_x /* 29 */ = stack_slot 4 : ptr
+    /* no result */ store %__PARAM_my_sin_impl_x, %__SLOT_PARAM_my_sin_impl_x
+
+^if.entry_1 /* 10 */ :
+    %v22 /* 31 */ = load %__SLOT_PARAM_my_sin_impl_x : f32
+    %v23 /* 32 */ = call @my_fabs(%v22) : f32
+    %v24 /* 33 */ = get_global @__GLOBAL_CONST_EPSILON : ptr
+    %v25 /* 34 */ = load %v24 : f32
+    %v26 /* 35 */ = fcmp.ule %v23, %v25 : i1
+    /* no result */ br %v26, ^if.then_1, ^if.else_1
+
+^if.then_1 /* 11 */ :
+    %v27 /* 36 */ = load %__SLOT_PARAM_my_sin_impl_x : f32
+    /* no result */ store %v27, %__RET_my_sin_impl
+    /* no result */ jump ^bb5
+
+^if.else_1 /* 12 */ :
+    /* no result */ jump ^if.exit_1
+
+^if.exit_1 /* 13 */ :
+    %v28 /* 37 */ = load %__SLOT_PARAM_my_sin_impl_x : f32
+    %v29 /* 38 */ = fconst 0x40400000 : f32
+    %v30 /* 39 */ = fdiv %v28, %v29 : f32
+    %v31 /* 40 */ = call @my_sin_impl(%v30) : f32
+    %v32 /* 41 */ = call @p(%v31) : f32
+    /* no result */ store %v32, %__RET_my_sin_impl
+    /* no result */ jump ^bb5
+
+^bb5 /* 9 */ :
+    %v33 /* 42 */ = load %__RET_my_sin_impl : f32
+    /* no result */ ret %v33
+
+}
+func @p /* 1 */ (f32) -> f32 {
+^bb2 /* 6 */ (%__PARAM_p_x: f32 /* 11 */):
+    %__RET_p /* 13 */ = stack_slot 4 : ptr
+    %__SLOT_PARAM_p_x /* 12 */ = stack_slot 4 : ptr
+    /* no result */ store %__PARAM_p_x, %__SLOT_PARAM_p_x
+    %v8 /* 14 */ = iconst 0x00000003i32 : i32
+    %v9 /* 15 */ = sitofp %v8 : f32
+    %v10 /* 16 */ = load %__SLOT_PARAM_p_x : f32
+    %v11 /* 17 */ = fmul %v9, %v10 : f32
+    %v12 /* 18 */ = iconst 0x00000004i32 : i32
+    %v13 /* 19 */ = sitofp %v12 : f32
+    %v14 /* 20 */ = load %__SLOT_PARAM_p_x : f32
+    %v15 /* 21 */ = fmul %v13, %v14 : f32
+    %v16 /* 22 */ = load %__SLOT_PARAM_p_x : f32
+    %v17 /* 23 */ = fmul %v15, %v16 : f32
+    %v18 /* 24 */ = load %__SLOT_PARAM_p_x : f32
+    %v19 /* 25 */ = fmul %v17, %v18 : f32
+    %v20 /* 26 */ = fsub %v11, %v19 : f32
+    /* no result */ store %v20, %__RET_p
+    /* no result */ jump ^bb3
+
+^bb3 /* 7 */ :
+    %v21 /* 27 */ = load %__RET_p : f32
+    /* no result */ ret %v21
+
+}
+func @my_sin /* 3 */ (f32) -> f32 {
+^bb6 /* 14 */ (%__PARAM_my_sin_x: f32 /* 43 */):
+    %__SLOT_VAR_my_sin_xx_0 /* 57 */ = stack_slot 4 : ptr
+    %__RET_my_sin /* 45 */ = stack_slot 4 : ptr
+    %__SLOT_PARAM_my_sin_x /* 44 */ = stack_slot 4 : ptr
+    /* no result */ store %__PARAM_my_sin_x, %__SLOT_PARAM_my_sin_x
+
+^if.entry_2 /* 16 */ :
+    %v34 /* 46 */ = load %__SLOT_PARAM_my_sin_x : f32
+    %v35 /* 47 */ = get_global @__GLOBAL_CONST_TWO_PI : ptr
+    %v36 /* 48 */ = load %v35 : f32
+    %v37 /* 49 */ = fcmp.ult %v36, %v34 : i1
+    %v39 /* 51 */ = iconst 0x00000001i32 : i1
+    /* no result */ br %v37, ^bb9(%v39), ^bb8
+
+^bb8 /* 19 */ :
+    %v40 /* 52 */ = load %__SLOT_PARAM_my_sin_x : f32
+    %v41 /* 53 */ = get_global @__GLOBAL_CONST_TWO_PI : ptr
+    %v42 /* 54 */ = load %v41 : f32
+    %v43 /* 55 */ = fneg %v42 : f32
+    %v44 /* 56 */ = fcmp.ult %v40, %v43 : i1
+    /* no result */ jump ^bb9(%v44)
+
+^bb9 /* 20 */ (%v38: i1 /* 50 */):
+    /* no result */ br %v38, ^if.then_2, ^if.else_2
+
+^if.then_2 /* 17 */ :
+    %v45 /* 58 */ = load %__SLOT_PARAM_my_sin_x : f32
+    %v46 /* 59 */ = get_global @__GLOBAL_CONST_TWO_PI : ptr
+    %v47 /* 60 */ = load %v46 : f32
+    %v48 /* 61 */ = fdiv %v45, %v47 : f32
+    %v49 /* 62 */ = fptosi %v48 : i32
+    /* no result */ store %v49, %__SLOT_VAR_my_sin_xx_0
+    %v50 /* 63 */ = load %__SLOT_PARAM_my_sin_x : f32
+    %v51 /* 64 */ = load %__SLOT_VAR_my_sin_xx_0 : i32
+    %v52 /* 65 */ = sitofp %v51 : f32
+    %v53 /* 66 */ = get_global @__GLOBAL_CONST_TWO_PI : ptr
+    %v54 /* 67 */ = load %v53 : f32
+    %v55 /* 68 */ = fmul %v52, %v54 : f32
+    %v56 /* 69 */ = fsub %v50, %v55 : f32
+    /* no result */ store %v56, %__SLOT_PARAM_my_sin_x
+    /* no result */ jump ^if.exit_2
+
+^if.else_2 /* 18 */ :
+    /* no result */ jump ^if.exit_2
+
+^if.exit_2 /* 21 */ :
+
+^if.entry_3 /* 22 */ :
+    %v57 /* 70 */ = load %__SLOT_PARAM_my_sin_x : f32
+    %v58 /* 71 */ = get_global @__GLOBAL_CONST_PI : ptr
+    %v59 /* 72 */ = load %v58 : f32
+    %v60 /* 73 */ = fcmp.ult %v59, %v57 : i1
+    /* no result */ br %v60, ^if.then_3, ^if.else_3
+
+^if.then_3 /* 23 */ :
+    %v61 /* 74 */ = load %__SLOT_PARAM_my_sin_x : f32
+    %v62 /* 75 */ = get_global @__GLOBAL_CONST_TWO_PI : ptr
+    %v63 /* 76 */ = load %v62 : f32
+    %v64 /* 77 */ = fsub %v61, %v63 : f32
+    /* no result */ store %v64, %__SLOT_PARAM_my_sin_x
+    /* no result */ jump ^if.exit_3
+
+^if.else_3 /* 24 */ :
+    /* no result */ jump ^if.exit_3
+
+^if.exit_3 /* 25 */ :
+
+^if.entry_4 /* 26 */ :
+    %v65 /* 78 */ = load %__SLOT_PARAM_my_sin_x : f32
+    %v66 /* 79 */ = get_global @__GLOBAL_CONST_PI : ptr
+    %v67 /* 80 */ = load %v66 : f32
+    %v68 /* 81 */ = fneg %v67 : f32
+    %v69 /* 82 */ = fcmp.ult %v65, %v68 : i1
+    /* no result */ br %v69, ^if.then_4, ^if.else_4
+
+^if.then_4 /* 27 */ :
+    %v70 /* 83 */ = load %__SLOT_PARAM_my_sin_x : f32
+    %v71 /* 84 */ = get_global @__GLOBAL_CONST_TWO_PI : ptr
+    %v72 /* 85 */ = load %v71 : f32
+    %v73 /* 86 */ = fadd %v70, %v72 : f32
+    /* no result */ store %v73, %__SLOT_PARAM_my_sin_x
+    /* no result */ jump ^if.exit_4
+
+^if.else_4 /* 28 */ :
+    /* no result */ jump ^if.exit_4
+
+^if.exit_4 /* 29 */ :
+    %v74 /* 87 */ = load %__SLOT_PARAM_my_sin_x : f32
+    %v75 /* 88 */ = call @my_sin_impl(%v74) : f32
+    /* no result */ store %v75, %__RET_my_sin
+    /* no result */ jump ^bb7
+
+^bb7 /* 15 */ :
+    %v76 /* 89 */ = load %__RET_my_sin : f32
+    /* no result */ ret %v76
+
+}
+func @my_cos /* 4 */ (f32) -> f32 {
+^bb10 /* 30 */ (%__PARAM_my_cos_x: f32 /* 90 */):
+    %__RET_my_cos /* 92 */ = stack_slot 4 : ptr
+    %__SLOT_PARAM_my_cos_x /* 91 */ = stack_slot 4 : ptr
+    /* no result */ store %__PARAM_my_cos_x, %__SLOT_PARAM_my_cos_x
+    %v77 /* 93 */ = load %__SLOT_PARAM_my_cos_x : f32
+    %v78 /* 94 */ = get_global @__GLOBAL_CONST_PI : ptr
+    %v79 /* 95 */ = load %v78 : f32
+    %v80 /* 96 */ = iconst 0x00000002i32 : i32
+    %v81 /* 97 */ = sitofp %v80 : f32
+    %v82 /* 98 */ = fdiv %v79, %v81 : f32
+    %v83 /* 99 */ = fadd %v77, %v82 : f32
+    %v84 /* 100 */ = call @my_sin(%v83) : f32
+    /* no result */ store %v84, %__RET_my_cos
+    /* no result */ jump ^bb11
+
+^bb11 /* 31 */ :
+    %v85 /* 101 */ = load %__RET_my_cos : f32
+    /* no result */ ret %v85
+
+}
+func @dct /* 6 */ (ptr, ptr, i32, i32) -> void {
+^bb14 /* 40 */ (%__PARAM_dct_dct_mat: ptr /* 148 */, %__PARAM_dct_mat: ptr /* 149 */, %__PARAM_dct_n: i32 /* 150 */, %__PARAM_dct_m: i32 /* 151 */):
+    %__SLOT_VAR_dct_j_0 /* 181 */ = stack_slot 4 : ptr
+    %__SLOT_VAR_dct_i_0 /* 176 */ = stack_slot 4 : ptr
+    %__SLOT_VAR_dct_v_0 /* 159 */ = stack_slot 4 : ptr
+    %__SLOT_VAR_dct_u_0 /* 154 */ = stack_slot 4 : ptr
+    %__SLOT_PARAM_dct_m /* 153 */ = stack_slot 4 : ptr
+    %__SLOT_PARAM_dct_n /* 152 */ = stack_slot 4 : ptr
+    /* no result */ store %__PARAM_dct_n, %__SLOT_PARAM_dct_n
+    /* no result */ store %__PARAM_dct_m, %__SLOT_PARAM_dct_m
+    %v125 /* 155 */ = iconst 0x00000000i32 : i32
+    /* no result */ store %v125, %__SLOT_VAR_dct_u_0
+
+^while.entry_2 /* 42 */ :
+    %v126 /* 156 */ = load %__SLOT_VAR_dct_u_0 : i32
+    %v127 /* 157 */ = load %__SLOT_PARAM_dct_n : i32
+    %v128 /* 158 */ = icmp.slt %v126, %v127 : i1
+    /* no result */ br %v128, ^while.body_2, ^while.exit_2
+
+^while.body_2 /* 44 */ :
+    %v129 /* 160 */ = iconst 0x00000000i32 : i32
+    /* no result */ store %v129, %__SLOT_VAR_dct_v_0
+
+^while.entry_3 /* 45 */ :
+    %v130 /* 161 */ = load %__SLOT_VAR_dct_v_0 : i32
+    %v131 /* 162 */ = load %__SLOT_PARAM_dct_m : i32
+    %v132 /* 163 */ = icmp.slt %v130, %v131 : i1
+    /* no result */ br %v132, ^while.body_3, ^while.exit_3
+
+^while.body_3 /* 47 */ :
+    %v133 /* 164 */ = iconst 0x00000000i32 : i32
+    %v134 /* 165 */ = load %__SLOT_VAR_dct_u_0 : i32
+    %v135 /* 166 */ = iconst 0x00000020i32 : i32
+    %v136 /* 167 */ = mul %v134, %v135 : i32
+    %v137 /* 168 */ = add %v133, %v136 : i32
+    %v138 /* 169 */ = load %__SLOT_VAR_dct_v_0 : i32
+    %v139 /* 170 */ = iconst 0x00000004i32 : i32
+    %v140 /* 171 */ = mul %v138, %v139 : i32
+    %v141 /* 172 */ = add %v137, %v140 : i32
+    %v142 /* 173 */ = offset %__PARAM_dct_dct_mat, %v141 : ptr
+    %v143 /* 174 */ = iconst 0x00000000i32 : i32
+    %v144 /* 175 */ = sitofp %v143 : f32
+    /* no result */ store %v144, %v142
+    %v145 /* 177 */ = iconst 0x00000000i32 : i32
+    /* no result */ store %v145, %__SLOT_VAR_dct_i_0
+
+^while.entry_4 /* 48 */ :
+    %v146 /* 178 */ = load %__SLOT_VAR_dct_i_0 : i32
+    %v147 /* 179 */ = load %__SLOT_PARAM_dct_n : i32
+    %v148 /* 180 */ = icmp.slt %v146, %v147 : i1
+    /* no result */ br %v148, ^while.body_4, ^while.exit_4
+
+^while.body_4 /* 50 */ :
+    %v149 /* 182 */ = iconst 0x00000000i32 : i32
+    /* no result */ store %v149, %__SLOT_VAR_dct_j_0
+
+^while.entry_5 /* 51 */ :
+    %v150 /* 183 */ = load %__SLOT_VAR_dct_j_0 : i32
+    %v151 /* 184 */ = load %__SLOT_PARAM_dct_m : i32
+    %v152 /* 185 */ = icmp.slt %v150, %v151 : i1
+    /* no result */ br %v152, ^while.body_5, ^while.exit_5
+
+^while.body_5 /* 53 */ :
+    %v153 /* 186 */ = iconst 0x00000000i32 : i32
+    %v154 /* 187 */ = load %__SLOT_VAR_dct_u_0 : i32
+    %v155 /* 188 */ = iconst 0x00000020i32 : i32
+    %v156 /* 189 */ = mul %v154, %v155 : i32
+    %v157 /* 190 */ = add %v153, %v156 : i32
+    %v158 /* 191 */ = load %__SLOT_VAR_dct_v_0 : i32
+    %v159 /* 192 */ = iconst 0x00000004i32 : i32
+    %v160 /* 193 */ = mul %v158, %v159 : i32
+    %v161 /* 194 */ = add %v157, %v160 : i32
+    %v162 /* 195 */ = offset %__PARAM_dct_dct_mat, %v161 : ptr
+    %v163 /* 196 */ = iconst 0x00000000i32 : i32
+    %v164 /* 197 */ = load %__SLOT_VAR_dct_u_0 : i32
+    %v165 /* 198 */ = iconst 0x00000020i32 : i32
+    %v166 /* 199 */ = mul %v164, %v165 : i32
+    %v167 /* 200 */ = add %v163, %v166 : i32
+    %v168 /* 201 */ = load %__SLOT_VAR_dct_v_0 : i32
+    %v169 /* 202 */ = iconst 0x00000004i32 : i32
+    %v170 /* 203 */ = mul %v168, %v169 : i32
+    %v171 /* 204 */ = add %v167, %v170 : i32
+    %v172 /* 205 */ = offset %__PARAM_dct_dct_mat, %v171 : ptr
+    %v173 /* 206 */ = load %v172 : f32
+    %v174 /* 207 */ = iconst 0x00000000i32 : i32
+    %v175 /* 208 */ = load %__SLOT_VAR_dct_i_0 : i32
+    %v176 /* 209 */ = iconst 0x00000020i32 : i32
+    %v177 /* 210 */ = mul %v175, %v176 : i32
+    %v178 /* 211 */ = add %v174, %v177 : i32
+    %v179 /* 212 */ = load %__SLOT_VAR_dct_j_0 : i32
+    %v180 /* 213 */ = iconst 0x00000004i32 : i32
+    %v181 /* 214 */ = mul %v179, %v180 : i32
+    %v182 /* 215 */ = add %v178, %v181 : i32
+    %v183 /* 216 */ = offset %__PARAM_dct_mat, %v182 : ptr
+    %v184 /* 217 */ = load %v183 : f32
+    %v185 /* 218 */ = get_global @__GLOBAL_CONST_PI : ptr
+    %v186 /* 219 */ = load %v185 : f32
+    %v187 /* 220 */ = load %__SLOT_PARAM_dct_n : i32
+    %v188 /* 221 */ = sitofp %v187 : f32
+    %v189 /* 222 */ = fdiv %v186, %v188 : f32
+    %v190 /* 223 */ = load %__SLOT_VAR_dct_i_0 : i32
+    %v191 /* 224 */ = sitofp %v190 : f32
+    %v192 /* 225 */ = fconst 0x3f800000 : f32
+    %v193 /* 226 */ = fconst 0x40000000 : f32
+    %v194 /* 227 */ = fdiv %v192, %v193 : f32
+    %v195 /* 228 */ = fadd %v191, %v194 : f32
+    %v196 /* 229 */ = fmul %v189, %v195 : f32
+    %v197 /* 230 */ = load %__SLOT_VAR_dct_u_0 : i32
+    %v198 /* 231 */ = sitofp %v197 : f32
+    %v199 /* 232 */ = fmul %v196, %v198 : f32
+    %v200 /* 233 */ = call @my_cos(%v199) : f32
+    %v201 /* 234 */ = fmul %v184, %v200 : f32
+    %v202 /* 235 */ = get_global @__GLOBAL_CONST_PI : ptr
+    %v203 /* 236 */ = load %v202 : f32
+    %v204 /* 237 */ = load %__SLOT_PARAM_dct_m : i32
+    %v205 /* 238 */ = sitofp %v204 : f32
+    %v206 /* 239 */ = fdiv %v203, %v205 : f32
+    %v207 /* 240 */ = load %__SLOT_VAR_dct_j_0 : i32
+    %v208 /* 241 */ = sitofp %v207 : f32
+    %v209 /* 242 */ = fconst 0x3f800000 : f32
+    %v210 /* 243 */ = fconst 0x40000000 : f32
+    %v211 /* 244 */ = fdiv %v209, %v210 : f32
+    %v212 /* 245 */ = fadd %v208, %v211 : f32
+    %v213 /* 246 */ = fmul %v206, %v212 : f32
+    %v214 /* 247 */ = load %__SLOT_VAR_dct_v_0 : i32
+    %v215 /* 248 */ = sitofp %v214 : f32
+    %v216 /* 249 */ = fmul %v213, %v215 : f32
+    %v217 /* 250 */ = call @my_cos(%v216) : f32
+    %v218 /* 251 */ = fmul %v201, %v217 : f32
+    %v219 /* 252 */ = fadd %v173, %v218 : f32
+    /* no result */ store %v219, %v162
+    %v220 /* 253 */ = load %__SLOT_VAR_dct_j_0 : i32
+    %v221 /* 254 */ = iconst 0x00000001i32 : i32
+    %v222 /* 255 */ = add %v220, %v221 : i32
+    /* no result */ store %v222, %__SLOT_VAR_dct_j_0
+    /* no result */ jump ^while.entry_5
+
+^while.exit_5 /* 52 */ :
+    %v223 /* 256 */ = load %__SLOT_VAR_dct_i_0 : i32
+    %v224 /* 257 */ = iconst 0x00000001i32 : i32
+    %v225 /* 258 */ = add %v223, %v224 : i32
+    /* no result */ store %v225, %__SLOT_VAR_dct_i_0
+    /* no result */ jump ^while.entry_4
+
+^while.exit_4 /* 49 */ :
+    %v226 /* 259 */ = load %__SLOT_VAR_dct_v_0 : i32
+    %v227 /* 260 */ = iconst 0x00000001i32 : i32
+    %v228 /* 261 */ = add %v226, %v227 : i32
+    /* no result */ store %v228, %__SLOT_VAR_dct_v_0
+    /* no result */ jump ^while.entry_3
+
+^while.exit_3 /* 46 */ :
+    %v229 /* 262 */ = load %__SLOT_VAR_dct_u_0 : i32
+    %v230 /* 263 */ = iconst 0x00000001i32 : i32
+    %v231 /* 264 */ = add %v229, %v230 : i32
+    /* no result */ store %v231, %__SLOT_VAR_dct_u_0
+    /* no result */ jump ^while.entry_2
+
+^while.exit_2 /* 43 */ :
+
+^bb15 /* 41 */ :
+    /* no result */ ret void
+
+}
+func @main /* 8 */ () -> i32 {
+^bb18 /* 74 */ :
+    %__SLOT_VAR_main_j_0 /* 527 */ = stack_slot 4 : ptr
+    %__SLOT_VAR_main_i_0 /* 522 */ = stack_slot 4 : ptr
+    %__SLOT_VAR_main_dim_y_0 /* 520 */ = stack_slot 4 : ptr
+    %__SLOT_VAR_main_dim_x_0 /* 518 */ = stack_slot 4 : ptr
+    %__RET_main /* 517 */ = stack_slot 4 : ptr
+    %v474 /* 519 */ = call @getint() : i32
+    /* no result */ store %v474, %__SLOT_VAR_main_dim_x_0
+    %v475 /* 521 */ = call @getint() : i32
+    /* no result */ store %v475, %__SLOT_VAR_main_dim_y_0
+    %v476 /* 523 */ = iconst 0x00000000i32 : i32
+    /* no result */ store %v476, %__SLOT_VAR_main_i_0
+
+^while.entry_12 /* 76 */ :
+    %v477 /* 524 */ = load %__SLOT_VAR_main_i_0 : i32
+    %v478 /* 525 */ = load %__SLOT_VAR_main_dim_x_0 : i32
+    %v479 /* 526 */ = icmp.slt %v477, %v478 : i1
+    /* no result */ br %v479, ^while.body_12, ^while.exit_12
+
+^while.body_12 /* 78 */ :
+    %v480 /* 528 */ = iconst 0x00000000i32 : i32
+    /* no result */ store %v480, %__SLOT_VAR_main_j_0
+
+^while.entry_13 /* 79 */ :
+    %v481 /* 529 */ = load %__SLOT_VAR_main_j_0 : i32
+    %v482 /* 530 */ = load %__SLOT_VAR_main_dim_y_0 : i32
+    %v483 /* 531 */ = icmp.slt %v481, %v482 : i1
+    /* no result */ br %v483, ^while.body_13, ^while.exit_13
+
+^while.body_13 /* 81 */ :
+    %v484 /* 532 */ = get_global @__GLOBAL_VAR_test_block : ptr
+    %v485 /* 533 */ = iconst 0x00000000i32 : i32
+    %v486 /* 534 */ = load %__SLOT_VAR_main_i_0 : i32
+    %v487 /* 535 */ = iconst 0x00000020i32 : i32
+    %v488 /* 536 */ = mul %v486, %v487 : i32
+    %v489 /* 537 */ = add %v485, %v488 : i32
+    %v490 /* 538 */ = load %__SLOT_VAR_main_j_0 : i32
+    %v491 /* 539 */ = iconst 0x00000004i32 : i32
+    %v492 /* 540 */ = mul %v490, %v491 : i32
+    %v493 /* 541 */ = add %v489, %v492 : i32
+    %v494 /* 542 */ = offset %v484, %v493 : ptr
+    %v495 /* 543 */ = call @getfloat() : f32
+    /* no result */ store %v495, %v494
+    %v496 /* 544 */ = load %__SLOT_VAR_main_j_0 : i32
+    %v497 /* 545 */ = iconst 0x00000001i32 : i32
+    %v498 /* 546 */ = add %v496, %v497 : i32
+    /* no result */ store %v498, %__SLOT_VAR_main_j_0
+    /* no result */ jump ^while.entry_13
+
+^while.exit_13 /* 80 */ :
+    %v499 /* 547 */ = load %__SLOT_VAR_main_i_0 : i32
+    %v500 /* 548 */ = iconst 0x00000001i32 : i32
+    %v501 /* 549 */ = add %v499, %v500 : i32
+    /* no result */ store %v501, %__SLOT_VAR_main_i_0
+    /* no result */ jump ^while.entry_12
+
+^while.exit_12 /* 77 */ :
+    %v502 /* 550 */ = get_global @__GLOBAL_VAR_test_dct : ptr
+    %v503 /* 551 */ = iconst 0x00000000i32 : i32
+    %v504 /* 552 */ = offset %v502, %v503 : ptr
+    %v505 /* 553 */ = get_global @__GLOBAL_VAR_test_block : ptr
+    %v506 /* 554 */ = iconst 0x00000000i32 : i32
+    %v507 /* 555 */ = offset %v505, %v506 : ptr
+    %v508 /* 556 */ = load %__SLOT_VAR_main_dim_x_0 : i32
+    %v509 /* 557 */ = load %__SLOT_VAR_main_dim_y_0 : i32
+    /* no result */ call @dct(%v504, %v507, %v508, %v509)
+    %v510 /* 558 */ = get_global @__GLOBAL_VAR_test_dct : ptr
+    %v511 /* 559 */ = iconst 0x00000000i32 : i32
+    %v512 /* 560 */ = offset %v510, %v511 : ptr
+    %v513 /* 561 */ = load %__SLOT_VAR_main_dim_x_0 : i32
+    %v514 /* 562 */ = load %__SLOT_VAR_main_dim_y_0 : i32
+    /* no result */ call @write_mat(%v512, %v513, %v514)
+    %v515 /* 563 */ = get_global @__GLOBAL_VAR_test_idct : ptr
+    %v516 /* 564 */ = iconst 0x00000000i32 : i32
+    %v517 /* 565 */ = offset %v515, %v516 : ptr
+    %v518 /* 566 */ = get_global @__GLOBAL_VAR_test_dct : ptr
+    %v519 /* 567 */ = iconst 0x00000000i32 : i32
+    %v520 /* 568 */ = offset %v518, %v519 : ptr
+    %v521 /* 569 */ = load %__SLOT_VAR_main_dim_x_0 : i32
+    %v522 /* 570 */ = load %__SLOT_VAR_main_dim_y_0 : i32
+    /* no result */ call @idct(%v517, %v520, %v521, %v522)
+    %v523 /* 571 */ = get_global @__GLOBAL_VAR_test_idct : ptr
+    %v524 /* 572 */ = iconst 0x00000000i32 : i32
+    %v525 /* 573 */ = offset %v523, %v524 : ptr
+    %v526 /* 574 */ = load %__SLOT_VAR_main_dim_x_0 : i32
+    %v527 /* 575 */ = load %__SLOT_VAR_main_dim_y_0 : i32
+    /* no result */ call @write_mat(%v525, %v526, %v527)
+    %v528 /* 576 */ = iconst 0x00000000i32 : i32
+    /* no result */ store %v528, %__RET_main
+    /* no result */ jump ^bb19
+
+^bb19 /* 75 */ :
+    %v529 /* 577 */ = load %__RET_main : i32
+    /* no result */ ret %v529
+
+}

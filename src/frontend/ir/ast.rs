@@ -312,7 +312,7 @@ pub fn into_ir(ast: Vec<Item>, ctx: &mut Context, diag: &mut DiagnosticList) -> 
         }
     }
 
-    if errors.is_empty() {
+    if errors.is_empty() && diag.is_empty() {
         Some(())
     } else {
         // make errors into diagnostics

@@ -946,7 +946,7 @@ impl<'a> Parser<'a> {
         // %callee ( %arg1, %arg2, ... ) : ( %res_ty1, %res_ty2, ... ) or %res_ty
 
         // maybe just allow any format, skip paren and comma.
-        // TODO: more strict parsing
+        // TODO: refactor this part.
         let mut has_result_tys = false;
         loop {
             let token = self.lexer.peek(&mut self.diag);
@@ -954,10 +954,38 @@ impl<'a> Parser<'a> {
                 Tk::Value(_) => {
                     let value = self.parse_value()?;
                     operands.push(value);
+
+                    let token = self.lexer.peek(&mut self.diag);
+                    if let Tk::Delimiter(ref s) = token.kind {
+                        if s == "," || s == "(" {
+                            self.lexer.next(&mut self.diag);
+                        } else if s == ":" {
+                            self.lexer.next(&mut self.diag);
+                            has_result_tys = true;
+                            break;
+                        } else if s == ")" {
+                            self.lexer.next(&mut self.diag);
+                            if self.maybe_delimiter(":") {
+                                has_result_tys = true;
+                            }
+                            break;
+                        } else {
+                            break;
+                        }
+                    } else {
+                        break;
+                    }
                 }
                 Tk::Delimiter(ref s) => match s.as_ref() {
-                    "," | "(" | ")" => {
+                    "," | "(" => {
                         self.lexer.next(&mut self.diag);
+                    }
+                    ")" => {
+                        self.lexer.next(&mut self.diag);
+                        if self.maybe_delimiter(":") {
+                            has_result_tys = true;
+                        }
+                        break;
                     }
                     ":" => {
                         self.lexer.next(&mut self.diag);

@@ -140,6 +140,10 @@ impl LowerSpec for RvLowerSpec {
             x.clone()
         };
 
+        if x.is_zero() {
+            return MValue::new_reg(ty, regs::zero());
+        }
+
         if let Some(imm) = Imm12::try_from_apint(&x) {
             MValue::new_imm(ty, imm.as_i16() as i64)
         } else {
@@ -159,16 +163,24 @@ impl LowerSpec for RvLowerSpec {
         } else {
             *x
         };
-        let t = match x {
+        let t: Reg = match x {
             ir::FloatConstant::Float32(bits) => {
-                let (li, t) = RvInst::li(&mut lower.mctx, bits as u64);
-                lower.curr_block.unwrap().push_back(&mut lower.mctx, li);
-                t
+                if bits == 0 {
+                    regs::zero().into()
+                } else {
+                    let (li, t) = RvInst::li(&mut lower.mctx, bits as u64);
+                    lower.curr_block.unwrap().push_back(&mut lower.mctx, li);
+                    t
+                }
             }
             ir::FloatConstant::Float64(bits) => {
-                let (li, t) = RvInst::li(&mut lower.mctx, bits);
-                lower.curr_block.unwrap().push_back(&mut lower.mctx, li);
-                t
+                if bits == 0 {
+                    regs::zero().into()
+                } else {
+                    let (li, t) = RvInst::li(&mut lower.mctx, bits);
+                    lower.curr_block.unwrap().push_back(&mut lower.mctx, li);
+                    t
+                }
             }
         };
         // fmv.w.x or fmv.d.x
