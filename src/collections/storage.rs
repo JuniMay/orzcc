@@ -374,14 +374,10 @@ impl<T> From<usize> for BaseArenaPtr<T> {
     }
 }
 
-#[allow(clippy::non_canonical_clone_impl)]
 impl<T> Clone for BaseArenaPtr<T> {
     fn clone(&self) -> Self {
         // `Clone` will not be implemented for `T` when `T` is not `Clone`-able.
-        BaseArenaPtr {
-            id: self.id,
-            _marker: PhantomData,
-        }
+        *self
     }
 }
 
@@ -644,9 +640,8 @@ impl<T> fmt::Debug for UniqueArenaPtr<T> {
     }
 }
 
-#[allow(clippy::non_canonical_clone_impl)]
 impl<T> Clone for UniqueArenaPtr<T> {
-    fn clone(&self) -> Self { UniqueArenaPtr(self.0) }
+    fn clone(&self) -> Self { *self }
 }
 
 impl<T> Copy for UniqueArenaPtr<T> {}

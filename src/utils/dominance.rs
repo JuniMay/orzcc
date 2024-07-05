@@ -21,6 +21,8 @@ where
     frontiers: HashMap<N, Vec<N>>,
     /// The dominance tree of each node.
     domtree: HashMap<N, Vec<N>>,
+    /// The reverse postorder of the CFG.
+    rpo: Vec<N>,
 }
 
 impl<N> Default for Dominance<N>
@@ -32,6 +34,7 @@ where
             idoms: HashMap::new(),
             frontiers: HashMap::new(),
             domtree: HashMap::new(),
+            rpo: Vec::new(),
         }
     }
 }
@@ -47,7 +50,24 @@ where
     pub fn frontier(&self, node: N) -> &[N] { &self.frontiers[&node] }
 
     /// Returns the dominated nodes of `node`.
-    pub fn dominated(&self, node: N) -> &[N] { &self.domtree[&node] }
+    pub fn children(&self, node: N) -> &[N] { &self.domtree[&node] }
+
+    /// Returns true if `n1` dominates `n2`.
+    pub fn dominates(&self, n1: N, n2: N) -> bool {
+        if n1 == n2 {
+            return true;
+        }
+        let mut finger = n2;
+        while let Some(idom) = self.idoms[&finger] {
+            if idom == n1 {
+                return true;
+            }
+            finger = idom;
+        }
+        false
+    }
+
+    pub fn rpo(&self) -> &[N] { &self.rpo }
 
     fn intersect(n1: N, n2: N, idoms: &HashMap<N, Option<N>>, postorder: &HashMap<N, usize>) -> N {
         let mut finger1 = n1;
@@ -68,16 +88,17 @@ where
     /// # Parameters
     ///
     /// - `arena`: The arena of the control flow graph nodes and region.
-    /// - `region`: The region of the control flow graph.
     /// - `cfg`: The control flow graph information.
     ///
     /// # Returns
     ///
     /// A new [Dominance] instance.
-    pub fn new(arena: &N::A, region: N::Region, cfg: &CfgInfo<N, N::Region>) -> Self {
+    pub fn new(arena: &N::A, cfg: &CfgInfo<N, N::Region>) -> Self {
         let mut idoms = HashMap::new();
         let mut frontiers = HashMap::new();
         let mut domtree = HashMap::new();
+
+        let region = cfg.region();
 
         let mut dfs: DfsContext<N> = DfsContext::default();
 
@@ -162,6 +183,7 @@ where
             idoms,
             frontiers,
             domtree,
+            rpo,
         }
     }
 }

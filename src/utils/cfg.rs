@@ -106,5 +106,5 @@ where
     pub fn preds(&self, node: N) -> Option<&[N]> { self.preds.get(&node).map(|v| v.as_slice()) }
 
     /// Get the region associated with the control flow graph.
-    pub fn region(&self) -> &R { &self.region }
+    pub fn region(&self) -> R { self.region }
 }

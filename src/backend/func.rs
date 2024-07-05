@@ -65,8 +65,7 @@ impl<I> MFuncData<I> {
 pub struct MFunc<I>(BaseArenaPtr<MFuncData<I>>);
 
 impl<I> Clone for MFunc<I> {
-    #[allow(clippy::non_canonical_clone_impl)]
-    fn clone(&self) -> Self { Self(self.0) }
+    fn clone(&self) -> Self { *self }
 }
 
 impl<I> Copy for MFunc<I> {}

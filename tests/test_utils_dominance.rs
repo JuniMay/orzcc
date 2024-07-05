@@ -36,7 +36,7 @@ fn test_dominance_0() {
     let func = CfgFunc::new(&mut arena, bb5);
     let cfg = func.cfg_info(&arena);
 
-    let dominance = Dominance::new(&arena, func, &cfg);
+    let dominance = Dominance::new(&arena, &cfg);
 
     assert_eq!(dominance.idom(bb5), None);
     assert_eq!(dominance.idom(bb4), Some(bb5));

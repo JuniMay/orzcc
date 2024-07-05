@@ -91,7 +91,7 @@ impl Mem2reg {
 
     fn prepare(&mut self, ctx: &mut Context, func: Func) {
         let cfg = CfgInfo::new(ctx, func);
-        self.dominance = Dominance::new(ctx, func, &cfg);
+        self.dominance = Dominance::new(ctx, &cfg);
 
         // initialize variables
         // look for all the stack slots in the function, which should be in the entry
@@ -285,7 +285,7 @@ impl Mem2reg {
             inst.remove(ctx);
         }
 
-        let children = self.dominance.dominated(block).to_vec();
+        let children = self.dominance.children(block).to_vec();
         for child in children {
             changed |= self.rename(ctx, child);
         }
