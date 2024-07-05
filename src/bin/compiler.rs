@@ -1,15 +1,12 @@
 //! The compiler executable.
 
 use clap::{Arg, Command};
-use orzcc::{
-    backend::{riscv64::lower::RvLowerSpec, LowerConfig, LowerContext},
-    ir::{
-        passes::{
-            control_flow::CfgCanonicalize,
-            mem2reg::{Mem2reg, MEM2REG},
-        },
-        passman::PassManager,
+use orzcc::ir::{
+    passes::{
+        control_flow::CfgCanonicalize,
+        mem2reg::{Mem2reg, MEM2REG},
     },
+    passman::{PassManager, TransformPass},
 };
 
 struct CliCommand {
@@ -25,29 +22,30 @@ struct CliCommand {
     emit_typed_ast: Option<String>,
     /// Emitting ir
     emit_ir: Option<String>,
-    /// Emitting pre-reg-alloc-asm
-    emit_pre_reg_alloc_asm: Option<String>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "frontend-sysy")]
     {
-        use orzcc::frontend::sysy::{self, SysYParser};
+        use orzcc::{
+            backend::{riscv64::lower::RvLowerSpec, LowerConfig, LowerContext},
+            frontend::sysy::{self, SysYParser},
+        };
 
-        register_passes();
-        let cmd = parse_args();
+        let mut passman = PassManager::default();
+
+        register_passes(&mut passman);
+        let cmd = parse_args(&mut passman);
 
         let src = std::fs::read_to_string(&cmd.source)?;
         let src = sysy::preprocess(&src);
 
         let mut ast = SysYParser::new().parse(&src).unwrap();
-
         if let Some(emit_ast) = &cmd.emit_ast {
             std::fs::write(emit_ast, format!("{:#?}", ast))?;
         }
 
         ast.type_check();
-
         if let Some(emit_typed_ast) = &cmd.emit_typed_ast {
             std::fs::write(emit_typed_ast, format!("{:#?}", ast))?;
         }
@@ -55,7 +53,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut ir = sysy::irgen(&ast);
 
         for pass in cmd.passes {
-            PassManager::run_transform(&pass, &mut ir, 32);
+            passman.run_transform(&pass, &mut ir, 32);
         }
 
         ir.alloc_all_names();
@@ -67,24 +65,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut lower_ctx: LowerContext<RvLowerSpec> = LowerContext::new(
             &ir,
             LowerConfig {
-                omit_frame_pointer: false,
+                omit_frame_pointer: true,
             },
         );
         lower_ctx.lower();
+        // TODO: regalloc
+        lower_ctx.after_regalloc();
         let mctx = lower_ctx.finish();
-
         std::fs::write(cmd.output, format!("{}", mctx.display()))?;
     }
 
     Ok(())
 }
 
-fn register_passes() {
-    CfgCanonicalize::register();
-    Mem2reg::register();
+fn register_passes(passman: &mut PassManager) {
+    CfgCanonicalize::register(passman);
+    Mem2reg::register(passman);
 }
 
-fn cli() -> Command {
+fn cli(passman: &mut PassManager) -> Command {
     Command::new("compiler")
         .arg(
             Arg::new("output")
@@ -120,16 +119,11 @@ fn cli() -> Command {
                 .long("emit-ir")
                 .help("Emit the IR to the specified file"),
         )
-        .arg(
-            Arg::new("emit-pre-reg-alloc-asm")
-                .long("emit-pre-reg-alloc-asm")
-                .help("Emit the pre-register allocation assembly to the specified file"),
-        )
-        .args(PassManager::get_cli_args())
+        .args(passman.get_cli_args())
 }
 
-fn parse_args() -> CliCommand {
-    let matches = cli().get_matches();
+fn parse_args(passman: &mut PassManager) -> CliCommand {
+    let matches = cli(passman).get_matches();
     let output = matches.get_one::<String>("output").unwrap().clone();
     let source = matches.get_one::<String>("source").unwrap().clone();
     let _s_flag = matches.get_count("s_flag") > 0; // just a placeholder
@@ -142,20 +136,19 @@ fn parse_args() -> CliCommand {
     let emit_ast = matches.get_one::<String>("emit-ast").cloned();
     let emit_typed_ast = matches.get_one::<String>("emit-typed-ast").cloned();
     let emit_ir = matches.get_one::<String>("emit-ir").cloned();
-    let emit_pre_reg_alloc_asm = matches.get_one::<String>("emit-pre-reg-alloc-asm").cloned();
 
     let mut passes = Vec::new();
     if opt > 0 {
         passes.push(MEM2REG.to_string());
     }
 
-    let transform_names = PassManager::get_transform_names();
-    let parameter_names = PassManager::get_parameter_names();
+    let transform_names = passman.gather_transform_names();
+    let parameter_names = passman.gather_parameter_names();
 
     for parameter_name in parameter_names {
         let param = matches.get_one::<String>(&parameter_name);
         if let Some(param) = param {
-            PassManager::set_parameter(&parameter_name, param.clone());
+            passman.set_parameter(&parameter_name, param.clone());
         }
     }
 
@@ -172,6 +165,5 @@ fn parse_args() -> CliCommand {
         emit_ast,
         emit_typed_ast,
         emit_ir,
-        emit_pre_reg_alloc_asm,
     }
 }

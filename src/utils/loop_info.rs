@@ -61,6 +61,20 @@ where
     pub fn children(self, loop_ctx: &LoopContext<N>) -> Vec<Loop<N>> {
         self.deref(loop_ctx).children.clone()
     }
+
+    pub fn is_child_of(self, loop_ctx: &LoopContext<N>, parent: Loop<N>) -> bool {
+        if self == parent {
+            return true;
+        }
+        let mut lp = self;
+        while let Some(p) = lp.parent(loop_ctx) {
+            if p == parent {
+                return true;
+            }
+            lp = p;
+        }
+        false
+    }
 }
 
 impl<N> Default for LoopContext<N> {
@@ -85,6 +99,13 @@ where
     pub fn get_loop(&self, node: N) -> Option<Loop<N>> { self.node_to_loop.get(&node).copied() }
 
     pub fn loops(&self) -> Vec<Loop<N>> { self.loops.iter().map(|(p, _)| Loop(p)).collect() }
+
+    pub fn is_in_loop(&self, node: N, lp: Loop<N>) -> bool {
+        match self.node_to_loop.get(&node) {
+            Some(imm_loop) => imm_loop.is_child_of(self, lp),
+            None => false,
+        }
+    }
 
     fn detect_loops(&mut self, cfg: &CfgInfo<N, N::Region>, dominance: &Dominance<N>) {
         // a sequence of detected loops

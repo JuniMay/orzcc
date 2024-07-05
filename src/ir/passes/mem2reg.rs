@@ -75,10 +75,10 @@ pub struct Mem2reg {
 }
 
 impl Mem2reg {
-    pub fn register() {
-        let pass = Box::new(Mem2reg::default());
-        PassManager::register_transform(MEM2REG, pass, vec![Box::new(CfgCanonicalize)])
-    }
+    // pub fn register() {
+    //     let pass = Box::new(Mem2reg::default());
+    //     PassManager::register_transform(MEM2REG, pass,
+    // vec![Box::new(CfgCanonicalize)]) }
 
     fn reset(&mut self) {
         self.vars.clear();
@@ -329,4 +329,9 @@ impl GlobalPassMut for Mem2reg {
     }
 }
 
-impl TransformPass for Mem2reg {}
+impl TransformPass for Mem2reg {
+    fn register(passman: &mut PassManager) {
+        let pass = Mem2reg::default();
+        passman.register_transform(MEM2REG, pass, vec![Box::new(CfgCanonicalize)]);
+    }
+}

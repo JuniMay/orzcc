@@ -40,13 +40,6 @@ impl From<CfgCanonicalizeError> for PassError {
 /// are not used).
 pub struct CfgCanonicalize;
 
-impl CfgCanonicalize {
-    pub fn register() {
-        let pass = Box::new(CfgCanonicalize);
-        PassManager::register_transform(CFG_CANONICALIZE, pass, vec![])
-    }
-}
-
 impl LocalPassMut for CfgCanonicalize {
     type Output = ();
 
@@ -112,4 +105,8 @@ impl GlobalPassMut for CfgCanonicalize {
     }
 }
 
-impl TransformPass for CfgCanonicalize {}
+impl TransformPass for CfgCanonicalize {
+    fn register(passman: &mut PassManager) {
+        passman.register_transform(CFG_CANONICALIZE, CfgCanonicalize, Vec::new());
+    }
+}

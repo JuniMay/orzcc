@@ -307,6 +307,8 @@ where
 
     pub fn finish(self) -> MContext<S::I> { self.mctx }
 
+    pub fn mctx(&self) -> &MContext<S::I> { &self.mctx }
+
     pub fn lower(&mut self) {
         // firstly, create all functions, globals and blocks
         for func in self.ctx.funcs() {
@@ -394,7 +396,9 @@ where
         // In that way, we can allocate t0 after passing the arguments.
 
         // TODO: regalloc
+    }
 
+    pub fn after_regalloc(&mut self) {
         self.adjust_offset();
 
         for func in self.ctx.funcs() {

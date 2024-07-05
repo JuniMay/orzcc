@@ -56,4 +56,17 @@ fn test_utils_loop_info_0() {
 
     assert_eq!(outer.depth(&loop_ctx), 1);
     assert_eq!(inner.depth(&loop_ctx), 2);
+
+    assert!(outer.is_child_of(&loop_ctx, outer));
+    assert!(inner.is_child_of(&loop_ctx, outer));
+
+    assert!(loop_ctx.is_in_loop(bb0, outer));
+    assert!(loop_ctx.is_in_loop(bb1, outer));
+    assert!(loop_ctx.is_in_loop(bb2, outer));
+    assert!(loop_ctx.is_in_loop(bb3, outer));
+    assert!(loop_ctx.is_in_loop(bb1, inner));
+    assert!(loop_ctx.is_in_loop(bb2, inner));
+
+    assert!(!loop_ctx.is_in_loop(bb4, outer));
+    assert!(!loop_ctx.is_in_loop(bb4, inner));
 }
