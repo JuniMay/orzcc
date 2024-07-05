@@ -75,11 +75,6 @@ pub struct Mem2reg {
 }
 
 impl Mem2reg {
-    // pub fn register() {
-    //     let pass = Box::new(Mem2reg::default());
-    //     PassManager::register_transform(MEM2REG, pass,
-    // vec![Box::new(CfgCanonicalize)]) }
-
     fn reset(&mut self) {
         self.vars.clear();
         self.def_blocks.clear();
