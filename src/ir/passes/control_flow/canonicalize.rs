@@ -53,13 +53,6 @@ impl LocalPassMut for CfgCanonicalize {
             let mut has_terminator = false;
             for inst in block.iter(ctx) {
                 if has_terminator {
-                    for result in inst.results(ctx) {
-                        if !result.users(ctx).is_empty() {
-                            // we cannot remove it, because the result is used
-                            // TODO: maybe we should remove from tail to terminator
-                            return Err(CfgCanonicalizeError::ValueInUse(*result).into());
-                        }
-                    }
                     // there is already a terminator, the rest instructions are unreachable
                     insts_to_remove.push(inst);
                 } else if inst.is_terminator(ctx) {
@@ -77,7 +70,14 @@ impl LocalPassMut for CfgCanonicalize {
             }
         }
 
-        for inst in insts_to_remove {
+        for inst in insts_to_remove.into_iter().rev() {
+            for result in inst.results(ctx) {
+                if !result.users(ctx).is_empty() {
+                    // here the instructions are removed in reverse order, so the
+                    // value should not be in use
+                    return Err(CfgCanonicalizeError::ValueInUse(*result).into());
+                }
+            }
             inst.remove(ctx);
             changed = true;
         }

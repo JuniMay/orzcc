@@ -186,8 +186,8 @@ impl PassManager {
             iter += 1;
             let mut changed = false;
             for pass in self.deps.get_mut(&name).unwrap() {
-                let (_, local_chaned) = GlobalPassMut::run(pass.as_mut(), ctx).unwrap();
-                changed |= local_chaned;
+                let (_, local_changed) = GlobalPassMut::run(pass.as_mut(), ctx).unwrap();
+                changed |= local_changed;
             }
             let transform = self.transforms.get_mut(&name).unwrap();
             let (_, local_changed) = GlobalPassMut::run(transform.as_mut(), ctx).unwrap();

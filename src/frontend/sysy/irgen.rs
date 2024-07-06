@@ -364,6 +364,9 @@ impl IrGenContext {
 
                     let lhs = self.gen_local_expr(lhs).unwrap();
 
+                    // lhs might have changed the current block.
+                    let curr_block = self.curr_block.unwrap();
+
                     let rhs_block = ir::Block::new(&mut self.ctx);
 
                     let i1 = ir::Ty::int(&mut self.ctx, 1);
@@ -371,7 +374,7 @@ impl IrGenContext {
                     let block_param = merge_block.new_param(&mut self.ctx, i1);
 
                     if let Bo::LogicalAnd = op {
-                        let false_ = ir::Inst::iconst(&mut self.ctx, 0, i1);
+                        let false_ = ir::Inst::iconst(&mut self.ctx, false, i1);
                         curr_block.push_back(&mut self.ctx, false_);
                         let false_ = false_.result(&self.ctx, 0);
                         let br = ir::Inst::br(
@@ -384,7 +387,7 @@ impl IrGenContext {
                         );
                         curr_block.push_back(&mut self.ctx, br);
                     } else {
-                        let true_ = ir::Inst::iconst(&mut self.ctx, 1, i1);
+                        let true_ = ir::Inst::iconst(&mut self.ctx, true, i1);
                         curr_block.push_back(&mut self.ctx, true_);
                         let true_ = true_.result(&self.ctx, 0);
                         let br = ir::Inst::br(
@@ -917,14 +920,17 @@ impl IrGen for Decl {
                         .expect("global def expected to have constant initializer");
                     let size = init.ty().bytewidth();
                     let stack_slot = ir::Inst::stack_slot(&mut irgen.ctx, size as u32);
-                    stack_slot.result(&irgen.ctx, 0).alloc_name(
-                        &mut irgen.ctx,
-                        format!(
-                            "__SLOT_CONST_{}_{}_",
-                            irgen.curr_func_name.as_ref().unwrap(),
-                            ident
-                        ),
-                    );
+                    let stack_slot_name = stack_slot
+                        .result(&irgen.ctx, 0)
+                        .alloc_name(
+                            &mut irgen.ctx,
+                            format!(
+                                "__SLOT_CONST_{}_{}_",
+                                irgen.curr_func_name.as_ref().unwrap(),
+                                ident
+                            ),
+                        )
+                        .clone();
                     entry_block.push_front(&mut irgen.ctx, stack_slot);
                     irgen.symtable.insert(
                         ident,
@@ -964,11 +970,7 @@ impl IrGen for Decl {
                                     let constant = IrGenContext::gen_global_comptime(val);
                                     let ty = irgen.gen_type(init.ty());
 
-                                    let name = format!(
-                                        "__DATA_{}_{}",
-                                        irgen.curr_func_name.as_ref().unwrap(),
-                                        ident
-                                    );
+                                    let name = format!("__DATA{}", stack_slot_name,); // to avoid conflict
                                     ir::GlobalSlot::new(&mut irgen.ctx, name.clone(), ty, constant);
                                     let get_global = ir::Inst::get_global(&mut irgen.ctx, name);
                                     curr_block.push_back(&mut irgen.ctx, get_global);
@@ -1011,14 +1013,17 @@ impl IrGen for Decl {
                     let init = init.as_ref().unwrap();
                     let size = init.ty().bytewidth();
                     let stack_slot = ir::Inst::stack_slot(&mut irgen.ctx, size as u32);
-                    stack_slot.result(&irgen.ctx, 0).alloc_name(
-                        &mut irgen.ctx,
-                        format!(
-                            "__SLOT_VAR_{}_{}_",
-                            irgen.curr_func_name.as_ref().unwrap(),
-                            ident
-                        ),
-                    );
+                    let stack_slot_name = stack_slot
+                        .result(&irgen.ctx, 0)
+                        .alloc_name(
+                            &mut irgen.ctx,
+                            format!(
+                                "__SLOT_VAR_{}_{}_",
+                                irgen.curr_func_name.as_ref().unwrap(),
+                                ident
+                            ),
+                        )
+                        .clone();
                     entry_block.push_front(&mut irgen.ctx, stack_slot);
                     irgen.symtable.insert(
                         ident,
@@ -1102,11 +1107,7 @@ impl IrGen for Decl {
                             // memcpy
                             let constant = IrGenContext::gen_global_comptime(&global_init);
                             let ty = irgen.gen_type(init.ty());
-                            let name = format!(
-                                "__DATA_{}_{}",
-                                irgen.curr_func_name.as_ref().unwrap(),
-                                ident
-                            );
+                            let name = format!("__DATA{}", stack_slot_name,); // to avoid conflict
                             ir::GlobalSlot::new(&mut irgen.ctx, name.clone(), ty, constant);
                             let get_global = ir::Inst::get_global(&mut irgen.ctx, name);
                             curr_block.push_back(&mut irgen.ctx, get_global);

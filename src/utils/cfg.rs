@@ -76,8 +76,20 @@ where
             preds.entry(node).or_default();
 
             for succ in node.succs(arena) {
-                succs.entry(node).or_default().push(succ);
-                preds.entry(succ).or_default().push(node);
+                // we should not add duplicate nodes to succs/preds
+
+                // TODO: is it valid to `br` to the same block with different arguments?
+                // MLIR supports `cond_br` to the same block, but not sure about the control
+                // flow semantics.
+
+                // TODO: temporary solution, just iterate with `contains`
+                if !succs.entry(node).or_default().contains(&succ) {
+                    succs.entry(node).or_default().push(succ);
+                }
+                if !preds.entry(succ).or_default().contains(&node) {
+                    preds.entry(succ).or_default().push(node);
+                }
+
                 worklist.push(succ);
             }
         }

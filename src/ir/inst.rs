@@ -757,7 +757,11 @@ impl Inst {
         }
         for (arg, param) in args.iter().zip(params.iter()) {
             if arg.ty(ctx) != param.ty(ctx) {
-                panic!("argument type does not match the target block's parameters");
+                panic!(
+                    "types of arguments and parameters not match, arg: {}, param (expected): {}",
+                    arg.ty(ctx).display(ctx),
+                    param.ty(ctx).display(ctx)
+                );
             }
         }
 
@@ -981,6 +985,84 @@ impl Inst {
             if succ.block.inner() == block {
                 succ.add_arg(param, operands.pop().unwrap());
             }
+        }
+    }
+
+    /// Replace the destination block in the successor of the branch
+    /// instruction.
+    ///
+    /// This will replace the parameter to argument mapping as well. The def-use
+    /// chain of the blocks will be updated accordingly.
+    ///
+    /// If there are more than one successor having the old block, all of them
+    /// will be replaced.
+    ///
+    /// # Parameters
+    ///
+    /// - `ctx`: the context
+    /// - `old`: the old block to replace
+    /// - `new`: the new block to replace with
+    ///
+    /// # Panics
+    ///
+    /// - Panics if the instruction is not a branch instruction. Check with
+    ///   [Inst::is_terminator] before calling this method.
+    /// - Panics if the parameters of old and new blocks do not match.
+    pub fn replace_succ_block(self, ctx: &mut Context, old: Block, new: Block) {
+        if !self.is_terminator(ctx) {
+            panic!("instruction is not a terminator");
+        }
+
+        let old_params = old.params(ctx).to_vec();
+        let new_params = new.params(ctx).to_vec();
+
+        if old_params.len() != new_params.len() {
+            panic!("number of parameters does not match");
+        }
+        for (old_param, new_param) in old_params.iter().zip(new_params.iter()) {
+            if old_param.ty(ctx) != new_param.ty(ctx) {
+                panic!(
+                    "parameter type does not match, old: {}, new: {}",
+                    old_param.ty(ctx).display(ctx),
+                    new_param.ty(ctx).display(ctx)
+                );
+            }
+        }
+
+        // because the operand cannot be cloned, we need to create one for each
+        // successor.
+        let num_succs = self
+            .deref(ctx)
+            .successors
+            .iter()
+            .filter(|s| s.block.inner() == old)
+            .count();
+
+        let mut new_block_opds = (0..num_succs)
+            .map(|_| Operand::new(ctx, new, self))
+            .collect::<Vec<_>>();
+
+        // yes, borrow checker made us to record them first and drop later.
+        let mut old_block_opds = Vec::new();
+
+        for succ in self.deref_mut(ctx).successors.iter_mut() {
+            let mut args = Vec::new();
+            for (old_param, new_param) in old_params.iter().zip(new_params.iter()) {
+                let arg = succ.args.remove(old_param).unwrap();
+                args.push((new_param, arg));
+            }
+            for (param, arg) in args {
+                // we do not need to modify the def-use chain of arguments, because they are
+                // still used by the same instruction
+                succ.add_arg(*param, arg);
+            }
+            let new_block_opd = new_block_opds.pop().unwrap();
+            old_block_opds.push(std::mem::replace(&mut succ.block, new_block_opd));
+        }
+
+        // maintain the use of the old block
+        for old_block_opd in old_block_opds {
+            old_block_opd.drop(ctx);
         }
     }
 
