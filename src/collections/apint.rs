@@ -719,7 +719,7 @@ impl ApInt {
         }
     }
 
-    /// Inplace carrying signed multiplication, return the overflow.
+    /// Inplace carrying unsigned multiplication, return the overflow.
     ///
     /// # See Also
     ///
