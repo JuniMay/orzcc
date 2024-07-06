@@ -1,6 +1,7 @@
 /target
 
-/.vscode/
+/.vscode/*
+!settings.json
 
 /tests/sysy/performance
 /tests/sysy/final_performance
