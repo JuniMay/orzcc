@@ -8,7 +8,10 @@ use crate::{
         storage::{ArenaAlloc, ArenaFree, ArenaPtr, BaseArenaPtr},
     },
     impl_arena,
-    utils::{cfg::CfgNode, def_use::Usable},
+    utils::{
+        cfg::CfgNode,
+        def_use::{Usable, User},
+    },
 };
 
 /// The data of a block.
@@ -93,16 +96,69 @@ impl Block {
     pub fn params(self, ctx: &Context) -> &[Value] { self.deref(ctx).params.as_slice() }
 
     pub fn merge(self, ctx: &mut Context, other: Block) {
+        // check the last instruction
+        // - if no terminator, the other block cannot have parameters
+        // - if terminator, it should only have one successor, and replace uses of the
+        //   block params with the args.
+
+        let tail_inst = self.tail(ctx);
+
+        if let Some(tail_inst) = tail_inst {
+            if tail_inst.is_terminator(ctx) {
+                let succ = tail_inst.succ(ctx, 0);
+
+                if succ.block() != other {
+                    panic!("block has terminator but the successor is not the other block");
+                }
+
+                // we need to make sure all the block params has an arg
+                let arg_passing = succ.args();
+                if arg_passing.len() != other.params(ctx).len() {
+                    panic!("number of block params and args do not match");
+                }
+
+                // because we need to modify the def-use.
+                let mut replacements = Vec::new();
+
+                for param in other.params(ctx) {
+                    let arg = arg_passing
+                        .get(param)
+                        .expect("no argument passed to block param in the terminator instruction")
+                        .inner();
+                    replacements.push((*param, arg));
+                }
+
+                // now, replace all uses
+                for (param, arg) in replacements {
+                    for user in param.users(ctx) {
+                        user.replace(ctx, param, arg);
+                    }
+                }
+            } else {
+                // no terminator, check the next block params
+                if !other.params(ctx).is_empty() {
+                    panic!("block has no terminator but other block has parameters");
+                }
+            }
+        } else {
+            // no instruction, check the block params
+            if !other.params(ctx).is_empty() {
+                panic!("block has no instruction but other block has parameters");
+            }
+        }
+
         LinkedListContainerPtr::merge(self, ctx, other);
-        todo!("block merge should also update the def-use and users of block parameters")
     }
 
     pub fn split(self, ctx: &mut Context, inst: Inst) -> Block {
         let other = Block::new(ctx);
         LinkedListContainerPtr::split(self, ctx, other, inst);
         LinkedListNodePtr::insert_after(self, ctx, other);
-        todo!("block split should also update the def-use and users of block parameters")
-        // other
+
+        let jump = Inst::jump(ctx, other, Vec::new());
+        self.push_back(ctx, jump);
+
+        other
     }
 
     /// Remove a parameter of the block and free it.
