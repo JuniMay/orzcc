@@ -107,6 +107,8 @@ where
         }
     }
 
+    pub fn add_node_to_loop(&mut self, node: N, lp: Loop<N>) { self.node_to_loop.insert(node, lp); }
+
     fn detect_loops(&mut self, cfg: &CfgInfo<N, N::Region>, dominance: &Dominance<N>) {
         // a sequence of detected loops
         let mut loops = Vec::new();

@@ -563,7 +563,7 @@ impl LowerSpec for RvLowerSpec {
                         } else if bitwidth == 64 {
                             AluOpRRI::Addi
                         } else {
-                            unimplemented!()
+                            unimplemented!("{}", ty.display(lower.ctx));
                         };
 
                         let sub_op = if bitwidth == 32 {
@@ -927,8 +927,8 @@ impl LowerSpec for RvLowerSpec {
         let dst_bitwidth = dst_ty.bitwidth(lower.ctx).unwrap();
 
         match op {
-            ir::CastOp::Bitcast => val,
-            ir::CastOp::ZExt => val,
+            ir::CastOp::Bitcast => MValue::new_reg(dst_ty, src),
+            ir::CastOp::ZExt => MValue::new_reg(dst_ty, src),
             ir::CastOp::SExt => {
                 // shl, asr
                 let shift = 64 - src_bitwidth as i64;

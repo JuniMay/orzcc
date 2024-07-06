@@ -4,7 +4,10 @@
 
 /tests/sysy/performance
 /tests/sysy/final_performance
+/tests/sysy/custom
 
-/output/
+/output*/
 
 .DS_Store
+
+/test.*

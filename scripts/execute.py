@@ -337,7 +337,7 @@ def test(
         exec_result = execute(command, exec_timeout)
         log(log_file, command, exec_result)
 
-        if exec_result["returncode"] is None:
+        if exec_result["returncode"] is None or exec_result["returncode"] != 0:
             if exec_result["stderr"] == "TIMEOUT":
                 result_md_table += f"| `{testcase}` | ⚠️ orzcc TLE |\n"
                 print(f"\033[33m[  ERROR  ](orzcc TLE)\033[0m {testcase}")

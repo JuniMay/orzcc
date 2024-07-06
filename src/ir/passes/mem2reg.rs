@@ -262,16 +262,18 @@ impl Mem2reg {
 
             let inst = block.tail(ctx);
 
-            if let Some(inst) = inst {
-                if inst.is_terminator(ctx) {
+            match inst {
+                Some(inst) if inst.is_terminator(ctx) => {
                     for (param, incoming) in additional_param_map {
                         inst.add_succ_arg(ctx, succ, param, incoming);
                     }
-                } else {
+                }
+                Some(_) => {
                     panic!("block tail is not a terminator, do canonicalization first");
                 }
-            } else {
-                panic!("block has no tail, do canonicalization first");
+                None => {
+                    panic!("block has no tail, do canonicalization first");
+                }
             }
         }
 

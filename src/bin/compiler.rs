@@ -5,6 +5,7 @@ use orzcc::ir::{
     passes::{
         control_flow::CfgCanonicalize,
         fold::{ConstantFolding, CONSTANT_FOLDING},
+        loops::{LoopInvariantMotion, LOOP_INVARIANT_MOTION},
         mem2reg::{Mem2reg, MEM2REG},
         simple_dce::{SimpleDce, SIMPLE_DCE},
     },
@@ -85,6 +86,7 @@ fn register_passes(passman: &mut PassManager) {
     Mem2reg::register(passman);
     SimpleDce::register(passman);
     ConstantFolding::register(passman);
+    LoopInvariantMotion::register(passman);
 }
 
 fn cli(passman: &mut PassManager) -> Command {
@@ -143,9 +145,13 @@ fn parse_args(passman: &mut PassManager) -> CliCommand {
 
     let mut passes = Vec::new();
     if opt > 0 {
+        // TODO: we may need a pipeline to handle fix-point iteration
         passes.push(MEM2REG.to_string());
         passes.push(CONSTANT_FOLDING.to_string());
         passes.push(SIMPLE_DCE.to_string());
+        passes.push(LOOP_INVARIANT_MOTION.to_string());
+    } else {
+        // put some passes if testing.
     }
 
     let transform_names = passman.gather_transform_names();
