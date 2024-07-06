@@ -1,0 +1,572 @@
+slot @__GLOBAL_VAR_seed /* 0 */  : [i32; 3] = [0x9f, 0xbc, 0x30, 0x01, 0xd5, 0xe2, 0x30, 0x01, 0x07, 0xca, 0x9a, 0x3b]
+slot @__GLOBAL_VAR_a /* 2 */  : [i32; 10000] = zeroinit
+slot @__GLOBAL_VAR_staticvalue /* 1 */  : i32 = zeroinit
+decl @getarray(ptr) -> i32
+decl @_sysy_starttime(i32) -> void
+decl @getint() -> i32
+decl @putint(i32) -> void
+decl @_sysy_stoptime(i32) -> void
+decl @getch() -> i32
+decl @memset(ptr, i32, i32) -> void
+decl @memcpy(ptr, ptr, i32) -> void
+decl @putch(i32) -> void
+decl @putfloat(f32) -> void
+decl @putfarray(i32, ptr) -> void
+decl @putarray(i32, ptr) -> void
+decl @getfarray(ptr) -> i32
+decl @getfloat() -> f32
+func @main /* 2 */ () -> i32 {
+^bb4 /* 35 */ :
+    %__SLOT_VAR_main_y_0 /* 378 */ = stack_slot 4 : ptr
+    %__SLOT_VAR_main_x_0 /* 377 */ = stack_slot 4 : ptr
+    %__SLOT_VAR_main_n_0 /* 372 */ = stack_slot 4 : ptr
+    %__RET_main /* 371 */ = stack_slot 4 : ptr
+    %v360 /* 373 */ = call @getint() : i32
+    /* no result */ store %v360, %__SLOT_VAR_main_n_0
+    %v361 /* 374 */ = get_global @__GLOBAL_VAR_staticvalue : ptr
+    %v362 /* 375 */ = call @getint() : i32
+    /* no result */ store %v362, %v361
+    %v363 /* 376 */ = iconst 0x00000038i32 : i32
+    /* no result */ call @_sysy_starttime(%v363)
+
+^while.entry_1 /* 37 */ :
+    %v364 /* 379 */ = load %__SLOT_VAR_main_n_0 : i32
+    %v365 /* 380 */ = iconst 0x00000000i32 : i32
+    %v366 /* 381 */ = icmp.slt %v365, %v364 : i1
+    /* no result */ br %v366, ^while.body_1, ^while.exit_1
+
+^while.body_1 /* 39 */ :
+    %v367 /* 382 */ = load %__SLOT_VAR_main_n_0 : i32
+    %v368 /* 383 */ = iconst 0x00000001i32 : i32
+    %v369 /* 384 */ = sub %v367, %v368 : i32
+    /* no result */ store %v369, %__SLOT_VAR_main_n_0
+    %v370 /* 385 */ = call @rand() : i32
+    %v371 /* 386 */ = iconst 0x000493e0i32 : i32
+    %v372 /* 387 */ = srem %v370, %v371 : i32
+    /* no result */ store %v372, %__SLOT_VAR_main_x_0
+    %v373 /* 388 */ = call @rand() : i32
+    %v374 /* 389 */ = iconst 0x00000002i32 : i32
+    %v375 /* 390 */ = srem %v373, %v374 : i32
+    /* no result */ store %v375, %__SLOT_VAR_main_y_0
+    %v376 /* 391 */ = get_global @__GLOBAL_VAR_a : ptr
+    %v377 /* 392 */ = iconst 0x00000000i32 : i32
+    %v378 /* 393 */ = offset %v376, %v377 : ptr
+    %v379 /* 394 */ = load %__SLOT_VAR_main_x_0 : i32
+    %v380 /* 395 */ = load %__SLOT_VAR_main_y_0 : i32
+    %v381 /* 396 */ = call @set(%v378, %v379, %v380) : i32
+    /* no result */ jump ^while.entry_1
+
+^while.exit_1 /* 38 */ :
+    %v382 /* 397 */ = iconst 0x00000040i32 : i32
+    /* no result */ call @_sysy_stoptime(%v382)
+    %v383 /* 398 */ = iconst 0x00002710i32 : i32
+    %v384 /* 399 */ = get_global @__GLOBAL_VAR_a : ptr
+    %v385 /* 400 */ = iconst 0x00000000i32 : i32
+    %v386 /* 401 */ = offset %v384, %v385 : ptr
+    /* no result */ call @putarray(%v383, %v386)
+    %v387 /* 402 */ = iconst 0x00000000i32 : i32
+    /* no result */ store %v387, %__RET_main
+    /* no result */ jump ^bb5
+
+^bb5 /* 36 */ :
+    %v388 /* 403 */ = load %__RET_main : i32
+    /* no result */ ret %v388
+
+}
+func @set /* 0 */ (ptr, i32, i32) -> i32 {
+^bb0 /* 0 */ (%__PARAM_set_a: ptr /* 0 */, %__PARAM_set_pos: i32 /* 1 */, %__PARAM_set_d: i32 /* 2 */):
+    %__SLOT_VAR_set_v_0 /* 193 */ = stack_slot 4 : ptr
+    %__SLOT_VAR_set_i_0 /* 168 */ = stack_slot 4 : ptr
+    %__SLOT_VAR_set_x_0 /* 8 */ = stack_slot 124 : ptr
+    %__SLOT_CONST_set_bitcount_0 /* 6 */ = stack_slot 4 : ptr
+    %__RET_set /* 5 */ = stack_slot 4 : ptr
+    %__SLOT_PARAM_set_d /* 4 */ = stack_slot 4 : ptr
+    %__SLOT_PARAM_set_pos /* 3 */ = stack_slot 4 : ptr
+    /* no result */ store %__PARAM_set_pos, %__SLOT_PARAM_set_pos
+    /* no result */ store %__PARAM_set_d, %__SLOT_PARAM_set_d
+    %v0 /* 7 */ = iconst 0x0000001ei32 : i32
+    /* no result */ store %v0, %__SLOT_CONST_set_bitcount_0
+    %v1 /* 9 */ = iconst 0x00000000i32 : i32
+    %v2 /* 10 */ = iconst 0x0000007ci32 : i32
+    /* no result */ call @memset(%__SLOT_VAR_set_x_0, %v1, %v2)
+    %v3 /* 11 */ = iconst 0x00000000i32 : i32
+    %v4 /* 12 */ = iconst 0x00000000i32 : i32
+    %v5 /* 13 */ = iconst 0x00000004i32 : i32
+    %v6 /* 14 */ = mul %v4, %v5 : i32
+    %v7 /* 15 */ = add %v3, %v6 : i32
+    %v8 /* 16 */ = offset %__SLOT_VAR_set_x_0, %v7 : ptr
+    %v9 /* 17 */ = iconst 0x00000001i32 : i32
+    /* no result */ store %v9, %v8
+    %v10 /* 18 */ = iconst 0x00000000i32 : i32
+    %v11 /* 19 */ = iconst 0x00000001i32 : i32
+    %v12 /* 20 */ = iconst 0x00000004i32 : i32
+    %v13 /* 21 */ = mul %v11, %v12 : i32
+    %v14 /* 22 */ = add %v10, %v13 : i32
+    %v15 /* 23 */ = offset %__SLOT_VAR_set_x_0, %v14 : ptr
+    %v16 /* 24 */ = iconst 0x00000000i32 : i32
+    %v17 /* 25 */ = iconst 0x00000000i32 : i32
+    %v18 /* 26 */ = iconst 0x00000004i32 : i32
+    %v19 /* 27 */ = mul %v17, %v18 : i32
+    %v20 /* 28 */ = add %v16, %v19 : i32
+    %v21 /* 29 */ = offset %__SLOT_VAR_set_x_0, %v20 : ptr
+    %v22 /* 30 */ = load %v21 : i32
+    %v23 /* 31 */ = iconst 0x00000002i32 : i32
+    %v24 /* 32 */ = mul %v22, %v23 : i32
+    /* no result */ store %v24, %v15
+    %v25 /* 33 */ = iconst 0x00000000i32 : i32
+    %v26 /* 34 */ = iconst 0x00000002i32 : i32
+    %v27 /* 35 */ = iconst 0x00000004i32 : i32
+    %v28 /* 36 */ = mul %v26, %v27 : i32
+    %v29 /* 37 */ = add %v25, %v28 : i32
+    %v30 /* 38 */ = offset %__SLOT_VAR_set_x_0, %v29 : ptr
+    %v31 /* 39 */ = iconst 0x00000000i32 : i32
+    %v32 /* 40 */ = iconst 0x00000001i32 : i32
+    %v33 /* 41 */ = iconst 0x00000004i32 : i32
+    %v34 /* 42 */ = mul %v32, %v33 : i32
+    %v35 /* 43 */ = add %v31, %v34 : i32
+    %v36 /* 44 */ = offset %__SLOT_VAR_set_x_0, %v35 : ptr
+    %v37 /* 45 */ = load %v36 : i32
+    %v38 /* 46 */ = iconst 0x00000002i32 : i32
+    %v39 /* 47 */ = mul %v37, %v38 : i32
+    /* no result */ store %v39, %v30
+    %v40 /* 48 */ = iconst 0x00000000i32 : i32
+    %v41 /* 49 */ = iconst 0x00000003i32 : i32
+    %v42 /* 50 */ = iconst 0x00000004i32 : i32
+    %v43 /* 51 */ = mul %v41, %v42 : i32
+    %v44 /* 52 */ = add %v40, %v43 : i32
+    %v45 /* 53 */ = offset %__SLOT_VAR_set_x_0, %v44 : ptr
+    %v46 /* 54 */ = iconst 0x00000000i32 : i32
+    %v47 /* 55 */ = iconst 0x00000002i32 : i32
+    %v48 /* 56 */ = iconst 0x00000004i32 : i32
+    %v49 /* 57 */ = mul %v47, %v48 : i32
+    %v50 /* 58 */ = add %v46, %v49 : i32
+    %v51 /* 59 */ = offset %__SLOT_VAR_set_x_0, %v50 : ptr
+    %v52 /* 60 */ = load %v51 : i32
+    %v53 /* 61 */ = iconst 0x00000002i32 : i32
+    %v54 /* 62 */ = mul %v52, %v53 : i32
+    /* no result */ store %v54, %v45
+    %v55 /* 63 */ = iconst 0x00000000i32 : i32
+    %v56 /* 64 */ = iconst 0x00000004i32 : i32
+    %v57 /* 65 */ = iconst 0x00000004i32 : i32
+    %v58 /* 66 */ = mul %v56, %v57 : i32
+    %v59 /* 67 */ = add %v55, %v58 : i32
+    %v60 /* 68 */ = offset %__SLOT_VAR_set_x_0, %v59 : ptr
+    %v61 /* 69 */ = iconst 0x00000000i32 : i32
+    %v62 /* 70 */ = iconst 0x00000003i32 : i32
+    %v63 /* 71 */ = iconst 0x00000004i32 : i32
+    %v64 /* 72 */ = mul %v62, %v63 : i32
+    %v65 /* 73 */ = add %v61, %v64 : i32
+    %v66 /* 74 */ = offset %__SLOT_VAR_set_x_0, %v65 : ptr
+    %v67 /* 75 */ = load %v66 : i32
+    %v68 /* 76 */ = iconst 0x00000002i32 : i32
+    %v69 /* 77 */ = mul %v67, %v68 : i32
+    /* no result */ store %v69, %v60
+    %v70 /* 78 */ = iconst 0x00000000i32 : i32
+    %v71 /* 79 */ = iconst 0x00000005i32 : i32
+    %v72 /* 80 */ = iconst 0x00000004i32 : i32
+    %v73 /* 81 */ = mul %v71, %v72 : i32
+    %v74 /* 82 */ = add %v70, %v73 : i32
+    %v75 /* 83 */ = offset %__SLOT_VAR_set_x_0, %v74 : ptr
+    %v76 /* 84 */ = iconst 0x00000000i32 : i32
+    %v77 /* 85 */ = iconst 0x00000004i32 : i32
+    %v78 /* 86 */ = iconst 0x00000004i32 : i32
+    %v79 /* 87 */ = mul %v77, %v78 : i32
+    %v80 /* 88 */ = add %v76, %v79 : i32
+    %v81 /* 89 */ = offset %__SLOT_VAR_set_x_0, %v80 : ptr
+    %v82 /* 90 */ = load %v81 : i32
+    %v83 /* 91 */ = iconst 0x00000002i32 : i32
+    %v84 /* 92 */ = mul %v82, %v83 : i32
+    /* no result */ store %v84, %v75
+    %v85 /* 93 */ = iconst 0x00000000i32 : i32
+    %v86 /* 94 */ = iconst 0x00000006i32 : i32
+    %v87 /* 95 */ = iconst 0x00000004i32 : i32
+    %v88 /* 96 */ = mul %v86, %v87 : i32
+    %v89 /* 97 */ = add %v85, %v88 : i32
+    %v90 /* 98 */ = offset %__SLOT_VAR_set_x_0, %v89 : ptr
+    %v91 /* 99 */ = iconst 0x00000000i32 : i32
+    %v92 /* 100 */ = iconst 0x00000005i32 : i32
+    %v93 /* 101 */ = iconst 0x00000004i32 : i32
+    %v94 /* 102 */ = mul %v92, %v93 : i32
+    %v95 /* 103 */ = add %v91, %v94 : i32
+    %v96 /* 104 */ = offset %__SLOT_VAR_set_x_0, %v95 : ptr
+    %v97 /* 105 */ = load %v96 : i32
+    %v98 /* 106 */ = iconst 0x00000002i32 : i32
+    %v99 /* 107 */ = mul %v97, %v98 : i32
+    /* no result */ store %v99, %v90
+    %v100 /* 108 */ = iconst 0x00000000i32 : i32
+    %v101 /* 109 */ = iconst 0x00000007i32 : i32
+    %v102 /* 110 */ = iconst 0x00000004i32 : i32
+    %v103 /* 111 */ = mul %v101, %v102 : i32
+    %v104 /* 112 */ = add %v100, %v103 : i32
+    %v105 /* 113 */ = offset %__SLOT_VAR_set_x_0, %v104 : ptr
+    %v106 /* 114 */ = iconst 0x00000000i32 : i32
+    %v107 /* 115 */ = iconst 0x00000006i32 : i32
+    %v108 /* 116 */ = iconst 0x00000004i32 : i32
+    %v109 /* 117 */ = mul %v107, %v108 : i32
+    %v110 /* 118 */ = add %v106, %v109 : i32
+    %v111 /* 119 */ = offset %__SLOT_VAR_set_x_0, %v110 : ptr
+    %v112 /* 120 */ = load %v111 : i32
+    %v113 /* 121 */ = iconst 0x00000002i32 : i32
+    %v114 /* 122 */ = mul %v112, %v113 : i32
+    /* no result */ store %v114, %v105
+    %v115 /* 123 */ = iconst 0x00000000i32 : i32
+    %v116 /* 124 */ = iconst 0x00000008i32 : i32
+    %v117 /* 125 */ = iconst 0x00000004i32 : i32
+    %v118 /* 126 */ = mul %v116, %v117 : i32
+    %v119 /* 127 */ = add %v115, %v118 : i32
+    %v120 /* 128 */ = offset %__SLOT_VAR_set_x_0, %v119 : ptr
+    %v121 /* 129 */ = iconst 0x00000000i32 : i32
+    %v122 /* 130 */ = iconst 0x00000007i32 : i32
+    %v123 /* 131 */ = iconst 0x00000004i32 : i32
+    %v124 /* 132 */ = mul %v122, %v123 : i32
+    %v125 /* 133 */ = add %v121, %v124 : i32
+    %v126 /* 134 */ = offset %__SLOT_VAR_set_x_0, %v125 : ptr
+    %v127 /* 135 */ = load %v126 : i32
+    %v128 /* 136 */ = iconst 0x00000002i32 : i32
+    %v129 /* 137 */ = mul %v127, %v128 : i32
+    /* no result */ store %v129, %v120
+    %v130 /* 138 */ = iconst 0x00000000i32 : i32
+    %v131 /* 139 */ = iconst 0x00000009i32 : i32
+    %v132 /* 140 */ = iconst 0x00000004i32 : i32
+    %v133 /* 141 */ = mul %v131, %v132 : i32
+    %v134 /* 142 */ = add %v130, %v133 : i32
+    %v135 /* 143 */ = offset %__SLOT_VAR_set_x_0, %v134 : ptr
+    %v136 /* 144 */ = iconst 0x00000000i32 : i32
+    %v137 /* 145 */ = iconst 0x00000008i32 : i32
+    %v138 /* 146 */ = iconst 0x00000004i32 : i32
+    %v139 /* 147 */ = mul %v137, %v138 : i32
+    %v140 /* 148 */ = add %v136, %v139 : i32
+    %v141 /* 149 */ = offset %__SLOT_VAR_set_x_0, %v140 : ptr
+    %v142 /* 150 */ = load %v141 : i32
+    %v143 /* 151 */ = iconst 0x00000002i32 : i32
+    %v144 /* 152 */ = mul %v142, %v143 : i32
+    /* no result */ store %v144, %v135
+    %v145 /* 153 */ = iconst 0x00000000i32 : i32
+    %v146 /* 154 */ = iconst 0x0000000ai32 : i32
+    %v147 /* 155 */ = iconst 0x00000004i32 : i32
+    %v148 /* 156 */ = mul %v146, %v147 : i32
+    %v149 /* 157 */ = add %v145, %v148 : i32
+    %v150 /* 158 */ = offset %__SLOT_VAR_set_x_0, %v149 : ptr
+    %v151 /* 159 */ = iconst 0x00000000i32 : i32
+    %v152 /* 160 */ = iconst 0x00000009i32 : i32
+    %v153 /* 161 */ = iconst 0x00000004i32 : i32
+    %v154 /* 162 */ = mul %v152, %v153 : i32
+    %v155 /* 163 */ = add %v151, %v154 : i32
+    %v156 /* 164 */ = offset %__SLOT_VAR_set_x_0, %v155 : ptr
+    %v157 /* 165 */ = load %v156 : i32
+    %v158 /* 166 */ = iconst 0x00000002i32 : i32
+    %v159 /* 167 */ = mul %v157, %v158 : i32
+    /* no result */ store %v159, %v150
+    %v160 /* 169 */ = iconst 0x0000000ai32 : i32
+    /* no result */ store %v160, %__SLOT_VAR_set_i_0
+
+^while.entry_0 /* 2 */ :
+    %v161 /* 170 */ = load %__SLOT_VAR_set_i_0 : i32
+    %v162 /* 171 */ = load %__SLOT_CONST_set_bitcount_0 : i32
+    %v163 /* 172 */ = icmp.slt %v161, %v162 : i1
+    /* no result */ br %v163, ^while.body_0, ^while.exit_0
+
+^while.body_0 /* 4 */ :
+    %v164 /* 173 */ = load %__SLOT_VAR_set_i_0 : i32
+    %v165 /* 174 */ = iconst 0x00000001i32 : i32
+    %v166 /* 175 */ = add %v164, %v165 : i32
+    /* no result */ store %v166, %__SLOT_VAR_set_i_0
+    %v167 /* 176 */ = iconst 0x00000000i32 : i32
+    %v168 /* 177 */ = load %__SLOT_VAR_set_i_0 : i32
+    %v169 /* 178 */ = iconst 0x00000004i32 : i32
+    %v170 /* 179 */ = mul %v168, %v169 : i32
+    %v171 /* 180 */ = add %v167, %v170 : i32
+    %v172 /* 181 */ = offset %__SLOT_VAR_set_x_0, %v171 : ptr
+    %v173 /* 182 */ = iconst 0x00000000i32 : i32
+    %v174 /* 183 */ = load %__SLOT_VAR_set_i_0 : i32
+    %v175 /* 184 */ = iconst 0x00000001i32 : i32
+    %v176 /* 185 */ = sub %v174, %v175 : i32
+    %v177 /* 186 */ = iconst 0x00000004i32 : i32
+    %v178 /* 187 */ = mul %v176, %v177 : i32
+    %v179 /* 188 */ = add %v173, %v178 : i32
+    %v180 /* 189 */ = offset %__SLOT_VAR_set_x_0, %v179 : ptr
+    %v181 /* 190 */ = load %v180 : i32
+    %v182 /* 191 */ = iconst 0x00000002i32 : i32
+    %v183 /* 192 */ = mul %v181, %v182 : i32
+    /* no result */ store %v183, %v172
+    /* no result */ jump ^while.entry_0
+
+^while.exit_0 /* 3 */ :
+    %v184 /* 194 */ = iconst 0x00000000i32 : i32
+    /* no result */ store %v184, %__SLOT_VAR_set_v_0
+
+^if.entry_0 /* 5 */ :
+    %v185 /* 195 */ = load %__SLOT_PARAM_set_pos : i32
+    %v186 /* 196 */ = load %__SLOT_CONST_set_bitcount_0 : i32
+    %v187 /* 197 */ = sdiv %v185, %v186 : i32
+    %v188 /* 198 */ = iconst 0x00002710i32 : i32
+    %v189 /* 199 */ = icmp.sle %v188, %v187 : i1
+    /* no result */ br %v189, ^if.then_0, ^if.else_0
+
+^if.then_0 /* 6 */ :
+    %v190 /* 200 */ = iconst 0x00000000i32 : i32
+    /* no result */ store %v190, %__RET_set
+    /* no result */ jump ^bb1
+
+^if.else_0 /* 7 */ :
+    /* no result */ jump ^if.exit_0
+
+^if.exit_0 /* 8 */ :
+
+^if.entry_1 /* 9 */ :
+    %v191 /* 201 */ = iconst 0x00000000i32 : i32
+    %v192 /* 202 */ = load %__SLOT_PARAM_set_pos : i32
+    %v193 /* 203 */ = load %__SLOT_CONST_set_bitcount_0 : i32
+    %v194 /* 204 */ = sdiv %v192, %v193 : i32
+    %v195 /* 205 */ = iconst 0x00000004i32 : i32
+    %v196 /* 206 */ = mul %v194, %v195 : i32
+    %v197 /* 207 */ = add %v191, %v196 : i32
+    %v198 /* 208 */ = offset %__PARAM_set_a, %v197 : ptr
+    %v199 /* 209 */ = load %v198 : i32
+    %v200 /* 210 */ = iconst 0x00000000i32 : i32
+    %v201 /* 211 */ = load %__SLOT_PARAM_set_pos : i32
+    %v202 /* 212 */ = load %__SLOT_CONST_set_bitcount_0 : i32
+    %v203 /* 213 */ = srem %v201, %v202 : i32
+    %v204 /* 214 */ = iconst 0x00000004i32 : i32
+    %v205 /* 215 */ = mul %v203, %v204 : i32
+    %v206 /* 216 */ = add %v200, %v205 : i32
+    %v207 /* 217 */ = offset %__SLOT_VAR_set_x_0, %v206 : ptr
+    %v208 /* 218 */ = load %v207 : i32
+    %v209 /* 219 */ = sdiv %v199, %v208 : i32
+    %v210 /* 220 */ = iconst 0x00000002i32 : i32
+    %v211 /* 221 */ = srem %v209, %v210 : i32
+    %v212 /* 222 */ = load %__SLOT_PARAM_set_d : i32
+    %v213 /* 223 */ = icmp.ne %v211, %v212 : i1
+    %v214 /* 224 */ = not %v213 : i1
+    /* no result */ br %v214, ^if.then_1, ^if.else_1
+
+^if.then_1 /* 10 */ :
+
+^if.entry_2 /* 13 */ :
+    %v215 /* 225 */ = iconst 0x00000000i32 : i32
+    %v216 /* 226 */ = load %__SLOT_PARAM_set_pos : i32
+    %v217 /* 227 */ = load %__SLOT_CONST_set_bitcount_0 : i32
+    %v218 /* 228 */ = sdiv %v216, %v217 : i32
+    %v219 /* 229 */ = iconst 0x00000004i32 : i32
+    %v220 /* 230 */ = mul %v218, %v219 : i32
+    %v221 /* 231 */ = add %v215, %v220 : i32
+    %v222 /* 232 */ = offset %__PARAM_set_a, %v221 : ptr
+    %v223 /* 233 */ = load %v222 : i32
+    %v224 /* 234 */ = iconst 0x00000000i32 : i32
+    %v225 /* 235 */ = load %__SLOT_PARAM_set_pos : i32
+    %v226 /* 236 */ = load %__SLOT_CONST_set_bitcount_0 : i32
+    %v227 /* 237 */ = srem %v225, %v226 : i32
+    %v228 /* 238 */ = iconst 0x00000004i32 : i32
+    %v229 /* 239 */ = mul %v227, %v228 : i32
+    %v230 /* 240 */ = add %v224, %v229 : i32
+    %v231 /* 241 */ = offset %__SLOT_VAR_set_x_0, %v230 : ptr
+    %v232 /* 242 */ = load %v231 : i32
+    %v233 /* 243 */ = sdiv %v223, %v232 : i32
+    %v234 /* 244 */ = iconst 0x00000002i32 : i32
+    %v235 /* 245 */ = srem %v233, %v234 : i32
+    %v236 /* 246 */ = iconst 0x00000000i32 : i32
+    %v237 /* 247 */ = icmp.eq %v235, %v236 : i1
+    /* no result */ br %v237, ^if.then_2, ^if.else_2
+
+^if.then_2 /* 14 */ :
+
+^if.entry_3 /* 17 */ :
+    %v238 /* 248 */ = load %__SLOT_PARAM_set_d : i32
+    %v239 /* 249 */ = iconst 0x00000001i32 : i32
+    %v240 /* 250 */ = icmp.eq %v238, %v239 : i1
+    /* no result */ br %v240, ^if.then_3, ^if.else_3
+
+^if.then_3 /* 18 */ :
+    %v241 /* 251 */ = iconst 0x00000000i32 : i32
+    %v242 /* 252 */ = load %__SLOT_PARAM_set_pos : i32
+    %v243 /* 253 */ = load %__SLOT_CONST_set_bitcount_0 : i32
+    %v244 /* 254 */ = srem %v242, %v243 : i32
+    %v245 /* 255 */ = iconst 0x00000004i32 : i32
+    %v246 /* 256 */ = mul %v244, %v245 : i32
+    %v247 /* 257 */ = add %v241, %v246 : i32
+    %v248 /* 258 */ = offset %__SLOT_VAR_set_x_0, %v247 : ptr
+    %v249 /* 259 */ = load %v248 : i32
+    /* no result */ store %v249, %__SLOT_VAR_set_v_0
+    /* no result */ jump ^if.exit_3
+
+^if.else_3 /* 19 */ :
+    /* no result */ jump ^if.exit_3
+
+^if.exit_3 /* 20 */ :
+    /* no result */ jump ^if.exit_2
+
+^if.else_2 /* 15 */ :
+    /* no result */ jump ^if.exit_2
+
+^if.exit_2 /* 16 */ :
+
+^if.entry_4 /* 21 */ :
+    %v250 /* 260 */ = iconst 0x00000000i32 : i32
+    %v251 /* 261 */ = load %__SLOT_PARAM_set_pos : i32
+    %v252 /* 262 */ = load %__SLOT_CONST_set_bitcount_0 : i32
+    %v253 /* 263 */ = sdiv %v251, %v252 : i32
+    %v254 /* 264 */ = iconst 0x00000004i32 : i32
+    %v255 /* 265 */ = mul %v253, %v254 : i32
+    %v256 /* 266 */ = add %v250, %v255 : i32
+    %v257 /* 267 */ = offset %__PARAM_set_a, %v256 : ptr
+    %v258 /* 268 */ = load %v257 : i32
+    %v259 /* 269 */ = iconst 0x00000000i32 : i32
+    %v260 /* 270 */ = load %__SLOT_PARAM_set_pos : i32
+    %v261 /* 271 */ = load %__SLOT_CONST_set_bitcount_0 : i32
+    %v262 /* 272 */ = srem %v260, %v261 : i32
+    %v263 /* 273 */ = iconst 0x00000004i32 : i32
+    %v264 /* 274 */ = mul %v262, %v263 : i32
+    %v265 /* 275 */ = add %v259, %v264 : i32
+    %v266 /* 276 */ = offset %__SLOT_VAR_set_x_0, %v265 : ptr
+    %v267 /* 277 */ = load %v266 : i32
+    %v268 /* 278 */ = sdiv %v258, %v267 : i32
+    %v269 /* 279 */ = iconst 0x00000002i32 : i32
+    %v270 /* 280 */ = srem %v268, %v269 : i32
+    %v271 /* 281 */ = iconst 0x00000001i32 : i32
+    %v272 /* 282 */ = icmp.eq %v270, %v271 : i1
+    /* no result */ br %v272, ^if.then_4, ^if.else_4
+
+^if.then_4 /* 22 */ :
+
+^if.entry_5 /* 25 */ :
+    %v273 /* 283 */ = load %__SLOT_PARAM_set_d : i32
+    %v274 /* 284 */ = iconst 0x00000000i32 : i32
+    %v275 /* 285 */ = icmp.eq %v273, %v274 : i1
+    /* no result */ br %v275, ^if.then_5, ^if.else_5
+
+^if.then_5 /* 26 */ :
+    %v276 /* 286 */ = load %__SLOT_VAR_set_v_0 : i32
+    %v277 /* 287 */ = iconst 0x00000000i32 : i32
+    %v278 /* 288 */ = load %__SLOT_PARAM_set_pos : i32
+    %v279 /* 289 */ = load %__SLOT_CONST_set_bitcount_0 : i32
+    %v280 /* 290 */ = srem %v278, %v279 : i32
+    %v281 /* 291 */ = iconst 0x00000004i32 : i32
+    %v282 /* 292 */ = mul %v280, %v281 : i32
+    %v283 /* 293 */ = add %v277, %v282 : i32
+    %v284 /* 294 */ = offset %__SLOT_VAR_set_x_0, %v283 : ptr
+    %v285 /* 295 */ = load %v284 : i32
+    %v286 /* 296 */ = sub %v276, %v285 : i32
+    /* no result */ store %v286, %__SLOT_VAR_set_v_0
+    /* no result */ jump ^if.exit_5
+
+^if.else_5 /* 27 */ :
+    /* no result */ jump ^if.exit_5
+
+^if.exit_5 /* 28 */ :
+    /* no result */ jump ^if.exit_4
+
+^if.else_4 /* 23 */ :
+    /* no result */ jump ^if.exit_4
+
+^if.exit_4 /* 24 */ :
+    /* no result */ jump ^if.exit_1
+
+^if.else_1 /* 11 */ :
+    /* no result */ jump ^if.exit_1
+
+^if.exit_1 /* 12 */ :
+    %v287 /* 297 */ = iconst 0x00000000i32 : i32
+    %v288 /* 298 */ = load %__SLOT_PARAM_set_pos : i32
+    %v289 /* 299 */ = load %__SLOT_CONST_set_bitcount_0 : i32
+    %v290 /* 300 */ = sdiv %v288, %v289 : i32
+    %v291 /* 301 */ = iconst 0x00000004i32 : i32
+    %v292 /* 302 */ = mul %v290, %v291 : i32
+    %v293 /* 303 */ = add %v287, %v292 : i32
+    %v294 /* 304 */ = offset %__PARAM_set_a, %v293 : ptr
+    %v295 /* 305 */ = iconst 0x00000000i32 : i32
+    %v296 /* 306 */ = load %__SLOT_PARAM_set_pos : i32
+    %v297 /* 307 */ = load %__SLOT_CONST_set_bitcount_0 : i32
+    %v298 /* 308 */ = sdiv %v296, %v297 : i32
+    %v299 /* 309 */ = iconst 0x00000004i32 : i32
+    %v300 /* 310 */ = mul %v298, %v299 : i32
+    %v301 /* 311 */ = add %v295, %v300 : i32
+    %v302 /* 312 */ = offset %__PARAM_set_a, %v301 : ptr
+    %v303 /* 313 */ = load %v302 : i32
+    %v304 /* 314 */ = load %__SLOT_VAR_set_v_0 : i32
+    %v305 /* 315 */ = add %v303, %v304 : i32
+    /* no result */ store %v305, %v294
+    %v306 /* 316 */ = iconst 0x00000000i32 : i32
+    /* no result */ store %v306, %__RET_set
+    /* no result */ jump ^bb1
+
+^bb1 /* 1 */ :
+    %v307 /* 317 */ = load %__RET_set : i32
+    /* no result */ ret %v307
+
+}
+func @rand /* 1 */ () -> i32 {
+^bb2 /* 29 */ :
+    %__RET_rand /* 318 */ = stack_slot 4 : ptr
+    %v308 /* 319 */ = get_global @__GLOBAL_VAR_staticvalue : ptr
+    %v309 /* 320 */ = get_global @__GLOBAL_VAR_staticvalue : ptr
+    %v310 /* 321 */ = load %v309 : i32
+    %v311 /* 322 */ = get_global @__GLOBAL_VAR_seed : ptr
+    %v312 /* 323 */ = iconst 0x00000000i32 : i32
+    %v313 /* 324 */ = iconst 0x00000000i32 : i32
+    %v314 /* 325 */ = iconst 0x00000004i32 : i32
+    %v315 /* 326 */ = mul %v313, %v314 : i32
+    %v316 /* 327 */ = add %v312, %v315 : i32
+    %v317 /* 328 */ = offset %v311, %v316 : ptr
+    %v318 /* 329 */ = load %v317 : i32
+    %v319 /* 330 */ = mul %v310, %v318 : i32
+    %v320 /* 331 */ = get_global @__GLOBAL_VAR_seed : ptr
+    %v321 /* 332 */ = iconst 0x00000000i32 : i32
+    %v322 /* 333 */ = iconst 0x00000001i32 : i32
+    %v323 /* 334 */ = iconst 0x00000004i32 : i32
+    %v324 /* 335 */ = mul %v322, %v323 : i32
+    %v325 /* 336 */ = add %v321, %v324 : i32
+    %v326 /* 337 */ = offset %v320, %v325 : ptr
+    %v327 /* 338 */ = load %v326 : i32
+    %v328 /* 339 */ = add %v319, %v327 : i32
+    /* no result */ store %v328, %v308
+    %v329 /* 340 */ = get_global @__GLOBAL_VAR_staticvalue : ptr
+    %v330 /* 341 */ = get_global @__GLOBAL_VAR_staticvalue : ptr
+    %v331 /* 342 */ = load %v330 : i32
+    %v332 /* 343 */ = get_global @__GLOBAL_VAR_seed : ptr
+    %v333 /* 344 */ = iconst 0x00000000i32 : i32
+    %v334 /* 345 */ = iconst 0x00000002i32 : i32
+    %v335 /* 346 */ = iconst 0x00000004i32 : i32
+    %v336 /* 347 */ = mul %v334, %v335 : i32
+    %v337 /* 348 */ = add %v333, %v336 : i32
+    %v338 /* 349 */ = offset %v332, %v337 : ptr
+    %v339 /* 350 */ = load %v338 : i32
+    %v340 /* 351 */ = srem %v331, %v339 : i32
+    /* no result */ store %v340, %v329
+
+^if.entry_6 /* 31 */ :
+    %v341 /* 352 */ = get_global @__GLOBAL_VAR_staticvalue : ptr
+    %v342 /* 353 */ = load %v341 : i32
+    %v343 /* 354 */ = iconst 0x00000000i32 : i32
+    %v344 /* 355 */ = icmp.slt %v342, %v343 : i1
+    /* no result */ br %v344, ^if.then_6, ^if.else_6
+
+^if.then_6 /* 32 */ :
+    %v345 /* 356 */ = get_global @__GLOBAL_VAR_staticvalue : ptr
+    %v346 /* 357 */ = get_global @__GLOBAL_VAR_seed : ptr
+    %v347 /* 358 */ = iconst 0x00000000i32 : i32
+    %v348 /* 359 */ = iconst 0x00000002i32 : i32
+    %v349 /* 360 */ = iconst 0x00000004i32 : i32
+    %v350 /* 361 */ = mul %v348, %v349 : i32
+    %v351 /* 362 */ = add %v347, %v350 : i32
+    %v352 /* 363 */ = offset %v346, %v351 : ptr
+    %v353 /* 364 */ = load %v352 : i32
+    %v354 /* 365 */ = get_global @__GLOBAL_VAR_staticvalue : ptr
+    %v355 /* 366 */ = load %v354 : i32
+    %v356 /* 367 */ = add %v353, %v355 : i32
+    /* no result */ store %v356, %v345
+    /* no result */ jump ^if.exit_6
+
+^if.else_6 /* 33 */ :
+    /* no result */ jump ^if.exit_6
+
+^if.exit_6 /* 34 */ :
+    %v357 /* 368 */ = get_global @__GLOBAL_VAR_staticvalue : ptr
+    %v358 /* 369 */ = load %v357 : i32
+    /* no result */ store %v358, %__RET_rand
+    /* no result */ jump ^bb3
+
+^bb3 /* 30 */ :
+    %v359 /* 370 */ = load %__RET_rand : i32
+    /* no result */ ret %v359
+
+}

@@ -1085,6 +1085,62 @@ impl Inst {
             debug,
         }
     }
+
+    pub fn is_iconst(self, ctx: &Context) -> bool {
+        matches!(self.deref(ctx).kind, InstKind::IConst(_))
+    }
+
+    pub fn is_fconst(self, ctx: &Context) -> bool {
+        matches!(self.deref(ctx).kind, InstKind::FConst(_))
+    }
+
+    pub fn is_undef(self, ctx: &Context) -> bool { matches!(self.deref(ctx).kind, InstKind::Undef) }
+
+    pub fn is_ibinary(self, ctx: &Context) -> bool {
+        matches!(self.deref(ctx).kind, InstKind::IBinary(_))
+    }
+
+    pub fn is_fbinary(self, ctx: &Context) -> bool {
+        matches!(self.deref(ctx).kind, InstKind::FBinary(_))
+    }
+
+    pub fn is_iunary(self, ctx: &Context) -> bool {
+        matches!(self.deref(ctx).kind, InstKind::IUnary(_))
+    }
+
+    pub fn is_funary(self, ctx: &Context) -> bool {
+        matches!(self.deref(ctx).kind, InstKind::FUnary(_))
+    }
+
+    pub fn is_cast(self, ctx: &Context) -> bool {
+        matches!(self.deref(ctx).kind, InstKind::Cast(_))
+    }
+
+    pub fn is_offset(self, ctx: &Context) -> bool {
+        matches!(self.deref(ctx).kind, InstKind::Offset)
+    }
+
+    pub fn is_jump(self, ctx: &Context) -> bool { matches!(self.deref(ctx).kind, InstKind::Jump) }
+
+    pub fn is_br(self, ctx: &Context) -> bool { matches!(self.deref(ctx).kind, InstKind::Br) }
+
+    pub fn is_call(self, ctx: &Context) -> bool {
+        matches!(self.deref(ctx).kind, InstKind::Call(_))
+    }
+
+    pub fn is_call_indirect(self, ctx: &Context) -> bool {
+        matches!(self.deref(ctx).kind, InstKind::CallIndirect(_))
+    }
+
+    pub fn is_ret(self, ctx: &Context) -> bool { matches!(self.deref(ctx).kind, InstKind::Ret) }
+
+    pub fn is_get_global(self, ctx: &Context) -> bool {
+        matches!(self.deref(ctx).kind, InstKind::GetGlobal(_))
+    }
+
+    pub fn is_load(self, ctx: &Context) -> bool { matches!(self.deref(ctx).kind, InstKind::Load) }
+
+    pub fn is_store(self, ctx: &Context) -> bool { matches!(self.deref(ctx).kind, InstKind::Store) }
 }
 
 impl LinkedListNodePtr for Inst {
