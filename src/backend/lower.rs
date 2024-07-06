@@ -161,15 +161,15 @@ where
     ///
     /// Because we want to get the machine function by the symbol when
     /// generating call instruction, so we need to map the IR symbol to mfunc.
-    funcs: HashMap<ir::Symbol, MFunc<S::I>>,
+    pub funcs: HashMap<ir::Symbol, MFunc<S::I>>,
     /// Mapping IR block to machine block.
-    blocks: HashMap<ir::Block, MBlock<S::I>>,
+    pub blocks: HashMap<ir::Block, MBlock<S::I>>,
     /// Other global labels, for IR global slots
     ///
     /// This is usually not necessary, because we directly use the IR symbol as
     /// the machine label. However, this two are different types, so it's
     /// better to map them.
-    labels: HashMap<ir::Symbol, MLabel>,
+    pub labels: HashMap<ir::Symbol, MLabel>,
 
     /// The current function and block.
     pub(super) curr_func: Option<MFunc<S::I>>,
@@ -183,7 +183,7 @@ where
 }
 
 pub trait LowerSpec: Sized {
-    type I: MInst;
+    type I: MInst<S = Self>;
 
     /// Get the stack alignment of the target.
     ///
@@ -204,6 +204,22 @@ pub trait LowerSpec: Sized {
     ///
     /// The size of a pointer in bytes.
     fn pointer_size() -> usize;
+
+    /// Get the allocatable general purpose registers.
+    fn allocatable_gp_regs() -> Vec<Reg>;
+
+    /// Get the allocatable floating point registers.
+    fn allocatable_fp_regs() -> Vec<Reg>;
+
+    /// Get the allocatable registers.
+    fn allocatable_regs() -> Vec<Reg> {
+        let mut regs = Self::allocatable_gp_regs();
+        regs.extend(Self::allocatable_fp_regs());
+        regs
+    }
+
+    /// Get the non-allocatable registers.
+    fn non_allocatable_regs() -> Vec<Reg>;
 
     /// Get the aligned size of the stack frame.
     fn total_stack_size(lower: &mut LowerContext<Self>, mfunc: MFunc<Self::I>) -> u64;
@@ -284,6 +300,8 @@ pub trait LowerSpec: Sized {
     fn gen_func_prologue(lower: &mut LowerContext<Self>, func: MFunc<Self::I>);
 
     fn gen_func_epilogue(lower: &mut LowerContext<Self>, func: MFunc<Self::I>);
+
+    fn display_reg(reg: Reg) -> String;
 }
 
 impl<'a, S> LowerContext<'a, S>

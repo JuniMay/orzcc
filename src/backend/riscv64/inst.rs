@@ -1,6 +1,6 @@
 use std::fmt;
 
-use super::{imm::Imm12, regs};
+use super::{imm::Imm12, lower::RvLowerSpec, regs};
 use crate::{
     backend::{
         block::MBlock,
@@ -1038,6 +1038,8 @@ impl fmt::Display for Frm {
 }
 
 impl MInst for RvInst {
+    type S = RvLowerSpec;
+
     fn from_ptr(ptr: BaseArenaPtr<Self::T>) -> Self { Self(ptr) }
 
     fn ptr(self) -> BaseArenaPtr<Self::T> { self.0 }
@@ -1098,6 +1100,31 @@ impl MInst for RvInst {
     }
 
     fn defs(self, mctx: &MContext<Self>, _config: &LowerConfig) -> Vec<Reg> {
+        use RvInstKind as Ik;
+
+        match &self.deref(mctx).kind {
+            Ik::Li { rd, .. } => vec![*rd],
+            Ik::AluRR { rd, .. } => vec![*rd],
+            Ik::AluRRI { rd, .. } => vec![*rd],
+            Ik::AluRRR { rd, .. } => vec![*rd],
+            Ik::FpuRR { rd, .. } => vec![*rd],
+            Ik::FpuRRR { rd, .. } => vec![*rd],
+            Ik::FpuRRRR { rd, .. } => vec![*rd],
+            Ik::Load { rd, .. } => vec![*rd],
+            Ik::Store { .. } => vec![],
+            Ik::Ret => vec![],
+            Ik::Call { .. } => regs::RETURN_REGS
+                .iter()
+                .map(|r| (*r).into())
+                .collect(),
+            Ik::J { .. } => vec![],
+            Ik::Br { .. } => vec![],
+            Ik::La { rd, .. } => vec![*rd],
+            Ik::LoadAddr { rd, .. } => vec![*rd],
+        }
+    }
+
+    fn clobbers(self, mctx: &MContext<Self>, _config: &LowerConfig) -> Vec<Reg> {
         use RvInstKind as Ik;
 
         match &self.deref(mctx).kind {

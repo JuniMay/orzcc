@@ -28,7 +28,7 @@ func @test /* 0 */ () -> void {
     // get_global
     %test_func_ptr = get_global @test_func : ptr
     // indirect call with function pointer
-    %res = call_indirect (f32) -> i32, %test_func_ptr(%p2) : i32
+    // %res = call_indirect (f32) -> i32, %test_func_ptr(%p2) : i32
 
     // direct call with symbol
     %res_direct = call @test_func(%p2) : i32

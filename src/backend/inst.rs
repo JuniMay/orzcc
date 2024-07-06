@@ -2,7 +2,7 @@ use super::{
     block::MBlock,
     context::MContext,
     lower::{LowerConfig, MemLoc},
-    regs::Reg,
+    regs::Reg, LowerSpec,
 };
 use crate::collections::{
     linked_list::LinkedListNodePtr,
@@ -12,13 +12,21 @@ use crate::collections::{
 pub trait MInst:
     ArenaPtr<A = MContext<Self>> + LinkedListNodePtr<ContainerPtr = MBlock<Self>>
 {
+    type S: LowerSpec<I = Self>;
+    
     fn from_ptr(ptr: BaseArenaPtr<Self::T>) -> Self;
 
     fn ptr(self) -> BaseArenaPtr<Self::T>;
 
     fn uses(self, mctx: &MContext<Self>, config: &LowerConfig) -> Vec<Reg>;
 
+    /// Return registers defined by this instruction.
+    /// Note for call instruction, all return registers are defined. 
     fn defs(self, mctx: &MContext<Self>, config: &LowerConfig) -> Vec<Reg>;
+
+    /// Return registers that may be clobbered (edited) by this instruction.
+    /// Note for call instruction, all caller-saved registers are clobbered.
+    fn clobbers(self, mctx: &MContext<Self>, config: &LowerConfig) -> Vec<Reg>;
 
     fn is_terminator(self, mctx: &MContext<Self>) -> bool;
 

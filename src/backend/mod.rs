@@ -4,6 +4,7 @@ mod func;
 mod inst;
 mod lower;
 mod regs;
+pub mod reg_alloc;
 
 #[cfg(feature = "target-arm64")]
 pub mod arm64;

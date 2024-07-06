@@ -31,6 +31,85 @@ impl LowerSpec for RvLowerSpec {
 
     fn pointer_size() -> usize { 8 }
 
+    fn allocatable_gp_regs() -> Vec<Reg> {
+        vec![
+            regs::ra().into(),
+            regs::t1().into(),
+            regs::t2().into(),
+            regs::t3().into(),
+            regs::t4().into(),
+            regs::t5().into(),
+            regs::t6().into(),
+            regs::a0().into(),
+            regs::a1().into(),
+            regs::a2().into(),
+            regs::a3().into(),
+            regs::a4().into(),
+            regs::a5().into(),
+            regs::a6().into(),
+            regs::a7().into(),
+            regs::s0().into(),
+            regs::s1().into(),
+            regs::s2().into(),
+            regs::s3().into(),
+            regs::s4().into(),
+            regs::s5().into(),
+            regs::s6().into(),
+            regs::s7().into(),
+            regs::s8().into(),
+            regs::s9().into(),
+            regs::s10().into(),
+            regs::s11().into(),
+        ]
+    }
+
+    fn allocatable_fp_regs() -> Vec<Reg> {
+        vec![
+            regs::fa0().into(),
+            regs::fa1().into(),
+            regs::fa2().into(),
+            regs::fa3().into(),
+            regs::fa4().into(),
+            regs::fa5().into(),
+            regs::fa6().into(),
+            regs::fa7().into(),
+            regs::ft0().into(),
+            regs::ft1().into(),
+            regs::ft2().into(),
+            regs::ft3().into(),
+            regs::ft4().into(),
+            regs::ft5().into(),
+            regs::ft6().into(),
+            regs::ft7().into(),
+            regs::ft8().into(),
+            regs::ft9().into(),
+            regs::ft10().into(),
+            regs::ft11().into(),
+            regs::fs0().into(),
+            regs::fs1().into(),
+            regs::fs2().into(),
+            regs::fs3().into(),
+            regs::fs4().into(),
+            regs::fs5().into(),
+            regs::fs6().into(),
+            regs::fs7().into(),
+            regs::fs8().into(),
+            regs::fs9().into(),
+            regs::fs10().into(),
+            regs::fs11().into(),
+        ]
+    }
+
+    fn non_allocatable_regs() -> Vec<Reg> {
+        vec![
+            regs::zero().into(),
+            regs::t0().into(),
+            regs::sp().into(),
+            regs::gp().into(),
+            regs::tp().into(),
+        ]
+    }
+
     fn return_reg(ctx: &ir::Context, ty: ir::Ty) -> PReg {
         if ty.is_integer(ctx) || ty.is_ptr(ctx) {
             regs::a0()
@@ -1582,5 +1661,9 @@ impl LowerSpec for RvLowerSpec {
         }
 
         Self::gen_ret(lower);
+    }
+
+    fn display_reg(reg: Reg) -> String {
+        regs::display(reg)
     }
 }
