@@ -391,7 +391,7 @@ impl LowerSpec for RvLowerSpec {
                         // not commutative
                         let (li, t) = RvInst::li(&mut lower.mctx, imm as u64);
                         curr_block.push_back(&mut lower.mctx, li);
-                        let (inst, reg) = RvInst::alu_rrr(&mut lower.mctx, sub_op, reg, t);
+                        let (inst, reg) = RvInst::alu_rrr(&mut lower.mctx, sub_op, t, reg);
                         curr_block.push_back(&mut lower.mctx, inst);
                         MValue::new_reg(ty, reg)
                     }
@@ -714,7 +714,7 @@ impl LowerSpec for RvLowerSpec {
                                     Imm12::try_from_i64(1).unwrap(),
                                 );
                                 curr_block.push_back(&mut lower.mctx, inst);
-                                MValue::new_reg(ty, reg)
+                                MValue::new_reg(dst_ty, reg)
                             }
                             ir::ICmpCond::Ne => {
                                 // sltu
@@ -725,7 +725,7 @@ impl LowerSpec for RvLowerSpec {
                                     reg,
                                 );
                                 curr_block.push_back(&mut lower.mctx, inst);
-                                MValue::new_reg(ty, reg)
+                                MValue::new_reg(dst_ty, reg)
                             }
                             ir::ICmpCond::Slt
                             | ir::ICmpCond::Sle
@@ -743,8 +743,8 @@ impl LowerSpec for RvLowerSpec {
                             ir::ICmpCond::Eq | ir::ICmpCond::Ne => unreachable!(),
                         };
                         let reg_op = match cond {
-                            ir::ICmpCond::Slt | ir::ICmpCond::Ult => AluOpRRR::Slt,
-                            ir::ICmpCond::Sle | ir::ICmpCond::Ule => AluOpRRR::Sltu,
+                            ir::ICmpCond::Slt | ir::ICmpCond::Sle => AluOpRRR::Slt,
+                            ir::ICmpCond::Ult | ir::ICmpCond::Ule => AluOpRRR::Sltu,
                             ir::ICmpCond::Eq | ir::ICmpCond::Ne => unreachable!(),
                         };
                         let swap = matches!(cond, ir::ICmpCond::Sle | ir::ICmpCond::Ule);
@@ -900,8 +900,25 @@ impl LowerSpec for RvLowerSpec {
                     }
                 };
 
+                let not = matches!(cond, ir::FCmpCond::UNe);
+
                 let (inst, rd) = RvInst::fpu_rrr(&mut lower.mctx, op, Frm::Dyn, lhs, rhs);
                 curr_block.push_back(&mut lower.mctx, inst);
+
+                let rd = if not {
+                    // the type is i1, so we need to xor with 1
+                    let (inst, rd) = RvInst::alu_rri(
+                        &mut lower.mctx,
+                        AluOpRRI::Xori,
+                        rd,
+                        Imm12::try_from_i64(1).unwrap(),
+                    );
+                    curr_block.push_back(&mut lower.mctx, inst);
+                    rd
+                } else {
+                    rd
+                };
+
                 MValue::new_reg(dst_ty, rd)
             }
         }
@@ -1395,6 +1412,8 @@ impl LowerSpec for RvLowerSpec {
     }
 
     fn gen_func_prologue(lower: &mut LowerContext<Self>, func: MFunc<Self::I>) {
+        func.add_saved_reg(&mut lower.mctx, regs::ra());
+
         // addi sp, sp, -frame_size or sub
         //
         // store reg#0, total_stack_size - 8(sp)

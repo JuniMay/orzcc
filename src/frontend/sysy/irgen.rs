@@ -324,10 +324,10 @@ impl IrGenContext {
                             }
                         }
                         Bo::Ne => {
-                            let cmp = if is_float {
+                            if is_float {
                                 ir::Inst::fbinary(
                                     &mut self.ctx,
-                                    ir::FBinaryOp::Cmp(ir::FCmpCond::UEq),
+                                    ir::FBinaryOp::Cmp(ir::FCmpCond::UNe),
                                     lhs,
                                     rhs,
                                 )
@@ -338,10 +338,7 @@ impl IrGenContext {
                                     lhs,
                                     rhs,
                                 )
-                            };
-                            curr_block.push_back(&mut self.ctx, cmp);
-                            let cmp = cmp.result(&self.ctx, 0);
-                            ir::Inst::iunary(&mut self.ctx, ir::IUnaryOp::Not, cmp)
+                            }
                         }
                         Bo::LogicalAnd | Bo::LogicalOr => unreachable!(),
                     };
