@@ -1054,7 +1054,7 @@ impl LowerSpec for RvLowerSpec {
                     (33..=64, 64) => FpuOpRR::FcvtDL,
                     _ => unreachable!(),
                 };
-                let (inst, rd) = RvInst::fpu_rr(&mut lower.mctx, op, Frm::Rtz, src);
+                let (inst, rd) = RvInst::fpu_rr(&mut lower.mctx, op, Frm::Dyn, src);
                 curr_block.push_back(&mut lower.mctx, inst);
                 MValue::new_reg(dst_ty, rd)
             }
@@ -1078,7 +1078,7 @@ impl LowerSpec for RvLowerSpec {
                     (33..=64, 64) => FpuOpRR::FcvtDLu,
                     _ => unreachable!(),
                 };
-                let (inst, rd) = RvInst::fpu_rr(&mut lower.mctx, op, Frm::Rtz, src);
+                let (inst, rd) = RvInst::fpu_rr(&mut lower.mctx, op, Frm::Dyn, src);
                 curr_block.push_back(&mut lower.mctx, inst);
                 MValue::new_reg(dst_ty, rd)
             }
@@ -1090,6 +1090,7 @@ impl LowerSpec for RvLowerSpec {
                     (64, 33..=64) => FpuOpRR::FcvtLuD,
                     _ => unreachable!(),
                 };
+                // TODO: is the rounding mode correct?
                 let (inst, rd) = RvInst::fpu_rr(&mut lower.mctx, op, Frm::Rtz, src);
                 curr_block.push_back(&mut lower.mctx, inst);
                 MValue::new_reg(dst_ty, rd)
