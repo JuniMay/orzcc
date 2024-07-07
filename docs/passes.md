@@ -36,5 +36,7 @@ mem2reg 的 Pass 位于 `src/ir/passes` 下。
   - [ ] Better Block Argument Passing (at most one vreg should be enough)
   - [ ] Tune the spill weight
   - [ ] RISC-V `ra` register for allocation.
+  - [ ] Constraint & Hint
+  - [ ] Coalescing & Splitting
 - [ ] Scheduling (for dual-issue)
 - [ ] Peephole Optimization

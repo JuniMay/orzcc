@@ -149,7 +149,7 @@ fn parse_args(passman: &mut PassManager) -> CliCommand {
         passes.push(MEM2REG.to_string());
         passes.push(CONSTANT_FOLDING.to_string());
         passes.push(SIMPLE_DCE.to_string());
-        passes.push(LOOP_INVARIANT_MOTION.to_string());
+        // passes.push(LOOP_INVARIANT_MOTION.to_string());
     } else {
         // put some passes if testing.
     }
