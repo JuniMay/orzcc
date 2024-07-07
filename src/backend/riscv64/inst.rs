@@ -1242,9 +1242,13 @@ impl MInst for RvInst {
         let new_loc = match (old_loc, new_loc.unwrap()) {
             (MemLoc::Slot { .. } | MemLoc::Incoming { .. }, MemLoc::RegOffset { base, offset }) => {
                 if Imm12::try_from_i64(offset).is_none() {
+                    // li t0, offset
                     let t0 = regs::t0();
                     let li = Self::build_li(mctx, t0.into(), offset as u64);
                     self.insert_before(mctx, li);
+                    // add t0, base, t0
+                    let add = Self::build_alu_rrr(mctx, AluOpRRR::Add, t0.into(), base, t0.into());
+                    self.insert_before(mctx, add);
                     MemLoc::RegOffset {
                         base: t0.into(),
                         offset: 0,
