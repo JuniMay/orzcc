@@ -1,8 +1,25 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::{backend::{func::{self, MFuncData}, inst::MInst, regs::Reg, riscv64::regs::display, LowerConfig, LowerContext, LowerSpec, MBlock, MContext, MFunc}, collections::linked_list::LinkedListContainerPtr, utils::{cfg::{CfgInfo, CfgRegion}, dfs::DfsContext}};
-
 use super::block_defuse_analysis;
+use crate::{
+    backend::{
+        func::{self, MFuncData},
+        inst::MInst,
+        regs::Reg,
+        riscv64::regs::display,
+        LowerConfig,
+        LowerContext,
+        LowerSpec,
+        MBlock,
+        MContext,
+        MFunc,
+    },
+    collections::linked_list::LinkedListContainerPtr,
+    utils::{
+        cfg::{CfgInfo, CfgRegion},
+        dfs::DfsContext,
+    },
+};
 
 #[derive(Debug, Clone)]
 pub struct BlockInOut<I> {
@@ -19,21 +36,15 @@ impl<I> Default for BlockInOut<I> {
     }
 }
 
-impl<I> BlockInOut<I> 
+impl<I> BlockInOut<I>
 where
-    I: MInst
+    I: MInst,
 {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 
-    pub fn in_(&self, block: &MBlock<I>) -> Option<&HashSet<Reg>> {
-        self.in_.get(block)
-    }
+    pub fn in_(&self, block: &MBlock<I>) -> Option<&HashSet<Reg>> { self.in_.get(block) }
 
-    pub fn out(&self, block: &MBlock<I>) -> Option<&HashSet<Reg>> {
-        self.out.get(block)
-    }
+    pub fn out(&self, block: &MBlock<I>) -> Option<&HashSet<Reg>> { self.out.get(block) }
 
     pub fn display(&self, ctx: &LowerContext<I::S>) -> String {
         let mut s = String::new();
@@ -60,7 +71,7 @@ where
 
 pub fn analyze_on_function<S>(ctx: &LowerContext<S>, func: MFunc<S::I>) -> BlockInOut<S::I>
 where
-    S: LowerSpec
+    S: LowerSpec,
 {
     let def_uses = block_defuse_analysis::analyze_on_function(ctx, func);
 
@@ -106,5 +117,3 @@ where
 
     BlockInOut { in_, out }
 }
-
-    

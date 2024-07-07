@@ -1,17 +1,10 @@
 use std::{collections::HashMap, fmt::Display, hash::Hash};
 
+use super::liveness_analysis;
 use crate::{
-    backend::{
-        block,
-        context::DisplayMContext,
-        inst::{DisplayMInst, MInst},
-        regs::Reg,
-        LowerContext, LowerSpec, MFunc,
-    },
+    backend::{inst::MInst, regs::Reg, LowerContext, LowerSpec, MFunc},
     collections::linked_list::LinkedListContainerPtr,
 };
-
-use super::liveness_analysis;
 
 /// Left-closed right-open range
 /// [start, end)
@@ -22,9 +15,7 @@ pub struct Range {
 }
 
 impl Range {
-    pub fn new(start: usize, end: usize) -> Self {
-        Self { start, end }
-    }
+    pub fn new(start: usize, end: usize) -> Self { Self { start, end } }
 }
 
 impl Display for Range {
@@ -40,14 +31,10 @@ pub struct Interval {
 }
 
 impl Interval {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 
     /// Add a range to the interval.
-    pub fn add_range(&mut self, range: Range) {
-        self.ranges.push(range);
-    }
+    pub fn add_range(&mut self, range: Range) { self.ranges.push(range); }
 
     /// Optimize the ranges by merging overlapping ranges.
     pub fn optimize(&mut self) {
@@ -93,9 +80,7 @@ impl Interval {
     }
 
     /// Get the number of ranges in the interval.
-    pub fn range_count(&self) -> usize {
-        self.ranges.len()
-    }
+    pub fn range_count(&self) -> usize { self.ranges.len() }
 }
 
 impl Display for Interval {
@@ -147,7 +132,7 @@ impl LiveInterval {
 
         for block in func.iter(ctx.mctx()) {
             inst_numbers.push(String::new());
-            for inst in block.iter(ctx.mctx()) {
+            for _inst in block.iter(ctx.mctx()) {
                 inst_numbers.push(format!("{:}", inst_number));
                 inst_number += 1;
             }
@@ -173,7 +158,7 @@ impl LiveInterval {
         let mut live_ranges = Vec::new();
         for block in func.iter(ctx.mctx()) {
             live_ranges.push(" ".repeat(header_line.len()));
-            for inst in block.iter(ctx.mctx()) {
+            for _inst in block.iter(ctx.mctx()) {
                 let mut line = " ".repeat(header_line.len());
                 for (idx, (reg, _)) in self.intervals.iter().enumerate() {
                     let range = self.intervals.get(reg).unwrap();
@@ -190,9 +175,7 @@ impl LiveInterval {
         }
 
         // Combine the instruction numbers and the register live ranges.
-        for (inst_number, (inst_number_line, live_range_line)) in
-            inst_numbers.iter().zip(live_ranges.iter()).enumerate()
-        {
+        for (inst_number_line, live_range_line) in inst_numbers.iter().zip(live_ranges.iter()) {
             lines.push(format!("{:}{}", inst_number_line, live_range_line));
         }
 
@@ -206,13 +189,23 @@ impl LiveInterval {
     }
 }
 
+fn is_allocatable<S>(reg: Reg) -> bool
+where
+    S: LowerSpec,
+{
+    match reg {
+        Reg::P(reg) => S::allocatable_regs().contains(&reg),
+        Reg::V(_) => true,
+    }
+}
+
 pub fn analyze_on_function<S>(ctx: &LowerContext<S>, func: MFunc<S::I>) -> LiveInterval
 where
     S: LowerSpec,
     S::I: Hash,
 {
     let mut instruction_number = HashMap::new();
-    let mut in_out = liveness_analysis::analyze_on_function(ctx, func);
+    let in_out = liveness_analysis::analyze_on_function(ctx, func);
     let mut live_interval = LiveInterval::default();
 
     // number all the instructions
@@ -244,8 +237,9 @@ where
             // address use registers first
             for reg in inst.uses(ctx.mctx(), &ctx.config) {
                 // only calculate live intervals for allocatable registers and virtual registers
-                if !S::non_allocatable_regs().contains(&reg) {
-                    // if the register is not met before, create a new range from the beginning of the block
+                if is_allocatable::<S>(reg) {
+                    // if the register is not met before, create a new range from the beginning of
+                    // the block
                     let range = current_range.entry(reg).or_insert_with(|| {
                         Range::new(
                             instruction_number[&block_first_inst],
@@ -261,16 +255,18 @@ where
             }
 
             // address clobber registers
-            // for call instructions, all caller-saved registers are clobbered (may be edited)
-            // so we should make all caller-saved registers conflict with all live registers
-            // we can do this by mark all caller-saved registers live at [call + 1, call + 2)
-            // so here we consider all caller-saved registers 'defined' at the call instruction
+            // for call instructions, all caller-saved registers are clobbered (may be
+            // edited) so we should make all caller-saved registers conflict
+            // with all live registers we can do this by mark all caller-saved
+            // registers live at [call + 1, call + 2) so here we consider all
+            // caller-saved registers 'defined' at the call instruction
             // since they are not used later, they will only live at [call + 1, call + 2)
             for reg in inst.clobbers(ctx.mctx(), &ctx.config) {
                 // only calculate live intervals for allocatable registers and virtual registers
-                if !S::non_allocatable_regs().contains(&reg) {
-                    // if the register is not met before, create a new range from this instruction + 1
-                    // (since we can only use the register after this instruction)
+                if is_allocatable::<S>(reg) {
+                    // if the register is not met before, create a new range from this instruction +
+                    // 1 (since we can only use the register after this
+                    // instruction)
                     if !current_range.contains_key(&reg) {
                         current_range.insert(
                             reg,
@@ -322,14 +318,15 @@ where
                 .add_range(*range);
         }
 
-        // for those registers that are in both live_in and live_out, but not met in the block
-        // create a range from the beginning of the block to the end of the block
+        // for those registers that are in both live_in and live_out, but not met in the
+        // block create a range from the beginning of the block to the end of
+        // the block
         for reg in live_out
             .iter()
             .filter(|reg| live_in.contains(reg) && !current_range.contains_key(reg))
         {
             // only calculate live intervals for allocatable registers and virtual registers
-            if !S::non_allocatable_regs().contains(&reg) {
+            if is_allocatable::<S>(*reg) {
                 live_interval
                     .intervals
                     .entry(*reg)

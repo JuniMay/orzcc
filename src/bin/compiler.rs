@@ -72,7 +72,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             },
         );
         lower_ctx.lower();
-        // TODO: regalloc
+        lower_ctx.reg_alloc();
         lower_ctx.after_regalloc();
         let mctx = lower_ctx.finish();
         std::fs::write(cmd.output, format!("{}", mctx.display()))?;

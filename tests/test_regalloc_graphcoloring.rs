@@ -1,16 +1,17 @@
 use orzcc::{
     backend::{
-        reg_alloc::block_defuse_analysis,
+        reg_alloc::graph_coloring_allocation::GraphColoringAllocation,
         riscv64::lower::RvLowerSpec,
         LowerConfig,
         LowerContext,
+        MFunc,
     },
     collections::diagnostic::RenderOptions,
     frontend::ir::{into_ir, Parser},
 };
 
 #[test]
-fn test_regalloc_blockdefuse() {
+fn test_regalloc_graphcoloring() {
     let src = include_str!("ir/basic.orzir");
     let parser = Parser::new(src);
     let (ast, mut ctx, mut diag) = parser.parse();
@@ -32,11 +33,22 @@ fn test_regalloc_blockdefuse() {
 
     println!("{}", lower_ctx.mctx().display());
 
-    for (func_name, m_func) in lower_ctx.funcs.iter() {
-        if !m_func.is_external(lower_ctx.mctx()) {
-            println!("Function: {}", func_name);
-            let defuse = block_defuse_analysis::analyze_on_function(&lower_ctx, *m_func);
-            println!("{}", defuse.display(&lower_ctx));
-        }
+    let funcs: Vec<MFunc<_>> = lower_ctx
+        .funcs
+        .values()
+        .filter(|f| !f.is_external(lower_ctx.mctx()))
+        .copied()
+        .collect();
+
+    for func in funcs {
+        println!("Function: {}", func.label(lower_ctx.mctx()));
+        let mut allocation = GraphColoringAllocation::new();
+        allocation.run_on_function(&mut lower_ctx, func);
     }
+
+    lower_ctx.after_regalloc();
+
+    let mctx = lower_ctx.finish();
+
+    println!("{}", mctx.display());
 }

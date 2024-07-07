@@ -1,7 +1,7 @@
 use super::{
     imm::Imm12,
     inst::{AluOpRRI, AluOpRRR, BrOp, FpuOpRRR, Frm, LoadOp, RvInst, StoreOp},
-    regs,
+    regs::{self, CALLEE_SAVED_REGS, CALLER_SAVED_REGS, RETURN_REGS},
 };
 use crate::{
     backend::{
@@ -14,7 +14,10 @@ use crate::{
         PReg,
         RegKind,
     },
-    collections::{apint::ApInt, linked_list::LinkedListContainerPtr},
+    collections::{
+        apint::ApInt,
+        linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
+    },
     ir,
 };
 
@@ -31,84 +34,82 @@ impl LowerSpec for RvLowerSpec {
 
     fn pointer_size() -> usize { 8 }
 
-    fn allocatable_gp_regs() -> Vec<Reg> {
+    fn allocatable_gp_regs() -> Vec<PReg> {
         vec![
-            regs::ra().into(),
-            regs::t1().into(),
-            regs::t2().into(),
-            regs::t3().into(),
-            regs::t4().into(),
-            regs::t5().into(),
-            regs::t6().into(),
-            regs::a0().into(),
-            regs::a1().into(),
-            regs::a2().into(),
-            regs::a3().into(),
-            regs::a4().into(),
-            regs::a5().into(),
-            regs::a6().into(),
-            regs::a7().into(),
-            regs::s0().into(),
-            regs::s1().into(),
-            regs::s2().into(),
-            regs::s3().into(),
-            regs::s4().into(),
-            regs::s5().into(),
-            regs::s6().into(),
-            regs::s7().into(),
-            regs::s8().into(),
-            regs::s9().into(),
-            regs::s10().into(),
-            regs::s11().into(),
+            regs::t1(),
+            regs::t2(),
+            regs::t3(),
+            regs::t4(),
+            regs::t5(),
+            regs::t6(),
+            regs::a0(),
+            regs::a1(),
+            regs::a2(),
+            regs::a3(),
+            regs::a4(),
+            regs::a5(),
+            regs::a6(),
+            regs::a7(),
+            regs::s0(),
+            regs::s1(),
+            regs::s2(),
+            regs::s3(),
+            regs::s4(),
+            regs::s5(),
+            regs::s6(),
+            regs::s7(),
+            regs::s8(),
+            regs::s9(),
+            regs::s10(),
+            regs::s11(),
+            regs::ra(),
         ]
     }
 
-    fn allocatable_fp_regs() -> Vec<Reg> {
+    fn allocatable_fp_regs() -> Vec<PReg> {
         vec![
-            regs::fa0().into(),
-            regs::fa1().into(),
-            regs::fa2().into(),
-            regs::fa3().into(),
-            regs::fa4().into(),
-            regs::fa5().into(),
-            regs::fa6().into(),
-            regs::fa7().into(),
-            regs::ft0().into(),
-            regs::ft1().into(),
-            regs::ft2().into(),
-            regs::ft3().into(),
-            regs::ft4().into(),
-            regs::ft5().into(),
-            regs::ft6().into(),
-            regs::ft7().into(),
-            regs::ft8().into(),
-            regs::ft9().into(),
-            regs::ft10().into(),
-            regs::ft11().into(),
-            regs::fs0().into(),
-            regs::fs1().into(),
-            regs::fs2().into(),
-            regs::fs3().into(),
-            regs::fs4().into(),
-            regs::fs5().into(),
-            regs::fs6().into(),
-            regs::fs7().into(),
-            regs::fs8().into(),
-            regs::fs9().into(),
-            regs::fs10().into(),
-            regs::fs11().into(),
+            regs::fa0(),
+            regs::fa1(),
+            regs::fa2(),
+            regs::fa3(),
+            regs::fa4(),
+            regs::fa5(),
+            regs::fa6(),
+            regs::fa7(),
+            regs::ft0(),
+            regs::ft1(),
+            regs::ft2(),
+            regs::ft3(),
+            regs::ft4(),
+            regs::ft5(),
+            regs::ft6(),
+            regs::ft7(),
+            regs::ft8(),
+            regs::ft9(),
+            regs::ft10(),
+            regs::ft11(),
+            regs::fs0(),
+            regs::fs1(),
+            regs::fs2(),
+            regs::fs3(),
+            regs::fs4(),
+            regs::fs5(),
+            regs::fs6(),
+            regs::fs7(),
+            regs::fs8(),
+            regs::fs9(),
+            regs::fs10(),
+            regs::fs11(),
         ]
     }
 
-    fn non_allocatable_regs() -> Vec<Reg> {
-        vec![
-            regs::zero().into(),
-            regs::t0().into(),
-            regs::sp().into(),
-            regs::gp().into(),
-            regs::tp().into(),
-        ]
+    fn non_allocatable_regs() -> Vec<PReg> {
+        vec![regs::zero(), regs::t0(), regs::sp(), regs::gp(), regs::tp()]
     }
+
+    fn callee_saved_regs() -> Vec<PReg> { CALLEE_SAVED_REGS.iter().copied().collect() }
+
+    fn caller_saved_regs() -> Vec<PReg> { CALLER_SAVED_REGS.iter().copied().collect() }
 
     fn return_reg(ctx: &ir::Context, ty: ir::Ty) -> PReg {
         if ty.is_integer(ctx) || ty.is_ptr(ctx) {
@@ -1663,7 +1664,23 @@ impl LowerSpec for RvLowerSpec {
         Self::gen_ret(lower);
     }
 
-    fn display_reg(reg: Reg) -> String {
-        regs::display(reg)
+    fn gen_spill_load(lower: &mut LowerContext<Self>, reg: Reg, slot: MemLoc, inst: Self::I) {
+        let load = match reg.kind() {
+            RegKind::General => RvInst::build_load(&mut lower.mctx, LoadOp::Ld, reg, slot),
+            RegKind::Float => RvInst::build_load(&mut lower.mctx, LoadOp::Fld, reg, slot),
+            RegKind::Vector => unimplemented!(),
+        };
+        inst.insert_before(&mut lower.mctx, load);
     }
+
+    fn gen_spill_store(lower: &mut LowerContext<Self>, reg: Reg, slot: MemLoc, inst: Self::I) {
+        let store = match reg.kind() {
+            RegKind::General => RvInst::store(&mut lower.mctx, StoreOp::Sd, reg, slot),
+            RegKind::Float => RvInst::store(&mut lower.mctx, StoreOp::Fsd, reg, slot),
+            RegKind::Vector => unimplemented!(),
+        };
+        inst.insert_after(&mut lower.mctx, store);
+    }
+
+    fn display_reg(reg: Reg) -> String { regs::display(reg) }
 }

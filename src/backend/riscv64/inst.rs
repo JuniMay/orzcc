@@ -1113,10 +1113,7 @@ impl MInst for RvInst {
             Ik::Load { rd, .. } => vec![*rd],
             Ik::Store { .. } => vec![],
             Ik::Ret => vec![],
-            Ik::Call { .. } => regs::RETURN_REGS
-                .iter()
-                .map(|r| (*r).into())
-                .collect(),
+            Ik::Call { .. } => regs::RETURN_REGS.iter().map(|r| (*r).into()).collect(),
             Ik::J { .. } => vec![],
             Ik::Br { .. } => vec![],
             Ik::La { rd, .. } => vec![*rd],
@@ -1144,6 +1141,52 @@ impl MInst for RvInst {
                 .collect(),
             Ik::J { .. } => vec![],
             Ik::Br { .. } => vec![],
+            Ik::La { rd, .. } => vec![*rd],
+            Ik::LoadAddr { rd, .. } => vec![*rd],
+        }
+    }
+
+    fn all_regs(self, mctx: &MContext<Self>, config: &LowerConfig) -> Vec<Reg> {
+        use RvInstKind as Ik;
+
+        match &self.deref(mctx).kind {
+            Ik::Li { rd, .. } => vec![*rd],
+            Ik::AluRR { rd, rs, .. } => vec![*rd, *rs],
+            Ik::AluRRI { rd, rs, .. } => vec![*rd, *rs],
+            Ik::AluRRR { rd, rs1, rs2, .. } => vec![*rd, *rs1, *rs2],
+            Ik::FpuRR { rd, rs, .. } => vec![*rd, *rs],
+            Ik::FpuRRR { rd, rs1, rs2, .. } => vec![*rd, *rs1, *rs2],
+            Ik::FpuRRRR {
+                rd, rs1, rs2, rs3, ..
+            } => vec![*rd, *rs1, *rs2, *rs3],
+            Ik::Load { rd, loc, .. } => match loc {
+                MemLoc::RegOffset { base, .. } => vec![*rd, *base],
+                MemLoc::Slot { .. } | MemLoc::Incoming { .. } => {
+                    if config.omit_frame_pointer {
+                        vec![*rd, regs::sp().into()]
+                    } else {
+                        vec![*rd, regs::fp().into()]
+                    }
+                }
+            },
+            Ik::Store { src, loc, .. } => {
+                let mut regs = vec![*src];
+                match loc {
+                    MemLoc::RegOffset { base, .. } => regs.push(*base),
+                    MemLoc::Slot { .. } | MemLoc::Incoming { .. } => {
+                        if config.omit_frame_pointer {
+                            regs.push(regs::sp().into());
+                        } else {
+                            regs.push(regs::fp().into());
+                        }
+                    }
+                }
+                regs
+            }
+            Ik::Ret => vec![],
+            Ik::Call { arg_regs, .. } => vec![],
+            Ik::J { .. } => vec![],
+            Ik::Br { rs1, rs2, .. } => vec![*rs1, *rs2],
             Ik::La { rd, .. } => vec![*rd],
             Ik::LoadAddr { rd, .. } => vec![*rd],
         }
@@ -1246,6 +1289,135 @@ impl MInst for RvInst {
             | Ik::J { .. }
             | Ik::Br { .. }
             | Ik::La { .. } => unreachable!(),
+        }
+    }
+
+    fn replace_reg(self, mctx: &mut MContext<Self>, from: Reg, to: Reg) {
+        use RvInstKind as Ik;
+
+        match &mut self.deref_mut(mctx).kind {
+            Ik::Li { rd, .. } => {
+                if *rd == from {
+                    *rd = to;
+                }
+            }
+            Ik::AluRR { rd, rs, .. } => {
+                if *rd == from {
+                    *rd = to;
+                }
+                if *rs == from {
+                    *rs = to;
+                }
+            }
+            Ik::AluRRI { rd, rs, .. } => {
+                if *rd == from {
+                    *rd = to;
+                }
+                if *rs == from {
+                    *rs = to;
+                }
+            }
+            Ik::AluRRR { rd, rs1, rs2, .. } => {
+                if *rd == from {
+                    *rd = to;
+                }
+                if *rs1 == from {
+                    *rs1 = to;
+                }
+                if *rs2 == from {
+                    *rs2 = to;
+                }
+            }
+            Ik::FpuRR { rd, rs, .. } => {
+                if *rd == from {
+                    *rd = to;
+                }
+                if *rs == from {
+                    *rs = to;
+                }
+            }
+            Ik::FpuRRR { rd, rs1, rs2, .. } => {
+                if *rd == from {
+                    *rd = to;
+                }
+                if *rs1 == from {
+                    *rs1 = to;
+                }
+                if *rs2 == from {
+                    *rs2 = to;
+                }
+            }
+            Ik::FpuRRRR {
+                rd, rs1, rs2, rs3, ..
+            } => {
+                if *rd == from {
+                    *rd = to;
+                }
+                if *rs1 == from {
+                    *rs1 = to;
+                }
+                if *rs2 == from {
+                    *rs2 = to;
+                }
+                if *rs3 == from {
+                    *rs3 = to;
+                }
+            }
+            Ik::Load { rd, loc, .. } => {
+                if *rd == from {
+                    *rd = to;
+                }
+                match loc {
+                    MemLoc::RegOffset { base, .. } => {
+                        if *base == from {
+                            *base = to;
+                        }
+                    }
+                    MemLoc::Slot { .. } | MemLoc::Incoming { .. } => {}
+                }
+            }
+            Ik::Store { src, loc, .. } => {
+                if *src == from {
+                    *src = to;
+                }
+                match loc {
+                    MemLoc::RegOffset { base, .. } => {
+                        if *base == from {
+                            *base = to;
+                        }
+                    }
+                    MemLoc::Slot { .. } | MemLoc::Incoming { .. } => {}
+                }
+            }
+            Ik::Ret => {}
+            Ik::Call { .. } => {}
+            Ik::J { .. } => {}
+            Ik::Br { rs1, rs2, .. } => {
+                if *rs1 == from {
+                    *rs1 = to;
+                }
+                if *rs2 == from {
+                    *rs2 = to;
+                }
+            }
+            Ik::La { rd, .. } => {
+                if *rd == from {
+                    *rd = to;
+                }
+            }
+            Ik::LoadAddr { rd, loc, .. } => {
+                if *rd == from {
+                    *rd = to;
+                }
+                match loc {
+                    MemLoc::RegOffset { base, .. } => {
+                        if *base == from {
+                            *base = to;
+                        }
+                    }
+                    MemLoc::Slot { .. } | MemLoc::Incoming { .. } => {}
+                }
+            }
         }
     }
 }

@@ -2,7 +2,8 @@ use super::{
     block::MBlock,
     context::MContext,
     lower::{LowerConfig, MemLoc},
-    regs::Reg, LowerSpec,
+    regs::Reg,
+    LowerSpec,
 };
 use crate::collections::{
     linked_list::LinkedListNodePtr,
@@ -13,7 +14,7 @@ pub trait MInst:
     ArenaPtr<A = MContext<Self>> + LinkedListNodePtr<ContainerPtr = MBlock<Self>>
 {
     type S: LowerSpec<I = Self>;
-    
+
     fn from_ptr(ptr: BaseArenaPtr<Self::T>) -> Self;
 
     fn ptr(self) -> BaseArenaPtr<Self::T>;
@@ -21,12 +22,15 @@ pub trait MInst:
     fn uses(self, mctx: &MContext<Self>, config: &LowerConfig) -> Vec<Reg>;
 
     /// Return registers defined by this instruction.
-    /// Note for call instruction, all return registers are defined. 
+    /// Note for call instruction, all return registers are defined.
     fn defs(self, mctx: &MContext<Self>, config: &LowerConfig) -> Vec<Reg>;
 
     /// Return registers that may be clobbered (edited) by this instruction.
     /// Note for call instruction, all caller-saved registers are clobbered.
     fn clobbers(self, mctx: &MContext<Self>, config: &LowerConfig) -> Vec<Reg>;
+
+    /// Return all registers that are written in assembly of this instruction.
+    fn all_regs(self, mctx: &MContext<Self>, config: &LowerConfig) -> Vec<Reg>;
 
     fn is_terminator(self, mctx: &MContext<Self>) -> bool;
 
@@ -40,6 +44,8 @@ pub trait MInst:
         self.unlink(mctx);
         mctx.free(self);
     }
+
+    fn replace_reg(self, mctx: &mut MContext<Self>, from: Reg, to: Reg);
 }
 
 pub trait DisplayMInst<'a>: MInst {

@@ -24,7 +24,7 @@ where
 {
     pub(super) insts: BaseArena<I::T>,
     pub(super) blocks: BaseArena<MBlockData<I>>,
-    pub(super) funcs: BaseArena<MFuncData<I>>,
+    pub funcs: BaseArena<MFuncData<I>>,
 
     raw_data: Vec<(MLabel, RawData)>,
 

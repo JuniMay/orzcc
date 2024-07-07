@@ -24,6 +24,10 @@ impl Reg {
             Reg::V(vreg) => vreg.kind(),
         }
     }
+
+    pub fn is_preg(&self) -> bool { matches!(self, Reg::P(_)) }
+
+    pub fn is_vreg(&self) -> bool { matches!(self, Reg::V(_)) }
 }
 
 /// The physical register.

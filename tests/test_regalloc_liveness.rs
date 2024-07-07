@@ -1,7 +1,9 @@
 use orzcc::{
     backend::{
-        reg_alloc::liveness_analysis, riscv64::lower::RvLowerSpec, LowerConfig, LowerContext,
-        MFunc,
+        reg_alloc::liveness_analysis,
+        riscv64::lower::RvLowerSpec,
+        LowerConfig,
+        LowerContext,
     },
     collections::diagnostic::RenderOptions,
     frontend::ir::{into_ir, Parser},

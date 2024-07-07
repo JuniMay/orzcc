@@ -1,7 +1,9 @@
 use orzcc::{
     backend::{
-        reg_alloc::live_interval_analysis, riscv64::lower::RvLowerSpec, LowerConfig, LowerContext,
-        MFunc,
+        reg_alloc::live_interval_analysis,
+        riscv64::lower::RvLowerSpec,
+        LowerConfig,
+        LowerContext,
     },
     collections::diagnostic::RenderOptions,
     frontend::ir::{into_ir, Parser},
@@ -33,8 +35,12 @@ fn test_regalloc_liveinterval() {
     for (func_name, m_func) in lower_ctx.funcs.iter() {
         if !m_func.is_external(lower_ctx.mctx()) {
             println!("Function: {}", func_name);
-            let live_intervals: live_interval_analysis::LiveInterval = live_interval_analysis::analyze_on_function(&lower_ctx, *m_func);
-            println!("{}", live_intervals.pretty_display::<RvLowerSpec>(&lower_ctx, *m_func));
+            let live_intervals: live_interval_analysis::LiveInterval =
+                live_interval_analysis::analyze_on_function(&lower_ctx, *m_func);
+            println!(
+                "{}",
+                live_intervals.pretty_display::<RvLowerSpec>(&lower_ctx, *m_func)
+            );
         }
     }
 }

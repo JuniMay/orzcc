@@ -1,6 +1,9 @@
-use std::{collections::{HashMap, HashSet}, fmt::Display};
+use std::collections::{HashMap, HashSet};
 
-use crate::{backend::{inst::MInst, regs::Reg, LowerConfig, LowerContext, LowerSpec, MBlock, MContext, MFunc}, collections::linked_list::LinkedListContainerPtr};
+use crate::{
+    backend::{inst::MInst, regs::Reg, LowerContext, LowerSpec, MBlock, MFunc},
+    collections::linked_list::LinkedListContainerPtr,
+};
 
 #[derive(Debug, Clone)]
 pub struct BlockDefUse<I> {
@@ -17,21 +20,15 @@ impl<I> Default for BlockDefUse<I> {
     }
 }
 
-impl<I> BlockDefUse<I> 
+impl<I> BlockDefUse<I>
 where
-    I: MInst
+    I: MInst,
 {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 
-    pub fn uses(&self, block: &MBlock<I>) -> Option<&HashSet<Reg>> {
-        self.uses.get(block)
-    }
+    pub fn uses(&self, block: &MBlock<I>) -> Option<&HashSet<Reg>> { self.uses.get(block) }
 
-    pub fn defs(&self, block: &MBlock<I>) -> Option<&HashSet<Reg>> {
-        self.defs.get(block)
-    }
+    pub fn defs(&self, block: &MBlock<I>) -> Option<&HashSet<Reg>> { self.defs.get(block) }
 
     pub fn display(&self, ctx: &LowerContext<I::S>) -> String {
         let mut s = String::new();
@@ -41,7 +38,7 @@ where
             for reg in uses {
                 s.push_str(&format!("{}, ", I::S::display_reg(*reg)));
             }
-            s.push_str("\n");
+            s.push('\n');
         }
 
         for (block, defs) in &self.defs {
@@ -49,7 +46,7 @@ where
             for reg in defs {
                 s.push_str(&format!("{}, ", I::S::display_reg(*reg)));
             }
-            s.push_str("\n");
+            s.push('\n');
         }
 
         s
@@ -58,7 +55,7 @@ where
 
 pub fn analyze_on_function<S>(ctx: &LowerContext<S>, func: MFunc<S::I>) -> BlockDefUse<S::I>
 where
-    S: LowerSpec
+    S: LowerSpec,
 {
     let mut defuse = BlockDefUse::new();
 
@@ -79,8 +76,8 @@ where
 
         // remove non-allocatable registers
         for reg in S::non_allocatable_regs() {
-            uses.remove(&reg);
-            defs.remove(&reg);
+            uses.remove(&reg.into());
+            defs.remove(&reg.into());
         }
 
         defuse.uses.insert(block, uses);

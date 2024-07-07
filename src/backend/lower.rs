@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, hash::Hash};
 
 use super::{
     func::MLabel,
@@ -12,6 +12,7 @@ use super::{
     RegKind,
 };
 use crate::{
+    backend::reg_alloc::graph_coloring_allocation::GraphColoringAllocation,
     collections::{
         apint::ApInt,
         linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
@@ -140,7 +141,7 @@ impl MValue {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct LowerConfig {
     pub omit_frame_pointer: bool,
 }
@@ -206,20 +207,26 @@ pub trait LowerSpec: Sized {
     fn pointer_size() -> usize;
 
     /// Get the allocatable general purpose registers.
-    fn allocatable_gp_regs() -> Vec<Reg>;
+    fn allocatable_gp_regs() -> Vec<PReg>;
 
     /// Get the allocatable floating point registers.
-    fn allocatable_fp_regs() -> Vec<Reg>;
+    fn allocatable_fp_regs() -> Vec<PReg>;
 
     /// Get the allocatable registers.
-    fn allocatable_regs() -> Vec<Reg> {
+    fn allocatable_regs() -> Vec<PReg> {
         let mut regs = Self::allocatable_gp_regs();
         regs.extend(Self::allocatable_fp_regs());
         regs
     }
 
     /// Get the non-allocatable registers.
-    fn non_allocatable_regs() -> Vec<Reg>;
+    fn non_allocatable_regs() -> Vec<PReg>;
+
+    /// Get callee-saved registers.
+    fn callee_saved_regs() -> Vec<PReg>;
+
+    /// Get caller-saved registers.
+    fn caller_saved_regs() -> Vec<PReg>;
 
     /// Get the aligned size of the stack frame.
     fn total_stack_size(lower: &mut LowerContext<Self>, mfunc: MFunc<Self::I>) -> u64;
@@ -301,7 +308,32 @@ pub trait LowerSpec: Sized {
 
     fn gen_func_epilogue(lower: &mut LowerContext<Self>, func: MFunc<Self::I>);
 
+    fn gen_spill_load(lower: &mut LowerContext<Self>, reg: Reg, slot: MemLoc, inst: Self::I);
+
+    fn gen_spill_store(lower: &mut LowerContext<Self>, reg: Reg, slot: MemLoc, inst: Self::I);
+
     fn display_reg(reg: Reg) -> String;
+}
+
+impl<'a, S> LowerContext<'a, S>
+where
+    S: LowerSpec,
+    S::I: Hash,
+{
+    pub fn reg_alloc(&mut self) {
+        let funcs: Vec<MFunc<_>> = self
+            .funcs
+            .values()
+            .filter(|f| !f.is_external(self.mctx()))
+            .copied()
+            .collect();
+
+        for func in funcs {
+            println!("Function: {}", func.label(self.mctx()));
+            let mut allocation = GraphColoringAllocation::new();
+            allocation.run_on_function(self, func);
+        }
+    }
 }
 
 impl<'a, S> LowerContext<'a, S>
@@ -326,6 +358,8 @@ where
     pub fn finish(self) -> MContext<S::I> { self.mctx }
 
     pub fn mctx(&self) -> &MContext<S::I> { &self.mctx }
+
+    pub fn mctx_mut(&mut self) -> &mut MContext<S::I> { &mut self.mctx }
 
     pub fn lower(&mut self) {
         // firstly, create all functions, globals and blocks
