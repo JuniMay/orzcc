@@ -3,22 +3,16 @@ use std::collections::{HashMap, HashSet};
 use super::block_defuse_analysis;
 use crate::{
     backend::{
-        func::{self, MFuncData},
         inst::MInst,
         regs::Reg,
         riscv64::regs::display,
-        LowerConfig,
         LowerContext,
         LowerSpec,
         MBlock,
-        MContext,
         MFunc,
     },
     collections::linked_list::LinkedListContainerPtr,
-    utils::{
-        cfg::{CfgInfo, CfgRegion},
-        dfs::DfsContext,
-    },
+    utils::{cfg::CfgInfo, dfs::DfsContext},
 };
 
 #[derive(Debug, Clone)]
@@ -54,7 +48,7 @@ where
             for reg in in_ {
                 s.push_str(&format!("{}, ", display(*reg)));
             }
-            s.push_str("\n");
+            s.push('\n');
         }
 
         for (block, out) in &self.out {
@@ -62,7 +56,7 @@ where
             for reg in out {
                 s.push_str(&format!("{}, ", display(*reg)));
             }
-            s.push_str("\n");
+            s.push('\n');
         }
 
         s
@@ -101,7 +95,7 @@ where
 
             // in[B] = use[B] U (out[B] - def[B])
             in_set.extend(def_uses.uses(&block).unwrap().clone());
-            in_set.extend(out_set.difference(&def_uses.defs(&block).unwrap()).cloned());
+            in_set.extend(out_set.difference(def_uses.defs(&block).unwrap()).cloned());
 
             if in_[&block] != in_set {
                 in_.insert(block, in_set);

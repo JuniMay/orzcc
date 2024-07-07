@@ -1146,7 +1146,7 @@ impl MInst for RvInst {
         }
     }
 
-    fn all_regs(self, mctx: &MContext<Self>, config: &LowerConfig) -> Vec<Reg> {
+    fn all_regs(self, mctx: &MContext<Self>, _config: &LowerConfig) -> Vec<Reg> {
         use RvInstKind as Ik;
 
         match &self.deref(mctx).kind {
@@ -1161,30 +1161,18 @@ impl MInst for RvInst {
             } => vec![*rd, *rs1, *rs2, *rs3],
             Ik::Load { rd, loc, .. } => match loc {
                 MemLoc::RegOffset { base, .. } => vec![*rd, *base],
-                MemLoc::Slot { .. } | MemLoc::Incoming { .. } => {
-                    if config.omit_frame_pointer {
-                        vec![*rd, regs::sp().into()]
-                    } else {
-                        vec![*rd, regs::fp().into()]
-                    }
-                }
+                MemLoc::Slot { .. } | MemLoc::Incoming { .. } => vec![*rd],
             },
             Ik::Store { src, loc, .. } => {
                 let mut regs = vec![*src];
                 match loc {
                     MemLoc::RegOffset { base, .. } => regs.push(*base),
-                    MemLoc::Slot { .. } | MemLoc::Incoming { .. } => {
-                        if config.omit_frame_pointer {
-                            regs.push(regs::sp().into());
-                        } else {
-                            regs.push(regs::fp().into());
-                        }
-                    }
+                    MemLoc::Slot { .. } | MemLoc::Incoming { .. } => {}
                 }
                 regs
             }
             Ik::Ret => vec![],
-            Ik::Call { arg_regs, .. } => vec![],
+            Ik::Call { .. } => vec![],
             Ik::J { .. } => vec![],
             Ik::Br { rs1, rs2, .. } => vec![*rs1, *rs2],
             Ik::La { rd, .. } => vec![*rd],

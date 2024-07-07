@@ -1,7 +1,7 @@
 use super::{
     imm::Imm12,
     inst::{AluOpRRI, AluOpRRR, BrOp, FpuOpRRR, Frm, LoadOp, RvInst, StoreOp},
-    regs::{self, CALLEE_SAVED_REGS, CALLER_SAVED_REGS, RETURN_REGS},
+    regs::{self, CALLEE_SAVED_REGS, CALLER_SAVED_REGS},
 };
 use crate::{
     backend::{
@@ -32,7 +32,7 @@ impl LowerSpec for RvLowerSpec {
 
     fn stack_pointer() -> PReg { regs::sp() }
 
-    fn pointer_size() -> usize { 8 }
+    fn pointer_size() -> usize { 64 }
 
     fn allocatable_gp_regs() -> Vec<PReg> {
         vec![
@@ -107,9 +107,9 @@ impl LowerSpec for RvLowerSpec {
         vec![regs::zero(), regs::t0(), regs::sp(), regs::gp(), regs::tp()]
     }
 
-    fn callee_saved_regs() -> Vec<PReg> { CALLEE_SAVED_REGS.iter().copied().collect() }
+    fn callee_saved_regs() -> Vec<PReg> { CALLEE_SAVED_REGS.to_vec() }
 
-    fn caller_saved_regs() -> Vec<PReg> { CALLER_SAVED_REGS.iter().copied().collect() }
+    fn caller_saved_regs() -> Vec<PReg> { CALLER_SAVED_REGS.to_vec() }
 
     fn return_reg(ctx: &ir::Context, ty: ir::Ty) -> PReg {
         if ty.is_integer(ctx) || ty.is_ptr(ctx) {
@@ -206,7 +206,7 @@ impl LowerSpec for RvLowerSpec {
             panic!("gen_iconst: expected integer type, got {:?}", ty);
         }
 
-        let bitwidth = ty.bitwidth_with_ptr(lower.ctx, Self::pointer_size() * 8);
+        let bitwidth = ty.bitwidth_with_ptr(lower.ctx, Self::pointer_size());
 
         if bitwidth > 64 {
             unimplemented!("gen_iconst: bitwidth > 64: {}", bitwidth);
@@ -1311,7 +1311,7 @@ impl LowerSpec for RvLowerSpec {
     fn gen_load(lower: &mut LowerContext<Self>, ty: ir::Ty, mem_loc: MemLoc) -> MValue {
         let curr_block = lower.curr_block.unwrap();
 
-        let bitwidth = ty.bitwidth_with_ptr(lower.ctx, Self::pointer_size() * 8);
+        let bitwidth = ty.bitwidth_with_ptr(lower.ctx, Self::pointer_size());
         if ty.is_integer(lower.ctx) || ty.is_ptr(lower.ctx) {
             let op = match bitwidth {
                 0..=8 => LoadOp::Lb,
@@ -1374,9 +1374,7 @@ impl LowerSpec for RvLowerSpec {
             MValueKind::Undef => return,
         };
 
-        let bitwidth = val
-            .ty()
-            .bitwidth_with_ptr(lower.ctx, Self::pointer_size() * 8);
+        let bitwidth = val.ty().bitwidth_with_ptr(lower.ctx, Self::pointer_size());
         if val.ty().is_integer(lower.ctx) || val.ty().is_ptr(lower.ctx) {
             let op = match bitwidth {
                 0..=8 => StoreOp::Sb,

@@ -451,8 +451,6 @@ where
     }
 
     pub fn after_regalloc(&mut self) {
-        self.adjust_offset();
-
         for func in self.ctx.funcs() {
             let mfunc = self.funcs[func.name(self.ctx)];
 
@@ -464,6 +462,10 @@ where
             self.curr_block = Some(mfunc.tail(&self.mctx).unwrap());
             S::gen_func_epilogue(self, mfunc);
         }
+
+        // prologue/epilogue might changed the saved regs or other things, so we
+        // postpone the offset adjustment to here
+        self.adjust_offset();
     }
 
     fn adjust_offset(&mut self) {
