@@ -14,6 +14,7 @@ mem2reg 的 Pass 位于 `src/ir/passes` 下。
 
 - [x] CFG Canonicalization
 - [x] mem2reg
+  - [ ] Block Argument Reduction `sysy/hidden_functional/29_long_line`
 - [ ] Alias Analysis (basicaa)
 - [ ] Dead Code Elimination (maybe aggressive DCE)
 - [ ] Constant Folding & Propagation

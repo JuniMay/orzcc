@@ -5,7 +5,7 @@ use orzcc::ir::{
     passes::{
         control_flow::CfgCanonicalize,
         fold::{ConstantFolding, CONSTANT_FOLDING},
-        loops::{LoopInvariantMotion, LOOP_INVARIANT_MOTION},
+        loops::LoopInvariantMotion,
         mem2reg::{Mem2reg, MEM2REG},
         simple_dce::{SimpleDce, SIMPLE_DCE},
     },
