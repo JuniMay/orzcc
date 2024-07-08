@@ -1251,9 +1251,23 @@ impl LowerSpec for RvLowerSpec {
         // the first arg is at the end of the stack frame, so the offset is 0
         let mut offset = 0i64;
         for arg in pass_by_stack {
-            let loc = MemLoc::RegOffset {
-                base: regs::sp().into(),
-                offset,
+            let loc = if Imm12::try_from_i64(offset).is_some() {
+                MemLoc::RegOffset {
+                    base: regs::sp().into(),
+                    offset,
+                }
+            } else {
+                // li
+                let (li, rd) = RvInst::li(&mut lower.mctx, offset as u64);
+                lower.curr_block.unwrap().push_back(&mut lower.mctx, li);
+                // add
+                let (inst, rd) =
+                    RvInst::alu_rrr(&mut lower.mctx, AluOpRRR::Add, regs::sp().into(), rd);
+                lower.curr_block.unwrap().push_back(&mut lower.mctx, inst);
+                MemLoc::RegOffset {
+                    base: rd,
+                    offset: 0,
+                }
             };
             Self::gen_store(lower, arg, loc);
             let bytewidth = arg.ty().bytewidth_with_ptr(lower.ctx, Self::pointer_size()) as i64;
