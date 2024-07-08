@@ -5,7 +5,7 @@ use orzcc::ir::{
     passes::{
         control_flow::CfgCanonicalize,
         fold::{ConstantFolding, CONSTANT_FOLDING},
-        loops::LoopInvariantMotion,
+        loops::{LoopInvariantMotion, LOOP_INVARIANT_MOTION},
         mem2reg::{Mem2reg, MEM2REG},
         simple_dce::{SimpleDce, SIMPLE_DCE},
     },
@@ -147,8 +147,8 @@ fn parse_args(passman: &mut PassManager) -> CliCommand {
     if opt > 0 {
         // TODO: we may need a pipeline to handle fix-point iteration
         passes.push(MEM2REG.to_string());
-        passes.push(CONSTANT_FOLDING.to_string());
-        passes.push(SIMPLE_DCE.to_string());
+        // passes.push(CONSTANT_FOLDING.to_string());
+        // passes.push(SIMPLE_DCE.to_string());
         // passes.push(LOOP_INVARIANT_MOTION.to_string());
     } else {
         // put some passes if testing.
