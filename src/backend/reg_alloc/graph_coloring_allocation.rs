@@ -160,13 +160,14 @@ impl GraphColoringAllocation {
         let mut allocation_results = HashMap::new();
         let mut spilled_registers = HashSet::new();
 
-        let live_intervals = live_interval_analysis::analyze_on_function(ctx, func);
-
         // allocate general purpose and floating point registers separately
         for kind in &[RegKind::General, RegKind::Float] {
             let mut working_allocation_results;
             loop {
                 working_allocation_results = HashMap::new(); // allocation results for this round
+
+                // analyze live intervals
+                let live_intervals = live_interval_analysis::analyze_on_function(ctx, func);
 
                 // construct interference graph
                 let mut interference_graph = InterferenceGraph::new(*kind);
@@ -246,8 +247,8 @@ impl GraphColoringAllocation {
                 let mut spill_slots = HashMap::new(); // mapping of spilled registers to spill slots
                 for reg in spills {
                     // allocate a spill slot on the stack
-                    let stack_offset = func.storage_stack_size(ctx.mctx());
                     func.add_storage_stack_size(ctx.mctx_mut(), 8);
+                    let stack_offset = func.storage_stack_size(ctx.mctx());
                     spill_slots.insert(reg, stack_offset);
                     spilled_registers.insert(reg);
                     self.total_spills += 1;
