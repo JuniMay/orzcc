@@ -303,23 +303,23 @@ impl GraphColoringAllocation {
             if S::callee_saved_regs().contains(used_reg) {
                 func.add_saved_reg(ctx.mctx_mut(), *used_reg)
             }
+        }
 
-            // replace virtual registers with physical registers
-            let config = &ctx.config.clone();
-            let mut curr_block = func.head(ctx.mctx_mut());
-            while let Some(block) = curr_block {
-                let mut curr_inst = block.head(ctx.mctx_mut());
-                while let Some(inst) = curr_inst {
-                    let next_inst = inst.next(ctx.mctx_mut());
-                    for reg in inst.all_regs(ctx.mctx_mut(), config) {
-                        if let Some(allocated_reg) = allocation_results.get(&reg) {
-                            inst.replace_reg(ctx.mctx_mut(), reg, (*allocated_reg).into());
-                        }
+        // replace virtual registers with physical registers
+        let config = &ctx.config.clone();
+        let mut curr_block = func.head(ctx.mctx_mut());
+        while let Some(block) = curr_block {
+            let mut curr_inst = block.head(ctx.mctx_mut());
+            while let Some(inst) = curr_inst {
+                let next_inst = inst.next(ctx.mctx_mut());
+                for reg in inst.all_regs(ctx.mctx_mut(), config) {
+                    if let Some(allocated_reg) = allocation_results.get(&reg) {
+                        inst.replace_reg(ctx.mctx_mut(), reg, (*allocated_reg).into());
                     }
-                    curr_inst = next_inst;
                 }
-                curr_block = block.next(ctx.mctx_mut());
+                curr_inst = next_inst;
             }
+            curr_block = block.next(ctx.mctx_mut());
         }
     }
 
