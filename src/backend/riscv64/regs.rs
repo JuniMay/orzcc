@@ -229,7 +229,8 @@ pub const INT_ARG_REGS: [PReg; 8] = [a0(), a1(), a2(), a3(), a4(), a5(), a6(), a
 
 pub const FP_ARG_REGS: [PReg; 8] = [fa0(), fa1(), fa2(), fa3(), fa4(), fa5(), fa6(), fa7()];
 
-pub const CALLER_SAVED_REGS: [PReg; 35] = [
+pub const CALLER_SAVED_REGS: [PReg; 36] = [
+    ra(),
     t0(),
     t1(),
     t2(),
@@ -267,8 +268,7 @@ pub const CALLER_SAVED_REGS: [PReg; 35] = [
     fa7(),
 ];
 
-pub const CALLEE_SAVED_REGS: [PReg; 26] = [
-    ra(), // ra should be saved by the callee, or the return address will be lost
+pub const CALLEE_SAVED_REGS: [PReg; 25] = [
     sp(),
     s0(),
     s1(),

@@ -31,7 +31,7 @@ sudo apt install gdb-multiarch
 之后汇编
 
 ```shell
-riscv64-linux-gnu-gcc -march=rv64gc ./test.s -L./sysy-runtime-lib -lsylib -o ./test
+riscv64-linux-gnu-gcc -march=rv64gc ./test.s -L./tests/sysy/sysy-runtime-lib -lsylib -o ./test
 ```
 
 然后使用 QEMU 运行，其中 `1234` 是端口
