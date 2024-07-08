@@ -19,6 +19,7 @@ pub use context::Context;
 pub use fold::FoldContext;
 pub use global::{Func, FuncData, GlobalSlot, GlobalSlotData, Symbol, SymbolKind};
 pub use inst::{
+    remove_all_insts,
     CastOp,
     FBinaryOp,
     FCmpCond,

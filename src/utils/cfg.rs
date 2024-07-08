@@ -103,6 +103,8 @@ where
 
     /// Get the successors of a node.
     ///
+    /// The order of successors is not guaranteed.
+    ///
     /// # Returns
     ///
     /// - `Some(succs)`: The successors of the node.
@@ -110,6 +112,8 @@ where
     pub fn succs(&self, node: N) -> Option<&[N]> { self.succs.get(&node).map(|v| v.as_slice()) }
 
     /// Get the predecessors of a node.
+    ///
+    /// The order of predecessors is not guaranteed.
     ///
     /// # Returns
     ///
@@ -119,4 +123,23 @@ where
 
     /// Get the region associated with the control flow graph.
     pub fn region(&self) -> R { self.region }
+
+    /// Get the reachable nodes in the control flow graph.
+    pub fn reachable_nodes(&self, arena: &N::A) -> HashSet<N> {
+        let mut reachables = HashSet::new();
+        let entry = self.region.entry_node(arena);
+
+        let mut worklist = vec![entry];
+        while let Some(node) = worklist.pop() {
+            if !reachables.insert(node) {
+                continue;
+            }
+
+            if let Some(succs) = self.succs(node) {
+                worklist.extend_from_slice(succs);
+            }
+        }
+
+        reachables
+    }
 }

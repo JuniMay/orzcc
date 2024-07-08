@@ -241,6 +241,8 @@ impl Block {
 
     /// Unlink and drop the block.
     ///
+    /// This **WILL NOT** remove the instructions inside the block.
+    ///
     /// # Panics
     ///
     /// - Panics if the block is still in use.

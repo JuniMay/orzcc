@@ -1,5 +1,5 @@
 use core::fmt;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use super::{
     constant::FloatConstant,
@@ -13,6 +13,7 @@ use super::{
     Ty,
     Value,
     ValueData,
+    ValueKind,
 };
 use crate::{
     collections::{
@@ -1157,6 +1158,46 @@ impl Inst {
     /// Get the successor at the given index.
     pub fn succ(self, ctx: &Context, idx: usize) -> &Successor { &self.deref(ctx).successors[idx] }
 
+    /// Get the number of successors that goes to the given block.
+    ///
+    /// The [CfgInfo](crate::utils::cfg::CfgInfo) does not model the
+    /// control-flow-dependent argument passing. When simplifying CFG, we need
+    /// to know how many successors goes to a certain successor, and decide if
+    /// two blocks can be merged. For example, the IR below cannot be simplified
+    /// even though the two blocks has only one pred/succ.
+    ///
+    /// ```orzir
+    /// ^bb0:
+    ///     ...
+    ///     br %cond, ^bb1(%0), ^bb1(%1)
+    /// ^bb1: // only one pred `^bb0` in `CfgInfo`
+    ///     ...
+    /// ```
+    ///
+    /// Note that sometimes a branch instruction might pass the same argument to
+    /// the same block multiple times. That kinds of branch instruction can be
+    /// simplified. But here we only consider the number of successors that goes
+    /// to the given block, which is a conservative approach.
+    ///
+    /// TODO: simplify branch instruction with the same argument passing to the
+    /// same block multiple times.
+    ///
+    /// # Parameters
+    ///
+    /// - `ctx`: the context
+    /// - `block`: the target block
+    ///
+    /// # Returns
+    ///
+    /// The number of successors that goes to the given block.
+    pub fn num_succ_to(self, ctx: &Context, block: Block) -> usize {
+        self.deref(ctx)
+            .successors
+            .iter()
+            .filter(|s| s.block.inner() == block)
+            .count()
+    }
+
     /// Get the kind of the instruction.
     pub fn kind(self, ctx: &Context) -> &InstKind { &self.deref(ctx).kind }
 
@@ -1627,5 +1668,115 @@ impl<'a> fmt::Display for DisplayInst<'a> {
         }
 
         Ok(())
+    }
+}
+
+/// Remove all the given instructions.
+///
+/// The instructions might have complicated def-use chains, we need to remove
+/// those with no users first, i.e., a topological order.
+///
+/// # Parameters
+///
+/// - `ctx`: the context.
+/// - `insts`: the instructions to remove.
+/// - `best_effort`: if `true`, this function will try to remove as many
+///   instructions as possible without panicking. If `false`, this function will
+///   panic if it cannot remove all the instructions.
+///
+/// # Panics
+///
+/// Panics only if `best_effort` is `false`:
+///
+/// - Panics if the result is used by other instructions.
+/// - Panics if there are cycles (which is a bug).
+pub fn remove_all_insts(ctx: &mut Context, insts: Vec<Inst>, best_effort: bool) {
+    let mut inst_set = insts
+        .into_iter()
+        .map(|i| {
+            let num_users: usize = i
+                .results(ctx)
+                .iter()
+                .copied()
+                // if one instruction uses one value multiple times, `users` will only count once.
+                .map(|v| v.users(ctx).len())
+                .sum();
+            (i, num_users)
+        })
+        .collect::<HashMap<_, _>>();
+
+    let mut worklist = inst_set
+        .iter()
+        .filter(|(_, num_users)| **num_users == 0)
+        .map(|(inst, _)| *inst)
+        .collect::<Vec<_>>();
+
+    while let Some(inst) = worklist.pop() {
+        // we should only remove once if several opds are the same, because the users of
+        // values are recorded with `HashSet`, which is unique.
+        let mut removed = HashSet::new();
+        for opd in inst.operands(ctx) {
+            if !removed.insert(opd) {
+                continue;
+            }
+            match opd.kind(ctx) {
+                ValueKind::BlockParam { .. } => {
+                    // block parameter will not be removed
+                }
+                ValueKind::InstResult { inst, .. } => {
+                    // only update those in the inst_set
+                    if let Some(num_users) = inst_set.get_mut(inst) {
+                        *num_users -= 1;
+                        if *num_users == 0 {
+                            worklist.push(*inst);
+                        }
+                    }
+                }
+            }
+        }
+
+        // operands and successors are mutually exclusive, so we need to check both
+        for succ in inst.deref(ctx).successors.iter() {
+            for (_, arg) in succ.args().iter() {
+                if !removed.insert(arg.inner()) {
+                    continue;
+                }
+                match arg.inner().kind(ctx) {
+                    ValueKind::BlockParam { .. } => {
+                        // block parameter will not be removed
+                    }
+                    ValueKind::InstResult { inst, .. } => {
+                        // only update those in the inst_set
+                        if let Some(num_users) = inst_set.get_mut(inst) {
+                            *num_users -= 1;
+                            if *num_users == 0 {
+                                worklist.push(*inst);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // the instruction is not used by any other instructions, remove it
+        inst.remove(ctx);
+    }
+
+    // check if there are cycles, or used by other instructions
+    if !inst_set.is_empty() && !best_effort {
+        let mut panic = false;
+        for (inst, num_users) in inst_set {
+            if num_users > 0 {
+                eprintln!(
+                    "inst: {}, num_users: {}",
+                    inst.display(ctx, true),
+                    num_users
+                );
+                panic = true;
+            }
+        }
+        if panic {
+            panic!("remove_insts with best_effort=false: there are cycles or used by other instructions.");
+        }
     }
 }

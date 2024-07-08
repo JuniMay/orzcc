@@ -1,6 +1,17 @@
 use orzcc::{
     collections::{linked_list::LinkedListContainerPtr, storage::ArenaPtr},
-    ir::{debug::CommentPos, Block, Context, Func, IBinaryOp, Inst, Signature, Ty, Value},
+    ir::{
+        debug::CommentPos,
+        remove_all_insts,
+        Block,
+        Context,
+        Func,
+        IBinaryOp,
+        Inst,
+        Signature,
+        Ty,
+        Value,
+    },
     utils::{
         cfg::CfgNode,
         def_use::{Usable, User},
@@ -357,3 +368,270 @@ fn test_ir_diaplay_0() {
 }
 
 // TODO: more tests on display
+
+#[test]
+fn test_ir_remove_all_insts() {
+    let mut ctx = Context::default();
+
+    let int = Ty::int(&mut ctx, 32);
+    let boolean = Ty::int(&mut ctx, 1);
+    let float = Ty::float32(&mut ctx);
+    let void = Ty::void(&mut ctx);
+
+    let sig = Signature::new(vec![], vec![void]);
+    let func = Func::new(&mut ctx, "test", sig);
+
+    let entry = Block::new(&mut ctx);
+    let bb1 = Block::new(&mut ctx);
+    let bb2 = Block::new(&mut ctx);
+    let merge = Block::new(&mut ctx);
+
+    let p1 = merge.new_param(&mut ctx, int);
+    let p2 = merge.new_param(&mut ctx, float);
+
+    p1.assign_name(&mut ctx, "p1");
+    p2.assign_name(&mut ctx, "p2");
+
+    func.push_back(&mut ctx, entry);
+    func.push_back(&mut ctx, bb1);
+    func.push_back(&mut ctx, bb2);
+    func.push_back(&mut ctx, merge);
+
+    let i1 = Inst::iconst(&mut ctx, 1, int);
+    let i2 = Inst::fconst(&mut ctx, 2.0f32, float);
+
+    let v1 = i1.result(&ctx, 0);
+    let v2 = i2.result(&ctx, 0);
+
+    let i_dummy_cond = Inst::iconst(&mut ctx, 1, boolean);
+    let dummy_cond = i_dummy_cond.result(&ctx, 0);
+
+    dummy_cond.assign_name(&mut ctx, "dummy_cond");
+
+    let br = Inst::br(&mut ctx, dummy_cond, bb1, vec![], bb2, vec![]);
+
+    entry.push_back(&mut ctx, i1);
+    entry.push_back(&mut ctx, i2);
+    entry.push_back(&mut ctx, i_dummy_cond);
+    entry.push_back(&mut ctx, br);
+
+    let i3 = Inst::ibinary(&mut ctx, IBinaryOp::Add, v1, v1);
+    let i4 = Inst::ibinary(&mut ctx, IBinaryOp::Mul, v1, v1);
+
+    let v3 = i3.result(&ctx, 0);
+    let v4 = i4.result(&ctx, 0);
+
+    let jump1 = Inst::jump(&mut ctx, merge, vec![v3, v2]);
+    let jump2 = Inst::jump(&mut ctx, merge, vec![v4, v2]);
+
+    bb1.push_back(&mut ctx, i3);
+    bb1.push_back(&mut ctx, jump1);
+
+    bb2.push_back(&mut ctx, i4);
+    bb2.push_back(&mut ctx, jump2);
+
+    let i5 = Inst::ibinary(&mut ctx, IBinaryOp::Add, p1, p1);
+    let ret = Inst::ret(&mut ctx, vec![]);
+
+    merge.push_back(&mut ctx, i5);
+    merge.push_back(&mut ctx, ret);
+
+    merge.assign_name(&mut ctx, "merge");
+
+    ctx.alloc_all_names();
+
+    remove_all_insts(
+        &mut ctx,
+        vec![i1, i2, i_dummy_cond, br, i3, i4, jump1, jump2, i5, ret],
+        false,
+    );
+
+    assert!(entry.head(&ctx).is_none());
+    assert!(bb1.head(&ctx).is_none());
+    assert!(bb2.head(&ctx).is_none());
+    assert!(merge.head(&ctx).is_none());
+}
+
+#[test]
+#[should_panic]
+fn test_ir_remove_insts_panic() {
+    // some instruction not included in the block
+    let mut ctx = Context::default();
+
+    let int = Ty::int(&mut ctx, 32);
+    let boolean = Ty::int(&mut ctx, 1);
+    let float = Ty::float32(&mut ctx);
+    let void = Ty::void(&mut ctx);
+
+    let sig = Signature::new(vec![], vec![void]);
+    let func = Func::new(&mut ctx, "test", sig);
+
+    let entry = Block::new(&mut ctx);
+    let bb1 = Block::new(&mut ctx);
+    let bb2 = Block::new(&mut ctx);
+    let merge = Block::new(&mut ctx);
+
+    let p1 = merge.new_param(&mut ctx, int);
+    let p2 = merge.new_param(&mut ctx, float);
+
+    p1.assign_name(&mut ctx, "p1");
+    p2.assign_name(&mut ctx, "p2");
+
+    func.push_back(&mut ctx, entry);
+    func.push_back(&mut ctx, bb1);
+    func.push_back(&mut ctx, bb2);
+    func.push_back(&mut ctx, merge);
+
+    let i1 = Inst::iconst(&mut ctx, 1, int);
+    let i2 = Inst::fconst(&mut ctx, 2.0f32, float);
+
+    let v1 = i1.result(&ctx, 0);
+    let v2 = i2.result(&ctx, 0);
+
+    let i_dummy_cond = Inst::iconst(&mut ctx, 1, boolean);
+    let dummy_cond = i_dummy_cond.result(&ctx, 0);
+
+    dummy_cond.assign_name(&mut ctx, "dummy_cond");
+
+    let br = Inst::br(&mut ctx, dummy_cond, bb1, vec![], bb2, vec![]);
+
+    entry.push_back(&mut ctx, i1);
+    entry.push_back(&mut ctx, i2);
+    entry.push_back(&mut ctx, i_dummy_cond);
+    entry.push_back(&mut ctx, br);
+
+    let i3 = Inst::ibinary(&mut ctx, IBinaryOp::Add, v1, v1);
+    let i4 = Inst::ibinary(&mut ctx, IBinaryOp::Mul, v1, v1);
+
+    let v3 = i3.result(&ctx, 0);
+    let v4 = i4.result(&ctx, 0);
+
+    let jump1 = Inst::jump(&mut ctx, merge, vec![v3, v2]);
+    let jump2 = Inst::jump(&mut ctx, merge, vec![v4, v2]);
+
+    bb1.push_back(&mut ctx, i3);
+    bb1.push_back(&mut ctx, jump1);
+
+    bb2.push_back(&mut ctx, i4);
+    bb2.push_back(&mut ctx, jump2);
+
+    let i5 = Inst::ibinary(&mut ctx, IBinaryOp::Add, p1, p1);
+    let ret = Inst::ret(&mut ctx, vec![]);
+
+    merge.push_back(&mut ctx, i5);
+    merge.push_back(&mut ctx, ret);
+
+    merge.assign_name(&mut ctx, "merge");
+
+    ctx.alloc_all_names();
+
+    remove_all_insts(
+        &mut ctx,
+        vec![
+            i1,
+            i2,
+            i_dummy_cond,
+            br,
+            i3, // i4, // i4 not removed, so i1 cannot be removed
+            jump1,
+            jump2,
+            i5,
+            ret,
+        ],
+        false,
+    );
+}
+
+#[test]
+fn test_ir_remove_insts_best_effort() {
+    // some instruction not included in the block
+    let mut ctx = Context::default();
+
+    let int = Ty::int(&mut ctx, 32);
+    let boolean = Ty::int(&mut ctx, 1);
+    let float = Ty::float32(&mut ctx);
+    let void = Ty::void(&mut ctx);
+
+    let sig = Signature::new(vec![], vec![void]);
+    let func = Func::new(&mut ctx, "test", sig);
+
+    let entry = Block::new(&mut ctx);
+    let bb1 = Block::new(&mut ctx);
+    let bb2 = Block::new(&mut ctx);
+    let merge = Block::new(&mut ctx);
+
+    let p1 = merge.new_param(&mut ctx, int);
+    let p2 = merge.new_param(&mut ctx, float);
+
+    p1.assign_name(&mut ctx, "p1");
+    p2.assign_name(&mut ctx, "p2");
+
+    func.push_back(&mut ctx, entry);
+    func.push_back(&mut ctx, bb1);
+    func.push_back(&mut ctx, bb2);
+    func.push_back(&mut ctx, merge);
+
+    let i1 = Inst::iconst(&mut ctx, 1, int);
+    let i2 = Inst::fconst(&mut ctx, 2.0f32, float);
+
+    let v1 = i1.result(&ctx, 0);
+    let v2 = i2.result(&ctx, 0);
+
+    let i_dummy_cond = Inst::iconst(&mut ctx, 1, boolean);
+    let dummy_cond = i_dummy_cond.result(&ctx, 0);
+
+    dummy_cond.assign_name(&mut ctx, "dummy_cond");
+
+    let br = Inst::br(&mut ctx, dummy_cond, bb1, vec![], bb2, vec![]);
+
+    entry.push_back(&mut ctx, i1);
+    entry.push_back(&mut ctx, i2);
+    entry.push_back(&mut ctx, i_dummy_cond);
+    entry.push_back(&mut ctx, br);
+
+    let i3 = Inst::ibinary(&mut ctx, IBinaryOp::Add, v1, v1);
+    let i4 = Inst::ibinary(&mut ctx, IBinaryOp::Mul, v1, v1);
+
+    let v3 = i3.result(&ctx, 0);
+    let v4 = i4.result(&ctx, 0);
+
+    let jump1 = Inst::jump(&mut ctx, merge, vec![v3, v2]);
+    let jump2 = Inst::jump(&mut ctx, merge, vec![v4, v2]);
+
+    bb1.push_back(&mut ctx, i3);
+    bb1.push_back(&mut ctx, jump1);
+
+    bb2.push_back(&mut ctx, i4);
+    bb2.push_back(&mut ctx, jump2);
+
+    let i5 = Inst::ibinary(&mut ctx, IBinaryOp::Add, p1, p1);
+    let ret = Inst::ret(&mut ctx, vec![]);
+
+    merge.push_back(&mut ctx, i5);
+    merge.push_back(&mut ctx, ret);
+
+    merge.assign_name(&mut ctx, "merge");
+
+    ctx.alloc_all_names();
+
+    remove_all_insts(
+        &mut ctx,
+        vec![
+            i1,
+            i2,
+            i_dummy_cond,
+            br,
+            i3, // i4, // i4 not removed, so i1 cannot be removed
+            jump1,
+            jump2,
+            i5,
+            ret,
+        ],
+        true,
+    );
+
+    assert_eq!(entry.head(&ctx), Some(i1));
+    assert_eq!(bb1.head(&ctx), None);
+    assert_eq!(bb2.head(&ctx), Some(i4));
+    assert_eq!(merge.head(&ctx), None);
+}

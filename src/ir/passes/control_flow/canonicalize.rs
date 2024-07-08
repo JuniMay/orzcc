@@ -13,7 +13,7 @@ use crate::{
     utils::def_use::Usable,
 };
 
-pub const CFG_CANONICALIZE: &str = "cfg_canonicalize";
+pub const CFG_CANONICALIZE: &str = "cfg-canonicalize";
 
 #[derive(Debug, Error)]
 pub enum CfgCanonicalizeError {

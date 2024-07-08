@@ -3,7 +3,7 @@
 use clap::{Arg, Command};
 use orzcc::ir::{
     passes::{
-        control_flow::CfgCanonicalize,
+        control_flow::{CfgCanonicalize, CfgSimplify, CFG_SIMPLIFY},
         fold::{ConstantFolding, CONSTANT_FOLDING},
         loops::{LoopInvariantMotion, LOOP_INVARIANT_MOTION},
         mem2reg::{Mem2reg, MEM2REG},
@@ -83,9 +83,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn register_passes(passman: &mut PassManager) {
     CfgCanonicalize::register(passman);
+    CfgSimplify::register(passman);
+
     Mem2reg::register(passman);
     SimpleDce::register(passman);
     ConstantFolding::register(passman);
+
     LoopInvariantMotion::register(passman);
 }
 
@@ -147,9 +150,10 @@ fn parse_args(passman: &mut PassManager) -> CliCommand {
     if opt > 0 {
         // TODO: we may need a pipeline to handle fix-point iteration
         passes.push(MEM2REG.to_string());
-        // passes.push(CONSTANT_FOLDING.to_string());
-        // passes.push(SIMPLE_DCE.to_string());
-        // passes.push(LOOP_INVARIANT_MOTION.to_string());
+        passes.push(CONSTANT_FOLDING.to_string());
+        passes.push(SIMPLE_DCE.to_string());
+        passes.push(LOOP_INVARIANT_MOTION.to_string());
+        passes.push(CFG_SIMPLIFY.to_string());
     } else {
         // put some passes if testing.
     }
