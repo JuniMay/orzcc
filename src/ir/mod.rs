@@ -1,4 +1,5 @@
 mod block;
+mod call_graph;
 mod constant;
 mod context;
 mod fold;

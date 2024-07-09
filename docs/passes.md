@@ -17,6 +17,8 @@ mem2reg 的 Pass 位于 `src/ir/passes` 下。
   - [ ] Block Argument Reduction `sysy/hidden_functional/29_long_line`
 - [ ] Alias Analysis (basicaa)
 - [ ] Dead Code Elimination (maybe aggressive DCE)
+  - [x] Simple DCE
+  - [ ] Aggressive DCE
 - [ ] Constant Folding & Propagation
 - [ ] CFG Simplification
 - [ ] Global2local
@@ -26,7 +28,7 @@ mem2reg 的 Pass 位于 `src/ir/passes` 下。
   - [ ] Math Optimization
   - [ ] Multiplication Optimization
   - [ ] Division Optimization
-- [ ] Loop Invariant Code Motion
+- [x] Loop Invariant Code Motion
 - [ ] Loop Unrolling
 - [ ] Scalar Evolution Analysis
 - [ ] Tail Call Optimization
@@ -34,10 +36,12 @@ mem2reg 的 Pass 位于 `src/ir/passes` 下。
 ### Backend
 
 - [ ] Register Allocation
-  - [ ] Better Block Argument Passing (at most one vreg should be enough)
+  - [x] Better Block Argument Passing
   - [ ] Tune the spill weight
   - [ ] RISC-V `ra` register for allocation.
   - [ ] Constraint & Hint
   - [ ] Coalescing & Splitting
-- [ ] Scheduling (for dual-issue)
+- [ ] Scheduling
+  - [ ] For dual-issue
+  - [ ] For register pressure
 - [ ] Peephole Optimization

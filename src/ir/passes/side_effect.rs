@@ -19,3 +19,5 @@
 //! any function in the SCC has side effects.
 //!
 //! TODO: Implement this pass
+
+pub struct SideEffectAnalysis;

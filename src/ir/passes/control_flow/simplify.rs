@@ -18,7 +18,7 @@
 //!
 //! - [Inst::num_succ_to](crate::ir::Inst::num_succ_to)
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use super::CfgCanonicalize;
 use crate::{
@@ -29,7 +29,10 @@ use crate::{
         Context,
         Func,
     },
-    utils::cfg::CfgInfo,
+    utils::{
+        cfg::CfgInfo,
+        def_use::{Usable, User},
+    },
 };
 
 pub const CFG_SIMPLIFY: &str = "cfg-simplify";
@@ -106,7 +109,109 @@ impl CfgSimplify {
             succ.remove(ctx);
             changed = true;
 
-            // TODO: the CFG info is not updated
+            // TODO: the CFG info is not updated, so we must iterate multiple
+            // times to ensure that all blocks are merged
+        }
+
+        changed
+    }
+
+    fn remove_jump_only_blocks(&mut self, ctx: &mut Context, func: Func) -> bool {
+        // if a block is jump only, we can hoist the jump instruction to the
+        // predecessor, replace the jump instruction to the block with a jump
+        // instruction to the successor of the block
+
+        // if the block has any arguments, we cannot do this optimization.
+        // TODO: maybe we can merge the block arguments, but that also requires
+        // us to merge the block parameters.
+
+        let mut changed = false;
+
+        let mut cursor = func.cursor();
+
+        while let Some(block) = cursor.next(ctx) {
+            if block.head(ctx) != block.tail(ctx) {
+                continue;
+            }
+
+            if !block.params(ctx).is_empty() {
+                continue;
+            }
+
+            match block.tail(ctx) {
+                Some(inst) if inst.is_terminator(ctx) => {
+                    if !inst.is_jump(ctx) {
+                        continue;
+                    }
+                    let succ_args = inst.succ(ctx, 0).args();
+                    let succ_block = inst.succ(ctx, 0).block();
+
+                    let args = succ_block
+                        .params(ctx)
+                        .iter()
+                        .map(|param| succ_args[param].inner())
+                        .collect::<Vec<_>>();
+
+                    for user in block.users(ctx) {
+                        user.replace_succ_with_args(ctx, block, succ_block, args.clone());
+                        changed = true;
+                    }
+                    // we don't need to remove the block, because it will become
+                    // unreachable in the next iteration
+                }
+                // XXX: require cfg canonicalization first
+                Some(_) => {
+                    panic!("block tail is not a terminator, do canonicalization first");
+                }
+                None => {
+                    panic!("block has no tail, do canonicalization first");
+                }
+            }
+        }
+
+        changed
+    }
+
+    fn remove_single_pred_params(&mut self, ctx: &mut Context, func: Func) -> bool {
+        let mut changed = false;
+
+        let mut cursor = func.cursor();
+
+        while let Some(block) = cursor.next(ctx) {
+            if block.total_uses(ctx) != 1 {
+                continue;
+            }
+
+            let mut args = None;
+
+            for succ in block.users(ctx)[0].succs(ctx) {
+                if succ.block() == block {
+                    args = Some(
+                        succ.args()
+                            .iter()
+                            .map(|(param, arg)| (*param, arg.inner()))
+                            .collect::<HashMap<_, _>>(),
+                    );
+                }
+            }
+
+            let args = args.unwrap();
+
+            // there is only one pred, so we can drop the block params safely
+            while !block.params(ctx).is_empty() {
+                let len = block.params(ctx).len();
+
+                let param = block.params(ctx)[len - 1];
+
+                // replace the uses of the param with the argument
+                let arg = args[&param];
+                for user in param.users(ctx) {
+                    user.replace(ctx, param, arg);
+                }
+
+                block.drop_param(ctx, len - 1);
+                changed = true;
+            }
         }
 
         changed
@@ -121,6 +226,8 @@ impl LocalPassMut for CfgSimplify {
 
         changed |= self.eliminate_unreachable_blocks(ctx, func);
         changed |= self.straighten(ctx, func);
+        changed |= self.remove_jump_only_blocks(ctx, func);
+        changed |= self.remove_single_pred_params(ctx, func);
 
         Ok(((), changed))
     }

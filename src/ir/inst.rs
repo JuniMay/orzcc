@@ -1080,6 +1080,8 @@ impl Inst {
     /// Get the successor at the given index.
     pub fn succ(self, ctx: &Context, idx: usize) -> &Successor { &self.deref(ctx).successors[idx] }
 
+    pub fn succs(self, ctx: &Context) -> &[Successor] { &self.deref(ctx).successors }
+
     /// Get the number of successors that goes to the given block.
     ///
     /// The [CfgInfo](crate::utils::cfg::CfgInfo) does not model the
@@ -1118,6 +1120,56 @@ impl Inst {
             .iter()
             .filter(|s| s.block.inner() == block)
             .count()
+    }
+
+    pub fn replace_succ_with_args(
+        self,
+        ctx: &mut Context,
+        old: Block,
+        new: Block,
+        args: Vec<Value>,
+    ) {
+        if !old.params(ctx).is_empty() {
+            panic!("old block must not have parameters");
+        }
+
+        if !self.is_terminator(ctx) {
+            panic!("instruction is not a terminator");
+        }
+
+        let mut num_blocks_to_replace = 0;
+
+        for succ in self.deref(ctx).successors.iter() {
+            if succ.block.inner() == old {
+                num_blocks_to_replace += 1;
+            }
+        }
+
+        let params = new.params(ctx).to_vec();
+
+        // we need to create num_block_to_replace * len(args) operands, which is vector
+        // of vector of operands
+        let mut args = (0..num_blocks_to_replace)
+            .map(|_| {
+                args.iter()
+                    .zip(params.iter())
+                    .map(|(arg, param)| (*param, Operand::new(ctx, *arg, self)))
+                    .collect::<HashMap<_, _>>()
+            })
+            .collect::<Vec<_>>();
+
+        for succ in self.deref_mut(ctx).successors.iter_mut() {
+            if succ.block.set_inner_if_eq(old, new) {
+                // because we asserted that the old block has no parameters, we
+                // can just drop the old vec
+                succ.args = args.pop().unwrap();
+            }
+        }
+
+        for _ in 0..num_blocks_to_replace {
+            old.remove_user(ctx, self);
+            new.add_user(ctx, self);
+        }
     }
 
     /// Get the kind of the instruction.

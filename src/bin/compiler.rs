@@ -56,21 +56,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut ir = sysy::irgen(&ast);
 
         if cmd.opt > 0 {
-            let mut opt_pipeline = Pipeline::default();
+            passman.run_transform(MEM2REG, &mut ir, 1);
 
+            let mut opt_pipeline = Pipeline::default();
             opt_pipeline.add_pass(CONSTANT_FOLDING);
-            opt_pipeline.add_pass(CFG_SIMPLIFY);
             opt_pipeline.add_pass(SIMPLE_DCE);
             opt_pipeline.add_pass(LOOP_INVARIANT_MOTION);
+            opt_pipeline.add_pass(CFG_SIMPLIFY);
 
-            passman.run_transform(MEM2REG, &mut ir, 1);
             passman.run_pipeline(&mut ir, &opt_pipeline, 32, 8);
-
-            // // un-comment to test individual passes
-            // passman.run_transform(CONSTANT_FOLDING, &mut ir, 1);
-            // passman.run_transform(CFG_SIMPLIFY, &mut ir, 1);
-            // passman.run_transform(SIMPLE_DCE, &mut ir, 1);
-            // passman.run_transform(LOOP_INVARIANT_MOTION, &mut ir, 1);
         }
 
         ir.alloc_all_names();
