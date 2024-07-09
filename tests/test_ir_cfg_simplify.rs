@@ -1,7 +1,10 @@
 use orzcc::{
     collections::diagnostic::RenderOptions,
     frontend::ir::{into_ir, Parser},
-    ir::{passes::control_flow::CfgSimplify, passman::GlobalPassMut},
+    ir::{
+        passes::control_flow::{CfgSimplify, CFG_SIMPLIFY},
+        passman::{PassManager, TransformPass},
+    },
 };
 
 #[test]
@@ -23,16 +26,11 @@ fn test_ir_cfg_simplify_unreachable() {
         panic!("conversion failed");
     }
 
-    let mut cfg_simplify = CfgSimplify;
+    let mut passman = PassManager::default();
 
-    match GlobalPassMut::run(&mut cfg_simplify, &mut ctx) {
-        Ok((_, changed)) => {
-            assert!(changed);
-            ctx.alloc_all_names();
-            println!("{}", ctx.display(true));
-        }
-        Err(e) => {
-            panic!("test failed: {:?}", e);
-        }
-    }
+    CfgSimplify::register(&mut passman);
+
+    assert_eq!(passman.run_transform(CFG_SIMPLIFY, &mut ctx, 32), 4);
+
+    println!("{}", ctx.display(true));
 }

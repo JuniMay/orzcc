@@ -1,5 +1,5 @@
 use core::fmt;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use super::{debug::CommentPos, source_loc::Span, Context, Func, Inst, Ty, Value, ValueData};
 use crate::{
@@ -20,7 +20,7 @@ pub struct BlockData {
     /// The parameters of the block.
     params: Vec<Value>,
     /// The users of the block.
-    users: HashSet<Inst>,
+    users: HashMap<Inst, usize>,
     /// The first instruction of the block.
     head: Option<Inst>,
     /// The last instruction of the block.
@@ -59,7 +59,7 @@ impl Block {
         ctx.alloc_with(|self_ptr| BlockData {
             self_ptr,
             params: Vec::new(),
-            users: HashSet::new(),
+            users: HashMap::new(),
             head: None,
             tail: None,
             next: None,
@@ -134,6 +134,9 @@ impl Block {
                         user.replace(ctx, param, arg);
                     }
                 }
+
+                // remove the terminator instruction
+                tail_inst.remove(ctx);
             } else {
                 // no terminator, check the next block params
                 if !other.params(ctx).is_empty() {
@@ -219,7 +222,7 @@ impl Block {
     /// - [`Block::drop_param`]
     pub fn drop(self, ctx: &mut Context) {
         if !self.users(ctx).is_empty() {
-            panic!("cannot drop block because it is still in use");
+            panic!("cannot drop block {} because it is still in use", self.id());
         }
         if self.container(ctx).is_some() {
             panic!("cannot drop block because it is still linked");
@@ -466,9 +469,24 @@ impl LinkedListNodePtr for Block {
 impl Usable for Block {
     type U = Inst;
 
-    fn users(self, ctx: &Context) -> Vec<Inst> { self.deref(ctx).users.iter().copied().collect() }
+    fn users(self, ctx: &Context) -> Vec<Inst> { self.deref(ctx).users.keys().copied().collect() }
 
-    fn add_user(self, ctx: &mut Context, user: Inst) { self.deref_mut(ctx).users.insert(user); }
+    fn add_user(self, ctx: &mut Context, user: Inst) {
+        self.deref_mut(ctx)
+            .users
+            .entry(user)
+            .and_modify(|v| *v += 1)
+            .or_insert(1);
+    }
 
-    fn remove_user(self, ctx: &mut Context, user: Inst) { self.deref_mut(ctx).users.remove(&user); }
+    fn remove_user(self, ctx: &mut Context, user: Inst) {
+        if let Some(v) = self.deref_mut(ctx).users.get_mut(&user) {
+            *v -= 1;
+            if *v == 0 {
+                self.deref_mut(ctx).users.remove(&user);
+            }
+        }
+    }
+
+    fn total_uses(self, ctx: &Context) -> usize { self.deref(ctx).users.values().sum() }
 }

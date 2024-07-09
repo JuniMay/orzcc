@@ -58,10 +58,25 @@ impl LocalPassMut for SimpleDce {
             }
         }
 
-        let changed = !insts_to_remove.is_empty();
+        let mut changed = !insts_to_remove.is_empty();
 
         for inst in insts_to_remove {
             inst.remove(ctx);
+        }
+
+        // remove all the block params that are not used
+        let mut cursor = func.cursor();
+        while let Some(block) = cursor.next(ctx) {
+            let params = block.params(ctx).to_vec();
+            let mut delta = 0;
+
+            for (i, param) in params.into_iter().enumerate() {
+                if param.users(ctx).is_empty() {
+                    block.drop_param(ctx, i - delta);
+                    delta += 1; // we need the new index
+                    changed = true;
+                }
+            }
         }
 
         Ok(((), changed))

@@ -124,6 +124,15 @@ pub struct PassManager {
     deps: HashMap<String, Vec<Box<dyn TransformPass>>>,
 }
 
+#[derive(Default)]
+pub struct Pipeline {
+    passes: Vec<String>,
+}
+
+impl Pipeline {
+    pub fn add_pass(&mut self, name: impl Into<String>) { self.passes.push(name.into()); }
+}
+
 impl PassManager {
     pub fn new() -> Self { Self::default() }
 
@@ -213,5 +222,32 @@ impl PassManager {
         }));
 
         args
+    }
+
+    pub fn run_pipeline(
+        &mut self,
+        ctx: &mut Context,
+        pipeline: &Pipeline,
+        local_max_iter: usize,
+        max_iter: usize,
+    ) -> usize {
+        let mut changed = true;
+        let mut total_iter = 0;
+        while changed {
+            changed = false;
+            for pass_name in &pipeline.passes {
+                let iter = self.run_transform(pass_name, ctx, local_max_iter);
+                total_iter += iter;
+                if iter > 1 {
+                    changed = true;
+                }
+            }
+
+            if total_iter > max_iter {
+                break;
+            }
+        }
+
+        total_iter
     }
 }

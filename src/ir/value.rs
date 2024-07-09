@@ -4,7 +4,7 @@
 //! of an instruction, or the parameter of a block. Each value also should be
 //! associated with a type and def-use chain.
 
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 use super::{Block, Context, Func, Inst, Ty};
 use crate::{
@@ -45,7 +45,7 @@ pub struct ValueData {
     /// The kind of the value.
     kind: ValueKind,
     /// The users of the value.
-    users: HashSet<Inst>,
+    users: HashMap<Inst, usize>,
 }
 
 impl ValueData {
@@ -59,7 +59,7 @@ impl ValueData {
             self_ptr,
             ty,
             kind: ValueKind::InstResult { inst, idx },
-            users: HashSet::new(),
+            users: HashMap::new(),
         }
     }
 
@@ -71,7 +71,7 @@ impl ValueData {
             self_ptr,
             ty,
             kind: ValueKind::BlockParam { block, idx },
-            users: HashSet::new(),
+            users: HashMap::new(),
         }
     }
 }
@@ -172,9 +172,28 @@ impl Value {
 impl Usable for Value {
     type U = Inst;
 
-    fn users(self, ctx: &Context) -> Vec<Inst> { self.deref(ctx).users.iter().copied().collect() }
+    fn users(self, ctx: &Context) -> Vec<Inst> {
+        // keys
+        self.deref(ctx).users.keys().copied().collect()
+    }
 
-    fn add_user(self, ctx: &mut Context, user: Inst) { self.deref_mut(ctx).users.insert(user); }
+    fn add_user(self, ctx: &mut Context, user: Inst) {
+        self.deref_mut(ctx)
+            .users
+            .entry(user)
+            .and_modify(|v| *v += 1)
+            .or_insert(1);
+    }
 
-    fn remove_user(self, ctx: &mut Context, user: Inst) { self.deref_mut(ctx).users.remove(&user); }
+    fn remove_user(self, ctx: &mut Context, user: Inst) {
+        // decrease the counter, if the counter is 0, remove the user
+        if let Some(v) = self.deref_mut(ctx).users.get_mut(&user) {
+            *v -= 1;
+            if *v == 0 {
+                self.deref_mut(ctx).users.remove(&user);
+            }
+        }
+    }
+
+    fn total_uses(self, ctx: &Context) -> usize { self.deref(ctx).users.values().sum() }
 }

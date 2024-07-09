@@ -9,7 +9,7 @@ use orzcc::ir::{
         mem2reg::{Mem2reg, MEM2REG},
         simple_dce::{SimpleDce, SIMPLE_DCE},
     },
-    passman::{PassManager, TransformPass},
+    passman::{PassManager, Pipeline, TransformPass},
 };
 
 struct CliCommand {
@@ -17,14 +17,14 @@ struct CliCommand {
     output: String,
     /// The source code
     source: String,
-    /// The passes to run
-    passes: Vec<String>,
     /// Emitting ast
     emit_ast: Option<String>,
     /// Emitting type-checked ast
     emit_typed_ast: Option<String>,
     /// Emitting ir
     emit_ir: Option<String>,
+    /// Optimization level
+    opt: u8,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -55,8 +55,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let mut ir = sysy::irgen(&ast);
 
-        for pass in cmd.passes {
-            passman.run_transform(&pass, &mut ir, 32);
+        if cmd.opt > 0 {
+            let mut opt_pipeline = Pipeline::default();
+
+            opt_pipeline.add_pass(CONSTANT_FOLDING);
+            opt_pipeline.add_pass(CFG_SIMPLIFY);
+            opt_pipeline.add_pass(SIMPLE_DCE);
+            opt_pipeline.add_pass(LOOP_INVARIANT_MOTION);
+
+            passman.run_transform(MEM2REG, &mut ir, 1);
+            passman.run_pipeline(&mut ir, &opt_pipeline, 32, 8);
         }
 
         ir.alloc_all_names();
@@ -147,16 +155,6 @@ fn parse_args(passman: &mut PassManager) -> CliCommand {
     let emit_ir = matches.get_one::<String>("emit-ir").cloned();
 
     let mut passes = Vec::new();
-    if opt > 0 {
-        // TODO: we may need a pipeline to handle fix-point iteration
-        passes.push(MEM2REG.to_string());
-        // passes.push(CONSTANT_FOLDING.to_string());
-        // passes.push(SIMPLE_DCE.to_string());
-        // passes.push(LOOP_INVARIANT_MOTION.to_string());
-        // passes.push(CFG_SIMPLIFY.to_string());
-    } else {
-        // put some passes if testing.
-    }
 
     let transform_names = passman.gather_transform_names();
     let parameter_names = passman.gather_parameter_names();
@@ -177,9 +175,9 @@ fn parse_args(passman: &mut PassManager) -> CliCommand {
     CliCommand {
         output,
         source,
-        passes,
         emit_ast,
         emit_typed_ast,
         emit_ir,
+        opt,
     }
 }

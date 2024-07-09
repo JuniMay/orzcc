@@ -14,6 +14,7 @@ use crate::{
     },
     utils::{
         cfg::{CfgInfo, CfgNode},
+        def_use::User,
         dominance::Dominance,
         loop_info::{Loop, LoopContext},
     },
@@ -159,7 +160,7 @@ impl LoopInvariantMotion {
 
             match tail_inst {
                 Some(inst) if inst.is_terminator(ctx) => {
-                    inst.replace_succ_block(ctx, header, preheader);
+                    inst.replace(ctx, header, preheader);
                 }
                 Some(_) => {
                     panic!("block tail is not a terminator, do canonicalization first");

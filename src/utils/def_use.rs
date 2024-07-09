@@ -35,6 +35,12 @@ pub trait Usable: Sized + ArenaPtr + Hash {
 
     /// Remove a user from this entity.
     fn remove_user(self, arena: &mut Self::A, user: Self::U);
+
+    /// Get the total uses of this entity.
+    ///
+    /// One user might use this entity multiple times, this function should
+    /// return the total number of uses.
+    fn total_uses(self, arena: &Self::A) -> usize;
 }
 
 /// This trait is used to describe a entity that uses other entities.
