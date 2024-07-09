@@ -562,8 +562,11 @@ impl<'a> fmt::Display for DisplayRvInst<'a> {
                     MemLoc::RegOffset { base, offset } => {
                         format!("{}({})", offset, regs::display(*base))
                     }
-                    MemLoc::Slot { .. } | MemLoc::Incoming { .. } => {
-                        unreachable!("mem loc should be modified to reg offset")
+                    MemLoc::Slot { offset } => {
+                        format!("{}(??? SLOT)", offset)
+                    }
+                    MemLoc::Incoming { offset } => {
+                        format!("{}(??? INCOMING)", offset)
                     }
                 };
                 write!(f, "{} {}, {}", op, regs::display(*rd), slot)
@@ -573,8 +576,11 @@ impl<'a> fmt::Display for DisplayRvInst<'a> {
                     MemLoc::RegOffset { base, offset } => {
                         format!("{}({})", offset, regs::display(*base))
                     }
-                    MemLoc::Slot { .. } | MemLoc::Incoming { .. } => {
-                        unreachable!("mem loc should be modified to reg offset")
+                    MemLoc::Slot { offset } => {
+                        format!("{}(??? SLOT)", offset)
+                    }
+                    MemLoc::Incoming { offset } => {
+                        format!("{}(??? INCOMING)", offset)
                     }
                 };
                 write!(f, "{} {}, {}", op, regs::display(*src), slot)
@@ -598,8 +604,20 @@ impl<'a> fmt::Display for DisplayRvInst<'a> {
                 )
             }
             Ik::La { rd, label } => write!(f, "la {}, {}", regs::display(*rd), label),
-            Ik::LoadAddr { .. } => {
-                unreachable!("load addr should be converted to li + add or addi")
+            Ik::LoadAddr { rd, loc } => {
+                // unreachable!("load addr should be converted to li + add or addi")
+                let slot = match loc {
+                    MemLoc::RegOffset { base, offset } => {
+                        format!("{}({} REG_OFFSET)", offset, regs::display(*base))
+                    }
+                    MemLoc::Slot { offset } => {
+                        format!("{}(??? SLOT)", offset)
+                    }
+                    MemLoc::Incoming { offset } => {
+                        format!("{}(??? INCOMING)", offset)
+                    }
+                };
+                write!(f, "LOAD_ADDR??? {}, {}", regs::display(*rd), slot)
             }
         }
     }

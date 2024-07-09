@@ -478,9 +478,9 @@ where
             let outgoing_size = mfunc.outgoing_stack_size(&self.mctx) as i64;
             let total_stack_size = S::total_stack_size(self, mfunc) as i64;
 
-            for block in func.iter(self.ctx) {
-                let mblock = self.blocks[&block];
+            let mut cursor = mfunc.cursor();
 
+            while let Some(mblock) = cursor.next(self.mctx()) {
                 let mut curr_inst = mblock.head(&self.mctx);
 
                 while let Some(inst) = curr_inst {
@@ -669,23 +669,31 @@ where
                 let mblock_then = self.blocks[&then_succ.block()];
                 let mblock_else = self.blocks[&else_succ.block()];
 
-                // create a new block and pass arguments there
-                // TODO: NOT MOST EFFICIENT
-                let new_mblock =
-                    MBlock::new(&mut self.mctx, format!(".__machbb_{}", self.label_counter));
-                self.label_counter += 1;
+                // TODO: we can do better if there are no lost-copy problem between the two
+                // successors.
+                if then_succ.args().is_empty() {
+                    // if there are no arugments to pass, we can just br, without creating a new
+                    // block because no lost-copy problem will happen
+                    S::gen_br(self, mcond, mblock_then);
+                } else {
+                    // create a new block and pass arguments there
+                    let new_mblock =
+                        MBlock::new(&mut self.mctx, format!(".__machbb_{}", self.label_counter));
+                    self.label_counter += 1;
 
-                let this_mblock = self.curr_block.unwrap();
-                this_mblock.insert_after(self.mctx_mut(), new_mblock);
-                S::gen_br(self, mcond, new_mblock);
+                    let this_mblock = self.curr_block.unwrap();
+                    this_mblock.insert_after(self.mctx_mut(), new_mblock);
+                    S::gen_br(self, mcond, new_mblock);
 
-                self.curr_block = Some(new_mblock);
-                self.lower_succ(then_succ);
-                S::gen_jump(self, mblock_then);
+                    self.curr_block = Some(new_mblock);
+                    self.lower_succ(then_succ);
+                    S::gen_jump(self, mblock_then);
 
-                // the next jump does not need a new block, because if br is not successful, it
-                // should go here.
-                self.curr_block = Some(this_mblock);
+                    // the next jump does not need a new block, because if br is not successful, it
+                    // should go here. So we set it back.
+                    self.curr_block = Some(this_mblock);
+                }
+
                 self.lower_succ(else_succ);
                 S::gen_jump(self, mblock_else);
             }
@@ -746,32 +754,121 @@ where
     }
 
     fn lower_succ(&mut self, succ: &Successor) {
-        // TODO: IS THIS REALLY CORRECT? even if we jump to the `else_block`, the `then`
-        // args will still be passed, will there be overwriting problems?
         let args = succ.args();
-        // we need to create temporary registers for all block params,
-        // and then move the args to the temporary registers, and move
-        // from the temporary registers to the actual registers
-        let mut temp_passing = HashMap::new();
+
+        // 1. we can directly pass those immediate arguments
+        // 2. for mem loc, we can directly pass those are not reg offset, because they
+        //    either use sp or fp
+        // 3. for reg offset and reg, we need to check if they will be overwritten in
+        //    the passing.
+
+        let mut buffer = HashMap::new();
+        let mut tys = HashMap::new();
+        let mut reg_outgoing = HashMap::new();
+
         for (param, arg) in args.iter() {
             let mval = self.lowered[&arg.inner()];
-            let ty = arg.inner().ty(self.ctx);
 
             if let MValueKind::Reg(reg) = self.lowered[param].kind() {
-                let kind = reg.kind();
-                let temp = self.mctx.new_vreg(kind);
-                // pass arg to temp
-                S::gen_move(self, temp.into(), mval);
-                // record the temp
-                let temp_mval = MValue::new_reg(ty, temp);
-                temp_passing.insert(reg, temp_mval);
+                match mval.kind() {
+                    MValueKind::Imm(_) => {
+                        S::gen_move(self, reg, mval);
+                    }
+                    MValueKind::Mem(loc) => match loc {
+                        MemLoc::Incoming { .. } | MemLoc::Slot { .. } => {
+                            S::gen_move(self, reg, mval);
+                        }
+                        MemLoc::RegOffset { base, .. } => {
+                            // we can be sure that for each dst, only one src will be passed
+                            buffer.insert(reg, mval);
+                            tys.insert(reg, mval.ty());
+                            // record the out-degree of the register
+                            reg_outgoing
+                                .entry(base)
+                                .and_modify(|v| *v += 1)
+                                .or_insert(1);
+                            // also record the out-degree of the dst register
+                            reg_outgoing.entry(reg).or_insert(0);
+                        }
+                    },
+                    MValueKind::Reg(src) => {
+                        if src != reg {
+                            buffer.insert(reg, mval);
+                            tys.insert(reg, mval.ty());
+                            reg_outgoing.entry(src).and_modify(|v| *v += 1).or_insert(1);
+                            reg_outgoing.entry(reg).or_insert(0);
+                        } else {
+                            // we don't need to move the value if the source and
+                            // destination are the same
+                        }
+                    }
+                    MValueKind::Undef => {
+                        // we don't need to move the value if it's undefined
+                    }
+                }
             } else {
                 unreachable!()
             }
         }
 
-        for (param, temp) in temp_passing {
-            S::gen_move(self, param, temp);
+        // we can iteratively look for dst registers whose outgoing degree is 0,
+        // and move the value to the dst register. This is a topological sort
+        // actually. and if no such register is found, we can create a virtual
+        // register to break the cycle.
+
+        // record the vregs that are created to break the cycle, and the corresponding
+        // dst registers
+        let mut vreg_buffer = HashMap::new();
+
+        while !buffer.is_empty() {
+            let mut queue = Vec::new();
+
+            for (reg, out) in reg_outgoing.iter() {
+                if *out == 0 && buffer.contains_key(reg) {
+                    // push those outgoing degree is 0 and are dst registers
+                    queue.push(*reg);
+                }
+            }
+
+            while let Some(reg) = queue.pop() {
+                let mval = buffer.remove(&reg).unwrap();
+                S::gen_move(self, reg, mval);
+
+                let src_reg = match mval.kind() {
+                    MValueKind::Reg(reg) => reg,
+                    MValueKind::Mem(MemLoc::RegOffset { base, .. }) => base,
+                    MValueKind::Mem(_) | MValueKind::Imm(_) | MValueKind::Undef => unreachable!(),
+                };
+
+                if let Some(out) = reg_outgoing.get_mut(&src_reg) {
+                    *out -= 1;
+                    if *out == 0 && buffer.contains_key(&src_reg) {
+                        queue.push(src_reg);
+                    }
+                }
+            }
+
+            // if there are still registers in the buffer, we need to create a
+            // virtual register to break the cycle
+            if !buffer.is_empty() {
+                // choose one
+                let (reg, mval) = buffer.iter().next().unwrap();
+                let (reg, mval) = (*reg, *mval);
+
+                let vreg = self.mctx.new_vreg(reg.kind());
+                // record the virtual register and the corresponding dst register
+                vreg_buffer.insert(reg, vreg);
+                // remove the dst register from the buffer, and re-map with vreg, also update
+                // the out-degree
+                buffer.insert(vreg.into(), mval);
+                buffer.remove(&reg);
+                reg_outgoing.insert(vreg.into(), 0);
+            }
+        }
+
+        // now we need to move the value from the virtual register to the dst register
+        for (dst, vreg) in vreg_buffer {
+            S::gen_move(self, dst, MValue::new_reg(tys[&dst], vreg));
         }
     }
 }
