@@ -759,6 +759,7 @@ impl LowerSpec for RvLowerSpec {
                                 reg
                             }
                             (MValueKind::Imm(imm), MValueKind::Reg(reg)) => {
+                                // TODO: can we optimize this?
                                 let (li, lhs) = RvInst::li(&mut lower.mctx, imm as u64);
                                 curr_block.push_back(&mut lower.mctx, li);
                                 let (inst, reg) =
@@ -1140,7 +1141,7 @@ impl LowerSpec for RvLowerSpec {
 
         match offset.kind() {
             MValueKind::Reg(reg) => {
-                // TODO: not sure if signext is required
+                // XXX: assumes all the operations produced proper sign-extended values
                 let (inst, rd) = RvInst::alu_rrr(&mut lower.mctx, AluOpRRR::Add, base, reg);
                 curr_block.push_back(&mut lower.mctx, inst);
                 MValue::new_reg(ty, rd)
@@ -1459,10 +1460,10 @@ impl LowerSpec for RvLowerSpec {
             inst_buf.push(addi);
         } else {
             let t0 = regs::t0();
-            let li = RvInst::build_li(&mut lower.mctx, t0.into(), (-total_stack_size) as u64);
+            let li = RvInst::build_li(&mut lower.mctx, t0.into(), total_stack_size as u64);
             let add = RvInst::build_alu_rrr(
                 &mut lower.mctx,
-                AluOpRRR::Add,
+                AluOpRRR::Sub,
                 sp.into(),
                 sp.into(),
                 t0.into(),

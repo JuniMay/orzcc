@@ -588,20 +588,27 @@ impl ApInt {
     /// This operation WILL change the integer width, according to the actual
     /// 1s in the integer.
     pub fn shrink_to_fit(&mut self) {
-        let mut width = self.width;
-        // FIXME: still buggy
-        while width > 1 && !self.chunks.is_empty() && self.chunks.last().unwrap() == &0 {
-            self.chunks.pop();
-            width -= ApIntChunk::BITS as usize;
+        let mut width = self.width.max(1); // the minimum width is 1bit.
+
+        // deprecate the invalid chunks
+        while (self.chunks.len() - 1) * ApIntChunk::BITS as usize >= width {
+            self.chunks.pop().unwrap();
         }
-        if self.chunks.is_empty() {
-            // add a zero chunk
+
+        // make sure the `width` bit is within the last chunk
+        while (self.chunks.len() + 1) * ApIntChunk::BITS as usize <= width {
             self.chunks.push(0);
+        }
+
+        // pop till last non-zero chunk or the last chunk
+        while width > ApIntChunk::BITS as usize && self.chunks.last().unwrap() == &0 {
+            self.chunks.pop().unwrap();
+            width -= ApIntChunk::BITS as usize;
         }
         let num_chunks = self.chunks.len();
         let last_chunk_width = ApIntChunk::BITS - self.chunks.last().unwrap().leading_zeros();
-        let new_width = (num_chunks - 1) * ApIntChunk::BITS as usize + last_chunk_width as usize;
-        self.width = new_width.max(1); // the minimum width is 1bit.
+        self.width = (num_chunks - 1) * ApIntChunk::BITS as usize + last_chunk_width as usize;
+        self.width = self.width.max(1); // the chunk can be all zeros
     }
 
     /// Consumes the integer and return the shrunk integer.
@@ -1244,6 +1251,20 @@ impl fmt::Display for ApInt {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_shrink_0() {
+        let mut a = ApInt::from(0u32);
+        a.shrink_to_fit();
+        assert_eq!(a.width, 1);
+    }
+
+    #[test]
+    fn test_shrink_1() {
+        let mut a = ApInt::from(0xf000000000000000u64);
+        a.shrink_to_fit();
+        assert_eq!(a.width, 64);
+    }
 
     #[test]
     fn test_inplace_neg_0() {

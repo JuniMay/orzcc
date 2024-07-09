@@ -32,10 +32,11 @@ impl Imm12 {
         if x.width() <= 12 {
             Some(Imm12(u16::from(x.clone())))
         } else {
-            let (abs, _) = x.clone().into_abs();
+            let (abs, sign) = x.clone().into_abs();
+
             let abs = abs.into_shrunk();
 
-            if abs.width() <= 11 {
+            if abs.width() <= 11 || (abs.width() == 12 && u16::from(abs) == 0x800 && sign) {
                 let bits = x.clone().into_truncated(12).0;
                 Some(Imm12(u16::from(bits)))
             } else {
@@ -55,4 +56,63 @@ impl PartialOrd for Imm12 {
 
 impl fmt::Display for Imm12 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { write!(f, "{}", self.as_i16()) }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn imm12_try_from_i64() {
+        assert_eq!(Imm12::try_from_i64(0), Some(Imm12(0)));
+        assert_eq!(Imm12::try_from_i64(1), Some(Imm12(1)));
+        assert_eq!(Imm12::try_from_i64(2047), Some(Imm12(2047)));
+        assert_eq!(
+            Imm12::try_from_i64(-2048),
+            Some(Imm12((-2048i16) as u16 & 0xfff))
+        );
+        assert_eq!(Imm12::try_from_i64(-2049), None);
+        assert_eq!(Imm12::try_from_i64(2048), None);
+    }
+
+    #[test]
+    fn imm12_try_from_u64() {
+        assert_eq!(Imm12::try_from_u64(0), Some(Imm12(0)));
+        assert_eq!(Imm12::try_from_u64(1), Some(Imm12(1)));
+        assert_eq!(Imm12::try_from_u64(2047), Some(Imm12(2047)));
+        assert_eq!(Imm12::try_from_u64(2048), None);
+    }
+
+    #[test]
+    fn imm12_try_from_apint() {
+        let x = ApInt::from(0);
+        assert_eq!(Imm12::try_from_apint(&x), Some(Imm12(0)));
+        assert_eq!(Imm12::try_from_apint(&x).unwrap().as_i16(), 0);
+
+        let x = ApInt::from(1);
+        assert_eq!(Imm12::try_from_apint(&x), Some(Imm12(1)));
+        assert_eq!(Imm12::try_from_apint(&x).unwrap().as_i16(), 1);
+
+        let x = ApInt::from(2047);
+        assert_eq!(Imm12::try_from_apint(&x), Some(Imm12(2047)));
+        assert_eq!(Imm12::try_from_apint(&x).unwrap().as_i16(), 2047);
+
+        let x = ApInt::from(-2047);
+        assert_eq!(
+            Imm12::try_from_apint(&x),
+            Some(Imm12((-2047i16) as u16 & 0xfff))
+        );
+        assert_eq!(Imm12::try_from_apint(&x).unwrap().as_i16(), -2047);
+
+        let x = ApInt::from(-2048);
+        dbg!(&x);
+        assert_eq!(
+            Imm12::try_from_apint(&x),
+            Some(Imm12((-2048i16) as u16 & 0xfff))
+        );
+        assert_eq!(Imm12::try_from_apint(&x).unwrap().as_i16(), -2048);
+
+        let x = ApInt::from(-2049);
+        assert_eq!(Imm12::try_from_apint(&x), None);
+    }
 }
