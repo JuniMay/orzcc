@@ -384,19 +384,23 @@ where
                 );
                 mfunc.push_back(&mut self.mctx, mblock);
                 self.blocks.insert(block, mblock);
-                // create registers for parameters
-                for param in block.params(self.ctx) {
-                    let ty = param.ty(self.ctx);
-                    let reg = if ty.is_integer(self.ctx) || ty.is_ptr(self.ctx) {
-                        self.mctx.new_vreg(RegKind::General)
-                    } else if ty.is_float(self.ctx) {
-                        self.mctx.new_vreg(RegKind::Float)
-                    } else {
-                        // TODO: to support struct-like types, we need to create multiple registers
-                        unimplemented!("unsupported parameter type: {}", ty.display(self.ctx))
-                    };
-                    let mvalue = MValue::new_reg(ty, reg);
-                    self.lowered.insert(*param, mvalue);
+
+                if block != func.entry_node(self.ctx) {
+                    // create registers for parameters, entry node will be created in `gen_incoming`
+                    for param in block.params(self.ctx) {
+                        let ty = param.ty(self.ctx);
+                        let reg = if ty.is_integer(self.ctx) || ty.is_ptr(self.ctx) {
+                            self.mctx.new_vreg(RegKind::General)
+                        } else if ty.is_float(self.ctx) {
+                            self.mctx.new_vreg(RegKind::Float)
+                        } else {
+                            // TODO: to support struct-like types, we need to create multiple
+                            // registers
+                            unimplemented!("unsupported parameter type: {}", ty.display(self.ctx))
+                        };
+                        let mvalue = MValue::new_reg(ty, reg);
+                        self.lowered.insert(*param, mvalue);
+                    }
                 }
             }
         }
@@ -446,8 +450,6 @@ where
         // storage region, make the spilled slots under them (higher address)
         // so we don't need to rely on the spilled size to determine the offset.
         // In that way, we can allocate t0 after passing the arguments.
-
-        // TODO: regalloc
     }
 
     pub fn after_regalloc(&mut self) {
@@ -659,6 +661,7 @@ where
             }
             Ik::Br => {
                 let cond = inst.operand(self.ctx, 0);
+                let mcond = self.lowered[&cond];
 
                 let then_succ = inst.succ(self.ctx, 0);
                 let else_succ = inst.succ(self.ctx, 1);
@@ -666,10 +669,23 @@ where
                 let mblock_then = self.blocks[&then_succ.block()];
                 let mblock_else = self.blocks[&else_succ.block()];
 
-                self.lower_succ(then_succ);
-                let mcond = self.lowered[&cond];
-                S::gen_br(self, mcond, mblock_then);
+                // create a new block and pass arguments there
+                // TODO: NOT MOST EFFICIENT
+                let new_mblock =
+                    MBlock::new(&mut self.mctx, format!(".__machbb_{}", self.label_counter));
+                self.label_counter += 1;
 
+                let this_mblock = self.curr_block.unwrap();
+                this_mblock.insert_after(self.mctx_mut(), new_mblock);
+                S::gen_br(self, mcond, new_mblock);
+
+                self.curr_block = Some(new_mblock);
+                self.lower_succ(then_succ);
+                S::gen_jump(self, mblock_then);
+
+                // the next jump does not need a new block, because if br is not successful, it
+                // should go here.
+                self.curr_block = Some(this_mblock);
                 self.lower_succ(else_succ);
                 S::gen_jump(self, mblock_else);
             }
@@ -730,6 +746,8 @@ where
     }
 
     fn lower_succ(&mut self, succ: &Successor) {
+        // TODO: IS THIS REALLY CORRECT? even if we jump to the `else_block`, the `then`
+        // args will still be passed, will there be overwriting problems?
         let args = succ.args();
         // we need to create temporary registers for all block params,
         // and then move the args to the temporary registers, and move

@@ -149,7 +149,7 @@ fn parse_args(passman: &mut PassManager) -> CliCommand {
     let mut passes = Vec::new();
     if opt > 0 {
         // TODO: we may need a pipeline to handle fix-point iteration
-        // passes.push(MEM2REG.to_string());
+        passes.push(MEM2REG.to_string());
         // passes.push(CONSTANT_FOLDING.to_string());
         // passes.push(SIMPLE_DCE.to_string());
         // passes.push(LOOP_INVARIANT_MOTION.to_string());
