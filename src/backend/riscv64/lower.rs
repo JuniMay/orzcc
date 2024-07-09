@@ -227,7 +227,8 @@ impl LowerSpec for RvLowerSpec {
         if let Some(imm) = Imm12::try_from_apint(&x) {
             MValue::new_imm(ty, imm.as_i16() as i64)
         } else {
-            let bits = u64::from(x.clone());
+            // sign-extend to 64-bit, because we are working on rv64
+            let bits = u64::from(x.clone().into_signext(64));
             let (li, t) = RvInst::li(&mut lower.mctx, bits);
             lower.curr_block.unwrap().push_back(&mut lower.mctx, li);
             MValue::new_reg(ty, t)
