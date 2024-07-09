@@ -13,3 +13,5 @@
 .DS_Store
 
 /test.*
+
+/scripts/__pycache__/*
