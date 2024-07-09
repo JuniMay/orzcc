@@ -65,6 +65,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             passman.run_transform(MEM2REG, &mut ir, 1);
             passman.run_pipeline(&mut ir, &opt_pipeline, 32, 8);
+
+            // // un-comment to test individual passes
+            // passman.run_transform(CONSTANT_FOLDING, &mut ir, 1);
+            // passman.run_transform(CFG_SIMPLIFY, &mut ir, 1);
+            // passman.run_transform(SIMPLE_DCE, &mut ir, 1);
+            // passman.run_transform(LOOP_INVARIANT_MOTION, &mut ir, 1);
         }
 
         ir.alloc_all_names();

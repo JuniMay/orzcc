@@ -67,6 +67,12 @@ impl LocalPassMut for SimpleDce {
         // remove all the block params that are not used
         let mut cursor = func.cursor();
         while let Some(block) = cursor.next(ctx) {
+            if block == func.head(ctx).unwrap() {
+                // we cannot remove the params of the entry block, because they are crucial to
+                // arguments passing
+                continue;
+            }
+
             let params = block.params(ctx).to_vec();
             let mut delta = 0;
 
