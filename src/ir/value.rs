@@ -192,6 +192,8 @@ impl Usable for Value {
             if *v == 0 {
                 self.deref_mut(ctx).users.remove(&user);
             }
+        } else {
+            panic!("the user is not found.");
         }
     }
 

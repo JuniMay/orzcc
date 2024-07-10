@@ -1,0 +1,6 @@
+func @test_add_zero_elim(i32) -> i32 {
+^entry(%v0: i32):
+    %zero = iconst 0 : i32
+    %v1 = add %v0, %zero : i32
+    ret %v1
+}

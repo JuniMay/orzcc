@@ -39,7 +39,7 @@ impl LocalPassMut for SimpleDce {
                     | Ik::StackSlot(_) => {
                         let mut used = false;
                         for result in inst.results(ctx) {
-                            if !result.users(ctx).is_empty() {
+                            if result.total_uses(ctx) != 0 {
                                 used = true;
                                 break;
                             }

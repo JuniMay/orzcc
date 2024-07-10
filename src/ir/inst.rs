@@ -1238,6 +1238,45 @@ impl Inst {
     pub fn is_load(self, ctx: &Context) -> bool { matches!(self.deref(ctx).kind, InstKind::Load) }
 
     pub fn is_store(self, ctx: &Context) -> bool { matches!(self.deref(ctx).kind, InstKind::Store) }
+
+    pub fn is_commutative(self, ctx: &Context) -> bool {
+        use InstKind as Ik;
+
+        matches!(
+            self.kind(ctx),
+            Ik::IBinary(IBinaryOp::Add)
+                | Ik::IBinary(IBinaryOp::Mul)
+                | Ik::IBinary(IBinaryOp::And)
+                | Ik::IBinary(IBinaryOp::Or)
+                | Ik::IBinary(IBinaryOp::Xor)
+                | Ik::FBinary(FBinaryOp::Add)
+                | Ik::FBinary(FBinaryOp::Mul)
+        )
+    }
+
+    pub fn commute_operands(self, ctx: &mut Context) {
+        if !self.is_commutative(ctx) {
+            panic!("instruction is not commutative");
+        }
+
+        let operands = self.deref(ctx).operands.len();
+        if operands != 2 {
+            panic!("commutative instruction must have 2 operands");
+        }
+
+        self.deref_mut(ctx).operands.swap(0, 1);
+    }
+
+    pub fn is_used(self, ctx: &Context) -> bool {
+        let mut is_used = false;
+        for result in self.results(ctx) {
+            if !result.users(ctx).is_empty() {
+                is_used = true;
+                break;
+            }
+        }
+        is_used
+    }
 }
 
 impl LinkedListNodePtr for Inst {
@@ -1433,7 +1472,12 @@ impl<'a> fmt::Display for DisplayInst<'a> {
                 }
                 write!(f, "%{}", result.name(self.ctx).unwrap())?;
                 if self.debug {
-                    write!(f, " /* {} */", result.id())?;
+                    write!(
+                        f,
+                        " /* {}, uses: {} */",
+                        result.id(),
+                        result.total_uses(self.ctx)
+                    )?;
                 }
             }
             write!(f, " = ")?;

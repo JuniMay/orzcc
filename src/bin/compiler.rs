@@ -5,6 +5,7 @@ use orzcc::ir::{
     passes::{
         control_flow::{CfgCanonicalize, CfgSimplify, CFG_SIMPLIFY},
         fold::{ConstantFolding, CONSTANT_FOLDING},
+        instcombine::{InstCombine, INSTCOMBINE},
         loops::{LoopInvariantMotion, LOOP_INVARIANT_MOTION},
         mem2reg::{Mem2reg, MEM2REG},
         simple_dce::{SimpleDce, SIMPLE_DCE},
@@ -57,14 +58,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if cmd.opt > 0 {
             passman.run_transform(MEM2REG, &mut ir, 1);
+            passman.run_transform(LOOP_INVARIANT_MOTION, &mut ir, 1);
+            passman.run_transform(CFG_SIMPLIFY, &mut ir, 1);
 
             let mut opt_pipeline = Pipeline::default();
             opt_pipeline.add_pass(CONSTANT_FOLDING);
             opt_pipeline.add_pass(SIMPLE_DCE);
-            opt_pipeline.add_pass(LOOP_INVARIANT_MOTION);
-            opt_pipeline.add_pass(CFG_SIMPLIFY);
+            opt_pipeline.add_pass(INSTCOMBINE);
+            opt_pipeline.add_pass(SIMPLE_DCE);
 
-            passman.run_pipeline(&mut ir, &opt_pipeline, 32, 8);
+            let _iter = passman.run_pipeline(&mut ir, &opt_pipeline, 32, 8);
         }
 
         ir.alloc_all_names();
@@ -96,6 +99,7 @@ fn register_passes(passman: &mut PassManager) {
     Mem2reg::register(passman);
     SimpleDce::register(passman);
     ConstantFolding::register(passman);
+    InstCombine::register(passman);
 
     LoopInvariantMotion::register(passman);
 }
