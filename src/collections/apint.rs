@@ -96,6 +96,26 @@ impl ApInt {
         true
     }
 
+    pub fn count_ones(&self) -> u32 {
+        // here we assume that the operations before will keep the higher bits as 0
+        self.chunks.iter().map(|c| c.count_ones()).sum()
+    }
+
+    pub fn is_power_of_two(&self) -> bool { self.count_ones() == 1 }
+
+    pub fn trailing_zeros(&self) -> u32 {
+        let mut trailing_zeros = 0;
+        for chunk in self.chunks.iter() {
+            if *chunk == 0 {
+                trailing_zeros += ApIntChunk::BITS;
+            } else {
+                trailing_zeros += chunk.trailing_zeros();
+                break;
+            }
+        }
+        trailing_zeros.min(self.width as u32)
+    }
+
     /// Get the width of the integer.
     ///
     /// # Returns
@@ -589,16 +609,6 @@ impl ApInt {
     /// 1s in the integer.
     pub fn shrink_to_fit(&mut self) {
         let mut width = self.width.max(1); // the minimum width is 1bit.
-
-        // deprecate the invalid chunks
-        while (self.chunks.len() - 1) * ApIntChunk::BITS as usize >= width {
-            self.chunks.pop().unwrap();
-        }
-
-        // make sure the `width` bit is within the last chunk
-        while (self.chunks.len() + 1) * ApIntChunk::BITS as usize <= width {
-            self.chunks.push(0);
-        }
 
         // pop till last non-zero chunk or the last chunk
         while width > ApIntChunk::BITS as usize && self.chunks.last().unwrap() == &0 {
@@ -1253,6 +1263,54 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_power_of_two_0() {
+        let a = ApInt::from(1u32);
+        assert!(a.is_power_of_two());
+    }
+
+    #[test]
+    fn test_power_of_two_1() {
+        let a = ApInt::from(2u32);
+        assert!(a.is_power_of_two());
+    }
+
+    #[test]
+    fn test_power_of_two_2() {
+        let a = ApInt::from(3u32);
+        assert!(!a.is_power_of_two());
+    }
+
+    #[test]
+    fn test_power_of_two_3() {
+        let a = ApInt::from(0x8000_0000u32);
+        assert!(a.is_power_of_two());
+    }
+
+    #[test]
+    fn test_trailing_zeros_0() {
+        let a = ApInt::from(0u32);
+        assert_eq!(a.trailing_zeros(), 32);
+    }
+
+    #[test]
+    fn test_trailing_zeros_1() {
+        let a = ApInt::from(0x8000_0000u32);
+        assert_eq!(a.trailing_zeros(), 31);
+    }
+
+    #[test]
+    fn test_trailing_zeros_2() {
+        let a = ApInt::from(0x8000_0001u32);
+        assert_eq!(a.trailing_zeros(), 0);
+    }
+
+    #[test]
+    fn test_trailing_zeros_3() {
+        let a = ApInt::from(0x0000_0000_1000_0000u64);
+        assert_eq!(a.trailing_zeros(), 28);
+    }
+
+    #[test]
     fn test_shrink_0() {
         let mut a = ApInt::from(0u32);
         a.shrink_to_fit();
@@ -1264,6 +1322,14 @@ mod tests {
         let mut a = ApInt::from(0xf000000000000000u64);
         a.shrink_to_fit();
         assert_eq!(a.width, 64);
+    }
+
+    #[test]
+    fn test_shrink_2() {
+        let mut a = ApInt::from(vec![0x0000000080000000u64, 0u64]);
+        a.shrink_to_fit();
+        assert_eq!(a.width, 32);
+        assert_eq!(a.chunks, vec![0x80000000u64]);
     }
 
     #[test]
