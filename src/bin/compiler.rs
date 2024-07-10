@@ -59,9 +59,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if cmd.opt > 0 {
             passman.run_transform(MEM2REG, &mut ir, 1);
             passman.run_transform(LOOP_INVARIANT_MOTION, &mut ir, 1);
-            passman.run_transform(CFG_SIMPLIFY, &mut ir, 1);
 
             let mut opt_pipeline = Pipeline::default();
+            opt_pipeline.add_pass(CFG_SIMPLIFY);
             opt_pipeline.add_pass(CONSTANT_FOLDING);
             opt_pipeline.add_pass(SIMPLE_DCE);
             opt_pipeline.add_pass(INSTCOMBINE);
