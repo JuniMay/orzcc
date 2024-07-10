@@ -1,0 +1,38 @@
+name: Rust
+
+on:
+  push:
+    branches: ["master"]
+  pull_request:
+    branches: ["master"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Build
+        run: cargo build --verbose
+      - name: Run tests
+        run: cargo test --verbose
+      - name: Install Tarpaulin
+        # run: cargo install cargo-tarpaulin
+        run: |
+          wget https://github.com/xd009642/tarpaulin/releases/download/0.30.0/cargo-tarpaulin-x86_64-unknown-linux-gnu.tar.gz -O tarpaulin.tar.gz
+          tar -xvf tarpaulin.tar.gz
+      - name: Run coverage
+        run: ./cargo-tarpaulin --out Xml
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: JuniMay/orzcc
+      - name: Archive coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: ./cobertura.xml

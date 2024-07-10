@@ -1,5 +1,7 @@
 # OrzCC
 
+[![codecov](https://codecov.io/github/JuniMay/orzcc/graph/badge.svg?token=D7ZMIHWY5O)](https://codecov.io/github/JuniMay/orzcc)
+
 ## 测试
 
 可以使用 [cargo-tarpaulin](https://crates.io/crates/cargo-tarpaulin) 得到测试覆盖率
