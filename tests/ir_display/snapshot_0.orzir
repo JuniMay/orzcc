@@ -1,21 +1,21 @@
 // Just a test function
 func @test /* 0 */ () -> void {
 ^bb0 /* 0 */ :
-    %v0 /* 2 */ = iconst 0x00000001i32 : i32
-    %v1 /* 3 */ = fconst 0x40000000 : f32
-    %dummy_cond /* 4 */ = iconst 0x00000001i32 : i1
+    %v0 /* 2, uses: 4 */ = iconst 0x00000001i32 : i32
+    %v1 /* 3, uses: 2 */ = fconst 0x40000000 : f32
+    %dummy_cond /* 4, uses: 1 */ = iconst 0x00000001i32 : i1
     /* no result */ br %dummy_cond, ^bb1, ^bb2
 
 ^bb1 /* 1 */ :
-    %v2 /* 5 */ = add %v0, %v0 : i32
+    %v2 /* 5, uses: 1 */ = add %v0, %v0 : i32
     /* no result */ jump ^merge(%v2, %v1)
 
 ^bb2 /* 2 */ :
-    %v3 /* 6 */ = mul %v0, %v0 : i32
+    %v3 /* 6, uses: 1 */ = mul %v0, %v0 : i32
     /* no result */ jump ^merge(%v3, %v1)
 
 ^merge /* 3 */ (%p1: i32 /* 0 */, %p2: f32 /* 1 */):
-    %v4 /* 7 */ = add %p1, %p1 : i32
+    %v4 /* 7, uses: 0 */ = add %p1, %p1 : i32
     /* no result */ ret void
 
 } /* Just a test function comment at end */
