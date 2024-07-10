@@ -33,7 +33,12 @@ pub struct InstCombine {
 impl Default for InstCombine {
     fn default() -> Self {
         Self {
-            rules: vec![mv_const_rhs(), add_zero_elim(), mul_to_shl()],
+            rules: vec![
+                mv_const_rhs(),
+                add_zero_elim(),
+                offset_zero_elim(),
+                mul_to_shl(),
+            ],
         }
     }
 }
@@ -150,6 +155,33 @@ const fn add_zero_elim() -> Rule {
                         if v.is_zero() {
                             for user in dst.users(ctx) {
                                 user.replace(ctx, dst, lhs);
+                            }
+                            return true;
+                        }
+                    }
+                }
+            }
+            false
+        },
+    }
+}
+
+const fn offset_zero_elim() -> Rule {
+    Rule {
+        rewriter: |ctx, inst| {
+            if let Ik::Offset = inst.kind(ctx) {
+                let base = inst.operand(ctx, 0);
+                let offset = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
+                if let ValueKind::InstResult {
+                    inst: offset_inst, ..
+                } = offset.kind(ctx)
+                {
+                    if let Ik::IConst(v) = offset_inst.kind(ctx) {
+                        if v.is_zero() {
+                            for user in dst.users(ctx) {
+                                user.replace(ctx, dst, base);
                             }
                             return true;
                         }
