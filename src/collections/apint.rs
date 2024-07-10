@@ -896,6 +896,21 @@ impl ApInt {
         }
         bytes
     }
+
+    pub fn slt(&self, other: &Self) -> bool {
+        if self.highest_bit() && !other.highest_bit() {
+            true
+        } else if !self.highest_bit() && other.highest_bit() {
+            false
+        } else {
+            let sign = self.highest_bit();
+            match self.cmp(other) {
+                std::cmp::Ordering::Less => !sign,
+                std::cmp::Ordering::Greater => sign,
+                std::cmp::Ordering::Equal => false,
+            }
+        }
+    }
 }
 
 impl From<f32> for ApInt {
@@ -1482,6 +1497,27 @@ mod tests {
         let a = ApInt::from(vec![0, 0x1]);
         let b = ApInt::from(256u32);
         assert!(a > b);
+    }
+
+    #[test]
+    fn test_slt_0() {
+        let a = ApInt::from(-1i8);
+        let b = ApInt::from(1u8);
+        assert!(a.slt(&b));
+    }
+
+    #[test]
+    fn test_slt_1() {
+        let a = ApInt::from(vec![0, 0x1]);
+        let b = ApInt::from(256u32);
+        assert!(!a.slt(&b));
+    }
+
+    #[test]
+    fn test_slt_2() {
+        let a = ApInt::from(0x8000_0000u32);
+        let b = ApInt::from(0x7fff_ffffu32);
+        assert!(a.slt(&b));
     }
 
     #[test]

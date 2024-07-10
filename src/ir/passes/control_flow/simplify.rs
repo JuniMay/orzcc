@@ -22,12 +22,15 @@ use std::collections::{HashMap, HashSet};
 
 use super::CfgCanonicalize;
 use crate::{
-    collections::linked_list::LinkedListContainerPtr,
+    collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
     ir::{
         passman::{GlobalPassMut, LocalPassMut, PassManager, PassResult, TransformPass},
         remove_all_insts,
         Context,
         Func,
+        Inst,
+        InstKind,
+        ValueKind,
     },
     utils::{
         cfg::CfgInfo,
@@ -216,6 +219,69 @@ impl CfgSimplify {
 
         changed
     }
+
+    fn reduce_always_jump(&mut self, ctx: &mut Context, func: Func) -> bool {
+        let mut changed = false;
+        let mut insts_to_remove = Vec::new();
+
+        let mut cursor = func.cursor();
+        while let Some(block) = cursor.next(ctx) {
+            let mut cursor = block.cursor();
+            while let Some(inst) = cursor.next(ctx) {
+                if !inst.is_br(ctx) {
+                    continue;
+                }
+
+                let cond = inst.operand(ctx, 0);
+                if let ValueKind::InstResult {
+                    inst: cond_inst, ..
+                } = cond.kind(ctx)
+                {
+                    let cond_inst = *cond_inst;
+
+                    if let InstKind::IConst(v) = cond_inst.kind(ctx) {
+                        insts_to_remove.push(inst);
+                        let (block, args) = if v.is_one() {
+                            let succ_block = inst.succ(ctx, 0).block();
+                            let succ_args = inst
+                                .succ(ctx, 0)
+                                .args()
+                                .iter()
+                                .map(|(param, arg)| (*param, arg.inner()))
+                                .collect::<HashMap<_, _>>();
+
+                            (succ_block, succ_args)
+                        } else {
+                            let succ_block = inst.succ(ctx, 1).block();
+                            let succ_args = inst
+                                .succ(ctx, 1)
+                                .args()
+                                .iter()
+                                .map(|(param, arg)| (*param, arg.inner()))
+                                .collect::<HashMap<_, _>>();
+
+                            (succ_block, succ_args)
+                        };
+
+                        let args = block
+                            .params(ctx)
+                            .iter()
+                            .map(|param| args[param])
+                            .collect::<Vec<_>>();
+
+                        let jump = Inst::jump(ctx, block, args);
+                        inst.insert_before(ctx, jump);
+
+                        changed = true;
+                    }
+                }
+            }
+        }
+
+        remove_all_insts(ctx, insts_to_remove, false);
+
+        changed
+    }
 }
 
 impl LocalPassMut for CfgSimplify {
@@ -228,6 +294,7 @@ impl LocalPassMut for CfgSimplify {
         changed |= self.straighten(ctx, func);
         changed |= self.remove_jump_only_blocks(ctx, func);
         changed |= self.remove_single_pred_params(ctx, func);
+        changed |= self.reduce_always_jump(ctx, func);
 
         Ok(((), changed))
     }

@@ -7,7 +7,10 @@
 use std::collections::HashMap;
 
 use super::{constant::FloatConstant, Context, Inst, InstKind, Value};
-use crate::{collections::apint::ApInt, ir::IBinaryOp};
+use crate::{
+    collections::apint::ApInt,
+    ir::{IBinaryOp, ICmpCond},
+};
 
 #[derive(Debug, Clone)]
 pub enum FoldedConstant {
@@ -153,8 +156,19 @@ impl Inst {
                         let shamt = u64::from(rhs.clone());
                         lhs.inplace_ashr(shamt as usize);
                     }
-                    // TODO
-                    IBinaryOp::Cmp(_) => return None,
+                    IBinaryOp::Cmp(cond) => {
+                        let result = match cond {
+                            ICmpCond::Eq => &lhs == rhs,
+                            ICmpCond::Ne => &lhs != rhs,
+                            ICmpCond::Sle => lhs.slt(rhs) || &lhs == rhs,
+                            ICmpCond::Slt => lhs.slt(rhs),
+                            ICmpCond::Ule => &lhs <= rhs,
+                            // the default comparison is unsigned for ApInt
+                            ICmpCond::Ult => &lhs < rhs,
+                        };
+
+                        lhs = ApInt::from(result);
+                    }
                 }
 
                 Some(FoldedConstant::Integer(lhs))
