@@ -25,13 +25,15 @@ mem2reg 的 Pass 位于 `src/ir/passes` 下。
 - [ ] Function Inlining
 - [ ] Global Value Numbering
 - [ ] Strength Reduction
-  - [ ] Math Optimization
+  - [ ] Math Optimization (instcombine)
   - [ ] Multiplication Optimization
   - [ ] Division Optimization
 - [x] Loop Invariant Code Motion
 - [ ] Loop Unrolling
 - [ ] Scalar Evolution Analysis
 - [ ] Tail Call Optimization
+
+可能还需要一个更有效的测试方式。
 
 ### Backend
 
