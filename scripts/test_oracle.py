@@ -47,6 +47,53 @@ def test_one(test_case, timeout, opt_level, output_dir, executable_path, runtime
     log_file = open(log_path, "w")
     
     command = (
+        f"clang -w -xc {test_case} "
+        f"./tests/sysy/sysy-runtime-lib-fix/sylib.c "
+        f"-o {std_exec_path}"
+    )
+
+    exec_result = execute(command, timeout)
+    log(log_file, command, exec_result)
+
+    if exec_result["returncode"] is None or exec_result["stderr"] != "":
+        print(f"\033[33m[  ERROR  ] (clang CE)\033[0m {test_case}, see: ", log_path)
+        return False
+    
+    command = (
+        (f"{std_exec_path}" f" >{std_out_path}")
+        if in_path is None
+        else (
+            f"{std_exec_path}"
+            f" <{in_path} >{std_out_path}"
+        )
+    )
+
+    exec_result = execute(command, timeout)
+    log(log_file, command, exec_result)
+    
+    need_newline = False
+    with open(std_out_path, "r") as f:
+        content = f.read()
+        if len(content) > 0:
+            if not content.endswith("\n"):
+                need_newline = True
+
+    # add return code to the last line of out file
+    with open(std_out_path, "a+") as f:
+        if need_newline:
+            f.write("\n")
+        f.write(str(exec_result["returncode"]))
+        f.write("\n")
+
+    if exec_result["returncode"] is None:
+        if exec_result["stderr"] == "TIMEOUT":
+            print(f"\033[33m[  ERROR  ] (clang obj TLE)\033[0m {test_case}, check: {asm_path}")
+        else:
+            # SOS icon
+            print(f"\033[35m[  ERROR  ] (clang obj RE)\033[0m {test_case}, see: {log_path}")
+        return False
+    
+    command = (
             f"{executable_path} -S "
             f"-o {asm_path} "
             f"{test_case} "
@@ -140,53 +187,6 @@ def test_one(test_case, timeout, opt_level, output_dir, executable_path, runtime
     #     else:
     #         print(f"\033[35m[  ERROR  ] (clang ir -> asm RE)\033[0m {test_case}")
     #     return False
-    
-    command = (
-        f"clang -w -xc {test_case} "
-        f"./tests/sysy/sysy-runtime-lib-fix/sylib.c "
-        f"-o {std_exec_path}"
-    )
-
-    exec_result = execute(command, timeout)
-    log(log_file, command, exec_result)
-
-    if exec_result["returncode"] is None or exec_result["stderr"] != "":
-        print(f"\033[33m[  ERROR  ] (gcc CE)\033[0m {test_case}, see: ", log_path)
-        return False
-    
-    command = (
-        (f"{std_exec_path}" f" >{std_out_path}")
-        if in_path is None
-        else (
-            f"{std_exec_path}"
-            f" <{in_path} >{std_out_path}"
-        )
-    )
-
-    exec_result = execute(command, timeout)
-    log(log_file, command, exec_result)
-    
-    need_newline = False
-    with open(std_out_path, "r") as f:
-        content = f.read()
-        if len(content) > 0:
-            if not content.endswith("\n"):
-                need_newline = True
-
-    # add return code to the last line of out file
-    with open(std_out_path, "a+") as f:
-        if need_newline:
-            f.write("\n")
-        f.write(str(exec_result["returncode"]))
-        f.write("\n")
-
-    if exec_result["returncode"] is None:
-        if exec_result["stderr"] == "TIMEOUT":
-            print(f"\033[33m[  ERROR  ] (gcc obj TLE)\033[0m {test_case}, check: {asm_path}")
-        else:
-            # SOS icon
-            print(f"\033[35m[  ERROR  ] (gcc obj RE)\033[0m {test_case}, see: {log_path}")
-        return False
 
     # compare the output
     is_equal = check_file(out_path, std_out_path, diff_path)
