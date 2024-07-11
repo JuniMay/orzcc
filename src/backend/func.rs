@@ -134,6 +134,13 @@ where
         }
     }
 
+    /// Get the outgoing stack size and set it to zero.
+    pub fn take_outgoing_stack_size(self, mctx: &mut MContext<I>) -> u64 {
+        let size = self.outgoing_stack_size(mctx);
+        self.deref_mut(mctx).outgoing_stack_size = 0;
+        size
+    }
+
     pub fn saved_regs(self, mctx: &MContext<I>) -> Vec<PReg> {
         let mut regs: Vec<PReg> = self.deref(mctx).saved_regs.iter().copied().collect();
         // we need to sort the registers to make the order of saved registers

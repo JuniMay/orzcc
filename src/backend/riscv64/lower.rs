@@ -201,6 +201,30 @@ impl LowerSpec for RvLowerSpec {
         }
     }
 
+    fn gen_sp_adjust(lower: &mut LowerContext<Self>, offset: i64) {
+        if let Some(imm) = Imm12::try_from_i64(offset) {
+            let inst = RvInst::build_alu_rri(
+                &mut lower.mctx,
+                AluOpRRI::Addi,
+                regs::sp().into(),
+                regs::sp().into(),
+                imm,
+            );
+            lower.curr_block.unwrap().push_back(&mut lower.mctx, inst);
+        } else {
+            let (li, t) = RvInst::li(&mut lower.mctx, offset as u64);
+            lower.curr_block.unwrap().push_back(&mut lower.mctx, li);
+            let inst = RvInst::build_alu_rrr(
+                &mut lower.mctx,
+                AluOpRRR::Add,
+                regs::sp().into(),
+                regs::sp().into(),
+                t,
+            );
+            lower.curr_block.unwrap().push_back(&mut lower.mctx, inst);
+        }
+    }
+
     fn gen_iconst(lower: &mut LowerContext<Self>, x: &ApInt, ty: ir::Ty) -> MValue {
         if !ty.is_integer(lower.ctx) {
             panic!("gen_iconst: expected integer type, got {:?}", ty);
@@ -1249,22 +1273,39 @@ impl LowerSpec for RvLowerSpec {
             .unwrap()
             .update_outgoing_stack_size(&mut lower.mctx, required_stack_size);
 
+        let base: Reg = if lower.config.combine_stack_adjustments {
+            regs::sp().into()
+        } else if required_stack_size != 0 {
+            // we need to create a new vreg for the sub-ed sp
+            if let Some(imm) = Imm12::try_from_i64(-(required_stack_size as i64)) {
+                let (inst, rd) =
+                    RvInst::alu_rri(lower.mctx_mut(), AluOpRRI::Addi, regs::sp().into(), imm);
+                lower.curr_block.unwrap().push_back(&mut lower.mctx, inst);
+                rd
+            } else {
+                let (li, t) = RvInst::li(&mut lower.mctx, required_stack_size);
+                lower.curr_block.unwrap().push_back(&mut lower.mctx, li);
+                let (inst, rd) =
+                    RvInst::alu_rrr(&mut lower.mctx, AluOpRRR::Sub, regs::sp().into(), t);
+                lower.curr_block.unwrap().push_back(&mut lower.mctx, inst);
+                rd
+            }
+        } else {
+            regs::sp().into()
+        };
+
         // the offset is calculated from the end of the stack frame
         // the first arg is at the end of the stack frame, so the offset is 0
         let mut offset = 0i64;
         for arg in pass_by_stack {
             let loc = if Imm12::try_from_i64(offset).is_some() {
-                MemLoc::RegOffset {
-                    base: regs::sp().into(),
-                    offset,
-                }
+                MemLoc::RegOffset { base, offset }
             } else {
                 // li
                 let (li, rd) = RvInst::li(&mut lower.mctx, offset as u64);
                 lower.curr_block.unwrap().push_back(&mut lower.mctx, li);
                 // add
-                let (inst, rd) =
-                    RvInst::alu_rrr(&mut lower.mctx, AluOpRRR::Add, regs::sp().into(), rd);
+                let (inst, rd) = RvInst::alu_rrr(&mut lower.mctx, AluOpRRR::Add, base, rd);
                 lower.curr_block.unwrap().push_back(&mut lower.mctx, inst);
                 MemLoc::RegOffset {
                     base: rd,
@@ -1274,6 +1315,18 @@ impl LowerSpec for RvLowerSpec {
             Self::gen_store(lower, arg, loc);
             let bytewidth = arg.ty().bytewidth_with_ptr(lower.ctx, Self::pointer_size()) as i64;
             offset += bytewidth;
+        }
+
+        if !lower.config.combine_stack_adjustments && required_stack_size != 0 {
+            // adjust sp, just move base to sp
+            let inst = RvInst::build_alu_rri(
+                &mut lower.mctx,
+                AluOpRRI::Addi,
+                regs::sp().into(),
+                base,
+                Imm12::try_from_i64(0).unwrap(),
+            );
+            lower.curr_block.unwrap().push_back(&mut lower.mctx, inst);
         }
 
         arg_regs

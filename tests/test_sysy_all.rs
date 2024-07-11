@@ -18,12 +18,7 @@ fn compile_src(path: &str) {
     let mut ir = sysy::irgen(&ast);
 
     ir.alloc_all_names();
-    let mut lower_ctx: LowerContext<RvLowerSpec> = LowerContext::new(
-        &ir,
-        LowerConfig {
-            omit_frame_pointer: true,
-        },
-    );
+    let mut lower_ctx: LowerContext<RvLowerSpec> = LowerContext::new(&ir, LowerConfig::default());
     lower_ctx.lower();
     lower_ctx.reg_alloc();
     lower_ctx.after_regalloc();

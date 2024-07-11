@@ -141,9 +141,19 @@ impl MValue {
     }
 }
 
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct LowerConfig {
     pub omit_frame_pointer: bool,
+    pub combine_stack_adjustments: bool,
+}
+
+impl Default for LowerConfig {
+    fn default() -> Self {
+        Self {
+            omit_frame_pointer: true,
+            combine_stack_adjustments: true,
+        }
+    }
 }
 
 pub struct LowerContext<'a, S>
@@ -240,6 +250,8 @@ pub trait LowerSpec: Sized {
     /// immediate, etc. The types of src and dst must be the same when calling
     /// this function.
     fn gen_move(lower: &mut LowerContext<Self>, dst: Reg, src: MValue);
+
+    fn gen_sp_adjust(lower: &mut LowerContext<Self>, offset: i64);
 
     fn gen_iconst(lower: &mut LowerContext<Self>, x: &ApInt, dst_ty: ir::Ty) -> MValue;
 
@@ -708,6 +720,19 @@ where
 
                 let arg_regs = S::gen_outgoing(self, args);
                 S::gen_call(self, mfunc, arg_regs);
+
+                if !self.config.combine_stack_adjustments {
+                    // restore sp
+                    let outgoing_size = self
+                        .curr_func
+                        .unwrap()
+                        .take_outgoing_stack_size(self.mctx_mut());
+
+                    if outgoing_size != 0 {
+                        // add the offset back
+                        S::gen_sp_adjust(self, outgoing_size as i64);
+                    }
+                }
 
                 if !inst.results(self.ctx).is_empty() {
                     if inst.results(self.ctx).len() == 1 {

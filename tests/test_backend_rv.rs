@@ -57,12 +57,7 @@ fn test_backend_rv_fib() {
         println!("{}", diag.render(src, &RenderOptions::unicode_round()));
         panic!("test failed");
     }
-    let mut lower_ctx: LowerContext<RvLowerSpec> = LowerContext::new(
-        &ctx,
-        LowerConfig {
-            omit_frame_pointer: true,
-        },
-    );
+    let mut lower_ctx: LowerContext<RvLowerSpec> = LowerContext::new(&ctx, LowerConfig::default());
     lower_ctx.lower();
     lower_ctx.reg_alloc();
     lower_ctx.after_regalloc();
@@ -82,12 +77,7 @@ fn test_backend_succ_corner_case() {
         println!("{}", diag.render(src, &RenderOptions::unicode_round()));
         panic!("test failed");
     }
-    let mut lower_ctx: LowerContext<RvLowerSpec> = LowerContext::new(
-        &ctx,
-        LowerConfig {
-            omit_frame_pointer: true,
-        },
-    );
+    let mut lower_ctx: LowerContext<RvLowerSpec> = LowerContext::new(&ctx, LowerConfig::default());
     lower_ctx.lower();
     // lower_ctx.reg_alloc();
     lower_ctx.after_regalloc();

@@ -80,6 +80,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &ir,
             LowerConfig {
                 omit_frame_pointer: true,
+                combine_stack_adjustments: false,
             },
         );
         lower_ctx.lower();

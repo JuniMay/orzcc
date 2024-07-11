@@ -23,9 +23,7 @@ fn test_regalloc_graphcoloring() {
         panic!("test failed");
     }
 
-    let lower_config = LowerConfig {
-        omit_frame_pointer: true,
-    };
+    let lower_config = LowerConfig::default();
 
     let mut lower_ctx: LowerContext<RvLowerSpec> = LowerContext::new(&ctx, lower_config);
 
