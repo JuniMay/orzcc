@@ -39,7 +39,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut passman = PassManager::default();
 
         register_passes(&mut passman);
-        let cmd = parse_args(&mut passman);
+        let mut cmd = parse_args(&mut passman);
+
+        // just for test
+        cmd.opt = 1;
 
         let src = std::fs::read_to_string(&cmd.source)?;
         let src = sysy::preprocess(&src);
