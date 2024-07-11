@@ -1276,14 +1276,20 @@ impl LowerSpec for RvLowerSpec {
         let base: Reg = if lower.config.combine_stack_adjustments {
             regs::sp().into()
         } else if required_stack_size != 0 {
+            let aligned_size = (required_stack_size + 15) & !15;
+            lower
+                .curr_func
+                .unwrap()
+                .update_outgoing_stack_size(&mut lower.mctx, aligned_size);
+
             // we need to create a new vreg for the sub-ed sp
-            if let Some(imm) = Imm12::try_from_i64(-(required_stack_size as i64)) {
+            if let Some(imm) = Imm12::try_from_i64(-(aligned_size as i64)) {
                 let (inst, rd) =
                     RvInst::alu_rri(lower.mctx_mut(), AluOpRRI::Addi, regs::sp().into(), imm);
                 lower.curr_block.unwrap().push_back(&mut lower.mctx, inst);
                 rd
             } else {
-                let (li, t) = RvInst::li(&mut lower.mctx, required_stack_size);
+                let (li, t) = RvInst::li(&mut lower.mctx, aligned_size);
                 lower.curr_block.unwrap().push_back(&mut lower.mctx, li);
                 let (inst, rd) =
                     RvInst::alu_rrr(&mut lower.mctx, AluOpRRR::Sub, regs::sp().into(), t);

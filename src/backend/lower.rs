@@ -488,6 +488,11 @@ where
 
             let storage_size = mfunc.storage_stack_size(&self.mctx) as i64;
             let outgoing_size = mfunc.outgoing_stack_size(&self.mctx) as i64;
+
+            if !self.config.combine_stack_adjustments {
+                assert_eq!(outgoing_size, 0);
+            }
+
             let total_stack_size = S::total_stack_size(self, mfunc) as i64;
 
             let mut cursor = mfunc.cursor();
