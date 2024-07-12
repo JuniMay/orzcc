@@ -7,8 +7,7 @@ compile:
   tags:
     - riscv64
   script:
-    - . "/home/user/.cargo/env"
-    - cargo build --release
+    - /home/user/.cargo/bin/cargo build --release
 
 performance:
   stage: performance
