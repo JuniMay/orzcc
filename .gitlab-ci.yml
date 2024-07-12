@@ -1,0 +1,25 @@
+stages:
+  - compile
+  - performance
+
+compile:
+  stage: compile
+  tags:
+    - riscv64
+  script:
+    - cargo build --release
+
+performance:
+  stage: performance
+  tags:
+    - riscv64
+  script:
+    - python3 ./scripts/execute.py --timeout 150 --testcase-dir '/home/user/final_performance' --opt-level 1 --no-compile --native --performance --csv-file '/home/user/result.csv' --runtime-lib-dir '/home/user/sysy-runtime-lib/'
+    - cp /home/user/result.csv .
+
+  dependencies:
+    - compile
+
+  artifacts:
+    paths:
+      - result.csv
