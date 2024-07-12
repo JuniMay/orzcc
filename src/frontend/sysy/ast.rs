@@ -1177,13 +1177,7 @@ impl Expr {
 
                 let indices: Vec<Expr> = indices
                     .into_iter()
-                    .map(|index| {
-                        if let Some(folded) = index.try_fold(symtable) {
-                            Expr::const_(folded)
-                        } else {
-                            index.type_check(None, symtable)
-                        }
-                    })
+                    .map(|index| index.type_check(Some(&Type::int()), symtable))
                     .collect();
 
                 let mut ty = entry.ty.clone();
