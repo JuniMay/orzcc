@@ -1036,22 +1036,30 @@ impl Expr {
                 let expr = expr.try_fold(symtable)?;
                 match self.ty.as_ref().unwrap().kind() {
                     Tk::Bool => {
-                        let expr = if let ComptimeVal::Bool(val) = expr {
-                            val as i32
-                        } else {
-                            panic!("unsupported type coercion")
+                        let expr = match expr {
+                            ComptimeVal::Bool(val) => val,
+                            ComptimeVal::Int(val) => val != 0,
+                            ComptimeVal::Float(val) => val != 0.0,
+                            ComptimeVal::List(_)
+                            | ComptimeVal::Zeros(_)
+                            | ComptimeVal::Undef(_) => {
+                                panic!("unsupported type coercion: {:?}", expr)
+                            }
                         };
-                        Some(ComptimeVal::Int(expr))
+                        Some(ComptimeVal::bool(expr))
                     }
                     Tk::Int => {
-                        let expr = if let ComptimeVal::Int(val) = expr {
-                            val
-                        } else if let ComptimeVal::Float(val) = expr {
-                            val as i32
-                        } else {
-                            panic!("unsupported type coercion")
+                        let expr = match expr {
+                            ComptimeVal::Bool(val) => val as i32,
+                            ComptimeVal::Int(val) => val,
+                            ComptimeVal::Float(val) => val as i32,
+                            ComptimeVal::List(_)
+                            | ComptimeVal::Zeros(_)
+                            | ComptimeVal::Undef(_) => {
+                                panic!("unsupported type coercion: {:?}", expr)
+                            }
                         };
-                        Some(ComptimeVal::Int(expr))
+                        Some(ComptimeVal::int(expr))
                     }
                     Tk::Float => {
                         let expr = match expr {
@@ -1060,9 +1068,11 @@ impl Expr {
                             ComptimeVal::Float(val) => val,
                             ComptimeVal::List(_)
                             | ComptimeVal::Zeros(_)
-                            | ComptimeVal::Undef(_) => panic!("unsupported type coercion"),
+                            | ComptimeVal::Undef(_) => {
+                                panic!("unsupported type coercion: {:?}", expr)
+                            }
                         };
-                        Some(ComptimeVal::Float(expr))
+                        Some(ComptimeVal::float(expr))
                     }
                     Tk::Void | Tk::Ptr(_) | Tk::Array(..) | Tk::Func(..) => {
                         panic!("unsupported type coercion")
@@ -1244,6 +1254,10 @@ impl Expr {
             } else if ty != expr.ty() {
                 panic!("unsupported type coercion: {:?}", ty);
             }
+        }
+
+        if let Some(comptime) = expr.try_fold(symtable) {
+            expr = Expr::const_(comptime);
         }
 
         expr
