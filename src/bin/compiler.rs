@@ -1,16 +1,19 @@
 //! The compiler executable.
 
 use clap::{Arg, Command};
-use orzcc::ir::{
-    passes::{
-        control_flow::{CfgCanonicalize, CfgSimplify, CFG_SIMPLIFY},
-        fold::{ConstantFolding, CONSTANT_FOLDING},
-        instcombine::{InstCombine, INSTCOMBINE},
-        loops::{LoopInvariantMotion, LOOP_INVARIANT_MOTION},
-        mem2reg::{Mem2reg, MEM2REG},
-        simple_dce::{SimpleDce, SIMPLE_DCE},
+use orzcc::{
+    backend::LowerConfig,
+    ir::{
+        passes::{
+            control_flow::{CfgCanonicalize, CfgSimplify, CFG_SIMPLIFY},
+            fold::{ConstantFolding, CONSTANT_FOLDING},
+            instcombine::{InstCombine, INSTCOMBINE},
+            loops::{LoopInvariantMotion, LOOP_INVARIANT_MOTION},
+            mem2reg::{Mem2reg, MEM2REG},
+            simple_dce::{SimpleDce, SIMPLE_DCE},
+        },
+        passman::{PassManager, Pipeline, TransformPass},
     },
-    passman::{PassManager, Pipeline, TransformPass},
 };
 
 struct CliCommand {
@@ -26,23 +29,23 @@ struct CliCommand {
     emit_ir: Option<String>,
     /// Optimization level
     opt: u8,
+
+    /// Lower config
+    lower_cfg: LowerConfig,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(feature = "frontend-sysy")]
     {
         use orzcc::{
-            backend::{riscv64::lower::RvLowerSpec, LowerConfig, LowerContext},
+            backend::{riscv64::lower::RvLowerSpec, LowerContext},
             frontend::sysy::{self, SysYParser},
         };
 
         let mut passman = PassManager::default();
 
         register_passes(&mut passman);
-        let mut cmd = parse_args(&mut passman);
-
-        // just for test
-        cmd.opt = 1;
+        let cmd = parse_args(&mut passman);
 
         let src = std::fs::read_to_string(&cmd.source)?;
         let src = sysy::preprocess(&src);
@@ -79,13 +82,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::fs::write(emit_ir, format!("{}", ir.display(true)))?;
         }
 
-        let mut lower_ctx: LowerContext<RvLowerSpec> = LowerContext::new(
-            &ir,
-            LowerConfig {
-                omit_frame_pointer: true,
-                combine_stack_adjustments: false,
-            },
-        );
+        let mut lower_ctx: LowerContext<RvLowerSpec> = LowerContext::new(&ir, cmd.lower_cfg);
         lower_ctx.lower();
         lower_ctx.reg_alloc();
         lower_ctx.after_regalloc();
@@ -144,6 +141,16 @@ fn cli(passman: &mut PassManager) -> Command {
                 .long("emit-ir")
                 .help("Emit the IR to the specified file"),
         )
+        .arg(
+            Arg::new("no-combine-stack-adjustments")
+                .long("no-combine-stack-adjustments")
+                .action(clap::ArgAction::Count),
+        )
+        .arg(
+            Arg::new("no-omit-frame-pointer")
+                .long("no-omit-frame-pointer")
+                .action(clap::ArgAction::Count),
+        )
         .args(passman.get_cli_args())
 }
 
@@ -161,6 +168,9 @@ fn parse_args(passman: &mut PassManager) -> CliCommand {
     let emit_ast = matches.get_one::<String>("emit-ast").cloned();
     let emit_typed_ast = matches.get_one::<String>("emit-typed-ast").cloned();
     let emit_ir = matches.get_one::<String>("emit-ir").cloned();
+
+    let omit_frame_pointer = matches.get_count("no-omit-frame-pointer") == 0;
+    let combine_stack_adjustments = matches.get_count("no-combine-stack-adjustments") == 0;
 
     let mut passes = Vec::new();
 
@@ -180,6 +190,11 @@ fn parse_args(passman: &mut PassManager) -> CliCommand {
         }
     }
 
+    let lower_cfg = LowerConfig {
+        omit_frame_pointer,
+        combine_stack_adjustments,
+    };
+
     CliCommand {
         output,
         source,
@@ -187,5 +202,6 @@ fn parse_args(passman: &mut PassManager) -> CliCommand {
         emit_typed_ast,
         emit_ir,
         opt,
+        lower_cfg,
     }
 }
