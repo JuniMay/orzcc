@@ -1,6 +1,4 @@
-use std::{fmt::Display, hash::Hash};
-
-use rustc_hash::FxHashMap;
+use std::{collections::HashMap, fmt::Display, hash::Hash};
 
 use super::liveness_analysis;
 use crate::{
@@ -97,7 +95,7 @@ impl Display for Interval {
 
 #[derive(Debug, Clone, Default)]
 pub struct LiveInterval {
-    pub intervals: FxHashMap<Reg, Interval>,
+    pub intervals: HashMap<Reg, Interval>,
 }
 
 impl LiveInterval {
@@ -206,7 +204,7 @@ where
     S: LowerSpec,
     S::I: Hash,
 {
-    let mut instruction_number = FxHashMap::default();
+    let mut instruction_number = HashMap::new();
     let in_out = liveness_analysis::analyze_on_function(ctx, func);
     let mut live_interval = LiveInterval::default();
 
@@ -222,8 +220,8 @@ where
 
     // calculate live intervals
     for block in func.iter(ctx.mctx()) {
-        let mut current_range = FxHashMap::default(); // current extending range
-        let mut last_use = FxHashMap::default(); // last use of the register
+        let mut current_range = HashMap::new(); // current extending range
+        let mut last_use = HashMap::new(); // last use of the register
         let live_in = in_out.in_(&block).unwrap();
         let live_out = in_out.out(&block).unwrap();
         let block_first_inst = block.head(ctx.mctx());

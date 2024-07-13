@@ -1,6 +1,7 @@
-use std::hash::Hash;
-
-use rustc_hash::{FxHashMap, FxHashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    hash::Hash,
+};
 
 use super::live_interval_analysis::{self, LiveInterval};
 use crate::{
@@ -20,14 +21,14 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct InterferenceGraph {
-    pub graph: FxHashMap<Reg, FxHashSet<Reg>>,
+    pub graph: HashMap<Reg, HashSet<Reg>>,
     pub kind: RegKind,
 }
 
 impl InterferenceGraph {
     pub fn new(kind: RegKind) -> Self {
         Self {
-            graph: FxHashMap::default(),
+            graph: HashMap::new(),
             kind,
         }
     }
@@ -46,7 +47,7 @@ impl InterferenceGraph {
         });
     }
 
-    pub fn adjacent(&self, u: Reg) -> Option<&FxHashSet<Reg>> { self.graph.get(&u) }
+    pub fn adjacent(&self, u: Reg) -> Option<&HashSet<Reg>> { self.graph.get(&u) }
 
     pub fn degree(&self, u: Reg) -> usize { self.graph.get(&u).map(|e| e.len()).unwrap_or(0) }
 
@@ -121,7 +122,7 @@ impl InterferenceGraph {
     }
 
     /// Retrun all the precolored nodes in the graph
-    pub fn precolored(&self) -> FxHashSet<Reg> {
+    pub fn precolored(&self) -> HashSet<Reg> {
         match self.kind {
             RegKind::General => self
                 .graph
@@ -147,7 +148,7 @@ impl InterferenceGraph {
 // /// and the kind of registers that were allocated
 // #[derive(Debug, Clone)]
 // pub struct AllocationResult {
-//     pub result: FxHashMap<Reg, Reg>,
+//     pub result: HashMap<Reg, Reg>,
 //     pub kind: RegKind,
 // }
 
@@ -163,7 +164,7 @@ where
     cfg: Option<CfgInfo<MBlock<S::I>, MFunc<S::I>>>,
     dominance: Option<Dominance<MBlock<S::I>>>,
     loop_ctx: Option<LoopContext<MBlock<S::I>>>,
-    block_depth_map: Option<FxHashMap<MBlock<S::I>, u32>>,
+    block_depth_map: Option<HashMap<MBlock<S::I>, u32>>,
 }
 
 impl<S> Default for GraphColoringAllocation<S>
@@ -192,14 +193,14 @@ where
     pub fn new() -> Self { Self::default() }
 
     pub fn run_on_function(&mut self, ctx: &mut LowerContext<S>, func: MFunc<S::I>) {
-        let mut allocation_results = FxHashMap::default();
-        let mut spilled_registers = FxHashSet::default();
+        let mut allocation_results = HashMap::new();
+        let mut spilled_registers = HashSet::default();
 
         // allocate general purpose and floating point registers separately
         for kind in &[RegKind::General, RegKind::Float] {
             let mut working_allocation_results;
             loop {
-                working_allocation_results = FxHashMap::default(); // allocation results for this round
+                working_allocation_results = HashMap::new(); // allocation results for this round
 
                 // analyze live intervals
                 let live_intervals = live_interval_analysis::analyze_on_function(ctx, func);
@@ -241,7 +242,7 @@ where
                     }
                 }
 
-                let mut spills = FxHashSet::default(); // spilled registers in this round
+                let mut spills = HashSet::new(); // spilled registers in this round
 
                 // select
                 while let Some(reg) = stack.pop() {
@@ -255,7 +256,7 @@ where
                     // remove colors of neighbors
                     for neighbor in interference_graph
                         .adjacent(reg)
-                        .unwrap_or(&FxHashSet::default())
+                        .unwrap_or(&HashSet::default())
                     {
                         match neighbor {
                             Reg::P(preg) => {
@@ -287,7 +288,7 @@ where
                 }
 
                 // do the actual spilling
-                let mut spill_slots = FxHashMap::default(); // mapping of spilled registers to spill slots
+                let mut spill_slots = HashMap::new(); // mapping of spilled registers to spill slots
                 for reg in spills {
                     // allocate a spill slot on the stack
                     func.add_storage_stack_size(ctx.mctx_mut(), 8);
@@ -373,7 +374,7 @@ where
         ctx: &LowerContext<S>,
         func: MFunc<S::I>,
         graph: &InterferenceGraph,
-        spilled_registers: &FxHashSet<Reg>,
+        spilled_registers: &HashSet<Reg>,
     ) -> Reg {
         let mut max_degree = 0;
         let mut spill_candidate = None;

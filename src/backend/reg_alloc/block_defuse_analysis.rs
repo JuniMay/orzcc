@@ -1,4 +1,6 @@
-use rustc_hash::{FxHashMap, FxHashSet};
+use std::collections::HashSet;
+
+use rustc_hash::FxHashMap;
 
 use crate::{
     backend::{inst::MInst, regs::Reg, LowerContext, LowerSpec, MBlock, MFunc},
@@ -7,8 +9,8 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct BlockDefUse<I> {
-    pub uses: FxHashMap<MBlock<I>, FxHashSet<Reg>>,
-    pub defs: FxHashMap<MBlock<I>, FxHashSet<Reg>>,
+    pub uses: FxHashMap<MBlock<I>, HashSet<Reg>>,
+    pub defs: FxHashMap<MBlock<I>, HashSet<Reg>>,
 }
 
 impl<I> Default for BlockDefUse<I> {
@@ -26,9 +28,9 @@ where
 {
     pub fn new() -> Self { Self::default() }
 
-    pub fn uses(&self, block: &MBlock<I>) -> Option<&FxHashSet<Reg>> { self.uses.get(block) }
+    pub fn uses(&self, block: &MBlock<I>) -> Option<&HashSet<Reg>> { self.uses.get(block) }
 
-    pub fn defs(&self, block: &MBlock<I>) -> Option<&FxHashSet<Reg>> { self.defs.get(block) }
+    pub fn defs(&self, block: &MBlock<I>) -> Option<&HashSet<Reg>> { self.defs.get(block) }
 
     pub fn display(&self, ctx: &LowerContext<I::S>) -> String {
         let mut s = String::new();
@@ -60,8 +62,8 @@ where
     let mut defuse = BlockDefUse::new();
 
     for block in func.iter(ctx.mctx()) {
-        let mut uses = FxHashSet::default();
-        let mut defs = FxHashSet::default();
+        let mut uses = HashSet::default();
+        let mut defs = HashSet::default();
 
         for inst in block.iter(ctx.mctx()) {
             for reg in inst.uses(ctx.mctx(), &ctx.config) {
