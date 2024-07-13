@@ -237,11 +237,12 @@ impl PassManager {
             changed = false;
             for pass_name in &pipeline.passes {
                 let iter = self.run_transform(pass_name, ctx, local_max_iter);
-                total_iter += iter;
+                println!("Running pass: {} for {} iterations", pass_name, iter);
                 if iter > 1 {
                     changed = true;
                 }
             }
+            total_iter += 1;
 
             if total_iter > max_iter {
                 break;
