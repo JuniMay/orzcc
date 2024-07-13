@@ -7,7 +7,7 @@ compile:
   tags:
     - riscv64
   script:
-    - /home/user/.cargo/bin/rustup default stable
+    - curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf | sh
     - cargo build --release
 
 performance:
