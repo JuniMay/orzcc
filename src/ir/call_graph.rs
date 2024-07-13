@@ -1,19 +1,19 @@
-use std::collections::{HashMap, HashSet};
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::{Context, Func, InstKind, Symbol, SymbolKind};
 use crate::collections::linked_list::LinkedListContainerPtr;
 
 pub struct CallGraph {
-    calls: HashMap<Func, HashSet<Func>>,
-    call_decls: HashMap<Func, Vec<Symbol>>,
-    call_indirects: HashSet<Func>,
+    calls: FxHashMap<Func, FxHashSet<Func>>,
+    call_decls: FxHashMap<Func, Vec<Symbol>>,
+    call_indirects: FxHashSet<Func>,
 }
 
 impl CallGraph {
     pub fn from_ir(ctx: &Context) -> Self {
-        let mut calls = HashMap::new();
-        let mut call_decls = HashMap::new();
-        let mut call_indirects = HashSet::new();
+        let mut calls = FxHashMap::default();
+        let mut call_decls = FxHashMap::default();
+        let mut call_indirects = FxHashSet::default();
 
         for func in ctx.funcs() {
             for block in func.iter(ctx) {
@@ -21,7 +21,10 @@ impl CallGraph {
                     if let InstKind::Call(sym) = inst.kind(ctx) {
                         match ctx.lookup_symbol(sym).unwrap() {
                             SymbolKind::FuncDef(func) => {
-                                calls.entry(*func).or_insert(HashSet::new()).insert(*func);
+                                calls
+                                    .entry(*func)
+                                    .or_insert(FxHashSet::default())
+                                    .insert(*func);
                             }
                             SymbolKind::FuncDecl(_) => {
                                 call_decls
@@ -53,26 +56,26 @@ impl CallGraph {
     /// mapping
     ///
     /// TODO: Test this
-    pub fn compute_sccs(&self) -> HashMap<Func, usize> {
+    pub fn compute_sccs(&self) -> FxHashMap<Func, usize> {
         let mut sccs = Vec::new();
         let mut index = 0;
         let mut stack = Vec::new();
-        let mut indices = HashMap::new();
-        let mut lowlinks = HashMap::new();
-        let mut on_stack = HashSet::new();
-        let mut func_to_scc = HashMap::new();
+        let mut indices = FxHashMap::default();
+        let mut lowlinks = FxHashMap::default();
+        let mut on_stack = FxHashSet::default();
+        let mut func_to_scc = FxHashMap::default();
 
         #[allow(clippy::too_many_arguments)]
         fn strongconnect(
             func: Func,
-            calls: &HashMap<Func, HashSet<Func>>,
+            calls: &FxHashMap<Func, FxHashSet<Func>>,
             index: &mut usize,
             stack: &mut Vec<Func>,
-            indices: &mut HashMap<Func, usize>,
-            lowlinks: &mut HashMap<Func, usize>,
-            on_stack: &mut HashSet<Func>,
-            sccs: &mut Vec<HashSet<Func>>,
-            func_to_scc: &mut HashMap<Func, usize>,
+            indices: &mut FxHashMap<Func, usize>,
+            lowlinks: &mut FxHashMap<Func, usize>,
+            on_stack: &mut FxHashSet<Func>,
+            sccs: &mut Vec<FxHashSet<Func>>,
+            func_to_scc: &mut FxHashMap<Func, usize>,
         ) {
             indices.insert(func, *index);
             lowlinks.insert(func, *index);
@@ -100,7 +103,7 @@ impl CallGraph {
             }
 
             if lowlinks[&func] == indices[&func] {
-                let mut scc = HashSet::new();
+                let mut scc = FxHashSet::default();
                 loop {
                     let callee = stack.pop().unwrap();
                     on_stack.remove(&callee);

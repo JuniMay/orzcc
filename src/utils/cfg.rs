@@ -1,7 +1,6 @@
-use std::{
-    collections::{HashMap, HashSet},
-    hash::Hash,
-};
+use std::hash::Hash;
+
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::collections::storage::ArenaPtr;
 
@@ -42,9 +41,9 @@ where
     /// The region associated with the control flow graph.
     region: R,
     /// The predecessors of each node.
-    succs: HashMap<N, Vec<N>>,
+    succs: FxHashMap<N, Vec<N>>,
     /// The successors of each node.
-    preds: HashMap<N, Vec<N>>,
+    preds: FxHashMap<N, Vec<N>>,
 }
 
 impl<N, R> CfgInfo<N, R>
@@ -54,13 +53,13 @@ where
 {
     /// Derive the control flow graph information from the region.
     pub fn new(arena: &N::A, region: R) -> Self {
-        let mut succs: HashMap<N, Vec<N>> = HashMap::new();
-        let mut preds: HashMap<N, Vec<N>> = HashMap::new();
+        let mut succs: FxHashMap<N, Vec<N>> = FxHashMap::default();
+        let mut preds: FxHashMap<N, Vec<N>> = FxHashMap::default();
 
         let entry = region.entry_node(arena);
 
         let mut worklist: Vec<N> = vec![entry];
-        let mut visited = HashSet::new();
+        let mut visited = FxHashSet::default();
 
         while let Some(node) = worklist.pop() {
             if visited.contains(&node) {
@@ -125,8 +124,8 @@ where
     pub fn region(&self) -> R { self.region }
 
     /// Get the reachable nodes in the control flow graph.
-    pub fn reachable_nodes(&self, arena: &N::A) -> HashSet<N> {
-        let mut reachables = HashSet::new();
+    pub fn reachable_nodes(&self, arena: &N::A) -> FxHashSet<N> {
+        let mut reachables = FxHashSet::default();
         let entry = self.region.entry_node(arena);
 
         let mut worklist = vec![entry];

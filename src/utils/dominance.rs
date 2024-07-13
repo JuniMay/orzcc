@@ -3,7 +3,9 @@
 //! This module implements the algorithm described in "A Simple, Fast Dominance
 //! Algorithm" by Cooper, et al.
 
-use std::{collections::HashMap, hash::Hash};
+use std::hash::Hash;
+
+use rustc_hash::FxHashMap;
 
 use super::{
     cfg::{CfgInfo, CfgNode},
@@ -16,11 +18,11 @@ where
     N: CfgNode,
 {
     /// The immediate dominator of each node.
-    idoms: HashMap<N, Option<N>>,
+    idoms: FxHashMap<N, Option<N>>,
     /// The dominance frontier of each node.
-    frontiers: HashMap<N, Vec<N>>,
+    frontiers: FxHashMap<N, Vec<N>>,
     /// The dominance tree of each node.
-    domtree: HashMap<N, Vec<N>>,
+    domtree: FxHashMap<N, Vec<N>>,
     /// The reverse postorder of the CFG.
     rpo: Vec<N>,
 }
@@ -31,9 +33,9 @@ where
 {
     fn default() -> Self {
         Self {
-            idoms: HashMap::new(),
-            frontiers: HashMap::new(),
-            domtree: HashMap::new(),
+            idoms: FxHashMap::default(),
+            frontiers: FxHashMap::default(),
+            domtree: FxHashMap::default(),
             rpo: Vec::new(),
         }
     }
@@ -69,7 +71,12 @@ where
 
     pub fn rpo(&self) -> &[N] { &self.rpo }
 
-    fn intersect(n1: N, n2: N, idoms: &HashMap<N, Option<N>>, postorder: &HashMap<N, usize>) -> N {
+    fn intersect(
+        n1: N,
+        n2: N,
+        idoms: &FxHashMap<N, Option<N>>,
+        postorder: &FxHashMap<N, usize>,
+    ) -> N {
         let mut finger1 = n1;
         let mut finger2 = n2;
         while finger1 != finger2 {
@@ -94,15 +101,15 @@ where
     ///
     /// A new [Dominance] instance.
     pub fn new(arena: &N::A, cfg: &CfgInfo<N, N::Region>) -> Self {
-        let mut idoms = HashMap::new();
-        let mut frontiers = HashMap::new();
-        let mut domtree = HashMap::new();
+        let mut idoms = FxHashMap::default();
+        let mut frontiers = FxHashMap::default();
+        let mut domtree = FxHashMap::default();
 
         let region = cfg.region();
 
         let mut dfs: DfsContext<N> = DfsContext::default();
 
-        let mut postorder = HashMap::new();
+        let mut postorder = FxHashMap::default();
         let mut rpo = Vec::new();
 
         for (i, node) in dfs.post_order_iter(arena, region).enumerate() {

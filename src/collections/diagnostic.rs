@@ -3,11 +3,9 @@
 //! This module is a very simple diagnostic utility inspired by
 //! [ariadne](https://github.com/zesterer/ariadne).
 
-use std::{
-    collections::{HashMap, HashSet},
-    fmt,
-    ops::Range,
-};
+use std::{fmt, ops::Range};
+
+use rustc_hash::{FxHashMap, FxHashSet};
 
 /// The context to store all diagnostic snippets.
 #[derive(Debug, Default)]
@@ -260,11 +258,12 @@ impl fmt::Display for DiagnosticRenderer<'_> {
         let charset = &self.options.charset;
 
         // the set of lines that have annotations
-        let mut annotated_lines = HashSet::new();
+        let mut annotated_lines = FxHashSet::default();
         // the underline ranges (related to the start of the line) for each lines
-        let mut underlines: HashMap<usize, Vec<(usize, usize)>> = HashMap::new();
+        let mut underlines: FxHashMap<usize, Vec<(usize, usize)>> = FxHashMap::default();
         // the inline annotations (not covering multiple lines)
-        let mut inline_annotations: HashMap<usize, Vec<(usize, &Annotation)>> = HashMap::new();
+        let mut inline_annotations: FxHashMap<usize, Vec<(usize, &Annotation)>> =
+            FxHashMap::default();
         // the block annotations (covering multiple lines)
         let mut block_annotations = Vec::new();
 
@@ -446,7 +445,7 @@ impl fmt::Display for DiagnosticRenderer<'_> {
             );
             let annotations = inline_annotations.get(&lineno).unwrap();
 
-            let mut annotation_pos = HashSet::new();
+            let mut annotation_pos = FxHashSet::default();
             for (pos, _) in annotations.iter() {
                 annotation_pos.insert(*pos);
             }

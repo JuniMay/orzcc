@@ -1,5 +1,6 @@
 use core::fmt;
-use std::collections::HashMap;
+
+use rustc_hash::FxHashMap;
 
 use super::{
     debug::CommentInfo,
@@ -48,7 +49,7 @@ pub struct Context {
     /// The storage of global slots
     pub(super) global_slots: BaseArena<GlobalSlotData>,
     /// The symbol defined in the context.
-    pub(super) symbols: HashMap<Symbol, SymbolKind>,
+    pub(super) symbols: FxHashMap<Symbol, SymbolKind>,
 
     // +-----------------+
     // | name management |
@@ -83,7 +84,7 @@ impl Default for Context {
             values: BaseArena::default(),
             funcs: BaseArena::default(),
             global_slots: BaseArena::default(),
-            symbols: HashMap::new(),
+            symbols: FxHashMap::default(),
 
             // +-----------------+
             // | name management |
@@ -113,7 +114,7 @@ impl Context {
             values: BaseArena::default(),
             funcs: BaseArena::default(),
             global_slots: BaseArena::default(),
-            symbols: HashMap::new(),
+            symbols: FxHashMap::default(),
 
             // +-----------------+
             // | name management |

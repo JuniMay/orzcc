@@ -18,7 +18,7 @@
 //!
 //! - [Inst::num_succ_to](crate::ir::Inst::num_succ_to)
 
-use std::collections::{HashMap, HashSet};
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::CfgCanonicalize;
 use crate::{
@@ -51,7 +51,7 @@ impl CfgSimplify {
         let reachables = cfg.reachable_nodes(ctx);
 
         let mut insts_to_remove = Vec::new();
-        let mut unreachables = HashSet::new();
+        let mut unreachables = FxHashSet::default();
 
         for block in func.iter(ctx) {
             if reachables.contains(&block) {
@@ -193,7 +193,7 @@ impl CfgSimplify {
                         succ.args()
                             .iter()
                             .map(|(param, arg)| (*param, arg.inner()))
-                            .collect::<HashMap<_, _>>(),
+                            .collect::<FxHashMap<_, _>>(),
                     );
                 }
             }
@@ -248,7 +248,7 @@ impl CfgSimplify {
                                 .args()
                                 .iter()
                                 .map(|(param, arg)| (*param, arg.inner()))
-                                .collect::<HashMap<_, _>>();
+                                .collect::<FxHashMap<_, _>>();
 
                             (succ_block, succ_args)
                         } else {
@@ -258,7 +258,7 @@ impl CfgSimplify {
                                 .args()
                                 .iter()
                                 .map(|(param, arg)| (*param, arg.inner()))
-                                .collect::<HashMap<_, _>>();
+                                .collect::<FxHashMap<_, _>>();
 
                             (succ_block, succ_args)
                         };

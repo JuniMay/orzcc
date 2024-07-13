@@ -1,5 +1,6 @@
 use core::fmt;
-use std::collections::{HashMap, HashSet};
+
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::{debug::CommentPos, source_loc::Span, Context, Func, Inst, Ty, Value, ValueData};
 use crate::{
@@ -20,7 +21,7 @@ pub struct BlockData {
     /// The parameters of the block.
     params: Vec<Value>,
     /// The users of the block.
-    users: HashMap<Inst, usize>,
+    users: FxHashMap<Inst, usize>,
     /// The first instruction of the block.
     head: Option<Inst>,
     /// The last instruction of the block.
@@ -59,7 +60,7 @@ impl Block {
         ctx.alloc_with(|self_ptr| BlockData {
             self_ptr,
             params: Vec::new(),
-            users: HashMap::new(),
+            users: FxHashMap::default(),
             head: None,
             tail: None,
             next: None,
@@ -185,7 +186,7 @@ impl Block {
             if !inst.is_terminator(ctx) {
                 unreachable!("block is used in a non-terminator instruction");
             }
-            let mut args_to_modify = HashSet::new();
+            let mut args_to_modify = FxHashSet::default();
 
             for succ in inst.deref_mut(ctx).successors.iter_mut() {
                 if succ.block.inner() == self {

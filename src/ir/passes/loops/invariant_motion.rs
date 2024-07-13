@@ -1,4 +1,6 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::VecDeque;
+
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use crate::{
     collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
@@ -40,7 +42,7 @@ impl LoopInvariantMotion {
 
         let header = lp.header(&self.loop_ctx);
 
-        let mut visited = HashSet::new();
+        let mut visited = FxHashSet::default();
         let mut queue = VecDeque::new();
         let mut changed = false;
 
@@ -136,7 +138,7 @@ impl LoopInvariantMotion {
 
         let preds = cfg.preds(header).unwrap();
 
-        let mut param_mapping = HashMap::new();
+        let mut param_mapping = FxHashMap::default();
         let mut preheader_jump_args = Vec::new();
 
         #[allow(clippy::unnecessary_to_owned)] // inacurrate clippy

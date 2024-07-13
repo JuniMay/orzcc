@@ -11,7 +11,9 @@
 //! All the traits in this module apply to the arena pointers instead of the
 //! actual data.
 
-use std::{collections::HashSet, hash::Hash};
+use std::hash::Hash;
+
+use rustc_hash::FxHashSet;
 
 use crate::collections::storage::ArenaPtr;
 
@@ -66,15 +68,15 @@ where
 
     /// Check if this entity uses any of the given entities.
     fn if_uses_any(self, arena: &Self::A, usables: &[T]) -> bool {
-        let lhs = self.all_uses(arena).into_iter().collect::<HashSet<T>>();
-        let rhs = usables.iter().cloned().collect::<HashSet<T>>();
+        let lhs = self.all_uses(arena).into_iter().collect::<FxHashSet<T>>();
+        let rhs = usables.iter().cloned().collect::<FxHashSet<T>>();
         lhs.intersection(&rhs).next().is_some()
     }
 
     /// Check if this entity uses all of the given entities.
     fn if_uses_all(self, arena: &Self::A, usables: &[T]) -> bool {
-        let lhs = self.all_uses(arena).into_iter().collect::<HashSet<T>>();
-        let rhs = usables.iter().cloned().collect::<HashSet<T>>();
+        let lhs = self.all_uses(arena).into_iter().collect::<FxHashSet<T>>();
+        let rhs = usables.iter().cloned().collect::<FxHashSet<T>>();
         lhs.is_superset(&rhs)
     }
 

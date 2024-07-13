@@ -1,5 +1,7 @@
 use core::fmt;
-use std::{collections::HashSet, hash::Hash};
+use std::hash::Hash;
+
+use rustc_hash::FxHashSet;
 
 use super::{block::MBlock, context::MContext, inst::MInst, PReg};
 use crate::{
@@ -46,7 +48,7 @@ pub struct MFuncData<I> {
     /// function.
     outgoing_stack_size: u64,
     /// The saved registers
-    saved_regs: HashSet<PReg>,
+    saved_regs: FxHashSet<PReg>,
     /// The signature of the function
     sig: ir::Signature,
 
@@ -86,7 +88,7 @@ where
             label: label.into(),
             storage_stack_size: 0,
             outgoing_stack_size: 0,
-            saved_regs: HashSet::new(),
+            saved_regs: FxHashSet::default(),
             sig,
             is_external: false,
             head: None,
@@ -104,7 +106,7 @@ where
             label: label.into(),
             storage_stack_size: 0,
             outgoing_stack_size: 0,
-            saved_regs: HashSet::new(),
+            saved_regs: FxHashSet::default(),
             sig,
             is_external: true,
             head: None,

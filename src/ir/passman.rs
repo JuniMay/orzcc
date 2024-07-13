@@ -3,8 +3,9 @@
 //! The pass manager is a module that provides a consistent interface for
 //! running and managing passes on a module.
 
-use std::{collections::HashMap, str::FromStr};
+use std::str::FromStr;
 
+use rustc_hash::FxHashMap;
 use thiserror::Error;
 
 use super::{Context, Func};
@@ -119,9 +120,9 @@ pub trait TransformPass: GlobalPassMut<Output = ()> {
 
 #[derive(Default)]
 pub struct PassManager {
-    parameters: HashMap<String, String>,
-    transforms: HashMap<String, Box<dyn TransformPass>>,
-    deps: HashMap<String, Vec<Box<dyn TransformPass>>>,
+    parameters: FxHashMap<String, String>,
+    transforms: FxHashMap<String, Box<dyn TransformPass>>,
+    deps: FxHashMap<String, Vec<Box<dyn TransformPass>>>,
 }
 
 #[derive(Default)]

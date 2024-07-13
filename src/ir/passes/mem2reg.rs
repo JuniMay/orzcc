@@ -1,4 +1,6 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::VecDeque;
+
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::control_flow::CfgCanonicalize;
 use crate::{
@@ -53,25 +55,25 @@ pub const MEM2REG: &str = "mem2reg";
 #[derive(Default)]
 pub struct Mem2reg {
     /// Variable set.
-    vars: HashSet<Value>,
+    vars: FxHashSet<Value>,
 
     /// Define blocks
-    def_blocks: HashMap<Value, HashSet<Block>>,
+    def_blocks: FxHashMap<Value, FxHashSet<Block>>,
 
     /// Block worklists
-    worklists: HashMap<Value, VecDeque<Block>>,
+    worklists: FxHashMap<Value, VecDeque<Block>>,
 
     /// Incoming values
-    incomings: HashMap<Value, Value>,
+    incomings: FxHashMap<Value, Value>,
 
     /// The param to variable map.
-    block_params: HashMap<Value, Value>,
+    block_params: FxHashMap<Value, Value>,
 
     /// Dominance
     dominance: Dominance<Block>,
 
     /// The types of the variables.
-    types: HashMap<Value, Ty>,
+    types: FxHashMap<Value, Ty>,
 }
 
 impl Mem2reg {
@@ -101,7 +103,7 @@ impl Mem2reg {
                 if let Some(ty) = self.is_promotable(ctx, slot) {
                     self.vars.insert(slot);
                     self.types.insert(slot, ty);
-                    self.def_blocks.insert(slot, HashSet::new());
+                    self.def_blocks.insert(slot, FxHashSet::default());
                     self.worklists.insert(slot, VecDeque::new());
                 }
                 last_stack_slot = inst;
@@ -137,7 +139,7 @@ impl Mem2reg {
     }
 
     fn insert_block_params(&mut self, ctx: &mut Context) {
-        let mut inserted: HashMap<Value, HashSet<Block>> = HashMap::new();
+        let mut inserted: FxHashMap<Value, FxHashSet<Block>> = FxHashMap::default();
 
         for (slot, worklist) in self.worklists.iter_mut() {
             while !worklist.is_empty() {
@@ -251,7 +253,7 @@ impl Mem2reg {
 
         // edit the branch instructions
         for succ in block.succs(ctx) {
-            let mut additional_param_map = HashMap::new();
+            let mut additional_param_map = FxHashMap::default();
 
             for param in succ.params(ctx) {
                 if let Some(var) = self.block_params.get(param) {

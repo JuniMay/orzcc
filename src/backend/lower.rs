@@ -1,4 +1,6 @@
-use std::{collections::HashMap, hash::Hash};
+use std::hash::Hash;
+
+use rustc_hash::FxHashMap;
 
 use super::{
     func::MLabel,
@@ -167,20 +169,20 @@ where
     pub(super) ctx: &'a ir::Context,
 
     /// The mapping from IR value to lowered machine value.
-    pub(super) lowered: HashMap<ir::Value, MValue>,
+    pub(super) lowered: FxHashMap<ir::Value, MValue>,
     /// Functions in the machine code.
     ///
     /// Because we want to get the machine function by the symbol when
     /// generating call instruction, so we need to map the IR symbol to mfunc.
-    pub funcs: HashMap<ir::Symbol, MFunc<S::I>>,
+    pub funcs: FxHashMap<ir::Symbol, MFunc<S::I>>,
     /// Mapping IR block to machine block.
-    pub blocks: HashMap<ir::Block, MBlock<S::I>>,
+    pub blocks: FxHashMap<ir::Block, MBlock<S::I>>,
     /// Other global labels, for IR global slots
     ///
     /// This is usually not necessary, because we directly use the IR symbol as
     /// the machine label. However, this two are different types, so it's
     /// better to map them.
-    pub labels: HashMap<ir::Symbol, MLabel>,
+    pub labels: FxHashMap<ir::Symbol, MLabel>,
 
     /// The current function and block.
     pub(super) curr_func: Option<MFunc<S::I>>,
@@ -356,10 +358,10 @@ where
         Self {
             mctx: MContext::new(),
             ctx,
-            lowered: HashMap::new(),
-            funcs: HashMap::new(),
-            blocks: HashMap::new(),
-            labels: HashMap::new(),
+            lowered: FxHashMap::default(),
+            funcs: FxHashMap::default(),
+            blocks: FxHashMap::default(),
+            labels: FxHashMap::default(),
             curr_func: None,
             curr_block: None,
             label_counter: 0,
@@ -792,9 +794,9 @@ where
         // 3. for reg offset and reg, we need to check if they will be overwritten in
         //    the passing.
 
-        let mut buffer = HashMap::new();
-        let mut tys = HashMap::new();
-        let mut reg_outgoing = HashMap::new();
+        let mut buffer = FxHashMap::default();
+        let mut tys = FxHashMap::default();
+        let mut reg_outgoing = FxHashMap::default();
 
         for (param, arg) in args.iter() {
             let mval = self.lowered[&arg.inner()];
@@ -848,7 +850,7 @@ where
 
         // record the vregs that are created to break the cycle, and the corresponding
         // dst registers
-        let mut vreg_buffer = HashMap::new();
+        let mut vreg_buffer = FxHashMap::default();
 
         while !buffer.is_empty() {
             let mut queue = Vec::new();

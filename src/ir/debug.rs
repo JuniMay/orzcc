@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use super::{Block, Inst, Symbol};
 
@@ -18,9 +18,9 @@ pub enum CommentPos {
 
 #[derive(Default)]
 pub(super) struct CommentInfo {
-    insts: HashMap<Inst, Vec<(CommentPos, String)>>,
-    blocks: HashMap<Block, Vec<(CommentPos, String)>>,
-    symbols: HashMap<Symbol, Vec<(CommentPos, String)>>,
+    insts: FxHashMap<Inst, Vec<(CommentPos, String)>>,
+    blocks: FxHashMap<Block, Vec<(CommentPos, String)>>,
+    symbols: FxHashMap<Symbol, Vec<(CommentPos, String)>>,
 }
 
 impl CommentInfo {

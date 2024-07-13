@@ -1,5 +1,6 @@
 use core::fmt;
-use std::collections::HashMap;
+
+use rustc_hash::FxHashMap;
 
 use super::{
     constant::FloatConstant,
@@ -334,14 +335,14 @@ pub struct Successor {
     ///
     /// This represents the parameter to argument mapping, the keys represent
     /// parameters, and the values represent arguments.
-    pub(super) args: HashMap<Value, Operand<Value>>,
+    pub(super) args: FxHashMap<Value, Operand<Value>>,
 }
 
 impl Successor {
     pub fn new(block: Operand<Block>) -> Self {
         Self {
             block,
-            args: HashMap::new(),
+            args: FxHashMap::default(),
         }
     }
 
@@ -354,7 +355,7 @@ impl Successor {
 
     pub fn block(&self) -> Block { self.block.inner() }
 
-    pub fn args(&self) -> &HashMap<Value, Operand<Value>> { &self.args }
+    pub fn args(&self) -> &FxHashMap<Value, Operand<Value>> { &self.args }
 }
 
 pub struct DisplaySuccessor<'a> {
@@ -1154,7 +1155,7 @@ impl Inst {
                 args.iter()
                     .zip(params.iter())
                     .map(|(arg, param)| (*param, Operand::new(ctx, *arg, self)))
-                    .collect::<HashMap<_, _>>()
+                    .collect::<FxHashMap<_, _>>()
             })
             .collect::<Vec<_>>();
 
@@ -1339,7 +1340,7 @@ impl User<Block> for Inst {
             .iter()
             .copied()
             .zip(new.params(ctx).iter().copied())
-            .collect::<HashMap<_, _>>();
+            .collect::<FxHashMap<_, _>>();
 
         let mut num_replaced = 0;
 
@@ -1721,7 +1722,7 @@ pub fn remove_all_insts(ctx: &mut Context, insts: Vec<Inst>, best_effort: bool) 
                 .sum();
             (i, num_users)
         })
-        .collect::<HashMap<_, _>>();
+        .collect::<FxHashMap<_, _>>();
 
     let mut worklist = inst_set
         .iter()

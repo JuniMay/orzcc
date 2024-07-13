@@ -4,7 +4,7 @@
 //! of an instruction, or the parameter of a block. Each value also should be
 //! associated with a type and def-use chain.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use super::{Block, Context, Func, Inst, Ty};
 use crate::{
@@ -45,7 +45,7 @@ pub struct ValueData {
     /// The kind of the value.
     kind: ValueKind,
     /// The users of the value.
-    users: HashMap<Inst, usize>,
+    users: FxHashMap<Inst, usize>,
 }
 
 impl ValueData {
@@ -59,7 +59,7 @@ impl ValueData {
             self_ptr,
             ty,
             kind: ValueKind::InstResult { inst, idx },
-            users: HashMap::new(),
+            users: FxHashMap::default(),
         }
     }
 
@@ -71,7 +71,7 @@ impl ValueData {
             self_ptr,
             ty,
             kind: ValueKind::BlockParam { block, idx },
-            users: HashMap::new(),
+            users: FxHashMap::default(),
         }
     }
 }

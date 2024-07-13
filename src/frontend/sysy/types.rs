@@ -1,4 +1,6 @@
-use std::{cell::RefCell, collections::HashMap, fmt, hash, rc::Rc};
+use std::{cell::RefCell, fmt, hash, rc::Rc};
+
+use rustc_hash::FxHashMap;
 
 /// The type in SysY language.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -66,7 +68,7 @@ impl Type {
         /// The pool to implement singleton.
         ///
         /// Reference: https://github.com/pku-minic/koopa/blob/master/src/ir/types.rs
-        static POOL: RefCell<HashMap<TypeKind, Type>> = RefCell::new(HashMap::new());
+        static POOL: RefCell<FxHashMap<TypeKind, Type>> = RefCell::new(FxHashMap::default());
     }
 
     pub fn make(kind: TypeKind) -> Type {

@@ -122,11 +122,13 @@
 //! the complex qualified paths.
 
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
+    collections::VecDeque,
     fmt,
     hash::{DefaultHasher, Hash, Hasher},
     marker::PhantomData,
 };
+
+use rustc_hash::{FxHashMap, FxHashSet};
 
 /// Indicates that the type can be used to dereference an arena pointer.
 ///
@@ -628,7 +630,7 @@ where
     T: GetUniqueArenaHash + Eq,
 {
     arena: BaseArena<T>,
-    unique_map: HashMap<UniqueArenaHash, HashSet<BaseArenaPtr<T>>>,
+    unique_map: FxHashMap<UniqueArenaHash, FxHashSet<BaseArenaPtr<T>>>,
 }
 
 #[derive(PartialEq, Eq, Hash)]
@@ -653,7 +655,7 @@ where
     fn default() -> Self {
         UniqueArena {
             arena: BaseArena::default(),
-            unique_map: HashMap::new(),
+            unique_map: FxHashMap::default(),
         }
     }
 }

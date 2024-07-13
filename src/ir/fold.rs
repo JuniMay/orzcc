@@ -4,7 +4,7 @@
 //! not only in optimization passes, but also helpful to build an execution
 //! engine for the IR.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use super::{constant::FloatConstant, Context, Inst, InstKind, Value};
 use crate::{
@@ -45,7 +45,7 @@ impl FoldedConstant {
 #[derive(Default)]
 pub struct FoldContext {
     /// The folded constant values.
-    values: HashMap<Value, FoldedConstant>,
+    values: FxHashMap<Value, FoldedConstant>,
 }
 
 impl FoldContext {

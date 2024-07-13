@@ -3,7 +3,9 @@
 //! This idea is from Cranelift, which implements a low-level DFS interface and
 //! iterator as reusable components.
 
-use std::{collections::HashSet, hash::Hash};
+use std::hash::Hash;
+
+use rustc_hash::FxHashSet;
 
 use super::cfg::{CfgNode, CfgRegion};
 
@@ -18,7 +20,7 @@ where
     N: CfgNode,
 {
     stack: Vec<(Event, N)>,
-    visited: HashSet<N>,
+    visited: FxHashSet<N>,
 }
 
 impl<N> Default for DfsContext<N>
@@ -28,7 +30,7 @@ where
     fn default() -> Self {
         Self {
             stack: Vec::new(),
-            visited: HashSet::new(),
+            visited: FxHashSet::default(),
         }
     }
 }

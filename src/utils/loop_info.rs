@@ -1,4 +1,6 @@
-use std::{collections::HashMap, hash::Hash};
+use std::hash::Hash;
+
+use rustc_hash::FxHashMap;
 
 use super::{
     cfg::{CfgInfo, CfgNode},
@@ -23,7 +25,7 @@ pub struct Loop<N>(BaseArenaPtr<LoopInfo<N>>);
 
 pub struct LoopContext<N> {
     loops: BaseArena<LoopInfo<N>>,
-    node_to_loop: HashMap<N, Loop<N>>,
+    node_to_loop: FxHashMap<N, Loop<N>>,
 }
 
 impl<N> Loop<N>
@@ -81,7 +83,7 @@ impl<N> Default for LoopContext<N> {
     fn default() -> Self {
         Self {
             loops: BaseArena::default(),
-            node_to_loop: HashMap::default(),
+            node_to_loop: FxHashMap::default(),
         }
     }
 }

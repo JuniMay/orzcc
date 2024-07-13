@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use super::{
     irgen::IrGenResult,
@@ -538,12 +538,12 @@ impl SymbolEntry {
 
 #[derive(Default)]
 pub struct SymbolTable {
-    stack: Vec<HashMap<String, SymbolEntry>>,
+    stack: Vec<FxHashMap<String, SymbolEntry>>,
     pub curr_ret_ty: Option<Type>,
 }
 
 impl SymbolTable {
-    pub fn enter_scope(&mut self) { self.stack.push(HashMap::new()); }
+    pub fn enter_scope(&mut self) { self.stack.push(FxHashMap::default()); }
 
     pub fn leave_scope(&mut self) { self.stack.pop(); }
 

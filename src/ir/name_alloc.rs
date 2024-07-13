@@ -1,4 +1,6 @@
-use std::{collections::HashMap, hash::Hash};
+use std::hash::Hash;
+
+use rustc_hash::FxHashMap;
 
 use crate::collections::storage::ArenaPtr;
 
@@ -7,16 +9,16 @@ where
     T: ArenaPtr,
 {
     /// Map from name to pointer.
-    name_to_ptr: HashMap<String, T>,
+    name_to_ptr: FxHashMap<String, T>,
     /// Map from pointer to name.
-    ptr_to_name: HashMap<T, String>,
+    ptr_to_name: FxHashMap<T, String>,
 
     /// Counter of each given prefix.
     ///
     /// When allocating names, one might want to use a prefix that has
     /// human-readable meaning, while also ensuring that the name is unique.
     /// So, we keep a counter for each prefix to allocate unique names.
-    counters: HashMap<String, usize>,
+    counters: FxHashMap<String, usize>,
 }
 
 impl<T> NameAlloc<T>
@@ -25,9 +27,9 @@ where
 {
     pub(super) fn new() -> Self {
         Self {
-            name_to_ptr: HashMap::new(),
-            ptr_to_name: HashMap::new(),
-            counters: HashMap::new(),
+            name_to_ptr: FxHashMap::default(),
+            ptr_to_name: FxHashMap::default(),
+            counters: FxHashMap::default(),
         }
     }
 
