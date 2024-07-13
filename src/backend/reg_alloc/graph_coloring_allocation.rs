@@ -5,8 +5,18 @@ use std::{
 
 use super::live_interval_analysis::{self, LiveInterval};
 use crate::{
-    backend::{inst::MInst, lower::MemLoc, regs::Reg, LowerContext, LowerSpec, MFunc, RegKind},
+    backend::{
+        inst::MInst,
+        lower::MemLoc,
+        regs::Reg,
+        LowerContext,
+        LowerSpec,
+        MBlock,
+        MFunc,
+        RegKind,
+    },
     collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
+    utils::{cfg::CfgInfo, dominance::Dominance, loop_info::LoopContext},
 };
 
 #[derive(Debug, Clone)]
@@ -142,21 +152,47 @@ impl InterferenceGraph {
 //     pub kind: RegKind,
 // }
 
-#[derive(Default)]
-pub struct GraphColoringAllocation {
+pub struct GraphColoringAllocation<S>
+where
+    S: LowerSpec,
+{
     pub total_spills: usize,
     pub total_loads_added: usize,
     pub total_stores_added: usize,
+
+    #[allow(clippy::type_complexity)]
+    cfg: Option<CfgInfo<MBlock<S::I>, MFunc<S::I>>>,
+    dominance: Option<Dominance<MBlock<S::I>>>,
+    loop_ctx: Option<LoopContext<MBlock<S::I>>>,
+    block_depth_map: Option<HashMap<MBlock<S::I>, u32>>,
 }
 
-impl GraphColoringAllocation {
+impl<S> Default for GraphColoringAllocation<S>
+where
+    S: LowerSpec,
+    S::I: Hash,
+{
+    fn default() -> Self {
+        Self {
+            total_spills: 0,
+            total_loads_added: 0,
+            total_stores_added: 0,
+            cfg: None,
+            dominance: None,
+            loop_ctx: None,
+            block_depth_map: None,
+        }
+    }
+}
+
+impl<S> GraphColoringAllocation<S>
+where
+    S: LowerSpec,
+    S::I: Hash,
+{
     pub fn new() -> Self { Self::default() }
 
-    pub fn run_on_function<S>(&mut self, ctx: &mut LowerContext<S>, func: MFunc<S::I>)
-    where
-        S: LowerSpec,
-        S::I: Hash,
-    {
+    pub fn run_on_function(&mut self, ctx: &mut LowerContext<S>, func: MFunc<S::I>) {
         let mut allocation_results = HashMap::new();
         let mut spilled_registers = HashSet::new();
 
@@ -195,7 +231,12 @@ impl GraphColoringAllocation {
                         working_graph.remove_node(reg);
                     } else {
                         // if no such node is found, spill a node
-                        let reg = Self::choose_spill_candidate(&working_graph, &spilled_registers);
+                        let reg = self.choose_spill_candidate(
+                            ctx,
+                            func,
+                            &working_graph,
+                            &spilled_registers,
+                        );
                         stack.push(reg);
                         working_graph.remove_node(reg);
                     }
@@ -324,16 +365,88 @@ impl GraphColoringAllocation {
         }
     }
 
-    fn choose_spill_candidate(graph: &InterferenceGraph, spilled_registers: &HashSet<Reg>) -> Reg {
-        let mut max_degree = 0;
+    // heuristic: choose the node with the highest degree
+    // fn choose_spill_candidate(graph: &InterferenceGraph, spilled_registers:
+    // &HashSet<Reg>) -> Reg {     let mut max_degree = 0;
+    //     let mut spill_candidate = None;
+
+    //     // find the node with the highest degree
+    //     for (reg, neighbors) in graph.graph.iter() {
+    //         if reg.is_vreg() && !spilled_registers.contains(reg) {
+    //             let degree = neighbors.len();
+    //             if degree > max_degree {
+    //                 max_degree = degree;
+    //                 spill_candidate = Some(*reg);
+    //             }
+    //         }
+    //     }
+
+    //     spill_candidate.unwrap_or_else(|| panic!("No spill candidate found"))
+    // }
+
+    // heuristic: from Modern Compiler Implementation in ML, p. 238
+    fn choose_spill_candidate(
+        &mut self,
+        ctx: &LowerContext<S>,
+        func: MFunc<S::I>,
+        graph: &InterferenceGraph,
+        spilled_registers: &HashSet<Reg>,
+    ) -> Reg {
+        // precalculate the cost of spilling each register if not already done
+        if self.loop_ctx.is_none() {
+            self.cfg = Some(CfgInfo::new(ctx.mctx(), func));
+            self.dominance = Some(Dominance::new(ctx.mctx(), self.cfg.as_ref().unwrap()));
+            self.loop_ctx = Some(LoopContext::new(
+                self.cfg.as_ref().unwrap(),
+                self.dominance.as_ref().unwrap(),
+            ));
+            self.block_depth_map = Some(HashMap::new());
+            for lp in self.loop_ctx.as_ref().unwrap().loops() {
+                let depth = lp.depth(self.loop_ctx.as_ref().unwrap());
+                for block in func.iter(ctx.mctx()) {
+                    if self.loop_ctx.as_ref().unwrap().is_in_loop(block, lp) {
+                        self.block_depth_map.as_mut().unwrap().insert(block, depth);
+                    }
+                }
+            }
+        }
+
+        let mut costs = HashMap::new();
+        for block in func.iter(ctx.mctx()) {
+            let depth = self
+                .block_depth_map
+                .as_ref()
+                .unwrap()
+                .get(&block)
+                .unwrap_or(&0);
+            for inst in block.iter(ctx.mctx()) {
+                for reg in inst.uses(ctx.mctx(), &ctx.config) {
+                    if reg.is_vreg() && !spilled_registers.contains(&reg) {
+                        *costs.entry(reg).or_insert(0 as f64) += 10.0_f64.powf(*depth as f64)
+                    }
+                }
+                for reg in inst.defs(ctx.mctx(), &ctx.config) {
+                    if reg.is_vreg() && !spilled_registers.contains(&reg) {
+                        *costs.entry(reg).or_insert(0 as f64) += 10.0_f64.powf(*depth as f64)
+                    }
+                }
+            }
+        }
+
+        let mut lowest_priority = f64::INFINITY;
         let mut spill_candidate = None;
 
         // find the node with the highest degree
         for (reg, neighbors) in graph.graph.iter() {
             if reg.is_vreg() && !spilled_registers.contains(reg) {
+                let cost = costs
+                    .get(reg)
+                    .expect("register in graph but not in instructions");
                 let degree = neighbors.len();
-                if degree > max_degree {
-                    max_degree = degree;
+                let priority = *cost / (degree as f64);
+                assert!(!priority.is_nan());
+                if priority < lowest_priority {
+                    lowest_priority = priority;
                     spill_candidate = Some(*reg);
                 }
             }
