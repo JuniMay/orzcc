@@ -537,6 +537,7 @@ const fn sub_identity_to_zero() -> Rule {
                             for user in dst.users(ctx) {
                                 user.replace(ctx, dst, neg_rhs.result(ctx, 0));
                             }
+                            return true;
                         } else if lhs == rhs_rhs {
                             // x - (y + x) => 0 - y
                             let zero = Inst::iconst(ctx, ApInt::zero(bitwidth), dst.ty(ctx));
@@ -549,8 +550,8 @@ const fn sub_identity_to_zero() -> Rule {
                             for user in dst.users(ctx) {
                                 user.replace(ctx, dst, neg_rhs.result(ctx, 0));
                             }
+                            return true;
                         }
-                        return true;
                     }
                 }
 
@@ -563,13 +564,14 @@ const fn sub_identity_to_zero() -> Rule {
                             for user in dst.users(ctx) {
                                 user.replace(ctx, dst, lhs_rhs);
                             }
+                            return true;
                         } else if rhs == lhs_rhs {
                             // (y + x) - x => y
                             for user in dst.users(ctx) {
                                 user.replace(ctx, dst, lhs_lhs);
                             }
+                            return true;
                         }
-                        return true;
                     }
                 }
             }
