@@ -39,7 +39,7 @@ impl LocalPassMut for ConstantFolding {
             }
         }
 
-        let changed = !folded_insts.is_empty();
+        let mut changed = false;
 
         for inst in folded_insts {
             if inst.is_iconst(ctx) || inst.is_fconst(ctx) || inst.is_undef(ctx) {
@@ -65,6 +65,8 @@ impl LocalPassMut for ConstantFolding {
 
             // all the uses are replaced, remove the original instruction
             inst.remove(ctx);
+
+            changed = true;
         }
 
         Ok(((), changed))
