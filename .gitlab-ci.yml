@@ -8,7 +8,7 @@ compile:
     - riscv64
   script:
     - /home/user/.cargo/bin/rustup default stable
-    - /home/user/.cargo/bin/cargo build --release
+    - cargo build --release
 
 performance:
   stage: performance
