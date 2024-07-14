@@ -14,6 +14,8 @@ fn test_utils_loop_info_0() {
 
     bb0.add_succ(&mut arena, bb1);
     bb1.add_succ(&mut arena, bb2);
+    // add twice to test duplicate
+    bb1.add_succ(&mut arena, bb2);
 
     bb2.add_succ(&mut arena, bb1);
     bb2.add_succ(&mut arena, bb3);
@@ -23,9 +25,9 @@ fn test_utils_loop_info_0() {
 
     //  .--> bb0
     //  |     |
-    //  |    bb1 <--.
-    //  |     |     |
-    //  |    bb2 ---'
+    //  | .- bb1 <--.
+    //  | |   |     |
+    //  | `> bb2 ---'
     //  |     |
     //  `--- bb3
     //        |

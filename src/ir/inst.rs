@@ -1123,6 +1123,13 @@ impl Inst {
             .count()
     }
 
+    pub fn succ_to(self, ctx: &Context, block: Block) -> impl Iterator<Item = &Successor> {
+        self.deref(ctx)
+            .successors
+            .iter()
+            .filter(move |s| s.block.inner() == block)
+    }
+
     pub fn replace_succ_with_args(
         self,
         ctx: &mut Context,

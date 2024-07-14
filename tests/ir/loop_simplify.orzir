@@ -1,0 +1,30 @@
+func @test_loop() -> void {
+^entry:
+    %0 = iconst 0 : i32
+    %1 = iconst 1 : i32
+    %2 = iconst 2 : i32
+    %3 = iconst 3 : i32
+    %4 = iconst 4 : i32
+    %5 = iconst 5 : i32
+    %6 = iconst 6 : i32
+    %7 = iconst 7 : i32
+    %8 = iconst 8 : i32
+
+    %v0 = add %1, %2 : i32
+    br %v0, ^loop.entry(%0), ^ret
+
+^loop.entry(%i: i32):
+    %cond = icmp.slt %i, %8 : i1
+    br %cond, ^loop.body, ^ret
+
+// two backedges
+^loop.body:
+    %cond_1 = icmp.slt %i, %8 : i1
+    br %cond_1, ^loop.entry(%2), ^loop.body_2
+
+^loop.body_2:
+    jump ^loop.entry(%1)
+
+^ret: // not a dedicated exit
+    ret
+}

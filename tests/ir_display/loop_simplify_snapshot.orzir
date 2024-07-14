@@ -1,0 +1,38 @@
+func @test_loop /* 0 */ () -> void {
+^entry /* 0 */ :
+    %0 /* 1, uses: 1 */ = iconst 0x0i1 : i32
+    %1 /* 2, uses: 2 */ = iconst 0x1i1 : i32
+    %2 /* 3, uses: 2 */ = iconst 0x2i2 : i32
+    %3 /* 4, uses: 0 */ = iconst 0x3i2 : i32
+    %4 /* 5, uses: 0 */ = iconst 0x4i3 : i32
+    %5 /* 6, uses: 0 */ = iconst 0x5i3 : i32
+    %6 /* 7, uses: 0 */ = iconst 0x6i3 : i32
+    %7 /* 8, uses: 0 */ = iconst 0x7i3 : i32
+    %8 /* 9, uses: 2 */ = iconst 0x8i4 : i32
+    %v0 /* 10, uses: 1 */ = add %1, %2 : i32
+    /* no result */ br %v0, ^loop.entry.preheader_0(%0), ^ret
+
+^loop.entry.preheader_0 /* 5 */ (%v1: i32 /* 13 */):
+    /* no result */ jump ^loop.entry(%v1)
+
+^loop.entry /* 1 */ (%i: i32 /* 0 */):
+    %cond /* 11, uses: 1 */ = icmp.slt %i, %8 : i1
+    /* no result */ br %cond, ^loop.body, ^ret.loopexit_0
+
+^loop.body /* 2 */ :
+    %cond_1 /* 12, uses: 1 */ = icmp.slt %i, %8 : i1
+    /* no result */ br %cond_1, ^loop.entry.backedge_0(%2), ^loop.body_2
+
+^loop.body_2 /* 3 */ :
+    /* no result */ jump ^loop.entry.backedge_0(%1)
+
+^loop.entry.backedge_0 /* 7 */ (%v2: i32 /* 14 */):
+    /* no result */ jump ^loop.entry(%v2)
+
+^ret.loopexit_0 /* 6 */ :
+    /* no result */ jump ^ret
+
+^ret /* 4 */ :
+    /* no result */ ret void
+
+}

@@ -1,4 +1,4 @@
-use core::fmt;
+use std::fmt;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -321,6 +321,124 @@ impl Block {
             data: self.deref(ctx),
             debug,
         }
+    }
+
+    /// Push an instruction to the back of the block, before the terminator.
+    ///
+    /// If the block has no terminator, the instruction will just be pushed to
+    /// the back.
+    pub fn push_inst_before_terminator(self, ctx: &mut Context, inst: Inst) {
+        let tail_inst = self.tail(ctx);
+
+        if let Some(tail_inst) = tail_inst {
+            if tail_inst.is_terminator(ctx) {
+                tail_inst.insert_before(ctx, inst);
+            } else {
+                tail_inst.insert_after(ctx, inst);
+            }
+        } else {
+            self.push_back(ctx, inst);
+        }
+    }
+
+    /// Split some of the predecessors to jump to a new block.
+    ///
+    /// This is useful for preheader insertion and dedicated exit block in loop.
+    ///
+    /// The new block **WILL NOT** be inserted and, the loop info or the CFG
+    /// info **WILL NOT** be updated. The caller should handle this.
+    ///
+    /// The caller should at least insert it into the layout, otherwise the IR
+    /// is malformed.
+    ///
+    /// # Parameters
+    ///
+    /// - `ctx`: The context.
+    /// - `preds`: The predecessors to split into the new block.
+    /// - `suffix`: The suffix of the new block name.
+    ///
+    /// # Panics
+    ///
+    /// This function expect a
+    /// [CfgCanonicalize](crate::ir::passes::control_flow::CfgCanonicalize) to
+    /// be run before calling this function, and thus panics if:
+    ///
+    /// - The block has no tail.
+    /// - The block tail is not a terminator.
+    #[must_use]
+    pub fn split_preds(
+        self,
+        ctx: &mut Context,
+        preds: Vec<Block>,
+        suffix: impl Into<String>,
+    ) -> Block {
+        if preds.is_empty() {
+            panic!("no predecessors to split");
+        }
+
+        let name = self.name_or_alloc(ctx, "bb").clone();
+        let new_bb = Block::new(ctx);
+
+        new_bb.alloc_name(ctx, format!("{}{}_", name, suffix.into()));
+
+        let mut param_mappings = FxHashMap::default();
+        let mut new_bb_jump_args = Vec::new();
+
+        #[allow(clippy::unnecessary_to_owned)]
+        for param in self.params(ctx).to_vec() {
+            let new_param = new_bb.new_param(ctx, param.ty(ctx));
+
+            param_mappings.insert(param, new_param);
+            new_bb_jump_args.push(new_param);
+        }
+
+        let new_bb_jump = Inst::jump(ctx, self, new_bb_jump_args);
+        new_bb.push_back(ctx, new_bb_jump);
+
+        // the `replace` of inst will replace all blocks in the branch that are the same
+        // as the old one, but cfg will regard `br ^bb0, ^bb0` as two preds, so  we must
+        // remove the duplicate preds
+        let unique_preds = preds.iter().copied().collect::<FxHashSet<_>>();
+
+        for pred in unique_preds.iter() {
+            let tail_inst = pred.tail(ctx);
+
+            match tail_inst {
+                Some(inst) if inst.is_terminator(ctx) => {
+                    inst.replace(ctx, self, new_bb);
+                }
+                Some(_) => {
+                    panic!("block tail is not a terminator, do canonicalization first");
+                }
+                None => {
+                    panic!("block has no tail, do canonicalization first");
+                }
+            }
+        }
+
+        new_bb
+    }
+
+    /// Get the predecessors of the block.
+    ///
+    /// This function directly get the predecessors from the users of this
+    /// block, which requires CFG canonicalization to be correct.
+    ///
+    /// Also, to be consistent with CFG info, this function also treats `br
+    /// ^bb0, ^bb0` as two preds, as the [Inst::num_succ_to] will return 2.
+    ///
+    /// This provides an alternative way when it is difficult to maintain CFG
+    /// info.
+    pub fn preds(self, ctx: &Context) -> Vec<Block> {
+        let mut preds = Vec::new();
+
+        for user in self.users(ctx) {
+            for _ in 0..user.num_succ_to(ctx, self) {
+                preds.push(user.container(ctx).unwrap());
+            }
+        }
+
+        preds
     }
 }
 

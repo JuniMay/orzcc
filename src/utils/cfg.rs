@@ -75,19 +75,12 @@ where
             preds.entry(node).or_default();
 
             for succ in node.succs(arena) {
-                // we should not add duplicate nodes to succs/preds
-
                 // TODO: is it valid to `br` to the same block with different arguments?
                 // MLIR supports `cond_br` to the same block, but not sure about the control
                 // flow semantics.
 
-                // TODO: temporary solution, just iterate with `contains`
-                if !succs.entry(node).or_default().contains(&succ) {
-                    succs.entry(node).or_default().push(succ);
-                }
-                if !preds.entry(succ).or_default().contains(&node) {
-                    preds.entry(succ).or_default().push(node);
-                }
+                succs.entry(node).or_default().push(succ);
+                preds.entry(succ).or_default().push(node);
 
                 worklist.push(succ);
             }
@@ -104,20 +97,34 @@ where
     ///
     /// The order of successors is not guaranteed.
     ///
+    /// For the instructions like `br ^bb0, ^bb0`, the successors will be `[bb0,
+    /// bb0]`, without removing the duplicates.
+    ///
     /// # Returns
     ///
     /// - `Some(succs)`: The successors of the node.
     /// - `None`: The node is not reachable.
+    ///
+    /// # See Also
+    ///
+    /// - [ir::Block::preds](crate::ir::Block::succs)
     pub fn succs(&self, node: N) -> Option<&[N]> { self.succs.get(&node).map(|v| v.as_slice()) }
 
     /// Get the predecessors of a node.
     ///
     /// The order of predecessors is not guaranteed.
     ///
+    /// For the instructions like `br ^bb0, ^bb0`, the predecessors of `bb0`
+    /// will be duplicated.
+    ///
     /// # Returns
     ///
     /// - `Some(preds)`: The predecessors of the node.
     /// - `None`: The node is not reachable.
+    ///
+    /// # See Also
+    ///
+    /// - [ir::Block::preds](crate::ir::Block::preds)
     pub fn preds(&self, node: N) -> Option<&[N]> { self.preds.get(&node).map(|v| v.as_slice()) }
 
     /// Get the region associated with the control flow graph.
