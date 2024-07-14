@@ -15,23 +15,29 @@ mem2reg 的 Pass 位于 `src/ir/passes` 下。
 - [x] CFG Canonicalization
 - [x] mem2reg
   - [ ] Block Argument Reduction `sysy/hidden_functional/29_long_line`
-- [ ] Alias Analysis (basicaa)
+    - [x] Dead Argument Elimination
+    - [ ] Other Reduction
 - [ ] Dead Code Elimination (maybe aggressive DCE)
   - [x] Simple DCE
   - [ ] Aggressive DCE
 - [ ] Constant Folding & Propagation
+  - [x] Integer
+  - [ ] Floating Point
 - [ ] CFG Simplification
-- [ ] Global2local
 - [ ] Function Inlining
 - [ ] Global Value Numbering
+- [ ] Global Code Motion
+  - [x] Loop Invariant Code Motion
+  - [ ] Sink
+- [ ] Global2local
 - [ ] Strength Reduction
   - [x] Math Optimization (instcombine)
   - [ ] Multiplication Optimization
   - [ ] Division Optimization
-- [x] Loop Invariant Code Motion
 - [ ] Loop Unrolling
 - [ ] Scalar Evolution Analysis
 - [ ] Tail Call Optimization
+- [ ] Alias Analysis (basicaa)
 
 可能还需要一个更有效的测试方式。
 
@@ -47,3 +53,4 @@ mem2reg 的 Pass 位于 `src/ir/passes` 下。
   - [ ] For dual-issue
   - [ ] For register pressure
 - [ ] Peephole Optimization
+  - [ ] `shNadd`
