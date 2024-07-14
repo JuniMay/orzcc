@@ -64,31 +64,35 @@ impl InterferenceGraph {
     pub fn construct_from_live_interval(&mut self, live_ranges: &LiveInterval) {
         match self.kind {
             RegKind::General => {
-                for (reg, live_interval) in live_ranges.intervals.iter() {
-                    if reg.kind() == RegKind::General {
-                        self.graph.entry(*reg).or_default();
-                        for (other_reg, other_live_interval) in live_ranges.intervals.iter() {
-                            if other_reg.kind() == RegKind::General
-                                && reg != other_reg
-                                && live_interval.intersects(other_live_interval, true)
-                            {
-                                self.add_edge(*reg, *other_reg);
-                            }
+                let all_intervals = live_ranges
+                    .intervals
+                    .iter()
+                    .filter(|(reg, _)| reg.kind() == RegKind::General)
+                    .collect::<Vec<_>>();
+
+                for i in 0..all_intervals.len() {
+                    let (reg, live_interval) = all_intervals[i];
+                    self.graph.entry(*reg).or_default();
+                    for (other_reg, other_live_interval) in all_intervals.iter().skip(i + 1) {
+                        if live_interval.intersects(other_live_interval, true) {
+                            self.add_edge(*reg, **other_reg);
                         }
                     }
                 }
             }
             RegKind::Float => {
-                for (reg, live_interval) in live_ranges.intervals.iter() {
-                    if reg.kind() == RegKind::Float {
-                        self.graph.entry(*reg).or_default();
-                        for (other_reg, other_live_interval) in live_ranges.intervals.iter() {
-                            if other_reg.kind() == RegKind::Float
-                                && reg != other_reg
-                                && live_interval.intersects(other_live_interval, true)
-                            {
-                                self.add_edge(*reg, *other_reg);
-                            }
+                let all_intervals = live_ranges
+                    .intervals
+                    .iter()
+                    .filter(|(reg, _)| reg.kind() == RegKind::Float)
+                    .collect::<Vec<_>>();
+
+                for i in 0..all_intervals.len() {
+                    let (reg, live_interval) = all_intervals[i];
+                    self.graph.entry(*reg).or_default();
+                    for (other_reg, other_live_interval) in all_intervals.iter().skip(i + 1) {
+                        if live_interval.intersects(other_live_interval, true) {
+                            self.add_edge(*reg, **other_reg);
                         }
                     }
                 }
