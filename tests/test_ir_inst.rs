@@ -277,7 +277,7 @@ fn test_ir_display_0() {
 }
 
 #[test]
-fn test_ir_diaplay_0() {
+fn test_ir_display_1() {
     let mut ctx = Context::default();
 
     let int = Ty::int(&mut ctx, 32);

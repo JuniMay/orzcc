@@ -103,6 +103,8 @@ impl Value {
 
     pub fn kind(self, ctx: &Context) -> &ValueKind { &self.deref(ctx).kind }
 
+    pub fn kind_mut(self, ctx: &mut Context) -> &mut ValueKind { &mut self.deref_mut(ctx).kind }
+
     /// Assign a name for the value.
     ///
     /// # Panics

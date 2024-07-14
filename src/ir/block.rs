@@ -2,7 +2,17 @@ use std::fmt;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use super::{debug::CommentPos, source_loc::Span, Context, Func, Inst, Ty, Value, ValueData};
+use super::{
+    debug::CommentPos,
+    source_loc::Span,
+    Context,
+    Func,
+    Inst,
+    Ty,
+    Value,
+    ValueData,
+    ValueKind,
+};
 use crate::{
     collections::{
         linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
@@ -179,7 +189,22 @@ impl Block {
         if !param.users(ctx).is_empty() {
             panic!("cannot remove block parameter because it is still in use");
         }
+
         self.deref_mut(ctx).params.remove(idx);
+
+        // also maintain the idx in the block params
+        let params = self.params(ctx).to_vec();
+        // idx-th is already removed, so we skip by `idx`. e.g., if idx is 0, we skip 0
+        // times and modify the 1st param (currently 1st); if idx is 1, we skip 1 time
+        // and modify the 2nd param (also currently 2nd), and so on.
+        for param in params.iter().skip(idx) {
+            if let ValueKind::BlockParam { idx, .. } = param.kind_mut(ctx) {
+                *idx -= 1;
+            } else {
+                unreachable!()
+            }
+        }
+
         // check all the users of the block and remove the argument passing.
         // also need to maintain the uses of the passed argument.
         for inst in self.users(ctx) {
@@ -529,7 +554,7 @@ impl fmt::Display for DisplayBlock<'_> {
                 write!(f, "%{}: {}", name, ty.display(self.ctx))?;
 
                 if self.debug {
-                    write!(f, " /* {} */", param.id())?;
+                    write!(f, " /* {}, no.{} */", param.id(), param.idx(self.ctx))?;
                 }
             }
             write!(f, "):")?;

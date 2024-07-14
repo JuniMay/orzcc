@@ -12,10 +12,10 @@ func @test_loop /* 0 */ () -> void {
     %v0 /* 10, uses: 1 */ = add %1, %2 : i32
     /* no result */ br %v0, ^loop.entry.preheader_0(%0), ^ret
 
-^loop.entry.preheader_0 /* 5 */ (%v1: i32 /* 13 */):
+^loop.entry.preheader_0 /* 5 */ (%v1: i32 /* 13, no.0 */):
     /* no result */ jump ^loop.entry(%v1)
 
-^loop.entry /* 1 */ (%i: i32 /* 0 */):
+^loop.entry /* 1 */ (%i: i32 /* 0, no.0 */):
     %cond /* 11, uses: 1 */ = icmp.slt %i, %8 : i1
     /* no result */ br %cond, ^loop.body, ^ret.loopexit_0
 
@@ -26,7 +26,7 @@ func @test_loop /* 0 */ () -> void {
 ^loop.body_2 /* 3 */ :
     /* no result */ jump ^loop.entry.backedge_0(%1)
 
-^loop.entry.backedge_0 /* 7 */ (%v2: i32 /* 14 */):
+^loop.entry.backedge_0 /* 7 */ (%v2: i32 /* 14, no.0 */):
     /* no result */ jump ^loop.entry(%v2)
 
 ^ret.loopexit_0 /* 6 */ :
