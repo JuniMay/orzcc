@@ -97,6 +97,8 @@ impl CfgSimplify {
             match block.tail(ctx) {
                 Some(inst) if inst.is_terminator(ctx) => {
                     if inst.num_succ_to(ctx, succ) != 1 {
+                        // TODO: This should not be reachable anymore, because now the number of
+                        // preds of succ is 1. But we need to test it.
                         continue;
                     }
                 }
@@ -126,7 +128,8 @@ impl CfgSimplify {
 
         // if the block has any arguments, we cannot do this optimization.
         // TODO: maybe we can merge the block arguments, but that also requires
-        // us to merge the block parameters.
+        // us to merge the block parameters. an example is the backedge block generated
+        // by loop simplify.
 
         let mut changed = false;
 

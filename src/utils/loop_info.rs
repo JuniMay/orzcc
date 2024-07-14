@@ -6,7 +6,10 @@ use super::{
     cfg::{CfgInfo, CfgNode},
     dominance::Dominance,
 };
-use crate::collections::storage::{ArenaAlloc, ArenaDeref, ArenaPtr, BaseArena, BaseArenaPtr};
+use crate::{
+    collections::storage::{ArenaAlloc, ArenaDeref, ArenaPtr, BaseArena, BaseArenaPtr},
+    ir,
+};
 
 /// Represents a natural loop in the control flow graph.
 pub struct LoopInfo<N> {
@@ -30,7 +33,7 @@ pub struct LoopContext<N> {
 
 impl<N> Loop<N>
 where
-    N: CfgNode,
+    N: CfgNode + Hash,
 {
     fn new(loop_ctx: &mut LoopContext<N>, header: N) -> Self {
         loop_ctx.alloc(LoopInfo {
@@ -76,6 +79,36 @@ where
             lp = p;
         }
         false
+    }
+}
+
+impl Loop<ir::Block> {
+    /// Get the preheader of the loop.
+    ///
+    /// This is specialized for IR, to get rid of the use of [CfgInfo].
+    pub fn get_preheader(
+        self,
+        ctx: &ir::Context,
+        loop_ctx: &LoopContext<ir::Block>,
+    ) -> Option<ir::Block> {
+        let preds = self.header(loop_ctx).preds(ctx);
+
+        // header has only one predecessor from outside the loop
+        // the predecessor only has one successor which is the header
+        let out_loop_preds = preds
+            .into_iter()
+            .filter(|p| !loop_ctx.is_in_loop(*p, self))
+            .collect::<Vec<_>>();
+
+        if out_loop_preds.len() == 1 {
+            // possible preheader
+            let pred = out_loop_preds[0];
+            if pred.succs(ctx).len() == 1 {
+                // yeah, only one successor, which is the header, so it is the preheader
+                return Some(pred);
+            }
+        }
+        None
     }
 }
 

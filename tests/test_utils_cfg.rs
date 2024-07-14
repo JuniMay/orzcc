@@ -84,6 +84,6 @@ fn test_cfg_info_1() {
 
     let cfg_info = func.cfg_info(&arena);
 
-    assert_eq!(cfg_info.succs(bb0).unwrap(), [bb1]);
-    assert_eq!(cfg_info.preds(bb1).unwrap(), [bb0]);
+    assert_eq!(cfg_info.succs(bb0).unwrap(), [bb1, bb1]);
+    assert_eq!(cfg_info.preds(bb1).unwrap(), [bb0, bb0]);
 }

@@ -1,22 +1,20 @@
 use std::collections::VecDeque;
 
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashSet;
 
+use super::simplify::LoopSimplify;
 use crate::{
     collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
     ir::{
-        passes::control_flow::CfgCanonicalize,
         passman::{GlobalPassMut, LocalPassMut, PassResult, TransformPass},
         Block,
         Context,
         Func,
-        Inst,
         InstKind,
         ValueKind,
     },
     utils::{
         cfg::{CfgInfo, CfgNode},
-        def_use::User,
         dominance::Dominance,
         loop_info::{Loop, LoopContext},
     },
@@ -30,17 +28,13 @@ pub struct LoopInvariantMotion {
 }
 
 impl LoopInvariantMotion {
-    pub fn process_loop(
-        &mut self,
-        ctx: &mut Context,
-        lp: Loop<Block>,
-        cfg: &CfgInfo<Block, Func>,
-    ) -> bool {
+    fn process_loop(&mut self, ctx: &mut Context, lp: Loop<Block>) -> bool {
         use InstKind as Ik;
-        // we need to create a preheader block to hold the moved instructions
-        let preheader = Block::new(ctx);
 
         let header = lp.header(&self.loop_ctx);
+        let preheader = lp
+            .get_preheader(ctx, &self.loop_ctx)
+            .expect("preheader should have been created by loop-simplify");
 
         let mut visited = FxHashSet::default();
         let mut queue = VecDeque::new();
@@ -113,7 +107,7 @@ impl LoopInvariantMotion {
                 // the preheader
                 if movable {
                     inst.unlink(ctx);
-                    preheader.push_back(ctx, inst);
+                    preheader.push_inst_before_terminator(ctx, inst);
                     changed = true;
                 }
             }
@@ -123,63 +117,6 @@ impl LoopInvariantMotion {
                     queue.push_back(succ);
                 }
             }
-        }
-
-        if !changed {
-            preheader.remove(ctx);
-            return false;
-        }
-
-        // there can be multiple predecessors of the header, we need to maintain the
-        // block params. It can be sure that all the predecessors have identical
-        // block params, so we can just copy all the block params from the header to
-        // the preheader, and modify the branch/jump instructions in the predecessors
-        // to jump to the preheader, and make a jump from the preheader to the header.
-
-        let preds = cfg.preds(header).unwrap();
-
-        let mut param_mapping = FxHashMap::default();
-        let mut preheader_jump_args = Vec::new();
-
-        #[allow(clippy::unnecessary_to_owned)] // inacurrate clippy
-        for param in header.params(ctx).to_vec() {
-            let ty = param.ty(ctx);
-            let new_param = preheader.new_param(ctx, ty);
-            param_mapping.insert(param, new_param);
-            preheader_jump_args.push(new_param);
-        }
-
-        let preheader_jump = Inst::jump(ctx, header, preheader_jump_args);
-        preheader.push_back(ctx, preheader_jump);
-
-        for pred in preds {
-            // we should skip the preds inside the loop
-            if self.loop_ctx.is_in_loop(*pred, lp) {
-                continue;
-            }
-
-            let tail_inst = pred.tail(ctx);
-
-            match tail_inst {
-                Some(inst) if inst.is_terminator(ctx) => {
-                    inst.replace(ctx, header, preheader);
-                }
-                Some(_) => {
-                    panic!("block tail is not a terminator, do canonicalization first");
-                }
-                None => {
-                    panic!("block has no tail, do canonicalization first");
-                }
-            }
-        }
-
-        // insert the preheader before header
-        header.insert_before(ctx, preheader);
-
-        // also, we need to map the preheader to the upper loop, or just not map it
-        // if this is a top-level loop
-        if let Some(parent) = lp.parent(&self.loop_ctx) {
-            self.loop_ctx.add_node_to_loop(preheader, parent);
         }
 
         changed
@@ -232,7 +169,7 @@ impl LocalPassMut for LoopInvariantMotion {
         let mut changed = false;
 
         for LoopWithDepth { lp, .. } in loops {
-            changed |= self.process_loop(ctx, lp, &cfg);
+            changed |= self.process_loop(ctx, lp);
         }
 
         Ok(((), changed))
@@ -255,6 +192,10 @@ impl GlobalPassMut for LoopInvariantMotion {
 impl TransformPass for LoopInvariantMotion {
     fn register(passman: &mut crate::ir::passman::PassManager) {
         let pass = Self::default();
-        passman.register_transform(LOOP_INVARIANT_MOTION, pass, vec![Box::new(CfgCanonicalize)]);
+        passman.register_transform(
+            LOOP_INVARIANT_MOTION,
+            pass,
+            vec![Box::new(LoopSimplify::default())],
+        );
     }
 }
