@@ -1133,31 +1133,19 @@ impl LowerSpec for RvLowerSpec {
 
         let ty = base.ty(); // ptr
 
-        let base = match base.kind() {
-            MValueKind::Reg(reg) => reg,
+        // keep the offset, merge later
+        let (base, slot_offset_imm) = match base.kind() {
+            MValueKind::Reg(reg) => (reg, 0i64),
             MValueKind::Imm(_) => unreachable!(),
             MValueKind::Mem(loc) => {
                 match loc {
-                    MemLoc::RegOffset { base, offset } => {
-                        if let Some(imm) = Imm12::try_from_i64(offset) {
-                            let (inst, rd) =
-                                RvInst::alu_rri(&mut lower.mctx, AluOpRRI::Addi, base, imm);
-                            curr_block.push_back(&mut lower.mctx, inst);
-                            rd
-                        } else {
-                            let (li, rd) = RvInst::li(&mut lower.mctx, offset as u64);
-                            curr_block.push_back(&mut lower.mctx, li);
-                            let (inst, rd) =
-                                RvInst::alu_rrr(&mut lower.mctx, AluOpRRR::Add, base, rd);
-                            curr_block.push_back(&mut lower.mctx, inst);
-                            rd
-                        }
-                    }
+                    MemLoc::RegOffset { base, offset } => (base, offset),
                     MemLoc::Slot { .. } | MemLoc::Incoming { .. } => {
                         // load addr because we cannot determine the offset
                         let (inst, rd) = RvInst::load_addr(&mut lower.mctx, loc);
                         curr_block.push_back(&mut lower.mctx, inst);
-                        rd
+                        // TODO: we need peephole after regalloc to optimize this offset
+                        (rd, 0)
                     }
                 }
             }
@@ -1166,20 +1154,35 @@ impl LowerSpec for RvLowerSpec {
 
         match offset.kind() {
             MValueKind::Reg(reg) => {
+                let base = if let Some(imm) = Imm12::try_from_i64(slot_offset_imm) {
+                    let (inst, rd) = RvInst::alu_rri(&mut lower.mctx, AluOpRRI::Addi, base, imm);
+                    curr_block.push_back(&mut lower.mctx, inst);
+                    rd
+                } else {
+                    let (li, rd) = RvInst::li(&mut lower.mctx, slot_offset_imm as u64);
+                    curr_block.push_back(&mut lower.mctx, li);
+                    let (inst, rd) = RvInst::alu_rrr(&mut lower.mctx, AluOpRRR::Add, base, rd);
+                    curr_block.push_back(&mut lower.mctx, inst);
+                    rd
+                };
                 // XXX: assumes all the operations produced proper sign-extended values
                 let (inst, rd) = RvInst::alu_rrr(&mut lower.mctx, AluOpRRR::Add, base, reg);
                 curr_block.push_back(&mut lower.mctx, inst);
                 MValue::new_reg(ty, rd)
             }
             MValueKind::Imm(imm) => {
-                let (inst, rd) = RvInst::alu_rri(
-                    &mut lower.mctx,
-                    AluOpRRI::Addi,
-                    base,
-                    Imm12::try_from_i64(imm).unwrap(),
-                );
-                curr_block.push_back(&mut lower.mctx, inst);
-                MValue::new_reg(ty, rd)
+                let total_offset = slot_offset_imm + imm;
+                if let Some(imm) = Imm12::try_from_i64(total_offset) {
+                    let (inst, rd) = RvInst::alu_rri(&mut lower.mctx, AluOpRRI::Addi, base, imm);
+                    curr_block.push_back(&mut lower.mctx, inst);
+                    MValue::new_reg(ty, rd)
+                } else {
+                    let (li, rd) = RvInst::li(&mut lower.mctx, total_offset as u64);
+                    curr_block.push_back(&mut lower.mctx, li);
+                    let (inst, rd) = RvInst::alu_rrr(&mut lower.mctx, AluOpRRR::Add, base, rd);
+                    curr_block.push_back(&mut lower.mctx, inst);
+                    MValue::new_reg(ty, rd)
+                }
             }
             MValueKind::Mem(_) => unreachable!(),
             MValueKind::Undef => MValue::new_undef(ty),
