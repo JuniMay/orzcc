@@ -5,6 +5,7 @@ use rustc_hash::FxHashMap;
 use super::{
     constant::FloatConstant,
     debug::CommentPos,
+    deep_clone::DeepCloneMap,
     source_loc::Span,
     Block,
     Context,
@@ -356,6 +357,10 @@ impl Successor {
     pub fn block(&self) -> Block { self.block.inner() }
 
     pub fn args(&self) -> &FxHashMap<Value, Operand<Value>> { &self.args }
+
+    pub fn get_arg(&self, param: Value) -> Option<Value> {
+        self.args.get(&param).map(|arg| arg.inner())
+    }
 }
 
 pub struct DisplaySuccessor<'a> {
@@ -1189,6 +1194,66 @@ impl Inst {
             data: self.deref(ctx),
             debug,
         }
+    }
+
+    pub fn deep_clone(self, ctx: &mut Context, map: &mut DeepCloneMap) -> Inst {
+        let kind = self.kind(ctx).clone();
+
+        let opds = self
+            .operands(ctx)
+            .into_iter()
+            .map(|opd| map.get_value_or_old(opd))
+            .collect::<Vec<_>>();
+
+        let result_tys = self
+            .results(ctx)
+            .iter()
+            .map(|r| r.ty(ctx))
+            .collect::<Vec<_>>();
+
+        let inst = Self::new(ctx, kind, result_tys, opds);
+
+        // succs
+        let blocks = self
+            .deref(ctx)
+            .successors
+            .iter()
+            .map(|succ| {
+                let old_block = succ.block();
+                let new_block = map.get_block_or_old(old_block);
+
+                let args = old_block
+                    .params(ctx)
+                    .iter()
+                    .zip(new_block.params(ctx).iter())
+                    .map(|(old_param, new_param)| {
+                        let old_arg = succ.get_arg(*old_param).unwrap();
+                        let new_arg = map.get_value_or_old(old_arg);
+                        (*new_param, new_arg)
+                    })
+                    .collect::<FxHashMap<_, _>>();
+
+                (new_block, args)
+            })
+            .collect::<Vec<_>>();
+
+        for (block, args) in blocks {
+            let mut new_succ = Successor::new(Operand::new(ctx, block, inst));
+            for (param, arg) in args {
+                new_succ.add_arg(param, Operand::new(ctx, arg, inst));
+            }
+            inst.add_successor(ctx, new_succ);
+        }
+
+        for (old_result, new_result) in self.results(ctx).iter().zip(inst.results(ctx).iter()) {
+            map.insert_value(*old_result, *new_result);
+        }
+
+        inst
+    }
+
+    pub fn is_stack_slot(self, ctx: &Context) -> bool {
+        matches!(self.deref(ctx).kind, InstKind::StackSlot(_))
     }
 
     pub fn is_iconst(self, ctx: &Context) -> bool {

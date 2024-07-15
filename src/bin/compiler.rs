@@ -7,6 +7,7 @@ use orzcc::{
         passes::{
             control_flow::{CfgCanonicalize, CfgSimplify, CFG_SIMPLIFY},
             fold::{ConstantFolding, CONSTANT_FOLDING},
+            inline::{Inline, INLINE},
             instcombine::{InstCombine, INSTCOMBINE},
             loops::{LoopInvariantMotion, LOOP_INVARIANT_MOTION},
             mem2reg::{Mem2reg, MEM2REG},
@@ -63,6 +64,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut ir = sysy::irgen(&ast);
 
         if cmd.opt > 0 {
+            passman.run_transform(INLINE, &mut ir, 1);
             passman.run_transform(MEM2REG, &mut ir, 1);
             passman.run_transform(LOOP_INVARIANT_MOTION, &mut ir, 1);
 
@@ -101,6 +103,7 @@ fn register_passes(passman: &mut PassManager) {
     SimpleDce::register(passman);
     ConstantFolding::register(passman);
     InstCombine::register(passman);
+    Inline::register(passman);
 
     LoopInvariantMotion::register(passman);
 }

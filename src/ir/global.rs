@@ -113,6 +113,9 @@ impl Func {
     pub fn comment(&self, ctx: &mut Context, pos: CommentPos, content: impl Into<String>) {
         self.deref(ctx).name.clone().comment(ctx, pos, content);
     }
+
+    /// Get the number of instructions in the function.
+    pub fn insn(self, ctx: &Context) -> usize { self.iter(ctx).map(|block| block.insn(ctx)).sum() }
 }
 
 impl CfgRegion for Func {
