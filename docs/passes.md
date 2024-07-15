@@ -54,3 +54,6 @@ mem2reg 的 Pass 位于 `src/ir/passes` 下。
   - [ ] For register pressure
 - [ ] Peephole Optimization
   - [ ] `shNadd`
+  - [ ] `Rol` 
+  - [ ] `Mulh`
+  - [ ] remove redundant direct jump

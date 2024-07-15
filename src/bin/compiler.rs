@@ -7,6 +7,7 @@ use orzcc::{
         passes::{
             control_flow::{CfgCanonicalize, CfgSimplify, CFG_SIMPLIFY},
             fold::{ConstantFolding, CONSTANT_FOLDING},
+            gvn::{GlobalValueNumbering, GVN},
             instcombine::{InstCombine, INSTCOMBINE},
             loops::{LoopInvariantMotion, LOOP_INVARIANT_MOTION},
             mem2reg::{Mem2reg, MEM2REG},
@@ -72,6 +73,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             opt_pipeline.add_pass(SIMPLE_DCE);
             opt_pipeline.add_pass(INSTCOMBINE);
             opt_pipeline.add_pass(SIMPLE_DCE);
+            opt_pipeline.add_pass(GVN);
+            opt_pipeline.add_pass(SIMPLE_DCE);
 
             let _iter = passman.run_pipeline(&mut ir, &opt_pipeline, 32, 8);
         }
@@ -103,6 +106,7 @@ fn register_passes(passman: &mut PassManager) {
     InstCombine::register(passman);
 
     LoopInvariantMotion::register(passman);
+    GlobalValueNumbering::register(passman);
 }
 
 fn cli(passman: &mut PassManager) -> Command {

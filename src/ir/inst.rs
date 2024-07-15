@@ -395,7 +395,7 @@ impl<'a> fmt::Display for DisplaySuccessor<'a> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub enum InstKind {
     Undef,
     /// Create a new value from a constant.
