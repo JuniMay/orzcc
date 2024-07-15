@@ -1,0 +1,201 @@
+slot @__GLOBAL_VAR_a /* 0 */  : i32 = undef
+slot @__GLOBAL_VAR_b /* 1 */  : i32 = undef
+slot @__GLOBAL_VAR_d /* 2 */  : i32 = undef
+decl @putch(i32) -> void
+decl @putint(i32) -> void
+decl @getfloat() -> f32
+decl @_sysy_starttime(i32) -> void
+decl @getarray(ptr) -> i32
+decl @putfarray(i32, ptr) -> void
+decl @memcpy(ptr, ptr, i32) -> void
+decl @putfloat(f32) -> void
+decl @getint() -> i32
+decl @getfarray(ptr) -> i32
+decl @getch() -> i32
+decl @memset(ptr, i32, i32) -> void
+decl @putarray(i32, ptr) -> void
+decl @_sysy_stoptime(i32) -> void
+func @set_b /* 0 */ (i32) -> i32 {
+^bb1 /* 0 */ (%__PARAM_set_b_val: i32 /* 0, no.0 */):
+    %v3 /* 1, uses: 1 */ = get_global @__GLOBAL_VAR_b : ptr
+    /* no result */ store %__PARAM_set_b_val, %v3
+    %v4 /* 2, uses: 1 */ = get_global @__GLOBAL_VAR_b : ptr
+    %v5 /* 3, uses: 1 */ = load %v4 : i32
+    /* no result */ ret %v5
+
+}
+func @set_d /* 1 */ (i32) -> i32 {
+^bb2 /* 1 */ (%__PARAM_set_d_val: i32 /* 4, no.0 */):
+    %v6 /* 5, uses: 1 */ = get_global @__GLOBAL_VAR_d : ptr
+    /* no result */ store %__PARAM_set_d_val, %v6
+    %v7 /* 6, uses: 1 */ = get_global @__GLOBAL_VAR_d : ptr
+    %v8 /* 7, uses: 1 */ = load %v7 : i32
+    /* no result */ ret %v8
+
+}
+func @main /* 2 */ () -> i32 {
+^bb3 /* 2 */ :
+    %v9 /* 13, uses: 1 */ = get_global @__GLOBAL_VAR_a : ptr
+    %v10 /* 14, uses: 1 */ = iconst 0x00000002i32 : i32
+    /* no result */ store %v10, %v9
+    %v11 /* 15, uses: 1 */ = get_global @__GLOBAL_VAR_b : ptr
+    %v12 /* 16, uses: 1 */ = iconst 0x00000003i32 : i32
+    /* no result */ store %v12, %v11
+    %v13 /* 17, uses: 1 */ = iconst 0x00000000i32 : i32
+    %v14 /* 18, uses: 1 */ = call @set_a(%v13) : i32
+    %v15 /* 19, uses: 1 */ = iconst 0x00000000i32 : i32
+    %v16 /* 20, uses: 1 */ = icmp.ne %v14, %v15 : i1
+    %v18 /* 21, uses: 1 */ = iconst 0x0i1 : i1
+    /* no result */ br %v16, ^bb4, ^bb5(%v18)
+
+^bb4 /* 3 */ :
+    %v19 /* 22, uses: 1 */ = iconst 0x00000001i32 : i32
+    %v20 /* 23, uses: 1 */ = call @set_b(%v19) : i32
+    %v21 /* 24, uses: 1 */ = iconst 0x00000000i32 : i32
+    %v22 /* 25, uses: 1 */ = icmp.ne %v20, %v21 : i1
+    /* no result */ jump ^bb5(%v22)
+
+^bb5 /* 4 */ (%v17: i1 /* 8, no.0 */):
+    /* no result */ br %v17, ^if.exit_0, ^if.exit_0
+
+^if.exit_0 /* 5 */ :
+    %v23 /* 26, uses: 1 */ = get_global @__GLOBAL_VAR_a : ptr
+    %v24 /* 27, uses: 1 */ = load %v23 : i32
+    /* no result */ call @putint(%v24)
+    %v25 /* 28, uses: 1 */ = iconst 0x00000020i32 : i32
+    /* no result */ call @putch(%v25)
+    %v26 /* 29, uses: 1 */ = get_global @__GLOBAL_VAR_b : ptr
+    %v27 /* 30, uses: 1 */ = load %v26 : i32
+    /* no result */ call @putint(%v27)
+    %v28 /* 31, uses: 1 */ = iconst 0x00000020i32 : i32
+    /* no result */ call @putch(%v28)
+    %v29 /* 32, uses: 1 */ = get_global @__GLOBAL_VAR_a : ptr
+    %v30 /* 33, uses: 1 */ = iconst 0x00000002i32 : i32
+    /* no result */ store %v30, %v29
+    %v31 /* 34, uses: 1 */ = get_global @__GLOBAL_VAR_b : ptr
+    %v32 /* 35, uses: 1 */ = iconst 0x00000003i32 : i32
+    /* no result */ store %v32, %v31
+    %v33 /* 36, uses: 1 */ = iconst 0x00000000i32 : i32
+    %v34 /* 37, uses: 1 */ = call @set_a(%v33) : i32
+    %v35 /* 38, uses: 1 */ = iconst 0x00000000i32 : i32
+    %v36 /* 39, uses: 1 */ = icmp.ne %v34, %v35 : i1
+    %v38 /* 40, uses: 1 */ = iconst 0x0i1 : i1
+    /* no result */ br %v36, ^bb6, ^bb7(%v38)
+
+^bb6 /* 6 */ :
+    %v39 /* 41, uses: 1 */ = iconst 0x00000001i32 : i32
+    %v40 /* 42, uses: 1 */ = call @set_b(%v39) : i32
+    %v41 /* 43, uses: 1 */ = iconst 0x00000000i32 : i32
+    %v42 /* 44, uses: 1 */ = icmp.ne %v40, %v41 : i1
+    /* no result */ jump ^bb7(%v42)
+
+^bb7 /* 7 */ (%v37: i1 /* 9, no.0 */):
+    /* no result */ br %v37, ^if.exit_1, ^if.exit_1
+
+^if.exit_1 /* 8 */ :
+    %v43 /* 45, uses: 1 */ = get_global @__GLOBAL_VAR_a : ptr
+    %v44 /* 46, uses: 1 */ = load %v43 : i32
+    /* no result */ call @putint(%v44)
+    %v45 /* 47, uses: 1 */ = iconst 0x00000020i32 : i32
+    /* no result */ call @putch(%v45)
+    %v46 /* 48, uses: 1 */ = get_global @__GLOBAL_VAR_b : ptr
+    %v47 /* 49, uses: 1 */ = load %v46 : i32
+    /* no result */ call @putint(%v47)
+    %v48 /* 50, uses: 1 */ = iconst 0x0000000ai32 : i32
+    /* no result */ call @putch(%v48)
+    %v49 /* 51, uses: 1 */ = get_global @__GLOBAL_VAR_d : ptr
+    %v50 /* 52, uses: 1 */ = iconst 0x00000002i32 : i32
+    /* no result */ store %v50, %v49
+    %v51 /* 53, uses: 1 */ = iconst 0x00000003i32 : i32
+    %v52 /* 54, uses: 1 */ = call @set_d(%v51) : i32
+    %v53 /* 55, uses: 1 */ = iconst 0x00000000i32 : i32
+    %v54 /* 56, uses: 1 */ = icmp.ne %v52, %v53 : i1
+    /* no result */ br %v54, ^if.exit_2, ^if.exit_2
+
+^if.exit_2 /* 9 */ :
+    %v55 /* 57, uses: 1 */ = get_global @__GLOBAL_VAR_d : ptr
+    %v56 /* 58, uses: 1 */ = load %v55 : i32
+    /* no result */ call @putint(%v56)
+    %v57 /* 59, uses: 1 */ = iconst 0x00000020i32 : i32
+    /* no result */ call @putch(%v57)
+    %v58 /* 60, uses: 1 */ = get_global @__GLOBAL_VAR_d : ptr
+    %v59 /* 61, uses: 1 */ = load %v58 : i32
+    /* no result */ call @putint(%v59)
+    %v60 /* 62, uses: 1 */ = iconst 0x0000000ai32 : i32
+    /* no result */ call @putch(%v60)
+    %v61 /* 63, uses: 1 */ = iconst 0x00000041i32 : i32
+    /* no result */ call @putch(%v61)
+    %v62 /* 64, uses: 1 */ = iconst 0x00000044i32 : i32
+    /* no result */ call @putch(%v62)
+    %v63 /* 65, uses: 1 */ = iconst 0x00000046i32 : i32
+    /* no result */ call @putch(%v63)
+    %v64 /* 66, uses: 1 */ = iconst 0x0000000ai32 : i32
+    /* no result */ call @putch(%v64)
+    %v65 /* 67, uses: 2 */ = iconst 0x00000000i32 : i32
+    %v66 /* 68, uses: 1 */ = iconst 0x00000043i32 : i32
+    /* no result */ call @putch(%v66)
+    %v67 /* 69, uses: 1 */ = iconst 0x00000049i32 : i32
+    /* no result */ call @putch(%v67)
+    %v73 /* 70, uses: 1 */ = iconst 0x1i1 : i1
+    %v68 /* 71, uses: 1 */ = not %v73 : i1
+    %v69 /* 72, uses: 1 */ = zext %v68 : i32
+    %v70 /* 73, uses: 1 */ = icmp.eq %v65, %v69 : i1
+    %v72 /* 74, uses: 1 */ = iconst 0x0i1 : i1
+    /* no result */ br %v70, ^bb8, ^bb9(%v72)
+
+^bb8 /* 10 */ :
+    %v74 /* 75, uses: 1 */ = iconst 0x0i1 : i1
+    /* no result */ jump ^bb9(%v74)
+
+^bb9 /* 11 */ (%v71: i1 /* 10, no.0 */):
+    %v76 /* 76, uses: 1 */ = iconst 0x1i1 : i1
+    /* no result */ br %v71, ^bb11(%v76), ^bb10
+
+^bb10 /* 12 */ :
+    %v78 /* 77, uses: 1 */ = iconst 0x1i1 : i1
+    /* no result */ jump ^bb11(%v78)
+
+^bb11 /* 13 */ (%v75: i1 /* 11, no.0 */):
+    /* no result */ br %v75, ^if.then_13, ^if.exit_13
+
+^if.then_13 /* 14 */ :
+    %v77 /* 78, uses: 1 */ = iconst 0x0000004ai32 : i32
+    /* no result */ call @putch(%v77)
+    /* no result */ jump ^if.exit_13
+
+^if.exit_13 /* 15 */ :
+    %v79 /* 79, uses: 1 */ = iconst 0x1i1 : i1
+    %v80 /* 80, uses: 1 */ = not %v79 : i1
+    %v81 /* 81, uses: 1 */ = zext %v80 : i32
+    %v82 /* 82, uses: 1 */ = icmp.eq %v65, %v81 : i1
+    %v84 /* 83, uses: 1 */ = iconst 0x1i1 : i1
+    /* no result */ br %v82, ^bb13(%v84), ^bb12
+
+^bb12 /* 16 */ :
+    %v85 /* 84, uses: 1 */ = iconst 0x0i1 : i1
+    /* no result */ jump ^bb13(%v85)
+
+^bb13 /* 17 */ (%v83: i1 /* 12, no.0 */):
+    /* no result */ br %v83, ^if.then_14, ^if.exit_14
+
+^if.then_14 /* 18 */ :
+    %v86 /* 85, uses: 1 */ = iconst 0x0000004bi32 : i32
+    /* no result */ call @putch(%v86)
+    /* no result */ jump ^if.exit_14
+
+^if.exit_14 /* 19 */ :
+    %v87 /* 86, uses: 1 */ = iconst 0x0000000ai32 : i32
+    /* no result */ call @putch(%v87)
+    %v88 /* 87, uses: 1 */ = iconst 0x00000000i32 : i32
+    /* no result */ ret %v88
+
+}
+func @set_a /* 3 */ (i32) -> i32 {
+^bb0 /* 20 */ (%__PARAM_set_a_val: i32 /* 88, no.0 */):
+    %v0 /* 89, uses: 1 */ = get_global @__GLOBAL_VAR_a : ptr
+    /* no result */ store %__PARAM_set_a_val, %v0
+    %v1 /* 90, uses: 1 */ = get_global @__GLOBAL_VAR_a : ptr
+    %v2 /* 91, uses: 1 */ = load %v1 : i32
+    /* no result */ ret %v2
+
+}

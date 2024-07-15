@@ -2,6 +2,7 @@ mod block;
 mod call_graph;
 mod constant;
 mod context;
+mod deep_clone;
 mod fold;
 mod global;
 mod inst;

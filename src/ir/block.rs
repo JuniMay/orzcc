@@ -81,6 +81,8 @@ impl Block {
         })
     }
 
+    pub fn insn(self, ctx: &Context) -> usize { self.iter(ctx).count() }
+
     pub fn set_source_span(self, ctx: &mut Context, span: impl Into<Span>) {
         self.deref_mut(ctx).source_span = span.into();
     }
@@ -164,13 +166,15 @@ impl Block {
         LinkedListContainerPtr::merge(self, ctx, other);
     }
 
-    pub fn split(self, ctx: &mut Context, inst: Inst) -> Block {
+    pub fn split(self, ctx: &mut Context, inst: Inst, create_jump: bool) -> Block {
         let other = Block::new(ctx);
         LinkedListContainerPtr::split(self, ctx, other, inst);
         LinkedListNodePtr::insert_after(self, ctx, other);
 
-        let jump = Inst::jump(ctx, other, Vec::new());
-        self.push_back(ctx, jump);
+        if create_jump {
+            let jump = Inst::jump(ctx, other, Vec::new());
+            self.push_back(ctx, jump);
+        }
 
         other
     }
