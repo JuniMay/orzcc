@@ -1,0 +1,238 @@
+use super::inst::{RvInst, RvInstKind};
+use crate::{
+    backend::{
+        inst::MInst,
+        peephole::{Peephole1, Peephole2, PeepholeRule, PeepholeRunner},
+        riscv64::inst::{AluOpRRI, AluOpRRR, FpuOpRRR},
+        LowerConfig,
+        MContext,
+    },
+    collections::linked_list::LinkedListNodePtr,
+};
+
+pub const fn fuse_shl_add() -> Peephole2<RvInst> {
+    PeepholeRule {
+        rewriter: |mctx, def_use, (a, b)| {
+            use RvInstKind as Ik;
+
+            match (a.kind(mctx), b.kind(mctx)) {
+                (
+                    Ik::AluRRI {
+                        op: AluOpRRI::Slli | AluOpRRI::Slliw,
+                        rd: slli_rd,
+                        rs: slli_rs,
+                        imm,
+                    },
+                    Ik::AluRRR {
+                        op: AluOpRRR::Add | AluOpRRR::Addw,
+                        rd: add_rd,
+                        rs1: add_rs1,
+                        rs2: add_rs2,
+                    },
+                ) => {
+                    // slli $v0, $v1, 1/2/3
+                    // add $v2, $v0, $v3
+                    // =>
+                    // sh1/2/3add $v2, $v1, $v3
+
+                    if def_use.num_uses(*slli_rd) != 1 {
+                        // we can't remove slli if it has multiple uses
+                        return false;
+                    }
+
+                    let shamt = imm.as_i16();
+                    let op = match shamt {
+                        1 => AluOpRRR::Sh1add,
+                        2 => AluOpRRR::Sh2add,
+                        3 => AluOpRRR::Sh3add,
+                        _ => return false,
+                    };
+
+                    let slli_rd = *slli_rd;
+                    let slli_rs = *slli_rs;
+
+                    let add_rd = *add_rd;
+                    let add_rs1 = *add_rs1;
+                    let add_rs2 = *add_rs2;
+
+                    let (shadd, lhs, rhs) = if slli_rd == add_rs1 {
+                        // reuse rd so we can remove add without replacing uses
+                        (
+                            RvInst::build_alu_rrr(mctx, op, add_rd, slli_rs, add_rs2),
+                            slli_rs,
+                            add_rs2,
+                        )
+                    } else if slli_rd == add_rs2 {
+                        // reuse rd so we can remove add without replacing uses
+                        (
+                            RvInst::build_alu_rrr(mctx, op, add_rd, slli_rs, add_rs1),
+                            add_rs1,
+                            slli_rs,
+                        )
+                    } else {
+                        return false;
+                    };
+
+                    // now, we overwrite the add with shadd, and the only use of
+                    // slli is in add, so we can safely remove slli and add
+
+                    // note that we must maintain the def-use when removing
+                    // instructions
+
+                    b.insert_after(mctx, shadd);
+
+                    def_use.remove_def(slli_rd, a);
+                    def_use.remove_use(slli_rs, a);
+
+                    def_use.remove_def(add_rd, b);
+                    def_use.remove_use(add_rs1, b);
+                    def_use.remove_use(add_rs2, b);
+
+                    a.remove(mctx);
+                    b.remove(mctx);
+
+                    def_use.add_def(add_rd, shadd);
+                    def_use.add_use(lhs, shadd);
+                    def_use.add_use(rhs, shadd);
+
+                    true
+                }
+                _ => false,
+            }
+        },
+    }
+}
+
+// TODO: floating-point move (fsgnj) is not handled yet
+
+pub const fn remove_redundant_move() -> Peephole1<RvInst> {
+    PeepholeRule {
+        rewriter: |mctx, def_use, a| {
+            use RvInstKind as Ik;
+
+            #[allow(clippy::wildcard_enum_match_arm)]
+            match a.kind(mctx) {
+                Ik::AluRRI {
+                    op: AluOpRRI::Addi,
+                    rd,
+                    rs,
+                    imm,
+                } => {
+                    if imm.as_i16() != 0 {
+                        return false;
+                    }
+
+                    let rd = *rd;
+                    let rs = *rs;
+
+                    if def_use.num_defs(rd) == 1
+                        && def_use.num_defs(rs) == 1
+                        && rd.is_vreg()
+                        && rs.is_vreg()
+                    {
+                        // TODO: can we replace rs that are callee-saved regs?
+
+                        // replace all uses of rd with rs, and remove this instruction
+                        def_use.replace_all_uses(mctx, rd, rs);
+
+                        def_use.remove_def(rd, a);
+                        def_use.remove_use(rs, a);
+
+                        a.remove(mctx);
+
+                        true
+                    } else {
+                        false
+                    }
+                }
+                _ => false,
+            }
+        },
+    }
+}
+
+pub const fn remove_identity_move() -> Peephole1<RvInst> {
+    PeepholeRule {
+        rewriter: |mctx, def_use, a| {
+            use RvInstKind as Ik;
+
+            #[allow(clippy::wildcard_enum_match_arm)]
+            match a.kind(mctx) {
+                Ik::AluRRI {
+                    op: AluOpRRI::Addi,
+                    rd,
+                    rs,
+                    imm,
+                } => {
+                    if imm.as_i16() != 0 {
+                        return false;
+                    }
+
+                    let rd = *rd;
+                    let rs = *rs;
+
+                    if rd == rs {
+                        // just remove this instruction
+                        def_use.remove_def(rd, a);
+                        def_use.remove_use(rs, a);
+
+                        a.remove(mctx);
+
+                        true
+                    } else {
+                        false
+                    }
+                }
+                Ik::FpuRRR {
+                    op: FpuOpRRR::FsgnjS | FpuOpRRR::FsgnjD,
+                    rm: _,
+                    rd,
+                    rs1,
+                    rs2,
+                } => {
+                    if rs1 == rs2 && rd == rs1 {
+                        // just remove this instruction
+                        def_use.remove_def(*rd, a);
+                        def_use.remove_use(*rs1, a);
+                        def_use.remove_use(*rs2, a);
+
+                        a.remove(mctx);
+
+                        true
+                    } else {
+                        false
+                    }
+                }
+                _ => false,
+            }
+        },
+    }
+}
+
+pub fn run_peephole(mctx: &mut MContext<RvInst>, config: &LowerConfig) -> bool {
+    let mut runner1 = PeepholeRunner::new();
+    let mut runner2 = PeepholeRunner::new();
+
+    runner1.add_rule(remove_identity_move());
+    runner1.add_rule(remove_redundant_move());
+    runner2.add_rule(fuse_shl_add());
+
+    let mut changed = false;
+
+    changed |= runner1.run(mctx, config);
+    changed |= runner2.run(mctx, config);
+
+    changed
+}
+
+pub fn run_peephole_after_regalloc(mctx: &mut MContext<RvInst>, config: &LowerConfig) -> bool {
+    let mut runner1 = PeepholeRunner::new();
+
+    runner1.add_rule(remove_identity_move());
+
+    let mut changed = false;
+
+    changed |= runner1.run(mctx, config);
+
+    changed
+}

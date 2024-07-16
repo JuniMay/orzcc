@@ -3,6 +3,7 @@ mod context;
 mod func;
 mod inst;
 mod lower;
+mod peephole;
 mod regs;
 
 pub mod reg_alloc;

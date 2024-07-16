@@ -58,7 +58,7 @@ riscv64-linux-gnu-gcc -march=rv64gc ./test.s -L./tests/sysy/sysy-runtime-lib -ls
 然后使用 QEMU 运行，其中 `1234` 是端口
 
 ```shell
-qemu-riscv64 -L /usr/riscv64-linux-gnu -g 1234 ./test < ./test.in &
+qemu-riscv64 -cpu rv64,zba=true,zbb=true -L /usr/riscv64-linux-gnu -g 1234 ./test < ./test.in &
 ```
 
 之后可以使用 GDB 连接 QEMU

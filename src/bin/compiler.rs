@@ -2,7 +2,7 @@
 
 use clap::{Arg, Command};
 use orzcc::{
-    backend::LowerConfig,
+    backend::{riscv64, LowerConfig},
     ir::{
         passes::{
             control_flow::{CfgCanonicalize, CfgSimplify, CFG_SIMPLIFY},
@@ -29,6 +29,8 @@ struct CliCommand {
     emit_typed_ast: Option<String>,
     /// Emitting ir
     emit_ir: Option<String>,
+    /// Emitting virtual-register code
+    emit_vcode: Option<String>,
     /// Optimization level
     opt: u8,
 
@@ -87,10 +89,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::fs::write(emit_ir, format!("{}", ir.display(true)))?;
         }
 
-        let mut lower_ctx: LowerContext<RvLowerSpec> = LowerContext::new(&ir, cmd.lower_cfg);
+        let mut lower_ctx: LowerContext<RvLowerSpec> =
+            LowerContext::new(&ir, cmd.lower_cfg.clone());
         lower_ctx.lower();
+
+        if cmd.opt > 0 {
+            riscv64::run_peephole(lower_ctx.mctx_mut(), &cmd.lower_cfg);
+        }
+
+        if let Some(emit_vcode) = &cmd.emit_vcode {
+            std::fs::write(emit_vcode, format!("{}", lower_ctx.mctx().display()))?;
+        }
+
         lower_ctx.reg_alloc();
         lower_ctx.after_regalloc();
+
+        if cmd.opt > 0 {
+            riscv64::run_peephole_after_regalloc(lower_ctx.mctx_mut(), &cmd.lower_cfg);
+        }
+
         let mctx = lower_ctx.finish();
         std::fs::write(cmd.output, format!("{}", mctx.display()))?;
     }
@@ -149,6 +166,11 @@ fn cli(passman: &mut PassManager) -> Command {
                 .help("Emit the IR to the specified file"),
         )
         .arg(
+            Arg::new("emit-vcode")
+                .long("emit-vcode")
+                .help("Emit the virtual-register code to the specified file"),
+        )
+        .arg(
             Arg::new("no-combine-stack-adjustments")
                 .long("no-combine-stack-adjustments")
                 .action(clap::ArgAction::Count),
@@ -175,6 +197,7 @@ fn parse_args(passman: &mut PassManager) -> CliCommand {
     let emit_ast = matches.get_one::<String>("emit-ast").cloned();
     let emit_typed_ast = matches.get_one::<String>("emit-typed-ast").cloned();
     let emit_ir = matches.get_one::<String>("emit-ir").cloned();
+    let emit_vcode = matches.get_one::<String>("emit-vcode").cloned();
 
     let omit_frame_pointer = matches.get_count("no-omit-frame-pointer") == 0;
     let combine_stack_adjustments = matches.get_count("no-combine-stack-adjustments") == 0;
@@ -208,6 +231,7 @@ fn parse_args(passman: &mut PassManager) -> CliCommand {
         emit_ast,
         emit_typed_ast,
         emit_ir,
+        emit_vcode,
         opt,
         lower_cfg,
     }
