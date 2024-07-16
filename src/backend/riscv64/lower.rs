@@ -588,38 +588,80 @@ impl LowerSpec for RvLowerSpec {
                 }
             }
             Ibop::Shl | Ibop::LShr | Ibop::AShr => {
-                let imm_op = match op {
-                    Ibop::Shl => AluOpRRI::Slli,
-                    Ibop::LShr => AluOpRRI::Srli,
-                    Ibop::AShr => AluOpRRI::Srai,
-                    Ibop::Add
-                    | Ibop::Sub
-                    | Ibop::Mul
-                    | Ibop::UDiv
-                    | Ibop::SDiv
-                    | Ibop::URem
-                    | Ibop::SRem
-                    | Ibop::And
-                    | Ibop::Or
-                    | Ibop::Xor
-                    | Ibop::Cmp(_) => unreachable!(),
+                let imm_op = if bitwidth == 32 {
+                    match op {
+                        Ibop::Shl => AluOpRRI::Slliw,
+                        Ibop::LShr => AluOpRRI::Srliw,
+                        Ibop::AShr => AluOpRRI::Sraiw,
+                        Ibop::Add
+                        | Ibop::Sub
+                        | Ibop::Mul
+                        | Ibop::UDiv
+                        | Ibop::SDiv
+                        | Ibop::URem
+                        | Ibop::SRem
+                        | Ibop::And
+                        | Ibop::Or
+                        | Ibop::Xor
+                        | Ibop::Cmp(_) => unreachable!(),
+                    }
+                } else if bitwidth == 64 {
+                    match op {
+                        Ibop::Shl => AluOpRRI::Slli,
+                        Ibop::LShr => AluOpRRI::Srli,
+                        Ibop::AShr => AluOpRRI::Srai,
+                        Ibop::Add
+                        | Ibop::Sub
+                        | Ibop::Mul
+                        | Ibop::UDiv
+                        | Ibop::SDiv
+                        | Ibop::URem
+                        | Ibop::SRem
+                        | Ibop::And
+                        | Ibop::Or
+                        | Ibop::Xor
+                        | Ibop::Cmp(_) => unreachable!(),
+                    }
+                } else {
+                    unimplemented!("gen_ibinary: bitwidth: {}", bitwidth);
                 };
 
-                let reg_op = match op {
-                    Ibop::Shl => AluOpRRR::Sll,
-                    Ibop::LShr => AluOpRRR::Srl,
-                    Ibop::AShr => AluOpRRR::Sra,
-                    Ibop::Add
-                    | Ibop::Sub
-                    | Ibop::Mul
-                    | Ibop::UDiv
-                    | Ibop::SDiv
-                    | Ibop::URem
-                    | Ibop::SRem
-                    | Ibop::And
-                    | Ibop::Or
-                    | Ibop::Xor
-                    | Ibop::Cmp(_) => unreachable!(),
+                let reg_op = if bitwidth == 32 {
+                    match op {
+                        Ibop::Shl => AluOpRRR::Sllw,
+                        Ibop::LShr => AluOpRRR::Srlw,
+                        Ibop::AShr => AluOpRRR::Sraw,
+                        Ibop::Add
+                        | Ibop::Sub
+                        | Ibop::Mul
+                        | Ibop::UDiv
+                        | Ibop::SDiv
+                        | Ibop::URem
+                        | Ibop::SRem
+                        | Ibop::And
+                        | Ibop::Or
+                        | Ibop::Xor
+                        | Ibop::Cmp(_) => unreachable!(),
+                    }
+                } else if bitwidth == 64 {
+                    match op {
+                        Ibop::Shl => AluOpRRR::Sll,
+                        Ibop::LShr => AluOpRRR::Srl,
+                        Ibop::AShr => AluOpRRR::Sra,
+                        Ibop::Add
+                        | Ibop::Sub
+                        | Ibop::Mul
+                        | Ibop::UDiv
+                        | Ibop::SDiv
+                        | Ibop::URem
+                        | Ibop::SRem
+                        | Ibop::And
+                        | Ibop::Or
+                        | Ibop::Xor
+                        | Ibop::Cmp(_) => unreachable!(),
+                    }
+                } else {
+                    unimplemented!("gen_ibinary: bitwidth: {}", bitwidth);
                 };
 
                 match (lhs.kind(), rhs.kind()) {
@@ -1154,7 +1196,9 @@ impl LowerSpec for RvLowerSpec {
 
         match offset.kind() {
             MValueKind::Reg(reg) => {
-                let base = if let Some(imm) = Imm12::try_from_i64(slot_offset_imm) {
+                let base = if slot_offset_imm == 0 {
+                    base
+                } else if let Some(imm) = Imm12::try_from_i64(slot_offset_imm) {
                     let (inst, rd) = RvInst::alu_rri(&mut lower.mctx, AluOpRRI::Addi, base, imm);
                     curr_block.push_back(&mut lower.mctx, inst);
                     rd
@@ -1172,7 +1216,9 @@ impl LowerSpec for RvLowerSpec {
             }
             MValueKind::Imm(imm) => {
                 let total_offset = slot_offset_imm + imm;
-                if let Some(imm) = Imm12::try_from_i64(total_offset) {
+                if total_offset == 0 {
+                    MValue::new_reg(ty, base)
+                } else if let Some(imm) = Imm12::try_from_i64(total_offset) {
                     let (inst, rd) = RvInst::alu_rri(&mut lower.mctx, AluOpRRI::Addi, base, imm);
                     curr_block.push_back(&mut lower.mctx, inst);
                     MValue::new_reg(ty, rd)

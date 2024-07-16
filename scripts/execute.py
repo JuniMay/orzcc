@@ -204,9 +204,7 @@ def test_native(
 
         execute(command, exec_timeout)
 
-        command = (
-            f"gcc -march=rv64gc {asm_path} -L{runtime_lib_dir} -lsylib -o {exec_path}"
-        )
+        command = f"gcc -march=rv64gc_zba_zbb {asm_path} -L{runtime_lib_dir} -lsylib -o {exec_path}"
 
         execute(command, exec_timeout)
 
@@ -331,6 +329,7 @@ def test(
             f"{testcase}.sy "
             # f'--emit-ast {ast_path} ' # AST will cause TLE on some cases.
             f"--emit-ir {ir_path} "
+            f"--emit-vcode {asm_path}.vcode "
             f"-O{opt_level}"
         )
 
@@ -348,7 +347,7 @@ def test(
             continue
 
         command = (
-            f"riscv64-linux-gnu-gcc -march=rv64gc {asm_path}"
+            f"riscv64-linux-gnu-gcc -march=rv64gc_zba_zbb {asm_path}"
             f" -L{runtime_lib_dir} -lsylib -o {exec_path}"
         )
 
@@ -361,10 +360,13 @@ def test(
             continue
 
         command = (
-            (f"qemu-riscv64 -L /usr/riscv64-linux-gnu {exec_path}" f" >{out_path}")
+            (
+                f"qemu-riscv64 -cpu rv64,zba=true,zbb=true -L /usr/riscv64-linux-gnu {exec_path}"
+                f" >{out_path}"
+            )
             if in_path is None
             else (
-                f"qemu-riscv64 -L /usr/riscv64-linux-gnu {exec_path}"
+                f"qemu-riscv64 -cpu rv64,zba=true,zbb=true -L /usr/riscv64-linux-gnu {exec_path}"
                 f" <{in_path} >{out_path}"
             )
         )

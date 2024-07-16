@@ -1,4 +1,10 @@
 use core::fmt;
+use std::hash::Hash;
+
+use rustc_hash::{FxHashMap, FxHashSet};
+
+use super::{inst::MInst, LowerConfig, MContext};
+use crate::collections::linked_list::LinkedListContainerPtr;
 
 /// The kind of a register.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -79,5 +85,75 @@ impl fmt::Display for VReg {
             },
             self.0
         )
+    }
+}
+
+/// A simple struct to record the definitions and uses of registers.
+///
+/// Note that this is not reaching definition analysis.
+pub struct RegDefUse<I: MInst + Hash> {
+    pub defs: FxHashMap<Reg, FxHashSet<I>>,
+    pub uses: FxHashMap<Reg, FxHashSet<I>>,
+}
+
+impl<I: MInst + Hash> RegDefUse<I> {
+    pub fn compute(mctx: &MContext<I>, config: &LowerConfig) -> Self {
+        let mut reg_def_use = RegDefUse {
+            defs: FxHashMap::default(),
+            uses: FxHashMap::default(),
+        };
+
+        for (_, func_data) in mctx.funcs.iter() {
+            let func = func_data.self_ptr();
+            if func.is_external(mctx) {
+                continue;
+            }
+
+            for block in func.iter(mctx) {
+                for inst in block.iter(mctx) {
+                    let defs = inst.defs(mctx, config);
+                    let uses = inst.uses(mctx, config);
+
+                    for def in defs {
+                        reg_def_use.defs.entry(def).or_default().insert(inst);
+                    }
+
+                    for use_ in uses {
+                        reg_def_use.uses.entry(use_).or_default().insert(inst);
+                    }
+                }
+            }
+        }
+
+        reg_def_use
+    }
+
+    pub fn remove_use(&mut self, reg: Reg, inst: I) {
+        if let Some(uses) = self.uses.get_mut(&reg) {
+            uses.remove(&inst);
+        }
+    }
+
+    pub fn add_use(&mut self, reg: Reg, inst: I) { self.uses.entry(reg).or_default().insert(inst); }
+
+    pub fn remove_def(&mut self, reg: Reg, inst: I) {
+        if let Some(defs) = self.defs.get_mut(&reg) {
+            defs.remove(&inst);
+        }
+    }
+
+    pub fn add_def(&mut self, reg: Reg, inst: I) { self.defs.entry(reg).or_default().insert(inst); }
+
+    pub fn num_uses(&self, reg: Reg) -> usize { self.uses.get(&reg).map_or(0, FxHashSet::len) }
+
+    pub fn num_defs(&self, reg: Reg) -> usize { self.defs.get(&reg).map_or(0, FxHashSet::len) }
+
+    pub fn replace_all_uses(&mut self, mctx: &mut MContext<I>, old: Reg, new: Reg) {
+        if let Some(uses) = self.uses.remove(&old) {
+            for inst in uses {
+                inst.replace_reg(mctx, old, new);
+                self.uses.entry(new).or_default().insert(inst);
+            }
+        }
     }
 }

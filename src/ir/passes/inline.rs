@@ -1,10 +1,11 @@
 use rustc_hash::FxHashMap;
 
+use super::control_flow::CfgSimplify;
 use crate::{
     collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
     ir::{
         deep_clone::DeepCloneMap,
-        passman::{GlobalPassMut, LocalPassMut, PassResult, TransformPass},
+        passman::{GlobalPassMut, LocalPassMut, ParamStorage, PassResult, TransformPass},
         Block,
         Context,
         Func,
@@ -37,7 +38,6 @@ impl Default for Inline {
     fn default() -> Self {
         Self {
             deep_clone_map: DeepCloneMap::default(),
-            // TODO: control by cli argument
             max_inline_depth: 2,
             max_inlinable_insn: 1024,
             depths: FxHashMap::default(),
@@ -217,11 +217,32 @@ impl GlobalPassMut for Inline {
         }
         Ok(((), changed))
     }
+
+    fn fetch_params(&mut self, params: &ParamStorage) {
+        self.max_inline_depth = params
+            .get("inline-max-depth")
+            .unwrap_or(self.max_inline_depth);
+
+        self.max_inlinable_insn = params
+            .get("inline-max-insn")
+            .unwrap_or(self.max_inlinable_insn);
+
+        println!(
+            "[ pass config ] inline: max_depth={}, max_insn={}",
+            self.max_inline_depth, self.max_inlinable_insn
+        );
+    }
 }
 
 impl TransformPass for Inline {
     fn register(passman: &mut crate::ir::passman::PassManager) {
         let pass = Self::default();
-        passman.register_transform(INLINE, pass, vec![/* Box::new(CfgCanonicalize) */]);
+        // using cfg-simplify to remove unreachable blocks, and make inlining easier
+        // XXX: unreachable codes might have wrong block arguments, which will cause
+        //      compiler panic. An example is `fft.sy` in SysY testcases.
+        passman.register_transform(INLINE, pass, vec![Box::new(CfgSimplify)]);
+
+        passman.add_parameter("inline-max-depth", 2);
+        passman.add_parameter("inline-max-insn", 1024);
     }
 }

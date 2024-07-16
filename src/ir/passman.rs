@@ -65,6 +65,8 @@ pub trait LocalPass {
 
     /// Run the pass on the given function.
     fn run(&mut self, ctx: &Context, func: Func) -> PassResult<Self::Output>;
+
+    fn fetch_params(&mut self, _params: &ParamStorage) {}
 }
 
 /// A pass that can be run on a function and modify it.
@@ -79,6 +81,8 @@ pub trait LocalPassMut {
     /// A tuple of the output of the pass and a boolean indicating whether the
     /// IR has been modified.
     fn run(&mut self, ctx: &mut Context, func: Func) -> PassResult<(Self::Output, bool)>;
+
+    fn fetch_params(&mut self, _params: &ParamStorage) {}
 }
 
 /// A pass that can be run on a Context.
@@ -88,6 +92,8 @@ pub trait GlobalPass {
 
     /// Run the pass on the given Context.
     fn run(&mut self, ctx: &Context) -> PassResult<Self::Output>;
+
+    fn fetch_params(&mut self, _params: &ParamStorage) {}
 }
 
 /// A pass that can be run on a Context and modify it.
@@ -102,6 +108,8 @@ pub trait GlobalPassMut {
     /// A tuple of the output of the pass and a boolean indicating whether the
     /// IR has been modified.
     fn run(&mut self, ctx: &mut Context) -> PassResult<(Self::Output, bool)>;
+
+    fn fetch_params(&mut self, _params: &ParamStorage) {}
 }
 
 /// The output of an analysis pass.
@@ -119,8 +127,33 @@ pub trait TransformPass: GlobalPassMut<Output = ()> {
 }
 
 #[derive(Default)]
-pub struct PassManager {
+pub struct ParamStorage {
     parameters: FxHashMap<String, String>,
+}
+
+impl ParamStorage {
+    fn insert(&mut self, name: impl Into<String>, default: impl ToString) {
+        self.parameters.insert(name.into(), default.to_string());
+    }
+
+    fn set<T: ToString>(&mut self, name: impl Into<String>, value: T) {
+        if let Some(param) = self.parameters.get_mut(&name.into()) {
+            *param = value.to_string();
+        }
+    }
+
+    pub fn get<T: FromStr>(&self, name: impl AsRef<str>) -> Option<T> {
+        self.parameters
+            .get(name.as_ref())
+            .and_then(|v| v.parse().ok())
+    }
+
+    fn iter(&self) -> impl Iterator<Item = (&String, &String)> { self.parameters.iter() }
+}
+
+#[derive(Default)]
+pub struct PassManager {
+    parameters: ParamStorage,
     transforms: FxHashMap<String, Box<dyn TransformPass>>,
     deps: FxHashMap<String, Vec<Box<dyn TransformPass>>>,
 }
@@ -137,20 +170,12 @@ impl Pipeline {
 impl PassManager {
     pub fn new() -> Self { Self::default() }
 
-    pub fn add_parameter(&mut self, name: impl Into<String>) {
-        self.parameters.insert(name.into(), String::new());
+    pub fn add_parameter(&mut self, name: impl Into<String>, default: impl ToString) {
+        self.parameters.insert(name, default);
     }
 
     pub fn set_parameter<T: ToString>(&mut self, name: impl Into<String>, value: T) {
-        if let Some(param) = self.parameters.get_mut(&name.into()) {
-            *param = value.to_string();
-        }
-    }
-
-    pub fn get_parameter<T: FromStr>(&self, name: impl AsRef<str>) -> Option<T> {
-        self.parameters
-            .get(name.as_ref())
-            .and_then(|v| v.parse().ok())
+        self.parameters.set(name, value);
     }
 
     pub fn register_transform<T: TransformPass + 'static>(
@@ -174,11 +199,11 @@ impl PassManager {
         names
     }
 
-    pub fn gather_parameter_names(&self) -> Vec<String> {
-        let mut names: Vec<String> = self
+    pub fn gather_parameter_names(&self) -> Vec<(String, String)> {
+        let mut names: Vec<(String, String)> = self
             .parameters
-            .keys()
-            .map(|name| name.to_string())
+            .iter()
+            .map(|(name, default)| (name.to_string(), default.to_string()))
             .collect();
         names.sort();
         names
@@ -195,11 +220,18 @@ impl PassManager {
         for _ in 0..max_iter {
             iter += 1;
             let mut changed = false;
-            for pass in self.deps.get_mut(&name).unwrap() {
+
+            let deps = &mut self.deps;
+            let transforms = &mut self.transforms;
+            let params = &self.parameters;
+
+            for pass in deps.get_mut(&name).unwrap() {
+                GlobalPassMut::fetch_params(pass.as_mut(), params);
                 let (_, local_changed) = GlobalPassMut::run(pass.as_mut(), ctx).unwrap();
                 changed |= local_changed;
             }
-            let transform = self.transforms.get_mut(&name).unwrap();
+            let transform = transforms.get_mut(&name).unwrap();
+            GlobalPassMut::fetch_params(transform.as_mut(), params);
             let (_, local_changed) = GlobalPassMut::run(transform.as_mut(), ctx).unwrap();
             changed |= local_changed;
             if !changed {
@@ -213,7 +245,7 @@ impl PassManager {
         let mut args: Vec<clap::Arg> = self
             .gather_parameter_names()
             .into_iter()
-            .map(|name| clap::Arg::new(&name).long(&name))
+            .map(|(name, default)| clap::Arg::new(&name).long(&name).default_value(default))
             .collect();
 
         args.extend(self.gather_transform_names().into_iter().map(|name| {
@@ -238,7 +270,10 @@ impl PassManager {
             changed = false;
             for pass_name in &pipeline.passes {
                 let iter = self.run_transform(pass_name, ctx, local_max_iter);
-                println!("Running pass: {} for {} iterations", pass_name, iter);
+                println!(
+                    "[ pipeline ] running {:>20} : {:^2} iterations",
+                    pass_name, iter
+                );
                 if iter > 1 {
                     changed = true;
                 }
