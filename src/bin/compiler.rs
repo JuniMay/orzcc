@@ -182,9 +182,9 @@ fn parse_args(passman: &mut PassManager) -> CliCommand {
     let mut passes = Vec::new();
 
     let transform_names = passman.gather_transform_names();
-    let parameter_names = passman.gather_parameter_names();
+    let parameters = passman.gather_parameter_names();
 
-    for parameter_name in parameter_names {
+    for (parameter_name, _) in parameters {
         let param = matches.get_one::<String>(&parameter_name);
         if let Some(param) = param {
             passman.set_parameter(&parameter_name, param.clone());
