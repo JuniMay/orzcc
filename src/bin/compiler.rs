@@ -68,8 +68,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if cmd.opt > 0 {
             passman.run_transform(MEM2REG, &mut ir, 1);
-            passman.run_transform(INLINE, &mut ir, 1);
-            passman.run_transform(LOOP_INVARIANT_MOTION, &mut ir, 1);
 
             let mut opt_pipeline = Pipeline::default();
             opt_pipeline.add_pass(CFG_SIMPLIFY);
@@ -78,6 +76,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             opt_pipeline.add_pass(INSTCOMBINE);
             opt_pipeline.add_pass(SIMPLE_DCE);
             opt_pipeline.add_pass(GVN);
+            opt_pipeline.add_pass(SIMPLE_DCE);
+            opt_pipeline.add_pass(LOOP_INVARIANT_MOTION);
+            opt_pipeline.add_pass(SIMPLE_DCE);
+            opt_pipeline.add_pass(INLINE);
             opt_pipeline.add_pass(SIMPLE_DCE);
 
             let _iter = passman.run_pipeline(&mut ir, &opt_pipeline, 32, 8);
