@@ -3,12 +3,141 @@ use crate::{
     backend::{
         inst::MInst,
         peephole::{Peephole1, Peephole2, PeepholeRule, PeepholeRunner},
-        riscv64::inst::{AluOpRRI, AluOpRRR, FpuOpRRR},
+        riscv64::{
+            inst::{AluOpRRI, AluOpRRR, BrOp, FpuOpRRR},
+            regs,
+        },
         LowerConfig,
         MContext,
     },
     collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
 };
+
+const fn fuse_cmp_br() -> Peephole2<RvInst> {
+    PeepholeRule {
+        rewriter: |mctx, def_use, (a, b)| {
+            use RvInstKind as Ik;
+
+            match (a.kind(mctx), b.kind(mctx)) {
+                (
+                    Ik::AluRRR {
+                        op: cmp_op @ (AluOpRRR::Slt | AluOpRRR::Sltu),
+                        rd,
+                        rs1: cmp_lhs,
+                        rs2: cmp_rhs,
+                    },
+                    Ik::Br {
+                        op: BrOp::Bne,
+                        rs1: br_lhs,
+                        rs2: br_rhs,
+                        block,
+                    },
+                ) => {
+                    let rd = *rd;
+                    let cmp_lhs = *cmp_lhs;
+                    let cmp_rhs = *cmp_rhs;
+                    let br_lhs = *br_lhs;
+                    let br_rhs = *br_rhs;
+
+                    let block = *block;
+
+                    #[allow(clippy::wildcard_enum_match_arm)]
+                    let br_op = match cmp_op {
+                        AluOpRRR::Slt => BrOp::Blt,
+                        AluOpRRR::Sltu => BrOp::Bltu,
+                        _ => unreachable!(),
+                    };
+
+                    if def_use.num_uses(rd) != 1 {
+                        // we can't remove cmp if it has multiple uses
+                        return false;
+                    }
+
+                    let new_br = if (rd == br_lhs && br_rhs == regs::zero().into())
+                        || (rd == br_rhs && br_lhs == regs::zero().into())
+                    {
+                        // slt + bne => blt
+                        RvInst::br(mctx, br_op, cmp_lhs, cmp_rhs, block)
+                    } else {
+                        return false;
+                    };
+
+                    b.insert_after(mctx, new_br);
+
+                    // maintain def-use
+                    def_use.remove_def(rd, a);
+                    def_use.remove_use(cmp_lhs, a);
+                    def_use.remove_use(cmp_rhs, a);
+
+                    def_use.remove_use(br_lhs, b);
+                    def_use.remove_use(br_rhs, b);
+
+                    a.remove(mctx);
+                    b.remove(mctx);
+
+                    def_use.add_use(cmp_lhs, new_br);
+                    def_use.add_use(cmp_rhs, new_br);
+
+                    true
+                }
+                (
+                    Ik::AluRRI {
+                        op: AluOpRRI::Sltiu,
+                        rd,
+                        rs: cmp_lhs,
+                        imm,
+                    },
+                    Ik::Br {
+                        op: BrOp::Bne,
+                        rs1: br_lhs,
+                        rs2: br_rhs,
+                        block,
+                    },
+                ) if imm.as_i16() == 1 => {
+                    let rd = *rd;
+
+                    let cmp_lhs = *cmp_lhs;
+
+                    let br_lhs = *br_lhs;
+                    let br_rhs = *br_rhs;
+
+                    let block = *block;
+
+                    if def_use.num_uses(rd) != 1 {
+                        return false;
+                    }
+
+                    let new_br = if (rd == br_lhs && br_rhs == regs::zero().into())
+                        || (rd == br_rhs && br_lhs == regs::zero().into())
+                    {
+                        // sltiu 1 + bnez => beqz
+                        RvInst::br(mctx, BrOp::Beq, cmp_lhs, regs::zero().into(), block)
+                    } else {
+                        return false;
+                    };
+
+                    b.insert_after(mctx, new_br);
+
+                    // maintain def-use
+                    def_use.remove_def(rd, a);
+                    def_use.remove_use(cmp_lhs, a);
+
+                    def_use.remove_use(br_lhs, b);
+                    def_use.remove_use(br_rhs, b);
+
+                    a.remove(mctx);
+                    b.remove(mctx);
+
+                    def_use.add_use(cmp_lhs, new_br);
+                    def_use.add_use(regs::zero().into(), new_br);
+
+                    true
+                }
+                _ => false,
+            }
+        },
+    }
+}
 
 const fn fuse_shl_add() -> Peephole2<RvInst> {
     PeepholeRule {
@@ -246,7 +375,12 @@ pub fn run_peephole(mctx: &mut MContext<RvInst>, config: &LowerConfig) -> bool {
 
     runner1.add_rule(remove_identity_move());
     runner1.add_rule(remove_redundant_move());
-    runner2.add_rule(fuse_shl_add());
+
+    runner2.add_rule(fuse_cmp_br());
+
+    if mctx.has_target_feature("zba") {
+        runner2.add_rule(fuse_shl_add());
+    }
 
     let mut changed = false;
 

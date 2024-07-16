@@ -1,5 +1,7 @@
 use core::fmt;
 
+use rustc_hash::FxHashSet;
+
 use super::{
     block::MBlockData,
     func::{MFuncData, MLabel},
@@ -24,11 +26,13 @@ where
 {
     pub(super) insts: BaseArena<I::T>,
     pub(super) blocks: BaseArena<MBlockData<I>>,
-    pub funcs: BaseArena<MFuncData<I>>,
+    pub(super) funcs: BaseArena<MFuncData<I>>,
 
     raw_data: Vec<(MLabel, RawData)>,
 
     vreg_counter: u32,
+
+    target_features: FxHashSet<String>,
 }
 
 impl<I> Default for MContext<I>
@@ -42,6 +46,7 @@ where
             funcs: BaseArena::default(),
             raw_data: Vec::new(),
             vreg_counter: 0,
+            target_features: FxHashSet::default(),
         }
     }
 }
@@ -60,6 +65,14 @@ where
 
     pub fn add_raw_data(&mut self, label: impl Into<MLabel>, data: RawData) {
         self.raw_data.push((label.into(), data));
+    }
+
+    pub fn add_target_feature(&mut self, feature: impl Into<String>) {
+        self.target_features.insert(feature.into());
+    }
+
+    pub fn has_target_feature(&self, feature: impl AsRef<str>) -> bool {
+        self.target_features.contains(feature.as_ref())
     }
 
     pub fn display(&self) -> DisplayMContext<I> { DisplayMContext { mctx: self } }

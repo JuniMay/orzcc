@@ -96,15 +96,25 @@ where
                 let mut curr_b = curr_a.and_then(|inst| inst.next(mctx));
 
                 while let Some((inst_a, inst_b)) = curr_a.zip(curr_b) {
-                    curr_a = inst_b.next(mctx);
-                    curr_b = curr_a.and_then(|inst| inst.next(mctx));
+                    curr_a = curr_b;
+                    curr_b = curr_b.and_then(|inst| inst.next(mctx));
+
+                    let mut local_changed = false;
 
                     for rule in &self.rules {
                         if (rule.rewriter)(mctx, &mut reg_def_use, (inst_a, inst_b)) {
-                            changed = true;
+                            local_changed = true;
                             break;
                         }
                     }
+
+                    if local_changed {
+                        // inst_a/inst_b might be removed, so we move forward again.
+                        curr_a = curr_b;
+                        curr_b = curr_b.and_then(|inst| inst.next(mctx));
+                    }
+
+                    changed |= local_changed;
                 }
             }
         }
