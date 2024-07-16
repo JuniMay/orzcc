@@ -7,10 +7,10 @@ use crate::{
         LowerConfig,
         MContext,
     },
-    collections::linked_list::LinkedListNodePtr,
+    collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
 };
 
-pub const fn fuse_shl_add() -> Peephole2<RvInst> {
+const fn fuse_shl_add() -> Peephole2<RvInst> {
     PeepholeRule {
         rewriter: |mctx, def_use, (a, b)| {
             use RvInstKind as Ik;
@@ -105,7 +105,7 @@ pub const fn fuse_shl_add() -> Peephole2<RvInst> {
 
 // TODO: floating-point move (fsgnj) is not handled yet
 
-pub const fn remove_redundant_move() -> Peephole1<RvInst> {
+const fn remove_redundant_move() -> Peephole1<RvInst> {
     PeepholeRule {
         rewriter: |mctx, def_use, a| {
             use RvInstKind as Ik;
@@ -151,7 +151,7 @@ pub const fn remove_redundant_move() -> Peephole1<RvInst> {
     }
 }
 
-pub const fn remove_identity_move() -> Peephole1<RvInst> {
+const fn remove_identity_move() -> Peephole1<RvInst> {
     PeepholeRule {
         rewriter: |mctx, def_use, a| {
             use RvInstKind as Ik;
@@ -209,6 +209,37 @@ pub const fn remove_identity_move() -> Peephole1<RvInst> {
     }
 }
 
+fn remove_redundant_jump(mctx: &mut MContext<RvInst>) -> bool {
+    let mut changed = false;
+
+    let funcs = mctx
+        .funcs
+        .iter_mut()
+        .map(|(_, func_data)| func_data.self_ptr())
+        .collect::<Vec<_>>();
+
+    for func in funcs {
+        if func.is_external(mctx) {
+            continue;
+        }
+
+        let mut cursor = func.cursor();
+        while let Some(block) = cursor.next(mctx) {
+            if let Some(tail) = block.tail(mctx) {
+                if let RvInstKind::J { block: succ } = tail.kind(mctx) {
+                    if block.next(mctx) == Some(*succ) {
+                        // remove redundant jump
+                        tail.remove(mctx);
+                        changed = true;
+                    }
+                }
+            }
+        }
+    }
+
+    changed
+}
+
 pub fn run_peephole(mctx: &mut MContext<RvInst>, config: &LowerConfig) -> bool {
     let mut runner1 = PeepholeRunner::new();
     let mut runner2 = PeepholeRunner::new();
@@ -233,6 +264,7 @@ pub fn run_peephole_after_regalloc(mctx: &mut MContext<RvInst>, config: &LowerCo
     let mut changed = false;
 
     changed |= runner1.run(mctx, config);
+    changed |= remove_redundant_jump(mctx);
 
     changed
 }
