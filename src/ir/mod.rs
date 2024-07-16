@@ -11,6 +11,7 @@ mod source_loc;
 mod ty;
 mod value;
 
+pub mod alias_analysis;
 pub mod debug;
 pub mod passes;
 pub mod passman;

@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use crate::{
     collections::linked_list::LinkedListContainerPtr,
     ir::{
+        alias_analysis::{AliasAnalysis, AliasAnalysisResult},
         passman::{GlobalPassMut, LocalPassMut, PassResult, TransformPass},
         Block,
         Context,
@@ -64,6 +65,8 @@ impl GVNInst {
 pub struct GlobalValueNumbering {
     /// The value table.
     value_table: HashMap<GVNInst, Vec<Value>>,
+    /// The memory table, mapping Ptr -> Value
+    memory_table: HashMap<Value, Value>,
     /// dominator tree
     dom: Dominance<Block>,
     /// change flag
@@ -77,6 +80,7 @@ impl GlobalValueNumbering {
         }
 
         let old_value_table = self.value_table.clone();
+        let old_memory_table = self.memory_table.clone();
 
         let mut cursor = block.cursor();
         while let Some(inst) = cursor.next(ctx) {
@@ -112,15 +116,65 @@ impl GlobalValueNumbering {
                         self.value_table.insert(gvn_inst, inst.results(ctx).into());
                     }
                 }
+                // DONE:
+                // Load %a ... Load %a
+                // The second Load should be replaced with the first Load
+                // Load %a ... Store %a ... Load %a
+                // The second Load should not be replaced
+                // Load %a ... Store %a
+                // No action
+                // Store %a ... Load %a
+                // The Load should be replaced with the Store
+                // TODO:
+                // Store %a ... Store %a
+                // The first store is redundant
+                // Store %a ... Load %a ... Store %a
+                // The first store is not redundant
+                // Store %a ... %a is not used
+                // The store is redundant
+                InstKind::Load => {
+                    // if the load instruction is in the memory table,
+                    // replace it with the value in the table
+                    if let Some(value) = self.memory_table.get(&inst.operand(ctx, 0)) {
+                        let users = inst.result(ctx, 0).users(ctx).clone();
+                        for user in users {
+                            user.replace(ctx, inst.result(ctx, 0), *value);
+                            self.changed = true;
+                        }
+                    } else {
+                        // if the load instruction is not in the memory
+                        // table, add it to the table
+                        self.memory_table
+                            .insert(inst.operand(ctx, 0), inst.result(ctx, 0));
+                    }
+                }
+                InstKind::Store => {
+                    // remove all the Ptr that may alias with the stored Ptr
+                    let mut to_remove = vec![];
+                    for (ptr, _) in self.memory_table.iter() {
+                        if matches!(
+                            AliasAnalysis::analyze(ctx, *ptr, inst.operand(ctx, 1)),
+                            AliasAnalysisResult::MayAlias | AliasAnalysisResult::MustAlias
+                        ) {
+                            to_remove.push(*ptr);
+                        }
+                    }
+                    for ptr in to_remove {
+                        self.memory_table.remove(&ptr);
+                    }
+                    // update the value in the table
+                    self.memory_table
+                        .insert(inst.operand(ctx, 1), inst.operand(ctx, 0));
+                }
+                InstKind::Call(_) | InstKind::CallIndirect(_) => {
+                    // remove all the Ptr in the memory table
+                    self.memory_table.clear();
+                }
                 InstKind::Undef
                 | InstKind::StackSlot(_)
                 | InstKind::Jump
                 | InstKind::Br
-                | InstKind::Call(_)
-                | InstKind::CallIndirect(_)
-                | InstKind::Ret
-                | InstKind::Load
-                | InstKind::Store => {}
+                | InstKind::Ret => {}
             }
         }
 
@@ -132,6 +186,7 @@ impl GlobalValueNumbering {
 
         // restore old value table
         self.value_table = old_value_table;
+        self.memory_table = old_memory_table;
     }
 }
 

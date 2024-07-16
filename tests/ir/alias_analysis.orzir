@@ -1,0 +1,27 @@
+slot @__GLOBAL_VAR_a /* 2 */  : [i32; 4] = zeroinit
+slot @__GLOBAL_VAR_b /* 2 */  : [i32; 4] = zeroinit
+func @main /* 2 */ () -> i32 {
+^bb1:
+    %__SLOT_VAR_main_a = stack_slot 16 : ptr
+    %__SLOT_VAR_main_b = stack_slot 16 : ptr
+
+    %__global_a = get_global @__GLOBAL_VAR_a : ptr
+    %__global_b = get_global @__GLOBAL_VAR_b : ptr
+
+    %offset_0 = iconst 0 : i32
+    %offset_1 = iconst 1 : i32
+
+    %__slot_var_main_a_0 = offset %__SLOT_VAR_main_a, %offset_0 : ptr
+    %__slot_var_main_a_1 = offset %__SLOT_VAR_main_a, %offset_1 : ptr
+
+    %__slot_var_main_b_0 = offset %__SLOT_VAR_main_b, %offset_0 : ptr
+    %__slot_var_main_b_1 = offset %__SLOT_VAR_main_b, %offset_1 : ptr
+
+    %__global_a_0 = offset %__global_a, %offset_0 : ptr
+    %__global_a_1 = offset %__global_a, %offset_1 : ptr
+
+    %__global_b_0 = offset %__global_b, %offset_0 : ptr
+    %__global_b_1 = offset %__global_b, %offset_1 : ptr
+
+    %__global_a_0_1 = offset %__global_a_0, %offset_1 : ptr
+}

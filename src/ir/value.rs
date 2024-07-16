@@ -169,6 +169,13 @@ impl Value {
     pub fn is_block_param(self, ctx: &Context) -> bool {
         matches!(self.deref(ctx).kind, ValueKind::BlockParam { .. })
     }
+
+    pub fn def_inst(self, ctx: &Context) -> Option<Inst> {
+        match self.deref(ctx).kind {
+            ValueKind::InstResult { inst, .. } => Some(inst),
+            ValueKind::BlockParam { .. } => None,
+        }
+    }
 }
 
 impl Usable for Value {
