@@ -94,8 +94,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut lower_ctx: LowerContext<RvLowerSpec> =
             LowerContext::new(&ir, cmd.lower_cfg.clone());
 
-        lower_ctx.mctx_mut().add_target_feature("zba");
-        lower_ctx.mctx_mut().add_target_feature("zbb");
+        lower_ctx.mctx_mut().set_arch("rv64imafdc_zba_zbb");
 
         lower_ctx.lower();
 

@@ -378,7 +378,7 @@ pub fn run_peephole(mctx: &mut MContext<RvInst>, config: &LowerConfig) -> bool {
 
     runner2.add_rule(fuse_cmp_br());
 
-    if mctx.has_target_feature("zba") {
+    if mctx.arch().contains("zba") {
         runner2.add_rule(fuse_shl_add());
     }
 

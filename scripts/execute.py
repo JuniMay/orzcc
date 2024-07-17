@@ -204,7 +204,7 @@ def test_native(
 
         execute(command, exec_timeout)
 
-        command = f"gcc -march=rv64gc_zba_zbb {asm_path} -L{runtime_lib_dir} -lsylib -o {exec_path}"
+        command = f"gcc {asm_path} -L{runtime_lib_dir} -lsylib -o {exec_path}"
 
         execute(command, exec_timeout)
 
@@ -347,7 +347,7 @@ def test(
             continue
 
         command = (
-            f"riscv64-linux-gnu-gcc -march=rv64gc_zba_zbb {asm_path}"
+            f"riscv64-linux-gnu-gcc {asm_path}"
             f" -L{runtime_lib_dir} -lsylib -o {exec_path}"
         )
 

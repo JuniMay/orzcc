@@ -32,7 +32,7 @@ where
 
     vreg_counter: u32,
 
-    target_features: FxHashSet<String>,
+    arch: String,
 }
 
 impl<I> Default for MContext<I>
@@ -46,7 +46,7 @@ where
             funcs: BaseArena::default(),
             raw_data: Vec::new(),
             vreg_counter: 0,
-            target_features: FxHashSet::default(),
+            arch: String::new(),
         }
     }
 }
@@ -67,13 +67,9 @@ where
         self.raw_data.push((label.into(), data));
     }
 
-    pub fn add_target_feature(&mut self, feature: impl Into<String>) {
-        self.target_features.insert(feature.into());
-    }
+    pub fn set_arch(&mut self, arch: impl Into<String>) { self.arch = arch.into(); }
 
-    pub fn has_target_feature(&self, feature: impl AsRef<str>) -> bool {
-        self.target_features.contains(feature.as_ref())
-    }
+    pub fn arch(&self) -> &str { &self.arch }
 
     pub fn display(&self) -> DisplayMContext<I> { DisplayMContext { mctx: self } }
 }
@@ -90,6 +86,7 @@ where
     I: DisplayMInst<'a>,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        writeln!(f, "\t.attribute arch, \"{}\"", self.mctx.arch())?;
         writeln!(f, "\t.option pic")?;
         writeln!(f, "\t.text")?;
         for (_, func_data) in self.mctx.funcs.iter() {
