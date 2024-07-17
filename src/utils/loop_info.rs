@@ -112,6 +112,27 @@ impl Loop<ir::Block> {
     }
 }
 
+pub struct LoopWithDepth<N> {
+    pub lp: Loop<N>,
+    pub depth: u32,
+}
+
+impl<N> PartialEq for LoopWithDepth<N> {
+    fn eq(&self, other: &Self) -> bool { self.depth == other.depth }
+}
+
+impl<N> Eq for LoopWithDepth<N> {}
+
+impl<N> PartialOrd for LoopWithDepth<N> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.depth.cmp(&other.depth))
+    }
+}
+
+impl<N> Ord for LoopWithDepth<N> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering { self.depth.cmp(&other.depth) }
+}
+
 impl<N> Default for LoopContext<N> {
     fn default() -> Self {
         Self {

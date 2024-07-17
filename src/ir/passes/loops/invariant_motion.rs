@@ -16,7 +16,7 @@ use crate::{
     utils::{
         cfg::{CfgInfo, CfgNode},
         dominance::Dominance,
-        loop_info::{Loop, LoopContext},
+        loop_info::{Loop, LoopContext, LoopWithDepth},
     },
 };
 
@@ -134,27 +134,6 @@ impl LocalPassMut for LoopInvariantMotion {
         let dominance = Dominance::new(ctx, &cfg);
 
         self.loop_ctx = LoopContext::new(&cfg, &dominance);
-
-        struct LoopWithDepth {
-            lp: Loop<Block>,
-            depth: u32,
-        }
-
-        impl PartialEq for LoopWithDepth {
-            fn eq(&self, other: &Self) -> bool { self.depth == other.depth }
-        }
-
-        impl Eq for LoopWithDepth {}
-
-        impl PartialOrd for LoopWithDepth {
-            fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-                Some(self.depth.cmp(&other.depth))
-            }
-        }
-
-        impl Ord for LoopWithDepth {
-            fn cmp(&self, other: &Self) -> std::cmp::Ordering { self.depth.cmp(&other.depth) }
-        }
 
         let mut loops = Vec::new();
 
