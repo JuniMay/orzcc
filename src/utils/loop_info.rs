@@ -1,13 +1,20 @@
-use std::hash::Hash;
+use std::{
+    collections::{HashSet, VecDeque},
+    hash::Hash,
+};
 
 use rustc_hash::FxHashMap;
 
 use super::{
     cfg::{CfgInfo, CfgNode},
+    def_use::Usable,
     dominance::Dominance,
 };
 use crate::{
-    collections::storage::{ArenaAlloc, ArenaDeref, ArenaPtr, BaseArena, BaseArenaPtr},
+    collections::{
+        linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
+        storage::{ArenaAlloc, ArenaDeref, ArenaPtr, BaseArena, BaseArenaPtr},
+    },
     ir,
 };
 
@@ -109,6 +116,42 @@ impl Loop<ir::Block> {
             }
         }
         None
+    }
+
+    /// Get all the values that are defined in the loop but used outside the
+    /// loop.
+    pub fn get_unclosed_values(
+        self,
+        ctx: &ir::Context,
+        loop_ctx: &LoopContext<ir::Block>,
+    ) -> HashSet<ir::Value> {
+        let header = self.header(loop_ctx);
+
+        let mut queue = VecDeque::new();
+        let mut visited = HashSet::new();
+
+        queue.push_back(header);
+
+        let mut values = HashSet::new();
+
+        while let Some(block) = queue.pop_front() {
+            if !visited.insert(block) {
+                continue;
+            }
+
+            for inst in block.iter(ctx) {
+                for result in inst.results(ctx) {
+                    for user in result.users(ctx) {
+                        let user_block = user.container(ctx).unwrap();
+                        if !loop_ctx.is_in_loop(user_block, self) {
+                            values.insert(*result);
+                        }
+                    }
+                }
+            }
+        }
+
+        values
     }
 }
 
