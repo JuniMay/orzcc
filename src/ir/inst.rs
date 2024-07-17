@@ -1350,6 +1350,14 @@ impl Inst {
         }
         is_used
     }
+
+    pub fn get_iconst_value(self, ctx: &Context) -> Option<ApInt> {
+        if let InstKind::IConst(value) = self.kind(ctx) {
+            Some(value.clone())
+        } else {
+            None
+        }
+    }
 }
 
 impl LinkedListNodePtr for Inst {

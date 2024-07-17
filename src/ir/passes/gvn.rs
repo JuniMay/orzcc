@@ -1,10 +1,12 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
-    collections::linked_list::LinkedListContainerPtr,
+    collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
     ir::{
+        alias_analysis::{AliasAnalysis, AliasAnalysisResult},
         passman::{GlobalPassMut, LocalPassMut, PassResult, TransformPass},
         Block,
+        CastOp,
         Context,
         Func,
         Inst,
@@ -112,15 +114,246 @@ impl GlobalValueNumbering {
                         self.value_table.insert(gvn_inst, inst.results(ctx).into());
                     }
                 }
+                // DONE:
+                // Load %a ... Load %a
+                // The second Load should be replaced with the first Load
+                // Load %a ... Store %a ... Load %a
+                // The second Load should not be replaced
+                // Load %a ... Store %a
+                // No action
+                // Store %a ... Load %a
+                // The Load should be replaced with the Store
+                // TODO:
+                // Store %a ... Store %a
+                // The first store is redundant
+                // Store %a ... Load %a ... Store %a
+                // The first store is not redundant
+                // Store %a ... %a is not used
+                // The store is redundant
+                InstKind::Load => {
+                    // travel reverse in this block to find any def of the same value
+                    let ptr = inst.operand(ctx, 0);
+                    let mut curr_inst = inst;
+                    let mut maybe_def_val = None;
+                    let mut get_clobbered = false;
+                    while let Some(last_inst) = curr_inst.prev(ctx) {
+                        match last_inst.kind(ctx) {
+                            InstKind::Store => {
+                                match AliasAnalysis::analyze(ctx, ptr, last_inst.operand(ctx, 1)) {
+                                    AliasAnalysisResult::MustAlias => {
+                                        // if we get a must alias, we can replace the load with the
+                                        // store's val
+                                        maybe_def_val = Some(last_inst.operand(ctx, 0));
+                                        break;
+                                    }
+                                    AliasAnalysisResult::MayAlias => {
+                                        // if we get a may alias, its clobbered by the store, so we
+                                        // quit
+                                        get_clobbered = true;
+                                        break;
+                                    }
+                                    AliasAnalysisResult::NoAlias => {
+                                        // if we get a no alias, we can continue
+                                    }
+                                }
+                            }
+                            InstKind::Load => {
+                                match AliasAnalysis::analyze(ctx, ptr, last_inst.operand(ctx, 0)) {
+                                    AliasAnalysisResult::MustAlias => {
+                                        // if we get a must alias, we can replace the load with the
+                                        // load's val
+                                        maybe_def_val = Some(last_inst.result(ctx, 0));
+                                        break;
+                                    }
+                                    AliasAnalysisResult::MayAlias
+                                    | AliasAnalysisResult::NoAlias => {
+                                        // if we get a may alias or no alias, we
+                                        // can continue
+                                    }
+                                }
+                            }
+                            InstKind::Call(_) | InstKind::CallIndirect(_) => {
+                                // if we get a call, we can't continue
+                                get_clobbered = true;
+                                break;
+                            }
+                            InstKind::GetGlobal(_)
+                            | InstKind::Offset
+                            | InstKind::StackSlot(_)
+                            | InstKind::Cast(CastOp::IntToPtr) => {
+                                // if we get a get_global, offset or stack_slot, we can't continue
+                                match AliasAnalysis::analyze(ctx, ptr, last_inst.result(ctx, 0)) {
+                                    AliasAnalysisResult::MustAlias
+                                    | AliasAnalysisResult::MayAlias => {
+                                        // if we get a must alias, we meet the
+                                        // true def of this val, we should treat
+                                        // as clobber // TODO: REALLY?
+                                        get_clobbered = true;
+                                        break;
+                                    }
+                                    AliasAnalysisResult::NoAlias => {
+                                        // if we get a no alias, we can continue
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+                        curr_inst = last_inst;
+                    }
+                    // if we found a def, replace the load with the def
+                    if let Some(def_val) = maybe_def_val {
+                        let users = inst.result(ctx, 0).users(ctx).clone();
+                        for user in users {
+                            user.replace(ctx, inst.result(ctx, 0), def_val);
+                            self.changed = true;
+                        }
+                        println!(
+                            "[ gvn ] eliminate load {:?} with {:?}",
+                            inst.result(ctx, 0),
+                            def_val
+                        );
+                    } else if !get_clobbered {
+                        // this means we meet the start of the block
+                        // we will trace back to the predecessor blocks
+                        let mut worklist_blocks = Vec::new();
+                        let mut visited_blocks = HashSet::new();
+                        for pred in block.preds(ctx) {
+                            worklist_blocks.push(pred);
+                        }
+                        let mut maybe_def_val_list = Vec::new();
+                        while let Some(work_block) = worklist_blocks.pop() {
+                            if visited_blocks.contains(&work_block) {
+                                continue;
+                            }
+                            let mut maybe_def_val = None;
+                            let mut get_clobbered = false;
+                            for block_inst in work_block.iter(ctx).rev() {
+                                // if we meet currrent block, then we should stop at current inst
+                                if block_inst == inst {
+                                    break;
+                                }
+                                match block_inst.kind(ctx) {
+                                    InstKind::Store => {
+                                        match AliasAnalysis::analyze(
+                                            ctx,
+                                            ptr,
+                                            block_inst.operand(ctx, 1),
+                                        ) {
+                                            AliasAnalysisResult::MustAlias => {
+                                                // if we get a must alias, we can replace the load
+                                                // with the store's val
+                                                maybe_def_val = Some(block_inst.operand(ctx, 0));
+                                                break;
+                                            }
+                                            AliasAnalysisResult::MayAlias => {
+                                                // if we get a may alias, its clobbered by the
+                                                // store, so we quit
+                                                get_clobbered = true;
+                                                break;
+                                            }
+                                            AliasAnalysisResult::NoAlias => {
+                                                // if we get a no alias, we can
+                                                // continue
+                                            }
+                                        }
+                                    }
+                                    InstKind::Load => {
+                                        match AliasAnalysis::analyze(
+                                            ctx,
+                                            ptr,
+                                            block_inst.operand(ctx, 0),
+                                        ) {
+                                            AliasAnalysisResult::MustAlias => {
+                                                // if we get a must alias, we can replace the load
+                                                // with the load's val
+                                                maybe_def_val = Some(block_inst.result(ctx, 0));
+                                                break;
+                                            }
+                                            AliasAnalysisResult::MayAlias
+                                            | AliasAnalysisResult::NoAlias => {
+                                                // if we get a may alias or no
+                                                // alias, we can continue
+                                            }
+                                        }
+                                    }
+                                    InstKind::Call(_) | InstKind::CallIndirect(_) => {
+                                        // if we get a call, we can't continue
+                                        get_clobbered = true;
+                                        break;
+                                    }
+                                    InstKind::GetGlobal(_)
+                                    | InstKind::Offset
+                                    | InstKind::StackSlot(_)
+                                    | InstKind::Cast(CastOp::IntToPtr) => {
+                                        // if we get a get_global, offset or stack_slot, we can't
+                                        // continue
+                                        match AliasAnalysis::analyze(
+                                            ctx,
+                                            ptr,
+                                            block_inst.result(ctx, 0),
+                                        ) {
+                                            AliasAnalysisResult::MustAlias
+                                            | AliasAnalysisResult::MayAlias => {
+                                                // if we get a must alias, we meet the
+                                                // true def of this val, we should treat
+                                                // as clobber // TODO: REALLY?
+                                                get_clobbered = true;
+                                                break;
+                                            }
+                                            AliasAnalysisResult::NoAlias => {
+                                                // if we get a no alias, we can
+                                                // continue
+                                            }
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            if let Some(def_val) = maybe_def_val {
+                                maybe_def_val_list.push(Some(def_val));
+                            } else if get_clobbered {
+                                maybe_def_val_list.push(None);
+                            } else {
+                                // we meet the start of the block, we will trace back to the
+                                // predecessor
+                                visited_blocks.insert(work_block);
+                                for pred in work_block.preds(ctx) {
+                                    if !visited_blocks.contains(&pred) {
+                                        worklist_blocks.push(pred);
+                                    }
+                                }
+                            }
+                        }
+                        // if there is no none in the maybe_def_val_list, and all
+                        // the values are the same, we can replace the load with the
+                        // value
+                        if !maybe_def_val_list.is_empty()
+                            && maybe_def_val_list.iter().all(|x| x.is_some())
+                            && maybe_def_val_list
+                                .iter()
+                                .all(|x| x.unwrap() == maybe_def_val_list[0].unwrap())
+                        {
+                            let def_val = maybe_def_val_list[0].unwrap();
+                            let users = inst.result(ctx, 0).users(ctx).clone();
+                            for user in users {
+                                user.replace(ctx, inst.result(ctx, 0), def_val);
+                                self.changed = true;
+                            }
+                            println!(
+                                "[ gvn ] eliminate load {:?} with {:?}",
+                                inst.result(ctx, 0),
+                                def_val
+                            );
+                        }
+                    }
+                }
+                InstKind::Store => {}
+                InstKind::Call(_) | InstKind::CallIndirect(_) => {}
                 InstKind::Undef
                 | InstKind::StackSlot(_)
                 | InstKind::Jump
                 | InstKind::Br
-                | InstKind::Call(_)
-                | InstKind::CallIndirect(_)
-                | InstKind::Ret
-                | InstKind::Load
-                | InstKind::Store => {}
+                | InstKind::Ret => {}
             }
         }
 
