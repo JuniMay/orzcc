@@ -65,10 +65,34 @@ impl AliasAnalysis {
                         if a_offset == b_offset {
                             // if the offset is the same, then the whole ptr must alias
                             AliasAnalysisResult::MustAlias
+                        } else if a_offset.iter().all(|v| {
+                            v.def_inst(ctx).is_some() && v.def_inst(ctx).unwrap().is_iconst(ctx)
+                        }) && b_offset.iter().all(|v| {
+                            v.def_inst(ctx).is_some() && v.def_inst(ctx).unwrap().is_iconst(ctx)
+                        }) {
+                            // if all the offsets are constants, then we can
+                            // check the offset
+                            // add up all the offsets
+                            let a_offset_val = a_offset
+                                .iter()
+                                .map(|v| v.def_inst(ctx).unwrap().get_iconst_value(ctx).unwrap())
+                                .fold(0, |acc, v| acc + u64::from(v));
+
+                            let b_offset_val = b_offset
+                                .iter()
+                                .map(|v| v.def_inst(ctx).unwrap().get_iconst_value(ctx).unwrap())
+                                .fold(0, |acc, v| acc + u64::from(v));
+
+                            if a_offset_val == b_offset_val {
+                                // if the offset is the same, then the whole ptr must alias
+                                AliasAnalysisResult::MustAlias
+                            } else {
+                                // if the offset is different, then the whole ptr must not alias
+                                AliasAnalysisResult::NoAlias
+                            }
                         } else {
                             // if the offset is different, then the whole ptr may alias
                             AliasAnalysisResult::MayAlias
-                            // TODO: We can do better for Constant offset
                         }
                     }
                 }
@@ -88,6 +112,24 @@ impl AliasAnalysis {
                         if a_offset.is_empty() {
                             // if the offset is empty, then the whole ptr must alias
                             AliasAnalysisResult::MustAlias
+                        } else if a_offset.iter().all(|v| {
+                            v.def_inst(ctx).is_some() && v.def_inst(ctx).unwrap().is_iconst(ctx)
+                        }) {
+                            // if all the offsets are constants, then we can
+                            // check the offset
+                            // add up all the offsets
+                            let a_offset_val = a_offset
+                                .iter()
+                                .map(|v| v.def_inst(ctx).unwrap().get_iconst_value(ctx).unwrap())
+                                .fold(0, |acc, v| acc + u64::from(v));
+
+                            if a_offset_val == 0 {
+                                // if the offset is 0, then the whole ptr must alias
+                                AliasAnalysisResult::MustAlias
+                            } else {
+                                // if the offset is not 0, then the whole ptr may alias
+                                AliasAnalysisResult::MayAlias
+                            }
                         } else {
                             // if the offset is not empty, then the whole ptr may alias
                             AliasAnalysisResult::MayAlias
@@ -110,6 +152,24 @@ impl AliasAnalysis {
                         if b_offset.is_empty() {
                             // if the offset is empty, then the whole ptr must alias
                             AliasAnalysisResult::MustAlias
+                        } else if b_offset.iter().all(|v| {
+                            v.def_inst(ctx).is_some() && v.def_inst(ctx).unwrap().is_iconst(ctx)
+                        }) {
+                            // if all the offsets are constants, then we can
+                            // check the offset
+                            // add up all the offsets
+                            let b_offset_val = b_offset
+                                .iter()
+                                .map(|v| v.def_inst(ctx).unwrap().get_iconst_value(ctx).unwrap())
+                                .fold(0, |acc, v| acc + u64::from(v));
+
+                            if b_offset_val == 0 {
+                                // if the offset is 0, then the whole ptr must alias
+                                AliasAnalysisResult::MustAlias
+                            } else {
+                                // if the offset is not 0, then the whole ptr may alias
+                                AliasAnalysisResult::MayAlias
+                            }
                         } else {
                             // if the offset is not empty, then the whole ptr may alias
                             AliasAnalysisResult::MayAlias
@@ -117,10 +177,18 @@ impl AliasAnalysis {
                     }
                 }
             }
-            (InstKind::StackSlot(_), InstKind::StackSlot(_))
-            | (InstKind::StackSlot(_), InstKind::GetGlobal(_))
+            (InstKind::GetGlobal(a), InstKind::GetGlobal(b)) => {
+                if a == b {
+                    // if the two globals are the same, then they must alias
+                    AliasAnalysisResult::MustAlias
+                } else {
+                    // if the two globals are different, then they must not alias
+                    AliasAnalysisResult::NoAlias
+                }
+            }
+            (InstKind::StackSlot(_), InstKind::GetGlobal(_))
             | (InstKind::GetGlobal(_), InstKind::StackSlot(_))
-            | (InstKind::GetGlobal(_), InstKind::GetGlobal(_)) => {
+            | (InstKind::StackSlot(_), InstKind::StackSlot(_)) => {
                 // different stack slots and globals must not alias
                 AliasAnalysisResult::NoAlias
             }
