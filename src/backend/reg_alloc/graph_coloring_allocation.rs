@@ -1,5 +1,6 @@
 use std::{
-    collections::{HashMap, HashSet},
+    cmp::Ordering,
+    collections::{BinaryHeap, HashMap, HashSet},
     hash::Hash,
 };
 
@@ -156,6 +157,22 @@ impl InterferenceGraph {
 //     pub kind: RegKind,
 // }
 
+/// (weight, register) pair for priority queue, min-heap
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct PriorityValuePair(f64, Reg);
+
+impl Eq for PriorityValuePair {}
+
+impl Ord for PriorityValuePair {
+    fn cmp(&self, other: &Self) -> Ordering {
+        other.0.partial_cmp(&self.0).unwrap_or(Ordering::Equal)
+    }
+}
+
+impl PartialOrd for PriorityValuePair {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> { other.0.partial_cmp(&self.0) }
+}
+
 pub struct GraphColoringAllocation<S>
 where
     S: LowerSpec,
@@ -204,6 +221,7 @@ where
         for kind in &[RegKind::General, RegKind::Float] {
             let mut working_allocation_results;
             loop {
+                println!("[ reg_alloc ] Allocating for {:?}", kind);
                 working_allocation_results = HashMap::new(); // allocation results for this round
 
                 // analyze live intervals
@@ -217,32 +235,79 @@ where
                 let mut stack = Vec::new();
                 let mut working_graph = interference_graph.clone();
 
-                // iterat until only precolored nodes are left
-                while !working_graph.all_colored() {
-                    // find a node with degree less than the number of allocatable registers
-                    if let Some(reg) = working_graph
-                        .graph
-                        .iter()
-                        .find(|(reg, neighbors)| {
-                            reg.kind() == *kind
-                                && reg.is_vreg()
-                                && neighbors.len() < S::allocatable_regs().len()
-                        })
-                        .map(|(reg, _)| *reg)
+                // precalculate spill priorities
+                let spill_priority_map =
+                    self.calculate_spill_priority(ctx, func, &working_graph, &spilled_registers);
+
+                // simplify priority queue
+                let mut simplify_queue = BinaryHeap::new();
+                for (reg, neighbors) in working_graph.graph.iter() {
+                    if reg.is_vreg()
+                        && neighbors.len() < S::allocatable_regs().len()
+                        && reg.kind() == *kind
                     {
+                        let priority = spill_priority_map.get(reg).unwrap();
+                        simplify_queue.push(PriorityValuePair(*priority, *reg));
+                    }
+                }
+
+                // iterate until only precolored nodes are left
+                while !working_graph.all_colored() {
+                    // find a node to simplify
+                    if let Some(reg) = simplify_queue.pop().map(|pvp| pvp.1) {
                         // push the node to the stack
                         stack.push(reg);
+                        // push the neighbors to the queue if degree is less than the number of
+                        // allocatable registers after removing this node
+                        for neighbor in working_graph.adjacent(reg).unwrap_or(&HashSet::default()) {
+                            if neighbor.is_vreg()
+                                && working_graph.degree(*neighbor) == S::allocatable_regs().len()
+                                && neighbor.kind() == *kind
+                            {
+                                let priority = spill_priority_map.get(neighbor).unwrap();
+                                simplify_queue.push(PriorityValuePair(*priority, *neighbor));
+                            }
+                        }
+                        // remove the node from the graph
                         working_graph.remove_node(reg);
                     } else {
                         // if no such node is found, spill a node
-                        let reg = self.choose_spill_candidate(
-                            ctx,
-                            func,
-                            &working_graph,
-                            &spilled_registers,
-                        );
-                        stack.push(reg);
-                        working_graph.remove_node(reg);
+                        let mut lowest_priority = f64::INFINITY;
+                        let mut spill_candidate = None;
+
+                        // find the node with the lowest spill priority
+                        for (reg, _) in working_graph.graph.iter() {
+                            if reg.is_vreg() && !spilled_registers.contains(reg) {
+                                let priority = spill_priority_map.get(reg).unwrap();
+                                if *priority < lowest_priority {
+                                    lowest_priority = *priority;
+                                    spill_candidate = Some(*reg);
+                                }
+                            }
+                        }
+
+                        if let Some(reg) = spill_candidate {
+                            // push the node to the stack
+                            stack.push(reg);
+                            // push the neighbors to the queue if degree is less than the number of
+                            // allocatable registers after removing this node
+                            for neighbor in
+                                working_graph.adjacent(reg).unwrap_or(&HashSet::default())
+                            {
+                                if neighbor.is_vreg()
+                                    && working_graph.degree(*neighbor)
+                                        == S::allocatable_regs().len()
+                                    && neighbor.kind() == *kind
+                                {
+                                    let priority = spill_priority_map.get(neighbor).unwrap();
+                                    simplify_queue.push(PriorityValuePair(*priority, *neighbor));
+                                }
+                            }
+                            // remove the node from the graph
+                            working_graph.remove_node(reg);
+                        } else {
+                            panic!("No spill candidate found");
+                        }
                     }
                 }
 
@@ -372,99 +437,94 @@ where
         }
     }
 
-    // heuristic: choose the node with the highest degree
-    fn choose_spill_candidate(
+    /// weight = (\sum def_or_use * 10^depth ) / degree
+    fn calculate_spill_priority(
         &mut self,
         ctx: &LowerContext<S>,
         func: MFunc<S::I>,
         graph: &InterferenceGraph,
         spilled_registers: &HashSet<Reg>,
-    ) -> Reg {
-        let mut max_degree = 0;
-        let mut spill_candidate = None;
-
-        // find the node with the highest degree
-        for (reg, neighbors) in graph.graph.iter() {
-            if reg.is_vreg() && !spilled_registers.contains(reg) {
-                let degree = neighbors.len();
-                if degree > max_degree {
-                    max_degree = degree;
-                    spill_candidate = Some(*reg);
+    ) -> HashMap<Reg, f64> {
+        // calculate loop depths
+        if self.loop_ctx.is_none() {
+            self.cfg = Some(CfgInfo::new(ctx.mctx(), func));
+            self.dominance = Some(Dominance::new(ctx.mctx(), self.cfg.as_ref().unwrap()));
+            self.loop_ctx = Some(LoopContext::new(
+                self.cfg.as_ref().unwrap(),
+                self.dominance.as_ref().unwrap(),
+            ));
+            self.block_depth_map = Some(HashMap::new());
+            for lp in self.loop_ctx.as_ref().unwrap().loops() {
+                let depth = lp.depth(self.loop_ctx.as_ref().unwrap());
+                for block in func.iter(ctx.mctx()) {
+                    if self.loop_ctx.as_ref().unwrap().is_in_loop(block, lp) {
+                        self.block_depth_map.as_mut().unwrap().insert(block, depth);
+                    }
                 }
             }
         }
 
-        spill_candidate.unwrap_or_else(|| panic!("No spill candidate found"))
+        let mut costs = HashMap::new();
+        for block in func.iter(ctx.mctx()) {
+            let depth = self
+                .block_depth_map
+                .as_ref()
+                .unwrap()
+                .get(&block)
+                .unwrap_or(&0);
+            for inst in block.iter(ctx.mctx()) {
+                for reg in inst.uses(ctx.mctx(), &ctx.config) {
+                    if reg.is_vreg() && !spilled_registers.contains(&reg) {
+                        *costs.entry(reg).or_insert(0 as f64) += 10.0_f64.powf(*depth as f64)
+                    }
+                }
+                for reg in inst.defs(ctx.mctx(), &ctx.config) {
+                    if reg.is_vreg() && !spilled_registers.contains(&reg) {
+                        *costs.entry(reg).or_insert(0 as f64) += 10.0_f64.powf(*depth as f64)
+                    }
+                }
+            }
+        }
+
+        let mut spill_priority = HashMap::new();
+        for (reg, neighbors) in graph.graph.iter() {
+            if spilled_registers.contains(reg) {
+                spill_priority.insert(*reg, f64::INFINITY);
+            } else if reg.is_vreg() {
+                let cost = costs
+                    .get(reg)
+                    .expect("register in graph but not in instructions");
+                let degree = neighbors.len();
+                let priority = *cost / (degree as f64);
+                assert!(!priority.is_nan());
+                spill_priority.insert(*reg, priority);
+            }
+        }
+
+        spill_priority
     }
 
-    // heuristic: from Modern Compiler Implementation in ML, p. 238
-    // fn choose_spill_candidate(
+    // /// weight = 1 / degree
+    // fn calculate_spill_priority(
     //     &mut self,
     //     ctx: &LowerContext<S>,
     //     func: MFunc<S::I>,
     //     graph: &InterferenceGraph,
     //     spilled_registers: &HashSet<Reg>,
-    // ) -> Reg {
-    //     // precalculate the cost of spilling each register if not already done
-    //     if self.loop_ctx.is_none() {
-    //         self.cfg = Some(CfgInfo::new(ctx.mctx(), func));
-    //         self.dominance = Some(Dominance::new(ctx.mctx(),
-    // self.cfg.as_ref().unwrap()));         self.loop_ctx =
-    // Some(LoopContext::new(             self.cfg.as_ref().unwrap(),
-    //             self.dominance.as_ref().unwrap(),
-    //         ));
-    //         self.block_depth_map = Some(HashMap::new());
-    //         for lp in self.loop_ctx.as_ref().unwrap().loops() {
-    //             let depth = lp.depth(self.loop_ctx.as_ref().unwrap());
-    //             for block in func.iter(ctx.mctx()) {
-    //                 if self.loop_ctx.as_ref().unwrap().is_in_loop(block, lp) {
-    //                     self.block_depth_map.as_mut().unwrap().insert(block,
-    // depth);                 }
-    //             }
-    //         }
-    //     }
-
-    //     let mut costs = HashMap::new();
-    //     for block in func.iter(ctx.mctx()) {
-    //         let depth = self
-    //             .block_depth_map
-    //             .as_ref()
-    //             .unwrap()
-    //             .get(&block)
-    //             .unwrap_or(&0);
-    //         for inst in block.iter(ctx.mctx()) {
-    //             for reg in inst.uses(ctx.mctx(), &ctx.config) {
-    //                 if reg.is_vreg() && !spilled_registers.contains(&reg) {
-    //                     *costs.entry(reg).or_insert(0 as f64) +=
-    // 10.0_f64.powf(*depth as f64)                 }
-    //             }
-    //             for reg in inst.defs(ctx.mctx(), &ctx.config) {
-    //                 if reg.is_vreg() && !spilled_registers.contains(&reg) {
-    //                     *costs.entry(reg).or_insert(0 as f64) +=
-    // 10.0_f64.powf(*depth as f64)                 }
-    //             }
-    //         }
-    //     }
-
-    //     let mut lowest_priority = f64::INFINITY;
-    //     let mut spill_candidate = None;
-
-    //     // find the node with the highest degree
+    // ) -> HashMap<Reg, f64> {
+    //     // calculate loop depths
+    //     let mut spill_priority = HashMap::new();
     //     for (reg, neighbors) in graph.graph.iter() {
-    //         if reg.is_vreg() && !spilled_registers.contains(reg) {
-    //             let cost = costs
-    //                 .get(reg)
-    //                 .expect("register in graph but not in instructions");
+    //         if spilled_registers.contains(reg) {
+    //             spill_priority.insert(*reg, f64::INFINITY);
+    //         } else if reg.is_vreg() {
     //             let degree = neighbors.len();
-    //             let priority = *cost / (degree as f64);
+    //             let priority = 1.0 / (degree as f64);
     //             assert!(!priority.is_nan());
-    //             if priority < lowest_priority {
-    //                 lowest_priority = priority;
-    //                 spill_candidate = Some(*reg);
-    //             }
+    //             spill_priority.insert(*reg, priority);
     //         }
     //     }
 
-    //     spill_candidate.unwrap_or_else(|| panic!("No spill candidate found"))
+    //     spill_priority
     // }
 }

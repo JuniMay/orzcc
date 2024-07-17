@@ -343,9 +343,18 @@ where
             .collect();
 
         for func in funcs {
-            println!("Function: {}", func.label(self.mctx()));
+            println!(
+                "[ reg_alloc ] Allocating function: {}",
+                func.label(self.mctx())
+            );
             let mut allocation = GraphColoringAllocation::new();
             allocation.run_on_function(self, func);
+            println!(
+                "[ reg_alloc ] Spilled {} regs, with {} loads and {} stores inserted",
+                allocation.total_spills,
+                allocation.total_loads_added,
+                allocation.total_stores_added
+            )
         }
     }
 }
