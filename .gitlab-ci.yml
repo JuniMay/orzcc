@@ -12,7 +12,7 @@ compile:
     - cargo build --release
   artifacts:
     paths:
-      - target/
+      - target/release/compiler
 
 performance:
   stage: performance
