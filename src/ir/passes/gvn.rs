@@ -4,6 +4,7 @@ use crate::{
     collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
     ir::{
         alias_analysis::{AliasAnalysis, AliasAnalysisResult},
+        function_analysis::FunctionAnalysis,
         passman::{GlobalPassMut, LocalPassMut, PassResult, TransformPass},
         Block,
         CastOp,
@@ -68,6 +69,8 @@ pub struct GlobalValueNumbering {
     value_table: HashMap<GVNInst, Vec<Value>>,
     /// dominator tree
     dom: Dominance<Block>,
+    /// function analysis
+    func_analysis: FunctionAnalysis,
     /// change flag
     changed: bool,
 }
@@ -134,6 +137,7 @@ impl GlobalValueNumbering {
                     // travel reverse in this block to find any def of the same value
                     let ptr = inst.operand(ctx, 0);
                     let mut curr_inst = inst;
+                    // FIXME: multiple result in inst
                     let mut maybe_def_val = None;
                     let mut get_clobbered = false;
                     while let Some(last_inst) = curr_inst.prev(ctx) {
@@ -172,7 +176,19 @@ impl GlobalValueNumbering {
                                     }
                                 }
                             }
-                            InstKind::Call(_) | InstKind::CallIndirect(_) => {
+                            InstKind::Call(symbol) => {
+                                if let Some(func) = ctx.lookup_func(symbol) {
+                                    // if we see a non-pure func call, we can't continue
+                                    if !self.func_analysis.is_pure(func) {
+                                        get_clobbered = true;
+                                        break;
+                                    }
+                                } else {
+                                    get_clobbered = true;
+                                    break;
+                                }
+                            }
+                            InstKind::CallIndirect(_) => {
                                 // if we get a call, we can't continue
                                 get_clobbered = true;
                                 break;
@@ -276,7 +292,19 @@ impl GlobalValueNumbering {
                                             }
                                         }
                                     }
-                                    InstKind::Call(_) | InstKind::CallIndirect(_) => {
+                                    InstKind::Call(symbol) => {
+                                        if let Some(func) = ctx.lookup_func(symbol) {
+                                            // if we see a non-pure func call, we can't continue
+                                            if !self.func_analysis.is_pure(func) {
+                                                get_clobbered = true;
+                                                break;
+                                            }
+                                        } else {
+                                            get_clobbered = true;
+                                            break;
+                                        }
+                                    }
+                                    InstKind::CallIndirect(_) => {
                                         // if we get a call, we can't continue
                                         get_clobbered = true;
                                         break;
@@ -347,9 +375,38 @@ impl GlobalValueNumbering {
                         }
                     }
                 }
-                InstKind::Store => {}
-                InstKind::Call(_) | InstKind::CallIndirect(_) => {}
-                InstKind::Undef
+                InstKind::Store => {
+                    // TODO: Store elimination
+                }
+                InstKind::Call(symbol) => {
+                    let gvn_inst = GVNInst::from_inst(ctx, inst);
+                    // if the instruction is in the value table, replace it with the value in
+                    // the table
+                    if let Some(func) = ctx.lookup_func(symbol) {
+                        if self.func_analysis.is_pure(func) {
+                            if let Some(value) = self.value_table.get(&gvn_inst) {
+                                for (old_value, new_value) in inst
+                                    .results(ctx)
+                                    .to_vec()
+                                    .iter()
+                                    .zip(value.iter())
+                                    .map(|(a, b)| (*a, *b))
+                                {
+                                    let users = old_value.users(ctx).clone();
+                                    for user in users {
+                                        user.replace(ctx, old_value, new_value);
+                                        self.changed = true;
+                                    }
+                                }
+                            } else {
+                                // if the instruction is not in the value table, add it to the table
+                                self.value_table.insert(gvn_inst, inst.results(ctx).into());
+                            }
+                        }
+                    }
+                }
+                InstKind::CallIndirect(_)
+                | InstKind::Undef
                 | InstKind::StackSlot(_)
                 | InstKind::Jump
                 | InstKind::Br
@@ -376,6 +433,8 @@ impl LocalPassMut for GlobalValueNumbering {
 
         let cfg = CfgInfo::new(ctx, func);
         self.dom = Dominance::new(ctx, &cfg);
+        self.func_analysis = FunctionAnalysis::new();
+        self.func_analysis.analyze_all(ctx);
 
         self.value_table = HashMap::new();
 

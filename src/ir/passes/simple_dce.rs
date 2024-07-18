@@ -4,6 +4,7 @@ use super::control_flow::CfgSimplify;
 use crate::{
     collections::linked_list::LinkedListContainerPtr,
     ir::{
+        function_analysis::FunctionAnalysis,
         passman::{GlobalPassMut, LocalPassMut, PassResult, TransformPass},
         Context,
         Func,
@@ -12,7 +13,17 @@ use crate::{
     utils::def_use::Usable,
 };
 
-pub struct SimpleDce;
+pub struct SimpleDce {
+    func_analysis: FunctionAnalysis,
+}
+
+impl Default for SimpleDce {
+    fn default() -> Self {
+        Self {
+            func_analysis: FunctionAnalysis::new(),
+        }
+    }
+}
 
 impl LocalPassMut for SimpleDce {
     type Output = ();
@@ -49,8 +60,26 @@ impl LocalPassMut for SimpleDce {
                             insts_to_remove.push(inst);
                         }
                     }
-                    Ik::Call(_) | Ik::CallIndirect(_) => {
-                        // maybe side effect, cannot remove (for now)
+                    Ik::Call(symbol) => {
+                        if let Some(called_func) = ctx.lookup_func(symbol) {
+                            // we can remove the call if the function is pure
+                            if self.func_analysis.is_pure(called_func) {
+                                let mut used = false;
+                                for result in inst.results(ctx) {
+                                    if result.total_uses(ctx) != 0 {
+                                        used = true;
+                                        break;
+                                    }
+                                }
+
+                                if !used {
+                                    insts_to_remove.push(inst);
+                                }
+                            }
+                        }
+                    }
+                    Ik::CallIndirect(_) => {
+                        // cannot remove
                     }
                     Ik::Store | Ik::Br | Ik::Jump | Ik::Ret => {
                         // cannot remove
@@ -97,6 +126,8 @@ impl GlobalPassMut for SimpleDce {
     fn run(&mut self, ctx: &mut Context) -> PassResult<(Self::Output, bool)> {
         let mut changed = false;
 
+        self.func_analysis.analyze_all(ctx);
+
         for func in ctx.funcs() {
             let ((), local_changed) = LocalPassMut::run(self, ctx, func)?;
             changed |= local_changed;
@@ -108,6 +139,10 @@ impl GlobalPassMut for SimpleDce {
 
 impl TransformPass for SimpleDce {
     fn register(passman: &mut crate::ir::passman::PassManager) {
-        passman.register_transform(SIMPLE_DCE, SimpleDce, vec![Box::new(CfgSimplify)]);
+        passman.register_transform(
+            SIMPLE_DCE,
+            SimpleDce::default(),
+            vec![Box::new(CfgSimplify)],
+        );
     }
 }

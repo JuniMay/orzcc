@@ -1,0 +1,307 @@
+slot @__GLOBAL_CONST_base /* 0 */  : i32 = [0x10, 0x00, 0x00, 0x00]
+slot @__GLOBAL_VAR_a /* 1 */  : [i32; 30000010] = undef
+slot @__GLOBAL_VAR_ans /* 2 */  : i32 = undef
+decl @_sysy_stoptime(i32) -> void
+decl @putch(i32) -> void
+decl @putint(i32) -> void
+decl @getfloat() -> f32
+decl @getarray(ptr) -> i32
+decl @putfarray(i32, ptr) -> void
+decl @memcpy(ptr, ptr, i32) -> void
+decl @putfloat(f32) -> void
+decl @getint() -> i32
+decl @getfarray(ptr) -> i32
+decl @getch() -> i32
+decl @memset(ptr, i32, i32) -> void
+decl @putarray(i32, ptr) -> void
+decl @_sysy_starttime(i32) -> void
+func @getNumPos /* 1 */ (i32, i32) -> i32 {
+^bb2 /* 9 */ (%__PARAM_getNumPos_num: i32 /* 32, no.0 */, %__PARAM_getNumPos_pos: i32 /* 33, no.1 */):
+    %v17 /* 40, uses: 1 */ = iconst 0x00000000i32 : i32
+    %v19 /* 45, uses: 2 */ = iconst 0x00000010i32 : i32
+    %v22 /* 48, uses: 1 */ = iconst 0x00000001i32 : i32
+    /* no result */ jump ^while.entry_1(%v17, %__PARAM_getNumPos_num)
+
+^while.entry_1 /* 11 */ (%v156: i32 /* 450, no.0 */, %v157: i32 /* 451, no.1 */):
+    %v18 /* 43, uses: 1 */ = icmp.slt %v156, %__PARAM_getNumPos_pos : i1
+    /* no result */ br %v18, ^while.body_1, ^while.exit_1
+
+^while.body_1 /* 13 */ :
+    %v20 /* 46, uses: 1 */ = sdiv %v157, %v19 : i32
+    %v23 /* 49, uses: 1 */ = add %v156, %v22 : i32
+    /* no result */ jump ^while.entry_1(%v23, %v20)
+
+^while.exit_1 /* 12 */ :
+    %v24 /* 52, uses: 1 */ = srem %v157, %v19 : i32
+    /* no result */ ret %v24
+
+}
+func @main /* 3 */ () -> i32 {
+^bb6 /* 44 */ :
+    %v131 /* 393, uses: 3 */ = get_global @__GLOBAL_VAR_a : ptr
+    %v132 /* 396, uses: 2 */ = call @getarray(%v131) : i32
+    %v133 /* 397, uses: 1 */ = iconst 0x0000005ai32 : i32
+    /* no result */ call @_sysy_starttime(%v133)
+    %v134 /* 398, uses: 1 */ = iconst 0x00000008i32 : i32
+    %v135 /* 402, uses: 5 */ = iconst 0x00000000i32 : i32
+    /* no result */ call @radixSort(%v134, %v131, %v135, %v132)
+    %v139 /* 409, uses: 5 */ = get_global @__GLOBAL_VAR_ans : ptr
+    %v67 /* 189, uses: 2 */ = iconst 0x00000002i32 : i32
+    %v147 /* 428, uses: 1 */ = iconst 0x00000001i32 : i32
+    /* no result */ jump ^while.entry_8(%v135)
+
+^while.entry_8 /* 46 */ (%v21: i32 /* 47, no.0 */):
+    %v138 /* 408, uses: 1 */ = icmp.slt %v21, %v132 : i1
+    /* no result */ br %v138, ^while.body_8, ^while.exit_8
+
+^while.body_8 /* 48 */ :
+    %v140 /* 411, uses: 1 */ = load %v139 : i32
+    %v70 /* 196, uses: 1 */ = shl %v21, %v67 : i32
+    %v141 /* 419, uses: 1 */ = offset %v131, %v70 : ptr
+    %v142 /* 420, uses: 1 */ = load %v141 : i32
+    %v143 /* 423, uses: 1 */ = add %v21, %v67 : i32
+    %v144 /* 424, uses: 1 */ = srem %v142, %v143 : i32
+    %v145 /* 425, uses: 1 */ = mul %v21, %v144 : i32
+    %v146 /* 426, uses: 1 */ = add %v140, %v145 : i32
+    /* no result */ store %v146, %v139
+    %v148 /* 429, uses: 1 */ = add %v21, %v147 : i32
+    /* no result */ jump ^while.entry_8(%v148)
+
+^while.exit_8 /* 47 */ :
+    %v149 /* 431, uses: 2 */ = load %v139 : i32
+    %v150 /* 433, uses: 1 */ = icmp.slt %v149, %v135 : i1
+    /* no result */ br %v150, ^if.then_3, ^if.exit_3
+
+^if.then_3 /* 50 */ :
+    %v151 /* 438, uses: 1 */ = sub %v135, %v149 : i32
+    /* no result */ store %v151, %v139
+    /* no result */ jump ^if.exit_3
+
+^if.exit_3 /* 52 */ :
+    %v152 /* 439, uses: 1 */ = iconst 0x00000066i32 : i32
+    /* no result */ call @_sysy_stoptime(%v152)
+    %v153 /* 441, uses: 1 */ = load %v139 : i32
+    /* no result */ call @putint(%v153)
+    %v154 /* 442, uses: 1 */ = iconst 0x0000000ai32 : i32
+    /* no result */ call @putch(%v154)
+    /* no result */ ret %v135
+
+}
+func @getMaxNum /* 0 */ (i32, ptr) -> i32 {
+^bb1 /* 0 */ (%__PARAM_getMaxNum_n: i32 /* 0, no.0 */, %__PARAM_getMaxNum_arr: ptr /* 1, no.1 */):
+    %v1 /* 5, uses: 2 */ = iconst 0x00000000i32 : i32
+    %v74 /* 206, uses: 1 */ = iconst 0x00000002i32 : i32
+    %v11 /* 28, uses: 1 */ = iconst 0x00000001i32 : i32
+    /* no result */ jump ^while.entry_0(%v1, %v1)
+
+^while.entry_0 /* 2 */ (%v16: i32 /* 36, no.0 */, %v14: i32 /* 34, no.1 */):
+    %v4 /* 10, uses: 1 */ = icmp.slt %v16, %__PARAM_getMaxNum_n : i1
+    /* no result */ br %v4, ^while.body_0, ^while.exit_0
+
+^while.body_0 /* 4 */ :
+    %v77 /* 217, uses: 1 */ = shl %v16, %v74 : i32
+    %v5 /* 16, uses: 1 */ = offset %__PARAM_getMaxNum_arr, %v77 : ptr
+    %v6 /* 17, uses: 2 */ = load %v5 : i32
+    %v8 /* 19, uses: 1 */ = icmp.slt %v14, %v6 : i1
+    /* no result */ br %v8, ^if.exit_0(%v6), ^if.exit_0(%v14)
+
+^if.exit_0 /* 8 */ (%v15: i32 /* 35, no.0 */):
+    %v12 /* 29, uses: 1 */ = add %v16, %v11 : i32
+    /* no result */ jump ^while.entry_0(%v12, %v15)
+
+^while.exit_0 /* 3 */ :
+    /* no result */ ret %v14
+
+}
+func @radixSort /* 2 */ (i32, ptr, i32, i32) -> void {
+^bb3 /* 14 */ (%__PARAM_radixSort_bitround: i32 /* 54, no.0 */, %__PARAM_radixSort_a: ptr /* 55, no.1 */, %__PARAM_radixSort_l: i32 /* 56, no.2 */, %__PARAM_radixSort_r: i32 /* 57, no.3 */):
+    %__SLOT_VAR_radixSort_cnt_0 /* 67, uses: 7 */ = stack_slot 64 : ptr
+    %__SLOT_VAR_radixSort_tail_0 /* 64, uses: 9 */ = stack_slot 64 : ptr
+    %__SLOT_VAR_radixSort_head_0 /* 61, uses: 11 */ = stack_slot 64 : ptr
+    %v136 /* 403, uses: 1 */ = undef : i32
+    %v137 /* 406, uses: 1 */ = undef : i32
+    %v25 /* 62, uses: 6 */ = iconst 0x00000000i32 : i32
+    %v26 /* 63, uses: 3 */ = iconst 0x00000040i32 : i32
+    /* no result */ call @memset(%__SLOT_VAR_radixSort_head_0, %v25, %v26)
+    /* no result */ call @memset(%__SLOT_VAR_radixSort_tail_0, %v25, %v26)
+    /* no result */ call @memset(%__SLOT_VAR_radixSort_cnt_0, %v25, %v26)
+    %v27 /* 71, uses: 1 */ = iconst 0xffffffffi32 : i32
+    %v28 /* 72, uses: 1 */ = icmp.eq %__PARAM_radixSort_bitround, %v27 : i1
+    %v30 /* 74, uses: 1 */ = iconst 0x1i1 : i1
+    /* no result */ br %v28, ^bb5(%v30), ^bb4
+
+^bb4 /* 19 */ :
+    %v31 /* 76, uses: 1 */ = iconst 0x00000001i32 : i32
+    %v32 /* 77, uses: 1 */ = add %__PARAM_radixSort_l, %v31 : i32
+    %v33 /* 79, uses: 1 */ = icmp.sle %__PARAM_radixSort_r, %v32 : i1
+    /* no result */ jump ^bb5(%v33)
+
+^bb5 /* 20 */ (%v29: i1 /* 73, no.0 */):
+    /* no result */ br %v29, ^bb0, ^while.entry_2.preheader_0
+
+^while.entry_2.preheader_0 /* 5 */ :
+    %v81 /* 223, uses: 17 */ = iconst 0x00000002i32 : i32
+    %v45 /* 114, uses: 11 */ = iconst 0x00000001i32 : i32
+    /* no result */ jump ^while.entry_2(%__PARAM_radixSort_l)
+
+^while.entry_2 /* 22 */ (%v7: i32 /* 18, no.0 */):
+    %v34 /* 84, uses: 1 */ = icmp.slt %v7, %__PARAM_radixSort_r : i1
+    /* no result */ br %v34, ^while.body_2, ^while.exit_2
+
+^while.body_2 /* 24 */ :
+    %v82 /* 226, uses: 1 */ = shl %v7, %v81 : i32
+    %v36 /* 91, uses: 2 */ = offset %__PARAM_radixSort_a, %v82 : ptr
+    %v37 /* 92, uses: 1 */ = load %v36 : i32
+    %v38 /* 94, uses: 1 */ = call @getNumPos(%v37, %__PARAM_radixSort_bitround) : i32
+    %v88 /* 241, uses: 1 */ = shl %v38, %v81 : i32
+    %v39 /* 98, uses: 1 */ = offset %__SLOT_VAR_radixSort_cnt_0, %v88 : ptr
+    %v41 /* 106, uses: 1 */ = load %v36 : i32
+    %v42 /* 108, uses: 1 */ = call @getNumPos(%v41, %__PARAM_radixSort_bitround) : i32
+    %v93 /* 256, uses: 1 */ = shl %v42, %v81 : i32
+    %v43 /* 112, uses: 1 */ = offset %__SLOT_VAR_radixSort_cnt_0, %v93 : ptr
+    %v44 /* 113, uses: 1 */ = load %v43 : i32
+    %v46 /* 115, uses: 1 */ = add %v44, %v45 : i32
+    /* no result */ store %v46, %v39
+    %v47 /* 118, uses: 1 */ = add %v7, %v45 : i32
+    /* no result */ jump ^while.entry_2(%v47)
+
+^while.exit_2 /* 23 */ :
+    /* no result */ store %__PARAM_radixSort_l, %__SLOT_VAR_radixSort_head_0
+    %v50 /* 139, uses: 1 */ = load %__SLOT_VAR_radixSort_cnt_0 : i32
+    %v51 /* 140, uses: 1 */ = add %__PARAM_radixSort_l, %v50 : i32
+    /* no result */ store %v51, %__SLOT_VAR_radixSort_tail_0
+    %v52 /* 143, uses: 3 */ = iconst 0x00000010i32 : i32
+    /* no result */ jump ^while.entry_3(%v45)
+
+^while.entry_3 /* 25 */ (%v10: i32 /* 27, no.0 */):
+    %v53 /* 144, uses: 1 */ = icmp.slt %v10, %v52 : i1
+    /* no result */ br %v53, ^while.body_3, ^while.entry_4(%v136, %v137, %v25)
+
+^while.body_3 /* 27 */ :
+    %v96 /* 264, uses: 3 */ = shl %v10, %v81 : i32
+    %v55 /* 150, uses: 1 */ = offset %__SLOT_VAR_radixSort_head_0, %v96 : ptr
+    %v56 /* 154, uses: 1 */ = sub %v10, %v45 : i32
+    %v103 /* 285, uses: 1 */ = shl %v56, %v81 : i32
+    %v57 /* 158, uses: 1 */ = offset %__SLOT_VAR_radixSort_tail_0, %v103 : ptr
+    %v58 /* 159, uses: 2 */ = load %v57 : i32
+    /* no result */ store %v58, %v55
+    %v60 /* 165, uses: 1 */ = offset %__SLOT_VAR_radixSort_tail_0, %v96 : ptr
+    %v62 /* 178, uses: 1 */ = offset %__SLOT_VAR_radixSort_cnt_0, %v96 : ptr
+    %v63 /* 179, uses: 1 */ = load %v62 : i32
+    %v64 /* 180, uses: 1 */ = add %v58, %v63 : i32
+    /* no result */ store %v64, %v60
+    %v65 /* 183, uses: 1 */ = add %v10, %v45 : i32
+    /* no result */ jump ^while.entry_3(%v65)
+
+^while.entry_4 /* 28 */ (%v129: i32 /* 391, no.0 */, %v13: i32 /* 30, no.1 */, %v9: i32 /* 21, no.2 */):
+    %v66 /* 187, uses: 1 */ = icmp.slt %v9, %v52 : i1
+    /* no result */ br %v66, ^while.entry_5.preheader_0, ^while.exit_4
+
+^while.entry_5.preheader_0 /* 10 */ :
+    %v111 /* 332, uses: 2 */ = shl %v9, %v81 : i32
+    %v68 /* 193, uses: 4 */ = offset %__SLOT_VAR_radixSort_head_0, %v111 : ptr
+    %v71 /* 200, uses: 1 */ = offset %__SLOT_VAR_radixSort_tail_0, %v111 : ptr
+    /* no result */ jump ^while.entry_5(%v129, %v13)
+
+^while.entry_5 /* 31 */ (%v155: i32 /* 444, no.0 */, %v3: i32 /* 9, no.1 */):
+    %v69 /* 194, uses: 2 */ = load %v68 : i32
+    %v72 /* 201, uses: 1 */ = load %v71 : i32
+    %v73 /* 202, uses: 1 */ = icmp.slt %v69, %v72 : i1
+    /* no result */ br %v73, ^while.body_5, ^while.exit_5
+
+^while.body_5 /* 33 */ :
+    %v121 /* 371, uses: 1 */ = shl %v69, %v81 : i32
+    %v75 /* 215, uses: 1 */ = offset %__PARAM_radixSort_a, %v121 : ptr
+    %v76 /* 216, uses: 1 */ = load %v75 : i32
+    /* no result */ jump ^while.entry_6(%v76, %v3)
+
+^while.entry_6 /* 34 */ (%v130: i32 /* 392, no.0 */, %v2: i32 /* 8, no.1 */):
+    %v78 /* 219, uses: 1 */ = call @getNumPos(%v130, %__PARAM_radixSort_bitround) : i32
+    %v79 /* 221, uses: 1 */ = icmp.ne %v78, %v9 : i1
+    /* no result */ br %v79, ^while.body_6, ^while.exit_6
+
+^while.body_6 /* 36 */ :
+    %v83 /* 228, uses: 1 */ = call @getNumPos(%v130, %__PARAM_radixSort_bitround) : i32
+    %v125 /* 382, uses: 1 */ = shl %v83, %v81 : i32
+    %v84 /* 232, uses: 1 */ = offset %__SLOT_VAR_radixSort_head_0, %v125 : ptr
+    %v85 /* 233, uses: 1 */ = load %v84 : i32
+    %v54 /* 146, uses: 1 */ = shl %v85, %v81 : i32
+    %v86 /* 237, uses: 1 */ = offset %__PARAM_radixSort_a, %v54 : ptr
+    %v87 /* 238, uses: 1 */ = load %v86 : i32
+    %v89 /* 243, uses: 1 */ = call @getNumPos(%v130, %__PARAM_radixSort_bitround) : i32
+    %v59 /* 161, uses: 1 */ = shl %v89, %v81 : i32
+    %v90 /* 247, uses: 1 */ = offset %__SLOT_VAR_radixSort_head_0, %v59 : ptr
+    %v91 /* 248, uses: 1 */ = load %v90 : i32
+    %v61 /* 174, uses: 1 */ = shl %v91, %v81 : i32
+    %v92 /* 252, uses: 1 */ = offset %__PARAM_radixSort_a, %v61 : ptr
+    /* no result */ store %v130, %v92
+    %v94 /* 257, uses: 1 */ = call @getNumPos(%v130, %__PARAM_radixSort_bitround) : i32
+    %v35 /* 87, uses: 1 */ = shl %v94, %v81 : i32
+    %v95 /* 261, uses: 1 */ = offset %__SLOT_VAR_radixSort_head_0, %v35 : ptr
+    %v97 /* 265, uses: 1 */ = call @getNumPos(%v130, %__PARAM_radixSort_bitround) : i32
+    %v40 /* 101, uses: 1 */ = shl %v97, %v81 : i32
+    %v98 /* 269, uses: 1 */ = offset %__SLOT_VAR_radixSort_head_0, %v40 : ptr
+    %v99 /* 270, uses: 1 */ = load %v98 : i32
+    %v100 /* 272, uses: 1 */ = add %v99, %v45 : i32
+    /* no result */ store %v100, %v95
+    /* no result */ jump ^while.entry_6(%v87, %v130)
+
+^while.exit_6 /* 35 */ :
+    %v101 /* 280, uses: 1 */ = load %v68 : i32
+    %v80 /* 222, uses: 1 */ = shl %v101, %v81 : i32
+    %v102 /* 284, uses: 1 */ = offset %__PARAM_radixSort_a, %v80 : ptr
+    /* no result */ store %v130, %v102
+    %v104 /* 298, uses: 1 */ = load %v68 : i32
+    %v105 /* 300, uses: 1 */ = add %v104, %v45 : i32
+    /* no result */ store %v105, %v68
+    /* no result */ jump ^while.entry_5(%v130, %v2)
+
+^while.exit_5 /* 32 */ :
+    %v106 /* 303, uses: 1 */ = add %v9, %v45 : i32
+    /* no result */ jump ^while.entry_4(%v155, %v3, %v106)
+
+^while.exit_4 /* 29 */ :
+    /* no result */ store %__PARAM_radixSort_l, %__SLOT_VAR_radixSort_head_0
+    %v108 /* 326, uses: 1 */ = load %__SLOT_VAR_radixSort_cnt_0 : i32
+    %v109 /* 327, uses: 1 */ = add %__PARAM_radixSort_l, %v108 : i32
+    /* no result */ store %v109, %__SLOT_VAR_radixSort_tail_0
+    %v122 /* 373, uses: 1 */ = sub %__PARAM_radixSort_bitround, %v45 : i32
+    /* no result */ jump ^while.entry_7(%v25)
+
+^while.entry_7 /* 37 */ (%v0: i32 /* 2, no.0 */):
+    %v110 /* 331, uses: 1 */ = icmp.slt %v0, %v52 : i1
+    /* no result */ br %v110, ^while.body_7, ^bb0
+
+^while.body_7 /* 39 */ :
+    %v112 /* 334, uses: 1 */ = icmp.slt %v25, %v0 : i1
+    /* no result */ br %v112, ^if.then_2, ^if.exit_2
+
+^if.then_2 /* 41 */ :
+    %v48 /* 122, uses: 3 */ = shl %v0, %v81 : i32
+    %v113 /* 340, uses: 1 */ = offset %__SLOT_VAR_radixSort_head_0, %v48 : ptr
+    %v114 /* 344, uses: 1 */ = sub %v0, %v45 : i32
+    %v49 /* 129, uses: 1 */ = shl %v114, %v81 : i32
+    %v115 /* 348, uses: 1 */ = offset %__SLOT_VAR_radixSort_tail_0, %v49 : ptr
+    %v116 /* 349, uses: 2 */ = load %v115 : i32
+    /* no result */ store %v116, %v113
+    %v117 /* 355, uses: 1 */ = offset %__SLOT_VAR_radixSort_tail_0, %v48 : ptr
+    %v118 /* 368, uses: 1 */ = offset %__SLOT_VAR_radixSort_cnt_0, %v48 : ptr
+    %v119 /* 369, uses: 1 */ = load %v118 : i32
+    %v120 /* 370, uses: 1 */ = add %v116, %v119 : i32
+    /* no result */ store %v120, %v117
+    /* no result */ jump ^if.exit_2
+
+^if.exit_2 /* 43 */ :
+    %v107 /* 323, uses: 2 */ = shl %v0, %v81 : i32
+    %v123 /* 379, uses: 1 */ = offset %__SLOT_VAR_radixSort_head_0, %v107 : ptr
+    %v124 /* 380, uses: 1 */ = load %v123 : i32
+    %v126 /* 386, uses: 1 */ = offset %__SLOT_VAR_radixSort_tail_0, %v107 : ptr
+    %v127 /* 387, uses: 1 */ = load %v126 : i32
+    /* no result */ call @radixSort(%v122, %__PARAM_radixSort_a, %v124, %v127)
+    %v128 /* 390, uses: 1 */ = add %v0, %v45 : i32
+    /* no result */ jump ^while.entry_7(%v128)
+
+^bb0 /* 15 */ :
+    /* no result */ ret void
+
+}

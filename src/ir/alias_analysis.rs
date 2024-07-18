@@ -41,9 +41,25 @@ impl AliasAnalysis {
         let a_inst = a.def_inst(ctx);
         let b_inst = b.def_inst(ctx);
 
-        // if we meet either of them being block parameter, we can't analyze them
-        if a_inst.is_none() || b_inst.is_none() {
+        // if we meet both of them being block parameter, we can't analyze
+        if a_inst.is_none() && b_inst.is_none() {
             return AliasAnalysisResult::MayAlias;
+        } else if a_inst.is_none() {
+            if matches!(b_inst.unwrap().kind(ctx), InstKind::StackSlot(_)) {
+                // if a is block parameter, and b is stack slot, then they must not alias
+                return AliasAnalysisResult::NoAlias;
+            } else {
+                // if a is block parameter, and b is not stack slot, then we can't analyze
+                return AliasAnalysisResult::MayAlias;
+            }
+        } else if b_inst.is_none() {
+            if matches!(a_inst.unwrap().kind(ctx), InstKind::StackSlot(_)) {
+                // if b is block parameter, and a is stack slot, then they must not alias
+                return AliasAnalysisResult::NoAlias;
+            } else {
+                // if b is block parameter, and a is not stack slot, then we can't analyze
+                return AliasAnalysisResult::MayAlias;
+            }
         }
 
         let a_inst = a_inst.unwrap();
