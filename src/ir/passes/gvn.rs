@@ -48,9 +48,10 @@ impl GVNInst {
         } else {
             inst.operands(ctx).to_vec()
         };
-        let ty = match inst.kind(ctx) {
-            InstKind::Cast(_) => Some(inst.result(ctx, 0).ty(ctx)),
-            _ => None,
+        let ty = if let InstKind::Cast(_) = inst.kind(ctx) {
+            Some(inst.result(ctx, 0).ty(ctx))
+        } else {
+            None
         };
         Self { kind, operands, ty }
     }
@@ -196,7 +197,17 @@ impl GlobalValueNumbering {
                                     }
                                 }
                             }
-                            _ => {}
+                            InstKind::Undef
+                            | InstKind::IConst(_)
+                            | InstKind::FConst(_)
+                            | InstKind::IBinary(_)
+                            | InstKind::FBinary(_)
+                            | InstKind::IUnary(_)
+                            | InstKind::FUnary(_)
+                            | InstKind::Cast(_)
+                            | InstKind::Jump
+                            | InstKind::Br
+                            | InstKind::Ret => {}
                         }
                         curr_inst = last_inst;
                     }
@@ -306,7 +317,17 @@ impl GlobalValueNumbering {
                                             }
                                         }
                                     }
-                                    _ => {}
+                                    InstKind::Undef
+                                    | InstKind::IConst(_)
+                                    | InstKind::FConst(_)
+                                    | InstKind::IBinary(_)
+                                    | InstKind::FBinary(_)
+                                    | InstKind::IUnary(_)
+                                    | InstKind::FUnary(_)
+                                    | InstKind::Cast(_)
+                                    | InstKind::Jump
+                                    | InstKind::Br
+                                    | InstKind::Ret => {}
                                 }
                             }
                             if let Some(def_val) = maybe_def_val {

@@ -14,7 +14,7 @@
 //! Note that the implementation is not very efficient currently, some
 //! optimizations may be needed in the future.
 
-use std::fmt;
+use std::{fmt, iter::Sum};
 
 use thiserror::Error;
 
@@ -1099,6 +1099,18 @@ impl Ord for ApInt {
             }
         }
         std::cmp::Ordering::Equal
+    }
+}
+
+impl Sum for ApInt {
+    fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+        iter.fold(ApInt::zero(1), |acc, x| {
+            let width = acc.width.max(x.width);
+            let mut acc = acc.into_zeroext(width);
+            let x = x.into_zeroext(width);
+            acc.inplace_add(&x);
+            acc
+        })
     }
 }
 
