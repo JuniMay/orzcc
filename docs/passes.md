@@ -24,8 +24,20 @@ mem2reg 的 Pass 位于 `src/ir/passes` 下。
   - [x] Integer
   - [ ] Floating Point
 - [ ] CFG Simplification
-- [ ] Function Inlining
-- [ ] Global Value Numbering
+  - [ ] Branch Condition Expr Simplification
+  - [ ] Branch Merge
+- [x] Function Inlining
+  - [x] Simple Inlining
+  - [ ] Recursive Inlining
+  - [ ] Mutually Recursive Inlining
+- [x] Global Value Numbering
+  - [x] Simple GVN
+  - [x] Load Elimination
+    - [x] Simple Load Elimination
+    - [ ] Load Elimination with Function Call
+  - [ ] Store Elimination
+  - [ ] GVN with PRE
+  - [x] Pure Func Call Elimination
 - [ ] Global Code Motion
   - [x] Loop Invariant Code Motion
   - [ ] Sink
@@ -34,10 +46,21 @@ mem2reg 的 Pass 位于 `src/ir/passes` 下。
   - [x] Math Optimization (instcombine)
   - [ ] Multiplication Optimization
   - [ ] Division Optimization
+  - [ ] DivMod To MulShift
 - [ ] Loop Unrolling
 - [ ] Scalar Evolution Analysis
 - [ ] Tail Call Optimization
-- [ ] Alias Analysis (basicaa)
+- [x] Alias Analysis (basicaa)
+- [ ] Function Analysis
+  - [x] Pure Function
+  - [ ] Function Clobber
+  - [ ] Function Use
+- [ ] Reassociation `gameoflife`
+- [ ] Tree Height Reduction `gameoflife`
+- [ ] Manual Memset
+- [ ] Memset Elimination
+- [ ] Memset Combination 
+- [ ] Instruction Scheduler
 
 可能还需要一个更有效的测试方式。
 
