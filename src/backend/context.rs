@@ -1,7 +1,5 @@
 use core::fmt;
 
-use rustc_hash::FxHashSet;
-
 use super::{
     block::MBlockData,
     func::{MFuncData, MLabel},

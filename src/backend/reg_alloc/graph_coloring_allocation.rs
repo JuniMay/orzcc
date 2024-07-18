@@ -170,6 +170,7 @@ impl Ord for PriorityValuePair {
 }
 
 impl PartialOrd for PriorityValuePair {
+    #[allow(clippy::non_canonical_partial_ord_impl)]
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> { other.0.partial_cmp(&self.0) }
 }
 

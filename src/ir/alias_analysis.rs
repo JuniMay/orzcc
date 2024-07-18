@@ -1,6 +1,7 @@
 use core::fmt;
 
-use super::{Context, Inst, InstKind, TyData, Value};
+use super::{Context, InstKind, Value};
+use crate::collections::apint::ApInt;
 
 pub enum AliasAnalysisResult {
     NoAlias,
@@ -89,15 +90,15 @@ impl AliasAnalysis {
                             // if all the offsets are constants, then we can
                             // check the offset
                             // add up all the offsets
-                            let a_offset_val = a_offset
+                            let a_offset_val: ApInt = a_offset
                                 .iter()
                                 .map(|v| v.def_inst(ctx).unwrap().get_iconst_value(ctx).unwrap())
-                                .fold(0, |acc, v| acc + u64::from(v));
+                                .sum();
 
-                            let b_offset_val = b_offset
+                            let b_offset_val: ApInt = b_offset
                                 .iter()
                                 .map(|v| v.def_inst(ctx).unwrap().get_iconst_value(ctx).unwrap())
-                                .fold(0, |acc, v| acc + u64::from(v));
+                                .sum();
 
                             if a_offset_val == b_offset_val {
                                 // if the offset is the same, then the whole ptr must alias
