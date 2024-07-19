@@ -4,7 +4,7 @@ use super::{debug::CommentPos, source_loc::Span, Block, Constant, Context, Signa
 use crate::{
     collections::{
         linked_list::LinkedListContainerPtr,
-        storage::{ArenaAlloc, ArenaPtr, BaseArenaPtr},
+        storage::{ArenaAlloc, ArenaFree, ArenaPtr, BaseArenaPtr},
     },
     impl_arena,
     utils::cfg::CfgRegion,
@@ -216,6 +216,20 @@ impl GlobalSlot {
 
     pub fn comment(&self, ctx: &mut Context, pos: CommentPos, content: impl Into<String>) {
         self.deref(ctx).name.clone().comment(ctx, pos, content);
+    }
+
+    pub fn remove(self, ctx: &mut Context) {
+        let symbol = self.name(ctx).clone();
+        // 如果：
+        // 1. symbols: HashMap<Symbol, SymbolKind, FxBuildHasher>中有以symbol为键的项
+        // 2. 该项的值是GlobalSlot类型
+        // 则删除该项及对应的GlobalSlot，并返回GlobalSlot
+        if let Some(SymbolKind::GlobalSlot(_)) = ctx.symbols.get(&symbol) {
+            ctx.symbols.remove(&symbol);
+            ctx.global_slots.free(self.0);
+        } else {
+            panic!("symbol {:?} is not a global slot", symbol);
+        }
     }
 }
 
