@@ -1,9 +1,6 @@
-use std::{
-    collections::{HashSet, VecDeque},
-    hash::Hash,
-};
+use std::{collections::VecDeque, hash::Hash};
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::{
     cfg::{CfgInfo, CfgNode},
@@ -124,15 +121,15 @@ impl Loop<ir::Block> {
         self,
         ctx: &ir::Context,
         loop_ctx: &LoopContext<ir::Block>,
-    ) -> HashSet<ir::Value> {
+    ) -> FxHashSet<ir::Value> {
         let header = self.header(loop_ctx);
 
         let mut queue = VecDeque::new();
-        let mut visited = HashSet::new();
+        let mut visited = FxHashSet::default();
 
         queue.push_back(header);
 
-        let mut values = HashSet::new();
+        let mut values = FxHashSet::default();
 
         while let Some(block) = queue.pop_front() {
             if !visited.insert(block) {
@@ -149,9 +146,55 @@ impl Loop<ir::Block> {
                     }
                 }
             }
+
+            for param in block.params(ctx) {
+                for user in param.users(ctx) {
+                    let user_block = user.container(ctx).unwrap();
+                    if !loop_ctx.is_in_loop(user_block, self) {
+                        values.insert(*param);
+                    }
+                }
+            }
+
+            for succ in block.succs(ctx) {
+                if loop_ctx.is_in_loop(succ, self) {
+                    queue.push_back(succ);
+                }
+            }
         }
 
         values
+    }
+
+    pub fn get_exit_blocks(
+        self,
+        ctx: &ir::Context,
+        loop_ctx: &LoopContext<ir::Block>,
+    ) -> FxHashSet<ir::Block> {
+        let header = self.header(loop_ctx);
+
+        let mut queue = VecDeque::new();
+        let mut visited = FxHashSet::default();
+
+        queue.push_back(header);
+
+        let mut exits = FxHashSet::default();
+
+        while let Some(block) = queue.pop_front() {
+            if !visited.insert(block) {
+                continue;
+            }
+
+            for succ in block.succs(ctx) {
+                if loop_ctx.is_in_loop(succ, self) {
+                    queue.push_back(succ);
+                } else {
+                    exits.insert(succ);
+                }
+            }
+        }
+
+        exits
     }
 }
 

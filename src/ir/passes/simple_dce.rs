@@ -1,6 +1,6 @@
 pub const SIMPLE_DCE: &str = "simple-dce";
 
-use super::control_flow::CfgSimplify;
+use super::control_flow::CfgCanonicalize;
 use crate::{
     collections::linked_list::LinkedListContainerPtr,
     ir::{
@@ -106,8 +106,8 @@ impl LocalPassMut for SimpleDce {
             let params = block.params(ctx).to_vec();
 
             for (i, param) in params.into_iter().enumerate().rev() {
-                // XXX: we need unreach elim (in cfg-simplify) here to remove the unreachable
-                // blocks, so all preds pass args to the block
+                // XXX: we need unreach elim (in cfg-canonicalize) here to remove the
+                // unreachable blocks, so all preds pass args to the block
                 if param.users(ctx).is_empty() {
                     // the index will be updated after each removal, so we do a reverse iteration
                     block.drop_param(ctx, i);
@@ -142,7 +142,7 @@ impl TransformPass for SimpleDce {
         passman.register_transform(
             SIMPLE_DCE,
             SimpleDce::default(),
-            vec![Box::new(CfgSimplify)],
+            vec![Box::new(CfgCanonicalize)],
         );
     }
 }

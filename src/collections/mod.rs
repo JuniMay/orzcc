@@ -14,3 +14,4 @@ pub mod apint;
 pub mod diagnostic;
 pub mod linked_list;
 pub mod storage;
+pub mod union_find;

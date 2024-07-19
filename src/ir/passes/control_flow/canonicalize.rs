@@ -1,16 +1,18 @@
+use rustc_hash::FxHashSet;
 use thiserror::Error;
 
 use crate::{
     collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
     ir::{
         passman::{GlobalPassMut, LocalPassMut, PassError, PassManager, PassResult, TransformPass},
+        remove_all_insts,
         Block,
         Context,
         Func,
         Inst,
         Value,
     },
-    utils::def_use::Usable,
+    utils::{cfg::CfgInfo, def_use::Usable},
 };
 
 pub const CFG_CANONICALIZE: &str = "cfg-canonicalize";
@@ -39,6 +41,42 @@ impl From<CfgCanonicalizeError> for PassError {
 /// terminator. And removes instructions after the terminator (if its results
 /// are not used).
 pub struct CfgCanonicalize;
+
+impl CfgCanonicalize {
+    fn eliminate_unreachable_blocks(&mut self, ctx: &mut Context, func: Func) -> bool {
+        let cfg = CfgInfo::new(ctx, func);
+
+        let mut changed = false;
+
+        let reachables = cfg.reachable_nodes(ctx);
+
+        let mut insts_to_remove = Vec::new();
+        let mut unreachables = FxHashSet::default();
+
+        for block in func.iter(ctx) {
+            if reachables.contains(&block) {
+                continue;
+            }
+
+            for inst in block.iter(ctx) {
+                insts_to_remove.push(inst);
+            }
+
+            unreachables.insert(block);
+        }
+
+        // TODO: not best effort but panic, maybe we should return an error
+        remove_all_insts(ctx, insts_to_remove, false);
+
+        changed |= !unreachables.is_empty();
+
+        for block in unreachables {
+            block.remove(ctx);
+        }
+
+        changed
+    }
+}
 
 impl LocalPassMut for CfgCanonicalize {
     type Output = ();
@@ -87,6 +125,8 @@ impl LocalPassMut for CfgCanonicalize {
             block.push_back(ctx, jump);
             changed = true;
         }
+
+        changed |= self.eliminate_unreachable_blocks(ctx, func);
 
         Ok(((), changed))
     }

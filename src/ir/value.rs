@@ -176,6 +176,13 @@ impl Value {
             ValueKind::BlockParam { .. } => None,
         }
     }
+
+    pub fn def_block(self, ctx: &Context) -> Block {
+        match self.deref(ctx).kind {
+            ValueKind::InstResult { inst, .. } => inst.container(ctx).unwrap(),
+            ValueKind::BlockParam { block, .. } => block,
+        }
+    }
 }
 
 impl Usable for Value {

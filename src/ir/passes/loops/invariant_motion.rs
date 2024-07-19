@@ -6,7 +6,8 @@ use super::simplify::LoopSimplify;
 use crate::{
     collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
     ir::{
-        passman::{GlobalPassMut, LocalPassMut, PassResult, TransformPass},
+        passes::control_flow::CfgCanonicalize,
+        passman::{GlobalPassMut, LocalPassMut, PassManager, PassResult, TransformPass},
         Block,
         Context,
         Func,
@@ -169,12 +170,13 @@ impl GlobalPassMut for LoopInvariantMotion {
 }
 
 impl TransformPass for LoopInvariantMotion {
-    fn register(passman: &mut crate::ir::passman::PassManager) {
+    fn register(passman: &mut PassManager) {
         let pass = Self::default();
         passman.register_transform(
             LOOP_INVARIANT_MOTION,
             pass,
-            vec![Box::new(LoopSimplify::default())],
+            // TODO: auto manage dependencies
+            vec![Box::new(CfgCanonicalize), Box::new(LoopSimplify::default())],
         );
     }
 }

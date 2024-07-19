@@ -1,6 +1,6 @@
 use rustc_hash::FxHashMap;
 
-use super::control_flow::CfgSimplify;
+use super::control_flow::{CfgCanonicalize, CfgSimplify};
 use crate::{
     collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
     ir::{
@@ -254,10 +254,15 @@ impl GlobalPassMut for Inline {
 impl TransformPass for Inline {
     fn register(passman: &mut crate::ir::passman::PassManager) {
         let pass = Self::default();
-        // using cfg-simplify to remove unreachable blocks, and make inlining easier
-        // XXX: unreachable codes might have wrong block arguments, which will cause
-        //      compiler panic. An example is `fft.sy` in SysY testcases.
-        passman.register_transform(INLINE, pass, vec![Box::new(CfgSimplify)]);
+        // using cfg-canonicalize to remove unreachable blocks, and cfg-simplify to
+        // inlining easiermake
+        // XXX: unreachable codes might have wrong block arguments,
+        // which will cause compiler panic. An example is `fft.sy` in SysY testcases.
+        passman.register_transform(
+            INLINE,
+            pass,
+            vec![Box::new(CfgCanonicalize), Box::new(CfgSimplify)],
+        );
 
         passman.add_parameter("inline-max-depth", 2);
         passman.add_parameter("inline-max-insn", 1024);

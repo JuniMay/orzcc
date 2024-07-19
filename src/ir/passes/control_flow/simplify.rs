@@ -18,7 +18,7 @@
 //!
 //! - [Inst::num_succ_to](crate::ir::Inst::num_succ_to)
 
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 
 use super::CfgCanonicalize;
 use crate::{
@@ -43,40 +43,6 @@ pub const CFG_SIMPLIFY: &str = "cfg-simplify";
 pub struct CfgSimplify;
 
 impl CfgSimplify {
-    fn eliminate_unreachable_blocks(&mut self, ctx: &mut Context, func: Func) -> bool {
-        let cfg = CfgInfo::new(ctx, func);
-
-        let mut changed = false;
-
-        let reachables = cfg.reachable_nodes(ctx);
-
-        let mut insts_to_remove = Vec::new();
-        let mut unreachables = FxHashSet::default();
-
-        for block in func.iter(ctx) {
-            if reachables.contains(&block) {
-                continue;
-            }
-
-            for inst in block.iter(ctx) {
-                insts_to_remove.push(inst);
-            }
-
-            unreachables.insert(block);
-        }
-
-        // TODO: not best effort but panic, maybe we should return an error
-        remove_all_insts(ctx, insts_to_remove, false);
-
-        changed |= !unreachables.is_empty();
-
-        for block in unreachables {
-            block.remove(ctx);
-        }
-
-        changed
-    }
-
     fn straighten(&mut self, ctx: &mut Context, func: Func) -> bool {
         // merge blocks that has only one succ, and the succ has only one pred
         let mut changed = false;
@@ -293,7 +259,6 @@ impl LocalPassMut for CfgSimplify {
     fn run(&mut self, ctx: &mut Context, func: Func) -> PassResult<(Self::Output, bool)> {
         let mut changed = false;
 
-        changed |= self.eliminate_unreachable_blocks(ctx, func);
         changed |= self.straighten(ctx, func);
         changed |= self.remove_jump_only_blocks(ctx, func);
         changed |= self.remove_single_pred_params(ctx, func);
