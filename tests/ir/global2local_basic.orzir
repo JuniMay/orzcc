@@ -1,23 +1,135 @@
-slot @__GLOBAL_VAR_seed /* 0 */  : [i32; 3] = [0x9f, 0xbc, 0x30, 0x01, 0xd5, 0xe2, 0x30, 0x01, 0x07, 0xca, 0x9a, 0x3b]
-slot @__GLOBAL_VAR_staticvalue /* 1 */  : i32 = zeroinit
-
+slot @__DATA__SLOT_VAR_main_c_0 /* 1 */  : [[i32; 2]; 4] = [0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00]
+slot @__DATA__SLOT_VAR_main_d_0 /* 2 */  : [[i32; 2]; 4] = [0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00]
+slot @__DATA__SLOT_VAR_main_e_0 /* 3 */  : [[i32; 2]; 4] = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00]
+slot @__DATA__SLOT_VAR_main_b_0 /* 0 */  : [[i32; 2]; 4] = [0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x06, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x08, 0x00, 0x00, 0x00]
+decl @_sysy_stoptime(i32) -> void
+decl @putch(i32) -> void
+decl @putint(i32) -> void
+decl @getfloat() -> f32
+decl @getarray(ptr) -> i32
+decl @putfarray(i32, ptr) -> void
 decl @memcpy(ptr, ptr, i32) -> void
+decl @putfloat(f32) -> void
+decl @getint() -> i32
+decl @getfarray(ptr) -> i32
+decl @getch() -> i32
 decl @memset(ptr, i32, i32) -> void
-
-func @main /* 2 */ () -> i32 {
+decl @putarray(i32, ptr) -> void
+decl @_sysy_starttime(i32) -> void
+func @main /* 0 */ () -> i32 {
 ^bb0 /* 0 */ :
-    %v1 /* 1 */ = get_global @__GLOBAL_VAR_staticvalue : ptr
-    %v2 /* 2 */ = iconst 0x00000000i32 : i32
-    /* no result */ store %v2, %v1
-    
+    %__SLOT_VAR_main_e_0 /* 13, uses: 6 */ = stack_slot 32 : ptr
+    %__SLOT_VAR_main_d_0 /* 10, uses: 2 */ = stack_slot 32 : ptr
+    %__SLOT_VAR_main_c_0 /* 7, uses: 2 */ = stack_slot 32 : ptr
+    %__SLOT_VAR_main_b_0 /* 4, uses: 1 */ = stack_slot 32 : ptr
+    %__SLOT_VAR_main_a_0 /* 1, uses: 2 */ = stack_slot 32 : ptr
+    %v99 /* 106, uses: 0 */ = undef : i32
+    %v0 /* 2, uses: 1 */ = iconst 0x00000000i32 : i32
+    %v1 /* 3, uses: 1 */ = iconst 0x00000020i32 : i32
+    /* no result */ call @memset(%__SLOT_VAR_main_a_0, %v0, %v1)
+    %v2 /* 5, uses: 1 */ = get_global @__DATA__SLOT_VAR_main_b_0 : ptr
+    %v3 /* 6, uses: 1 */ = iconst 0x00000020i32 : i32
+    /* no result */ call @memcpy(%__SLOT_VAR_main_b_0, %v2, %v3)
+    %v4 /* 8, uses: 1 */ = get_global @__DATA__SLOT_VAR_main_c_0 : ptr
+    %v5 /* 9, uses: 1 */ = iconst 0x00000020i32 : i32
+    /* no result */ call @memcpy(%__SLOT_VAR_main_c_0, %v4, %v5)
+    %v6 /* 11, uses: 1 */ = get_global @__DATA__SLOT_VAR_main_d_0 : ptr
+    %v7 /* 12, uses: 1 */ = iconst 0x00000020i32 : i32
+    /* no result */ call @memcpy(%__SLOT_VAR_main_d_0, %v6, %v7)
+    %v8 /* 14, uses: 1 */ = get_global @__DATA__SLOT_VAR_main_e_0 : ptr
+    %v9 /* 15, uses: 1 */ = iconst 0x00000020i32 : i32
+    /* no result */ call @memcpy(%__SLOT_VAR_main_e_0, %v8, %v9)
+    %v10 /* 16, uses: 1 */ = iconst 0x00000000i32 : i32
+    %v11 /* 17, uses: 1 */ = iconst 0x00000000i32 : i32
+    %v12 /* 18, uses: 1 */ = iconst 0x00000008i32 : i32
+    %v13 /* 19, uses: 1 */ = mul %v11, %v12 : i32
+    %v14 /* 20, uses: 1 */ = add %v10, %v13 : i32
+    %v15 /* 21, uses: 1 */ = iconst 0x00000000i32 : i32
+    %v16 /* 22, uses: 1 */ = iconst 0x00000004i32 : i32
+    %v17 /* 23, uses: 1 */ = mul %v15, %v16 : i32
+    %v18 /* 24, uses: 1 */ = add %v14, %v17 : i32
+    %v19 /* 25, uses: 1 */ = offset %__SLOT_VAR_main_e_0, %v18 : ptr
+    %v20 /* 26, uses: 1 */ = iconst 0x00000000i32 : i32
+    %v21 /* 27, uses: 1 */ = iconst 0x00000002i32 : i32
+    %v22 /* 28, uses: 1 */ = iconst 0x00000008i32 : i32
+    %v23 /* 29, uses: 1 */ = mul %v21, %v22 : i32
+    %v24 /* 30, uses: 1 */ = add %v20, %v23 : i32
+    %v25 /* 31, uses: 1 */ = iconst 0x00000001i32 : i32
+    %v26 /* 32, uses: 1 */ = iconst 0x00000004i32 : i32
+    %v27 /* 33, uses: 1 */ = mul %v25, %v26 : i32
+    %v28 /* 34, uses: 1 */ = add %v24, %v27 : i32
+    %v29 /* 35, uses: 1 */ = offset %__SLOT_VAR_main_d_0, %v28 : ptr
+    %v30 /* 36, uses: 1 */ = load %v29 : i32
+    /* no result */ store %v30, %v19
+    %v31 /* 37, uses: 1 */ = iconst 0x00000000i32 : i32
+    %v32 /* 38, uses: 1 */ = iconst 0x00000000i32 : i32
+    %v33 /* 39, uses: 1 */ = iconst 0x00000008i32 : i32
+    %v34 /* 40, uses: 1 */ = mul %v32, %v33 : i32
+    %v35 /* 41, uses: 1 */ = add %v31, %v34 : i32
+    %v36 /* 42, uses: 1 */ = iconst 0x00000001i32 : i32
+    %v37 /* 43, uses: 1 */ = iconst 0x00000004i32 : i32
+    %v38 /* 44, uses: 1 */ = mul %v36, %v37 : i32
+    %v39 /* 45, uses: 1 */ = add %v35, %v38 : i32
+    %v40 /* 46, uses: 1 */ = offset %__SLOT_VAR_main_e_0, %v39 : ptr
+    %v41 /* 47, uses: 1 */ = iconst 0x00000000i32 : i32
+    %v42 /* 48, uses: 1 */ = iconst 0x00000002i32 : i32
+    %v43 /* 49, uses: 1 */ = iconst 0x00000008i32 : i32
+    %v44 /* 50, uses: 1 */ = mul %v42, %v43 : i32
+    %v45 /* 51, uses: 1 */ = add %v41, %v44 : i32
+    %v46 /* 52, uses: 1 */ = iconst 0x00000001i32 : i32
+    %v47 /* 53, uses: 1 */ = iconst 0x00000004i32 : i32
+    %v48 /* 54, uses: 1 */ = mul %v46, %v47 : i32
+    %v49 /* 55, uses: 1 */ = add %v45, %v48 : i32
+    %v50 /* 56, uses: 1 */ = offset %__SLOT_VAR_main_c_0, %v49 : ptr
+    %v51 /* 57, uses: 1 */ = load %v50 : i32
+    /* no result */ store %v51, %v40
+    %v52 /* 58, uses: 1 */ = iconst 0x00000000i32 : i32
+    %v53 /* 59, uses: 1 */ = iconst 0x00000003i32 : i32
+    %v54 /* 60, uses: 1 */ = iconst 0x00000008i32 : i32
+    %v55 /* 61, uses: 1 */ = mul %v53, %v54 : i32
+    %v56 /* 62, uses: 1 */ = add %v52, %v55 : i32
+    %v57 /* 63, uses: 1 */ = iconst 0x00000001i32 : i32
+    %v58 /* 64, uses: 1 */ = iconst 0x00000004i32 : i32
+    %v59 /* 65, uses: 1 */ = mul %v57, %v58 : i32
+    %v60 /* 66, uses: 1 */ = add %v56, %v59 : i32
+    %v61 /* 67, uses: 1 */ = offset %__SLOT_VAR_main_e_0, %v60 : ptr
+    %v62 /* 68, uses: 1 */ = load %v61 : i32
+    %v63 /* 69, uses: 1 */ = iconst 0x00000000i32 : i32
+    %v64 /* 70, uses: 1 */ = iconst 0x00000000i32 : i32
+    %v65 /* 71, uses: 1 */ = iconst 0x00000008i32 : i32
+    %v66 /* 72, uses: 1 */ = mul %v64, %v65 : i32
+    %v67 /* 73, uses: 1 */ = add %v63, %v66 : i32
+    %v68 /* 74, uses: 1 */ = iconst 0x00000000i32 : i32
+    %v69 /* 75, uses: 1 */ = iconst 0x00000004i32 : i32
+    %v70 /* 76, uses: 1 */ = mul %v68, %v69 : i32
+    %v71 /* 77, uses: 1 */ = add %v67, %v70 : i32
+    %v72 /* 78, uses: 1 */ = offset %__SLOT_VAR_main_e_0, %v71 : ptr
+    %v73 /* 79, uses: 1 */ = load %v72 : i32
+    %v74 /* 80, uses: 1 */ = add %v62, %v73 : i32
+    %v75 /* 81, uses: 1 */ = iconst 0x00000000i32 : i32
+    %v76 /* 82, uses: 1 */ = iconst 0x00000000i32 : i32
+    %v77 /* 83, uses: 1 */ = iconst 0x00000008i32 : i32
+    %v78 /* 84, uses: 1 */ = mul %v76, %v77 : i32
+    %v79 /* 85, uses: 1 */ = add %v75, %v78 : i32
+    %v80 /* 86, uses: 1 */ = iconst 0x00000001i32 : i32
+    %v81 /* 87, uses: 1 */ = iconst 0x00000004i32 : i32
+    %v82 /* 88, uses: 1 */ = mul %v80, %v81 : i32
+    %v83 /* 89, uses: 1 */ = add %v79, %v82 : i32
+    %v84 /* 90, uses: 1 */ = offset %__SLOT_VAR_main_e_0, %v83 : ptr
+    %v85 /* 91, uses: 1 */ = load %v84 : i32
+    %v86 /* 92, uses: 1 */ = add %v74, %v85 : i32
+    %v87 /* 93, uses: 1 */ = iconst 0x00000000i32 : i32
+    %v88 /* 94, uses: 1 */ = iconst 0x00000002i32 : i32
+    %v89 /* 95, uses: 1 */ = iconst 0x00000008i32 : i32
+    %v90 /* 96, uses: 1 */ = mul %v88, %v89 : i32
+    %v91 /* 97, uses: 1 */ = add %v87, %v90 : i32
+    %v92 /* 98, uses: 1 */ = iconst 0x00000000i32 : i32
+    %v93 /* 99, uses: 1 */ = iconst 0x00000004i32 : i32
+    %v94 /* 100, uses: 1 */ = mul %v92, %v93 : i32
+    %v95 /* 101, uses: 1 */ = add %v91, %v94 : i32
+    %v96 /* 102, uses: 1 */ = offset %__SLOT_VAR_main_a_0, %v95 : ptr
+    %v97 /* 103, uses: 1 */ = load %v96 : i32
+    %v98 /* 104, uses: 1 */ = add %v86, %v97 : i32
+    /* no result */ ret %v98
 
-}
-
-func @rand /* 1 */ () -> i32 {
-^bb1 /* 0 */ :
-    %v12 /* 12 */ = get_global @__GLOBAL_VAR_seed : ptr
-    %v13 /* 13 */ = iconst 0x00000000i32 : i32
-    %v14 /* 14 */ = offset %v12, %v13 : ptr
-    %v15 /* 15 */ = load %v14 : i32
-    /* no result */ ret %v15
 }
