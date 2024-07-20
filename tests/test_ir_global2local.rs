@@ -1,12 +1,10 @@
 use orzcc::{
-    collections::diagnostic::RenderOptions,
-    frontend::ir::{into_ir, Parser},
-    ir::{passes::global2local::*, passman::{GlobalPassMut, PassManager, TransformPass}},
+    backend::riscv64::regs::display, collections::diagnostic::RenderOptions, frontend::ir::{into_ir, Parser}, ir::{passes::global2local::*, passman::{GlobalPassMut, PassManager, TransformPass}}
 };
 
 #[test]
 fn test_ir_global2local() {
-    let src = include_str!("ir/sysy_00_bitset_snapshot.orzir");
+    let src = include_str!("ir/global2local_basic.orzir");
     let parser = Parser::new(src);
     let (ast, mut ctx, mut diag) = parser.parse();
     
@@ -26,7 +24,11 @@ fn test_ir_global2local() {
 
     // -------------------- //
 
+    let debug : bool = true;
+    println!("{}", ctx.display(debug));
+
     let mut g2l = Global2Local::default();
-    g2l.analyze_usage(&ctx);
-    g2l.display_usage_map(&ctx);
+    GlobalPassMut::run(&mut g2l, &mut ctx);
+
+    println!("{}", ctx.display(debug));
 }

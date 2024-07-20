@@ -1,0 +1,23 @@
+slot @__GLOBAL_VAR_seed /* 0 */  : [i32; 3] = [0x9f, 0xbc, 0x30, 0x01, 0xd5, 0xe2, 0x30, 0x01, 0x07, 0xca, 0x9a, 0x3b]
+slot @__GLOBAL_VAR_staticvalue /* 1 */  : i32 = zeroinit
+
+decl @memcpy(ptr, ptr, i32) -> void
+decl @memset(ptr, i32, i32) -> void
+
+func @main /* 2 */ () -> i32 {
+^bb0 /* 0 */ :
+    %v1 /* 1 */ = get_global @__GLOBAL_VAR_staticvalue : ptr
+    %v2 /* 2 */ = iconst 0x00000000i32 : i32
+    /* no result */ store %v2, %v1
+    
+
+}
+
+func @rand /* 1 */ () -> i32 {
+^bb1 /* 0 */ :
+    %v12 /* 12 */ = get_global @__GLOBAL_VAR_seed : ptr
+    %v13 /* 13 */ = iconst 0x00000000i32 : i32
+    %v14 /* 14 */ = offset %v12, %v13 : ptr
+    %v15 /* 15 */ = load %v14 : i32
+    /* no result */ ret %v15
+}

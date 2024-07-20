@@ -1,11 +1,9 @@
 use std::{collections::{HashMap, HashSet}, vec};
 
 use crate::{
-    collections::{linked_list::{LinkedListContainerPtr, LinkedListNodePtr}, storage::ArenaPtr}, 
-    ir::{
-        global::Symbol, passman::{GlobalPassMut, PassManager, PassResult, TransformPass}, ty::TyData, Constant, ConstantKind, Context, Func, GlobalSlot, Inst, InstKind, Ty
-    }, 
-    utils::cfg::CfgRegion
+    backend::riscv64::inst, collections::{linked_list::{LinkedListContainerPtr, LinkedListNodePtr}, storage::ArenaPtr}, ir::{
+        debug, global::Symbol, passman::{GlobalPassMut, PassManager, PassResult, TransformPass}, ty::TyData, Constant, ConstantKind, Context, Func, GlobalSlot, Inst, InstKind, Ty
+    }, utils::{cfg::CfgRegion, def_use::User}
 };
 
 pub const GLOBAL2LOCAL: &str = "global2local";
@@ -108,7 +106,7 @@ impl Global2Local {
         }
 
         for (name, g2lslot) in self.slots.iter_mut(){
-            g2lslot.slot = Some(slot_names[name])
+            g2lslot.slot = Some(slot_names[name]);
         }
     }
 
@@ -127,6 +125,9 @@ impl GlobalPassMut for Global2Local {
     type Output = ();
 
     fn run(&mut self, ctx: &mut Context) -> PassResult<(Self::Output, bool)> {
+        self.analyze_usage(ctx);
+        println!("Usage analyzed.");
+
         let mut changed = false;
 
         // 如果usage_map中的某个全局槽对应0个函数，删掉这个全局槽
@@ -140,7 +141,7 @@ impl GlobalPassMut for Global2Local {
 
                     // 把全局槽移到这个函数中变为局部变量。步骤：
                     // 1.在局部（入口块）添加StackSlot类型的inst，确保这个局部槽具有与全局槽相同的特性。
-                    // 2.遍历所有GetGlobal类型的inst，找到那些获取目标全局槽的指令，记录这些指令中代表全局槽的指针变量，并将这些变量存储到一个集合（old_ptrs）中。
+                    // 2.遍历所有GetGlobal类型的inst，找到那些获取目标全局槽的指令，记录这些指令中代表全局槽的指针变量，并将这些变量存储到一个集合（old_ptrs）中，随后删除这些指令。
                     // 3.遍历所有Load和Store指令，检查它们的操作数是否在old_ptrs集合中。如果是，将操作数替换为新的局部指针变量（ptr_new）。
 
                     // 1.
@@ -149,12 +150,14 @@ impl GlobalPassMut for Global2Local {
                     entry_block.push_front(ctx, local_stack_slot);
                     entry_block.set_head(ctx, Some(local_stack_slot));
 
+                    let mut delete_global_slot = false;
                     match global_slot.init(ctx).kind() {
                         // 对于创建好的局部槽，通过在Block中添加IR指令（Inst）进行初始化。
 
-                        // (1) 如果全局槽为undef，则不需进行初始化，并删除全局槽；
+                        // (1) 如果全局槽为undef，则不需进行初始化，并删除全局槽（以及对全局槽的调用，后面一块删；剩下的相同）；
                         ConstantKind::Undef => {
                             global_slot.remove(ctx);
+                            delete_global_slot = true;
                         }
                         // (2)如果为zeroinit，则使用memset初始化，并删除全局槽；
                         ConstantKind::Zeroinit => {
@@ -175,6 +178,7 @@ impl GlobalPassMut for Global2Local {
                             local_stack_slot.insert_after(ctx, inst_call_memset);
 
                             global_slot.remove(ctx);
+                            delete_global_slot = true;
                         }
                         // (3) 如果有bytes则使用memcpy或者常量指令：
                         ConstantKind::Bytes(_) => {
@@ -195,6 +199,7 @@ impl GlobalPassMut for Global2Local {
                                         ]
                                     );
                                     global_slot.remove(ctx);
+                                    delete_global_slot = true;
                                 }
                                 TyData::Float32 => {
                                     let inst_constant = Inst::fconst(ctx, f32::from_le_bytes(content_bytes.try_into().unwrap()), g2lslot.ty(ctx));
@@ -207,6 +212,7 @@ impl GlobalPassMut for Global2Local {
                                         ]
                                     );
                                     global_slot.remove(ctx);
+                                    delete_global_slot = true;
                                 }
                                 TyData::Float64 => {
                                     let inst_constant = Inst::fconst(ctx, f64::from_le_bytes(content_bytes.try_into().unwrap()), g2lslot.ty(ctx));
@@ -219,6 +225,7 @@ impl GlobalPassMut for Global2Local {
                                         ]
                                     );
                                     global_slot.remove(ctx);
+                                    delete_global_slot = true;
                                 }
                                 // 对于其他情况，则在局部槽之后：
                                 // 1.获取全局槽指针
@@ -252,19 +259,29 @@ impl GlobalPassMut for Global2Local {
                             }
                         }
                     }
+                    println!("1st step done.");
 
                     // 2.
                     let mut old_ptrs = HashSet::new();
-                    for block in func.iter(ctx) {
-                        for inst in block.iter(ctx) {
-                            if let InstKind::GetGlobal(symbol) = inst.kind(ctx) {
-                                if symbol == global_slot.name(ctx) {
-                                    let old_ptr = inst.result(ctx, 0);
-                                    old_ptrs.insert(old_ptr);
-                                }
-                            }
-                        }
+                    // for block in func.iter(ctx) {
+                    //     for inst in block.iter(ctx) {
+                    //         if let InstKind::GetGlobal(symbol) = inst.kind(ctx) {
+                    //             if symbol == global_slot.name(ctx) {
+                    //                 let old_ptr = inst.result(ctx, 0);
+                    //                 old_ptrs.insert(old_ptr);
+                    //             }
+                    //         }
+                    //     }
+                    // }
+                    for inst in g2lslot.user_insts.iter() {
+                        // there are all GetGlobal insts in g2lslot.user_insts
+                        // 并且它们调用的全局槽也都是这个全局槽
+                        // assert!(matches!(inst.kind(ctx), InstKind::GetGlobal(symbol) if symbol == global_slot.name(ctx)));
+                        // println!("assert done.");
+                        let old_ptr = inst.result(ctx, 0);
+                        old_ptrs.insert(old_ptr);
                     }
+                    println!("2nd step done.");
 
                     // 3.
                     // 这个玩意是用来避免犯同时进行可变与不可变引用的错误（有关ctx）
@@ -278,7 +295,7 @@ impl GlobalPassMut for Global2Local {
                                     if old_ptrs.contains(&ptr) {
                                         // 收集需要替换的信息
                                         let new_ptr = local_stack_slot.result(ctx, 0);
-                                        modifications.push((inst, 0, ptr, new_ptr));
+                                        modifications.push((inst, ptr, new_ptr));
                                     }
                                 }
                                 InstKind::Store => {
@@ -286,7 +303,7 @@ impl GlobalPassMut for Global2Local {
                                     if old_ptrs.contains(&ptr) {
                                         // 收集需要替换的信息
                                         let new_ptr = local_stack_slot.result(ctx, 0);
-                                        modifications.push((inst, 1, ptr, new_ptr));
+                                        modifications.push((inst, ptr, new_ptr));
                                     }
                                 }
                                 _ => {}
@@ -295,11 +312,19 @@ impl GlobalPassMut for Global2Local {
                     }
 
                     // 在不再持有不可变引用的情况下进行修改
-                    for (inst, operand_idx, old_ptr, new_ptr) in modifications {
-                        let inst_mut = inst.deref_mut(ctx);
-                        inst_mut.operands[operand_idx].set_inner_if_eq(old_ptr, new_ptr);
+                    for (inst, old_ptr, new_ptr) in modifications {
+                        inst.replace(ctx, old_ptr, new_ptr)
                     }
+                    println!("3rd step done.");
 
+                    if delete_global_slot {
+                        for inst in g2lslot.user_insts.iter() {
+                            inst.remove(ctx);
+                        }
+                        println!("removed all GetGlobal insts.");
+                    } else {
+                        println!("needless to remove GetGlobal insts.");
+                    }
                 }
             } else {
                 changed = true;
