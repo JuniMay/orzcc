@@ -1,0 +1,37 @@
+
+func @test_loop_scev() -> void {
+^entry:
+    %0 = iconst 0 : i32
+    %1 = iconst 1 : i32
+    %2 = iconst 2 : i32
+    %3 = iconst 3 : i32
+    %4 = iconst 4 : i32
+    %5 = iconst 5 : i32
+    %6 = iconst 6 : i32
+    %7 = iconst 7 : i32
+    %8 = iconst 8 : i32
+
+    %v0 = add %1, %2 : i32
+    br %8, ^loop.entry(%0), ^ret
+
+^loop.entry(%i: i32): // %i is an induction variable
+    %cond = icmp.slt %i, %8 : i1
+    br %cond, ^loop.body, ^loop.exit
+
+^loop.body:
+    %v1 = add %v0, %3 : i32
+    %v2 = add %v1, %4 : i32
+    %v3 = add %v2, %5 : i32
+    %v4 = add %v3, %6 : i32
+    %v5 = add %v4, %7 : i32
+
+    %new_i = add %i, %3 : i32
+
+    jump ^loop.entry(%new_i)
+
+^loop.exit: // dedicated exit
+    jump ^ret
+
+^ret:
+    ret
+}

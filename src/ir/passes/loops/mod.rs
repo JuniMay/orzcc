@@ -5,4 +5,5 @@ mod simplify;
 
 pub use invariant_motion::{LoopInvariantMotion, LOOP_INVARIANT_MOTION};
 pub use lcssa::{Lcssa, LCSSA};
+pub use scalar_evolution::{InductionOp, Scev, ScevAnalysis};
 pub use simplify::{LoopSimplify, LOOP_SIMPLIFY};
