@@ -28,7 +28,7 @@ mem2reg 的 Pass 位于 `src/ir/passes` 下。
   - [ ] Branch Merge
 - [x] Function Inlining
   - [x] Simple Inlining
-  - [ ] Recursive Inlining
+  - [x] Recursive Inlining
   - [ ] Mutually Recursive Inlining
 - [x] Global Value Numbering
   - [x] Simple GVN
@@ -48,8 +48,8 @@ mem2reg 的 Pass 位于 `src/ir/passes` 下。
   - [ ] Division Optimization
   - [ ] DivMod To MulShift
 - [ ] Loop Unrolling
-- [ ] Scalar Evolution Analysis
-- [ ] Tail Call Optimization
+- [x] Scalar Evolution Analysis
+- [ ] ~~Tail Call Optimization~~
 - [x] Alias Analysis (basicaa)
 - [ ] Function Analysis
   - [x] Pure Function
@@ -59,8 +59,12 @@ mem2reg 的 Pass 位于 `src/ir/passes` 下。
 - [ ] Tree Height Reduction `gameoflife`
 - [ ] Manual Memset
 - [ ] Memset Elimination
-- [ ] Memset Combination 
+- [ ] Memset Combination
 - [ ] Instruction Scheduler
+- [ ] Load/Store combine (i32 + i32 -> i64)
+- [ ] Store + Loop -> Memset
+- [ ] Hand-crafted Operators
+- [ ] Integer Range Analysis
 
 可能还需要一个更有效的测试方式。
 
@@ -68,15 +72,15 @@ mem2reg 的 Pass 位于 `src/ir/passes` 下。
 
 - [ ] Register Allocation
   - [x] Better Block Argument Passing
-  - [ ] Tune the spill weight
-  - [ ] RISC-V `ra` register for allocation.
+  - [x] Tune the spill weight
+  - [ ] ~~RISC-V `ra` register for allocation.~~
   - [ ] Constraint & Hint
   - [ ] Coalescing & Splitting
 - [ ] Scheduling
   - [ ] For dual-issue
   - [ ] For register pressure
 - [ ] Peephole Optimization
-  - [ ] `shNadd`
-  - [ ] `Rol` 
+  - [x] `shNadd`
+  - [ ] `Rol`
   - [ ] `Mulh`
   - [ ] remove redundant direct jump
