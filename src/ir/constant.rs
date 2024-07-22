@@ -103,19 +103,23 @@ impl TryFrom<ApInt> for IntConstant {
     }
 }
 
+// display int constant requires masking, because there are signext constants
+
 impl fmt::Display for IntConstant {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}i{}", self.0, self.1) }
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}i{}", self.0 & self.mask(), self.1)
+    }
 }
 
 impl fmt::LowerHex for IntConstant {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:#x}i{}", self.0, self.1)
+        write!(f, "{:#x}i{}", self.0 & self.mask(), self.1)
     }
 }
 
 impl fmt::UpperHex for IntConstant {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:#X}i{}", self.0, self.1)
+        write!(f, "{:#X}i{}", self.0 & self.mask(), self.1)
     }
 }
 
