@@ -4,6 +4,121 @@ use std::hash::Hash;
 use super::source_loc::Span;
 use crate::collections::apint::ApInt;
 
+/// An integer constant, max 64 bits.
+///
+/// [ApInt] is too complex to be used as a constant. Simple integer constants
+/// are represented with this struct.
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
+pub struct IntConstant(u64, u8);
+
+impl IntConstant {
+    fn mask(self) -> u64 { (1u64 << self.1) - 1 }
+
+    pub fn into_apint(self) -> ApInt {
+        let width = self.1;
+        let value = self.0 & self.mask();
+        let apint = ApInt::from(value);
+        match width.cmp(&64) {
+            std::cmp::Ordering::Less => apint.into_truncated(width as usize).0,
+            std::cmp::Ordering::Equal => apint,
+            std::cmp::Ordering::Greater => panic!("width is too large"),
+        }
+    }
+
+    pub fn into_signext(self) -> Self {
+        let signed = self.0 as i64;
+        let shamt = 64 - self.1;
+        let value = (signed << shamt) >> shamt;
+        Self(value as u64, 64)
+    }
+
+    pub fn resize(self, width: u8) -> Self {
+        let mask = (1u64 << width) - 1;
+        let value = self.0 & mask;
+        Self(value, width)
+    }
+
+    pub fn zero(width: u8) -> Self { Self(0, width) }
+
+    pub fn one(width: u8) -> Self { Self(1, width) }
+
+    pub fn bits(&self) -> u64 { self.0 }
+
+    pub fn is_zero(&self) -> bool { self.0 == 0 }
+
+    pub fn is_one(&self) -> bool { self.0 == 1 }
+
+    pub fn is_power_of_two(&self) -> bool { self.0.is_power_of_two() }
+
+    pub fn trailing_zeros(&self) -> u32 { self.0.trailing_zeros().min(self.1 as u32) }
+}
+
+impl From<bool> for IntConstant {
+    fn from(value: bool) -> Self { Self(value as u64, 1) }
+}
+
+impl From<u8> for IntConstant {
+    fn from(value: u8) -> Self { Self(value as u64, 8) }
+}
+
+impl From<u16> for IntConstant {
+    fn from(value: u16) -> Self { Self(value as u64, 16) }
+}
+
+impl From<u32> for IntConstant {
+    fn from(value: u32) -> Self { Self(value as u64, 32) }
+}
+
+impl From<u64> for IntConstant {
+    fn from(value: u64) -> Self { Self(value, 64) }
+}
+
+impl From<i8> for IntConstant {
+    fn from(value: i8) -> Self { Self(value as u64, 8) }
+}
+
+impl From<i16> for IntConstant {
+    fn from(value: i16) -> Self { Self(value as u64, 16) }
+}
+
+impl From<i32> for IntConstant {
+    fn from(value: i32) -> Self { Self(value as u64, 32) }
+}
+
+impl From<i64> for IntConstant {
+    fn from(value: i64) -> Self { Self(value as u64, 64) }
+}
+
+impl TryFrom<ApInt> for IntConstant {
+    type Error = &'static str;
+
+    fn try_from(value: ApInt) -> Result<Self, Self::Error> {
+        let width = value.width();
+        if width > 64 {
+            Err("width is too large")
+        } else {
+            let bits = u64::from(value);
+            Ok(Self(bits, width as u8))
+        }
+    }
+}
+
+impl fmt::Display for IntConstant {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result { write!(f, "{}i{}", self.0, self.1) }
+}
+
+impl fmt::LowerHex for IntConstant {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:#x}i{}", self.0, self.1)
+    }
+}
+
+impl fmt::UpperHex for IntConstant {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:#X}i{}", self.0, self.1)
+    }
+}
+
 /// A float constant.
 ///
 /// The integer in `iconst` can be represented with [ApInt], but for

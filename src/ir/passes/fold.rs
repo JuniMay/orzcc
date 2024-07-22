@@ -7,6 +7,7 @@ use crate::{
         FoldContext,
         Func,
         Inst,
+        IntConstant,
     },
     utils::def_use::{Usable, User},
 };
@@ -51,7 +52,9 @@ impl LocalPassMut for ConstantFolding {
             let folded = self.fold_ctx.lookup(value).cloned().unwrap();
             let ty = value.ty(ctx);
             let new_inst = match folded {
-                FoldedConstant::Integer(v) => Inst::iconst(ctx, v, ty),
+                FoldedConstant::Integer(v) => {
+                    Inst::iconst(ctx, IntConstant::try_from(v).unwrap(), ty)
+                }
                 FoldedConstant::Float(v) => Inst::fconst(ctx, v, ty),
                 FoldedConstant::Undef => Inst::undef(ctx, ty),
             };

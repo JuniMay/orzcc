@@ -15,10 +15,7 @@ use super::{
 };
 use crate::{
     backend::reg_alloc::graph_coloring_allocation::GraphColoringAllocation,
-    collections::{
-        apint::ApInt,
-        linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
-    },
+    collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
     ir::{self, CastOp, Successor},
     utils::cfg::CfgRegion,
 };
@@ -255,9 +252,9 @@ pub trait LowerSpec: Sized {
 
     fn gen_sp_adjust(lower: &mut LowerContext<Self>, offset: i64);
 
-    fn gen_iconst(lower: &mut LowerContext<Self>, x: &ApInt, dst_ty: ir::Ty) -> MValue;
+    fn gen_iconst(lower: &mut LowerContext<Self>, x: ir::IntConstant, dst_ty: ir::Ty) -> MValue;
 
-    fn gen_fconst(lower: &mut LowerContext<Self>, x: &ir::FloatConstant, dst_ty: ir::Ty) -> MValue;
+    fn gen_fconst(lower: &mut LowerContext<Self>, x: ir::FloatConstant, dst_ty: ir::Ty) -> MValue;
 
     fn gen_ibinary(
         lower: &mut LowerContext<Self>,
@@ -566,12 +563,12 @@ where
                 let mvalue = MValue::new_undef(ty);
                 self.lowered.insert(inst.result(self.ctx, 0), mvalue);
             }
-            Ik::IConst(apint) => {
-                let mval = S::gen_iconst(self, apint, inst.result(self.ctx, 0).ty(self.ctx));
+            Ik::IConst(int) => {
+                let mval = S::gen_iconst(self, *int, inst.result(self.ctx, 0).ty(self.ctx));
                 self.lowered.insert(inst.result(self.ctx, 0), mval);
             }
             Ik::FConst(f) => {
-                let mval = S::gen_fconst(self, f, inst.result(self.ctx, 0).ty(self.ctx));
+                let mval = S::gen_fconst(self, *f, inst.result(self.ctx, 0).ty(self.ctx));
                 self.lowered.insert(inst.result(self.ctx, 0), mval);
             }
             Ik::StackSlot(size) => {

@@ -67,22 +67,8 @@ impl Inst {
             InstKind::Undef => Some(FoldedConstant::Undef),
             InstKind::IConst(value) => {
                 let width = self.result(ctx, 0).ty(ctx).bitwidth(ctx).unwrap();
-
-                // TODO: we really should verify the IR
-                // let value = value.clone().into_shrunk();
-
-                match value.width().cmp(&width) {
-                    std::cmp::Ordering::Less => {
-                        let value = value.clone().into_zeroext(width);
-                        Some(FoldedConstant::Integer(value))
-                    }
-                    std::cmp::Ordering::Equal => Some(FoldedConstant::Integer(value.clone())),
-                    std::cmp::Ordering::Greater => panic!(
-                        "fold: constant width too large: {} > {}",
-                        value.width(),
-                        width
-                    ),
-                }
+                let apint = value.resize(width as u8).into_apint();
+                Some(FoldedConstant::Integer(apint))
             }
             InstKind::FConst(value) => Some(FoldedConstant::Float(*value)),
             InstKind::IBinary(op) => {

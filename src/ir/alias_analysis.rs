@@ -1,7 +1,6 @@
 use core::fmt;
 
 use super::{Context, InstKind, Value};
-use crate::collections::apint::ApInt;
 
 pub enum AliasAnalysisResult {
     NoAlias,
@@ -90,14 +89,26 @@ impl AliasAnalysis {
                             // if all the offsets are constants, then we can
                             // check the offset
                             // add up all the offsets
-                            let a_offset_val: ApInt = a_offset
+                            let a_offset_val: u64 = a_offset
                                 .iter()
-                                .map(|v| v.def_inst(ctx).unwrap().get_iconst_value(ctx).unwrap())
+                                .map(|v| {
+                                    v.def_inst(ctx)
+                                        .unwrap()
+                                        .get_iconst_value(ctx)
+                                        .unwrap()
+                                        .bits()
+                                })
                                 .sum();
 
-                            let b_offset_val: ApInt = b_offset
+                            let b_offset_val = b_offset
                                 .iter()
-                                .map(|v| v.def_inst(ctx).unwrap().get_iconst_value(ctx).unwrap())
+                                .map(|v| {
+                                    v.def_inst(ctx)
+                                        .unwrap()
+                                        .get_iconst_value(ctx)
+                                        .unwrap()
+                                        .bits()
+                                })
                                 .sum();
 
                             if a_offset_val == b_offset_val {
@@ -138,7 +149,7 @@ impl AliasAnalysis {
                             let a_offset_val = a_offset
                                 .iter()
                                 .map(|v| v.def_inst(ctx).unwrap().get_iconst_value(ctx).unwrap())
-                                .fold(0, |acc, v| acc + u64::from(v));
+                                .fold(0, |acc, v| acc + v.bits());
 
                             if a_offset_val == 0 {
                                 // if the offset is 0, then the whole ptr must alias
@@ -178,7 +189,7 @@ impl AliasAnalysis {
                             let b_offset_val = b_offset
                                 .iter()
                                 .map(|v| v.def_inst(ctx).unwrap().get_iconst_value(ctx).unwrap())
-                                .fold(0, |acc, v| acc + u64::from(v));
+                                .fold(0, |acc, v| acc + v.bits());
 
                             if b_offset_val == 0 {
                                 // if the offset is 0, then the whole ptr must alias

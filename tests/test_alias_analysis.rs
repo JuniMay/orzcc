@@ -1,8 +1,7 @@
 use orzcc::{
-    backend::{riscv64::lower::RvLowerSpec, LowerConfig, LowerContext},
     collections::{diagnostic::RenderOptions, linked_list::LinkedListContainerPtr},
     frontend::ir::{into_ir, Parser},
-    ir::{alias_analysis::AliasAnalysis, InstKind},
+    ir::alias_analysis::AliasAnalysis,
 };
 
 #[test]

@@ -9,6 +9,7 @@ use super::{
     source_loc::Span,
     Block,
     Context,
+    IntConstant,
     Signature,
     Symbol,
     SymbolKind,
@@ -19,7 +20,6 @@ use super::{
 };
 use crate::{
     collections::{
-        apint::ApInt,
         linked_list::LinkedListNodePtr,
         storage::{ArenaAlloc, ArenaFree, ArenaPtr, BaseArenaPtr},
     },
@@ -407,7 +407,7 @@ pub enum InstKind {
     ///
     /// Using an individual constant creation instruction is similar to MLIR and
     /// Cranelift IR.
-    IConst(ApInt),
+    IConst(IntConstant),
     /// Create a new value from a constant.
     ///
     /// Currently, only f32 and f64 are supported.
@@ -567,7 +567,7 @@ impl Inst {
     }
 
     /// Create a new iconst instruction.
-    pub fn iconst(ctx: &mut Context, constant: impl Into<ApInt>, ty: Ty) -> Inst {
+    pub fn iconst(ctx: &mut Context, constant: impl Into<IntConstant>, ty: Ty) -> Inst {
         Self::new(ctx, InstKind::IConst(constant.into()), vec![ty], vec![])
     }
 
@@ -1351,9 +1351,9 @@ impl Inst {
         is_used
     }
 
-    pub fn get_iconst_value(self, ctx: &Context) -> Option<ApInt> {
+    pub fn get_iconst_value(self, ctx: &Context) -> Option<IntConstant> {
         if let InstKind::IConst(value) = self.kind(ctx) {
-            Some(value.clone())
+            Some(*value)
         } else {
             None
         }

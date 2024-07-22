@@ -23,6 +23,7 @@ use crate::{
         ICmpCond,
         IUnaryOp,
         InstKind,
+        IntConstant,
         Signature,
         Symbol,
         Ty,
@@ -657,12 +658,20 @@ impl<'a> Parser<'a> {
                             // iconst <apint>
                             let token = self.lexer.next(&mut self.diag);
                             if let Tk::Tokenized(s) = token.kind {
+                                // TODO: eliminiate ApInt here
                                 let apint = ApInt::try_from(s);
                                 if let Ok(apint) = apint {
-                                    Ik::IConst(apint)
+                                    if let Ok(int) = IntConstant::try_from(apint) {
+                                        Ik::IConst(int)
+                                    } else {
+                                        let snippet = Diagnostic::error("invalid integer")
+                                            .annotate(token.span.into(), "invalid integer literal");
+                                        self.diag.push(snippet);
+                                        return None;
+                                    }
                                 } else {
-                                    let snippet = Diagnostic::error("invalid apint")
-                                        .annotate(token.span.into(), "invalid apint literal");
+                                    let snippet = Diagnostic::error("invalid integer")
+                                        .annotate(token.span.into(), "invalid integer literal");
                                     self.diag.push(snippet);
                                     return None;
                                 }
@@ -734,8 +743,8 @@ impl<'a> Parser<'a> {
                                 if let Ok(size) = size {
                                     Ik::StackSlot(size)
                                 } else {
-                                    let snippet = Diagnostic::error("invalid apint")
-                                        .annotate(token.span.into(), "invalid apint literal");
+                                    let snippet = Diagnostic::error("invalid integer")
+                                        .annotate(token.span.into(), "invalid integer literal");
                                     self.diag.push(snippet);
                                     return None;
                                 }

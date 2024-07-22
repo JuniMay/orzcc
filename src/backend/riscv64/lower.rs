@@ -14,10 +14,7 @@ use crate::{
         PReg,
         RegKind,
     },
-    collections::{
-        apint::ApInt,
-        linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
-    },
+    collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
     ir,
 };
 
@@ -225,7 +222,7 @@ impl LowerSpec for RvLowerSpec {
         }
     }
 
-    fn gen_iconst(lower: &mut LowerContext<Self>, x: &ApInt, ty: ir::Ty) -> MValue {
+    fn gen_iconst(lower: &mut LowerContext<Self>, x: ir::IntConstant, ty: ir::Ty) -> MValue {
         if !ty.is_integer(lower.ctx) {
             panic!("gen_iconst: expected integer type, got {:?}", ty);
         }
@@ -236,37 +233,29 @@ impl LowerSpec for RvLowerSpec {
             unimplemented!("gen_iconst: bitwidth > 64: {}", bitwidth);
         }
 
-        let x = if x.width() > bitwidth {
-            // TODO: should be handled before lowering
-            let (x, _) = x.clone().into_truncated(bitwidth);
-            x
-        } else {
-            x.clone()
-        };
-
         if x.is_zero() {
             return MValue::new_reg(ty, regs::zero());
         }
 
-        if let Some(imm) = Imm12::try_from_apint(&x) {
+        if let Some(imm) = Imm12::try_from_u64(x.bits()) {
             MValue::new_imm(ty, imm.as_i16() as i64)
         } else {
             // sign-extend to 64-bit, because we are working on rv64
-            let bits = u64::from(x.clone().into_signext(64));
+            let bits = x.into_signext().bits();
             let (li, t) = RvInst::li(&mut lower.mctx, bits);
             lower.curr_block.unwrap().push_back(&mut lower.mctx, li);
             MValue::new_reg(ty, t)
         }
     }
 
-    fn gen_fconst(lower: &mut LowerContext<Self>, x: &ir::FloatConstant, ty: ir::Ty) -> MValue {
+    fn gen_fconst(lower: &mut LowerContext<Self>, x: ir::FloatConstant, ty: ir::Ty) -> MValue {
         if !ty.is_float32(lower.ctx) && !ty.is_float64(lower.ctx) {
             panic!("gen_fconst: expected float type, got {:?}", ty);
         }
         let x = if ty.is_float64(lower.ctx) {
             x.promote()
         } else {
-            *x
+            x
         };
         let t: Reg = match x {
             ir::FloatConstant::Float32(bits) => {

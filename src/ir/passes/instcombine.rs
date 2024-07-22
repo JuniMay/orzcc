@@ -25,10 +25,7 @@
 // TODO: Find a way to test these rules one by one.
 
 use crate::{
-    collections::{
-        apint::ApInt,
-        linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
-    },
+    collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
     ir::{
         passman::{GlobalPassMut, LocalPassMut, PassResult, TransformPass},
         Context,
@@ -36,6 +33,7 @@ use crate::{
         IBinaryOp,
         Inst,
         InstKind as Ik,
+        IntConstant,
         ValueKind,
     },
     utils::def_use::{Usable, User},
@@ -275,9 +273,8 @@ const fn mul_to_shl() -> Rule {
                 if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
                     if let Ik::IConst(v) = rhs_inst.kind(ctx) {
                         if v.is_power_of_two() {
-                            let shamt = ApInt::from(v.trailing_zeros())
-                                .into_shrunk()
-                                .into_zeroext(bitwidth);
+                            let shamt =
+                                IntConstant::from(v.trailing_zeros()).resize(bitwidth as u8);
                             let i_shamt = Inst::iconst(ctx, shamt, dst.ty(ctx));
                             let i_shl =
                                 Inst::ibinary(ctx, IBinaryOp::Shl, lhs, i_shamt.result(ctx, 0));
@@ -381,8 +378,10 @@ const fn add_to_mul() -> Rule {
                 let rhs = inst.operand(ctx, 1);
                 let dst = inst.result(ctx, 0);
 
+                let width = dst.ty(ctx).bitwidth(ctx).unwrap() as u8;
+
                 if lhs == rhs {
-                    let two = Inst::iconst(ctx, ApInt::from(2), dst.ty(ctx));
+                    let two = Inst::iconst(ctx, IntConstant::from(2).resize(width), dst.ty(ctx));
                     let mul = Inst::ibinary(ctx, IBinaryOp::Mul, lhs, two.result(ctx, 0));
                     inst.insert_after(ctx, two);
                     two.insert_after(ctx, mul);
@@ -511,7 +510,7 @@ const fn sub_identity_to_zero() -> Rule {
                 if lhs == rhs {
                     let zero = Inst::iconst(
                         ctx,
-                        ApInt::zero(dst.ty(ctx).bitwidth(ctx).unwrap()),
+                        IntConstant::zero(dst.ty(ctx).bitwidth(ctx).unwrap() as u8),
                         dst.ty(ctx),
                     );
                     inst.insert_after(ctx, zero);
@@ -527,7 +526,8 @@ const fn sub_identity_to_zero() -> Rule {
                         let rhs_rhs = rhs_inst.operand(ctx, 1);
                         if lhs == rhs_lhs {
                             // x - (x + y) => 0 - y
-                            let zero = Inst::iconst(ctx, ApInt::zero(bitwidth), dst.ty(ctx));
+                            let zero =
+                                Inst::iconst(ctx, IntConstant::zero(bitwidth as u8), dst.ty(ctx));
                             let neg_rhs =
                                 Inst::ibinary(ctx, IBinaryOp::Sub, zero.result(ctx, 0), rhs_rhs);
 
@@ -540,7 +540,8 @@ const fn sub_identity_to_zero() -> Rule {
                             return true;
                         } else if lhs == rhs_rhs {
                             // x - (y + x) => 0 - y
-                            let zero = Inst::iconst(ctx, ApInt::zero(bitwidth), dst.ty(ctx));
+                            let zero =
+                                Inst::iconst(ctx, IntConstant::zero(bitwidth as u8), dst.ty(ctx));
                             let neg_rhs =
                                 Inst::ibinary(ctx, IBinaryOp::Sub, zero.result(ctx, 0), rhs_lhs);
 
@@ -1083,7 +1084,11 @@ const fn distributive_one() -> Rule {
                             } = lhs_rhs.kind(ctx)
                             {
                                 if let Ik::IConst(_) = lhs_rhs_inst.kind(ctx) {
-                                    let one = Inst::iconst(ctx, ApInt::one(bitwidth), dst.ty(ctx));
+                                    let one = Inst::iconst(
+                                        ctx,
+                                        IntConstant::one(bitwidth as u8),
+                                        dst.ty(ctx),
+                                    );
                                     let new_rhs =
                                         Inst::ibinary(ctx, op, lhs_rhs, one.result(ctx, 0));
                                     let new_mul = Inst::ibinary(
@@ -1110,7 +1115,11 @@ const fn distributive_one() -> Rule {
                             } = lhs_lhs.kind(ctx)
                             {
                                 if let Ik::IConst(_) = lhs_lhs_inst.kind(ctx) {
-                                    let one = Inst::iconst(ctx, ApInt::one(bitwidth), dst.ty(ctx));
+                                    let one = Inst::iconst(
+                                        ctx,
+                                        IntConstant::one(bitwidth as u8),
+                                        dst.ty(ctx),
+                                    );
                                     let new_rhs =
                                         Inst::ibinary(ctx, op, lhs_lhs, one.result(ctx, 0));
                                     let new_mul = Inst::ibinary(
@@ -1145,7 +1154,11 @@ const fn distributive_one() -> Rule {
                             } = rhs_rhs.kind(ctx)
                             {
                                 if let Ik::IConst(_) = rhs_rhs_inst.kind(ctx) {
-                                    let one = Inst::iconst(ctx, ApInt::one(bitwidth), dst.ty(ctx));
+                                    let one = Inst::iconst(
+                                        ctx,
+                                        IntConstant::one(bitwidth as u8),
+                                        dst.ty(ctx),
+                                    );
                                     let new_rhs =
                                         Inst::ibinary(ctx, op, one.result(ctx, 0), rhs_rhs);
                                     let new_mul = Inst::ibinary(
@@ -1172,7 +1185,11 @@ const fn distributive_one() -> Rule {
                             } = rhs_lhs.kind(ctx)
                             {
                                 if let Ik::IConst(_) = rhs_lhs_inst.kind(ctx) {
-                                    let one = Inst::iconst(ctx, ApInt::one(bitwidth), dst.ty(ctx));
+                                    let one = Inst::iconst(
+                                        ctx,
+                                        IntConstant::one(bitwidth as u8),
+                                        dst.ty(ctx),
+                                    );
                                     let new_rhs =
                                         Inst::ibinary(ctx, op, one.result(ctx, 0), rhs_lhs);
                                     let new_mul = Inst::ibinary(
