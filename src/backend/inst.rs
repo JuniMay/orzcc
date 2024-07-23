@@ -46,6 +46,18 @@ pub trait MInst:
     }
 
     fn replace_reg(self, mctx: &mut MContext<Self>, from: Reg, to: Reg);
+
+    fn match_conditional_branch(self, mctx: &MContext<Self>) -> Option<MBlock<Self>>;
+
+    fn match_unconditional_branch(self, mctx: &MContext<Self>) -> Option<MBlock<Self>>;
+
+    /// Reverse the Branch condition and redirect the branch to new target.
+    /// Panics if the instruction is not a conditional branch.
+    fn inverse_conditional_branch(self, mctx: &mut MContext<Self>, new_target: MBlock<Self>);
+
+    /// Redirect the branch to new target.
+    /// Panics if the instruction is not a branch.
+    fn redirect_branch(self, mctx: &mut MContext<Self>, new_target: MBlock<Self>);
 }
 
 pub trait DisplayMInst<'a>: MInst {

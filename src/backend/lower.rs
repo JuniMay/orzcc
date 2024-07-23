@@ -701,46 +701,61 @@ where
                     // block because no lost-copy problem will happen
                     S::gen_br(self, mcond, mblock_then);
 
-                    // create a new block to jump
-                    let mblock_else_arg_passing =
-                        MBlock::new(&mut self.mctx, format!(".__machbb_{}", self.label_counter));
-                    self.label_counter += 1;
+                    if else_succ.args().is_empty() {
+                        // if there are no arguments to pass, we can just br, without creating a new
+                        // block because no lost-copy problem will happen
+                        S::gen_jump(self, mblock_else);
+                    } else {
+                        // create a new block to jump
+                        let mblock_else_arg_passing = MBlock::new(
+                            &mut self.mctx,
+                            format!(".__machbb_{}", self.label_counter),
+                        );
+                        self.label_counter += 1;
 
-                    S::gen_jump(self, mblock_else_arg_passing);
-                    self.curr_block
-                        .unwrap()
-                        .insert_after(self.mctx_mut(), mblock_else_arg_passing);
+                        S::gen_jump(self, mblock_else_arg_passing);
 
-                    self.curr_block = Some(mblock_else_arg_passing);
-                    self.lower_succ(else_succ);
-                    S::gen_jump(self, mblock_else);
+                        mblock_else.insert_before(self.mctx_mut(), mblock_else_arg_passing);
+
+                        self.curr_block = Some(mblock_else_arg_passing);
+
+                        self.lower_succ(else_succ);
+                        S::gen_jump(self, mblock_else);
+                    }
                 } else {
-                    // create a new block and pass arguments there
                     let mblock_then_arg_passing =
                         MBlock::new(&mut self.mctx, format!(".__machbb_{}", self.label_counter));
                     self.label_counter += 1;
 
-                    let mblock_else_arg_passing =
-                        MBlock::new(&mut self.mctx, format!(".__machbb_{}", self.label_counter));
-                    self.label_counter += 1;
-
                     let this_mblock = self.curr_block.unwrap();
-
                     this_mblock.insert_after(self.mctx_mut(), mblock_then_arg_passing);
-                    this_mblock.insert_after(self.mctx_mut(), mblock_else_arg_passing);
 
                     S::gen_br(self, mcond, mblock_then_arg_passing);
-                    S::gen_jump(self, mblock_else_arg_passing);
+
+                    if else_succ.args().is_empty() {
+                        // if there are no arguments to pass, we can just br, without creating a new
+                        // block because no lost-copy problem will happen
+                        S::gen_jump(self, mblock_else);
+                    } else {
+                        let mblock_else_arg_passing = MBlock::new(
+                            &mut self.mctx,
+                            format!(".__machbb_{}", self.label_counter),
+                        );
+                        self.label_counter += 1;
+
+                        mblock_else.insert_before(self.mctx_mut(), mblock_else_arg_passing);
+
+                        S::gen_jump(self, mblock_else_arg_passing);
+
+                        self.curr_block = Some(mblock_else_arg_passing);
+                        self.lower_succ(else_succ);
+                        S::gen_jump(self, mblock_else);
+                    }
 
                     self.curr_block = Some(mblock_then_arg_passing);
                     self.lower_succ(then_succ);
-                    S::gen_jump(self, mblock_then);
 
-                    // the next jump does not need a new block, because if br is not successful, it
-                    // should go here. So we set it back.
-                    self.curr_block = Some(mblock_else_arg_passing);
-                    self.lower_succ(else_succ);
-                    S::gen_jump(self, mblock_else);
+                    S::gen_jump(self, mblock_then);
                 }
             }
             Ik::Call(symbol) => {

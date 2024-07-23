@@ -7,6 +7,7 @@ mod peephole;
 mod regs;
 
 pub mod reg_alloc;
+pub mod simplify_cfg;
 
 #[cfg(feature = "target-arm64")]
 pub mod arm64;

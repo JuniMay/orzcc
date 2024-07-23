@@ -234,11 +234,11 @@ impl GlobalValueNumbering {
                             user.replace(ctx, inst.result(ctx, 0), def_val);
                             self.changed = true;
                         }
-                        println!(
-                            "[ gvn ] eliminate load {:?} with {:?}",
-                            inst.result(ctx, 0),
-                            def_val
-                        );
+                        // println!(
+                        //     "[ gvn ] eliminate load {:?} with {:?}",
+                        //     inst.result(ctx, 0),
+                        //     def_val
+                        // );
                     } else if !get_clobbered {
                         // this means we meet the start of the block
                         // we will trace back to the predecessor blocks
@@ -388,11 +388,11 @@ impl GlobalValueNumbering {
                                 user.replace(ctx, inst.result(ctx, 0), def_val);
                                 self.changed = true;
                             }
-                            println!(
-                                "[ gvn ] eliminate load {:?} with {:?}",
-                                inst.result(ctx, 0),
-                                def_val
-                            );
+                            // println!(
+                            //     "[ gvn ] eliminate load {:?} with {:?}",
+                            //     inst.result(ctx, 0),
+                            //     def_val
+                            // );
                         }
                     }
                 }
