@@ -568,7 +568,16 @@ impl Inst {
 
     /// Create a new iconst instruction.
     pub fn iconst(ctx: &mut Context, constant: impl Into<IntConstant>, ty: Ty) -> Inst {
-        Self::new(ctx, InstKind::IConst(constant.into()), vec![ty], vec![])
+        let width = ty.bitwidth(ctx).unwrap();
+        let constant: IntConstant = constant.into();
+        let constant = constant.resize(width as u8);
+        Self::new(
+            ctx,
+            // resize the constant to the width of the type
+            InstKind::IConst(constant),
+            vec![ty],
+            vec![],
+        )
     }
 
     /// Create a new fconst instruction for float32

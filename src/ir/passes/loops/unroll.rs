@@ -1,5 +1,6 @@
 use super::{scalar_evolution::LoopScevRecord, LoopSimplify, Scev, ScevAnalysis};
 use crate::{
+    collections::linked_list::LinkedListContainerPtr,
     ir::{
         deep_clone::DeepCloneMap,
         passes::{control_flow::CfgCanonicalize, loops::InductionOp},
@@ -15,7 +16,9 @@ use crate::{
         Context,
         Func,
         ICmpCond,
+        Inst,
         InstKind,
+        Value,
     },
     utils::loop_info::Loop,
 };
@@ -39,9 +42,6 @@ impl LoopUnroll {
     fn process_loop(&mut self, ctx: &mut Context, lp: Loop<Block>, scevs: &LoopScevRecord) -> bool {
         let mut changed = false;
 
-        let header = lp.header(&self.scev.loop_ctx);
-        let preheader = lp.get_preheader(ctx, &self.scev.loop_ctx).unwrap();
-
         let (lhs, cmp_cond, rhs) = if let Some(bound) = scevs.loop_bounds.get(&lp).unwrap() {
             bound
         } else {
@@ -64,20 +64,25 @@ impl LoopUnroll {
         // for slt, just minus the upper bound by 1
 
         // iterate the indvars, check if we can unroll the loop
-        for Scev {
+        if let Some(Scev {
             repr,
             start,
             step,
             op,
             modulus,
-        } in scevs.scevs.get(&lp).unwrap().iter()
+        }) = scevs
+            .scevs
+            .get(&lp)
+            .unwrap()
+            .iter()
+            .find(|s| s.repr == *lhs || s.repr == *rhs)
         {
             let (bound, cmp_cond, reversed) = if repr == lhs {
                 (rhs, cmp_cond, false)
             } else if repr == rhs {
                 (lhs, cmp_cond, true)
             } else {
-                return false;
+                unreachable!()
             };
 
             println!("[ loop-unroll ] start: {:?}", start);
@@ -115,55 +120,21 @@ impl LoopUnroll {
                 modulus_const
             });
 
-            let cmp_fn = |a: i64, b: i64| match (cmp_cond, reversed) {
-                (ICmpCond::Sle, false) => a <= b,
-                (ICmpCond::Slt, false) => a < b,
-                (ICmpCond::Sle, true) => a >= b,
-                (ICmpCond::Slt, true) => a > b,
-                _ => unreachable!(),
-            };
-
-            let induce_fn = |a: i64, b: i64, m: Option<i64>| {
-                let val = match op {
-                    InductionOp::Add => a + b,
-                    InductionOp::Sub => a - b,
-                    InductionOp::Mul => a * b,
-                    InductionOp::SDiv => a / b,
-                    InductionOp::Shl => a << b,
-                };
-
-                if let Some(m) = m {
-                    val % m
-                } else {
-                    val
-                }
-            };
-
             let trip_count_const = if let (Some(start), Some(step), Some(bound), None) =
                 (start_const, step_const, bound_const, modulus_const)
             {
-                let mut trip_count = 0usize;
-                let mut curr_indvar = start;
-
-                while cmp_fn(curr_indvar, bound) {
-                    trip_count += 1;
-                    curr_indvar = induce_fn(curr_indvar, step, None);
+                match (op, cmp_cond, reversed) {
+                    (InductionOp::Add, ICmpCond::Sle, false) => {
+                        let trip_count = (bound - start) / step + 1;
+                        Some(trip_count as usize)
+                    }
+                    (InductionOp::Add, ICmpCond::Slt, false) => {
+                        let trip_count = (bound - 1 - start) / step + 1;
+                        Some(trip_count as usize)
+                    }
+                    // TODO: support more
+                    _ => None,
                 }
-
-                Some(trip_count)
-            } else if let (Some(start), Some(step), Some(bound), Some(Some(m))) =
-                (start_const, step_const, bound_const, modulus_const)
-            {
-                // if the modulus exists, it must be a constant so we can compute the trip count
-                let mut trip_count = 0usize;
-                let mut curr_indvar = start;
-
-                while cmp_fn(curr_indvar, bound) {
-                    trip_count += 1;
-                    curr_indvar = induce_fn(curr_indvar, step, Some(m));
-                }
-
-                Some(trip_count)
             } else {
                 None
             };
@@ -172,9 +143,44 @@ impl LoopUnroll {
             println!("[ loop-unroll (const) ] step: {:?}", step_const);
             println!("[ loop-unroll (const) ] bound: {:?}", bound_const);
             println!("[ loop-unroll (const) ] trip count: {:?}", trip_count_const);
+
+            if let Some(_trip_count) = trip_count_const {
+                self.unroll_const(
+                    ctx,
+                    lp,
+                    *repr,
+                    start_const.unwrap(),
+                    step_const.unwrap(),
+                    bound_const.unwrap(),
+                );
+
+                changed = true;
+            }
         }
 
-        return changed;
+        changed
+    }
+
+    fn unroll_const(
+        &mut self,
+        ctx: &mut Context,
+        lp: Loop<Block>,
+        repr: Value,
+        start: i64,
+        step: i64,
+        bound: i64,
+    ) {
+        let header = lp.header(&self.scev.loop_ctx);
+        let preheader = lp.get_preheader(ctx, &self.scev.loop_ctx).unwrap();
+
+        let blocks = lp.get_blocks(ctx, &self.scev.loop_ctx);
+
+        // create new start value in the front of the header, and replace use.
+        let iconst = Inst::iconst(ctx, start, repr.ty(ctx));
+        preheader.push_back(ctx, iconst);
+
+        self.deep_clone_map
+            .insert_value(repr, iconst.result(ctx, 0));
     }
 }
 
