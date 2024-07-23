@@ -51,6 +51,8 @@ impl IntConstant {
     pub fn is_power_of_two(&self) -> bool { self.0.is_power_of_two() }
 
     pub fn trailing_zeros(&self) -> u32 { self.0.trailing_zeros().min(self.1 as u32) }
+
+    pub fn as_signed(&self) -> i64 { self.into_signext().0 as i64 }
 }
 
 impl From<bool> for IntConstant {

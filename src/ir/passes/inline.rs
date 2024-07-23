@@ -245,7 +245,7 @@ impl GlobalPassMut for Inline {
             .unwrap_or(self.max_inlinable_insn);
 
         println!(
-            "[ pass config ] inline: max_depth={}, max_insn={}",
+            "[ inline config ] inline: max_depth={}, max_insn={}",
             self.max_inline_depth, self.max_inlinable_insn
         );
     }
