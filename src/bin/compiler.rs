@@ -63,24 +63,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::fs::write(emit_typed_ast, format!("{:#?}", ast))?;
         }
 
-        let mut ir = sysy::irgen(&ast);
+        let mut ir = sysy::irgen(&ast); 
 
         if cmd.opt > 0 {
-            passman.run_transform(MEM2REG, &mut ir, 1);
-            passman.run_transform(INLINE, &mut ir, 1);
-            passman.run_transform(LOOP_INVARIANT_MOTION, &mut ir, 1);
+             passman.run_transform(GLOBAL2LOCAL, &mut ir, 1);
+            //passman.run_transform(MEM2REG, &mut ir, 1);
+            // passman.run_transform(INLINE, &mut ir, 1);
+            // passman.run_transform(LOOP_INVARIANT_MOTION, &mut ir, 1);
 
-            let mut opt_pipeline = Pipeline::default();
-            opt_pipeline.add_pass(GLOBAL2LOCAL);
-            opt_pipeline.add_pass(CFG_SIMPLIFY);
-            opt_pipeline.add_pass(CONSTANT_FOLDING);
-            opt_pipeline.add_pass(SIMPLE_DCE);
-            opt_pipeline.add_pass(INSTCOMBINE);
-            opt_pipeline.add_pass(SIMPLE_DCE);
-            opt_pipeline.add_pass(GVN);
-            opt_pipeline.add_pass(SIMPLE_DCE);
+            // let mut opt_pipeline = Pipeline::default();
+            // opt_pipeline.add_pass(GLOBAL2LOCAL);
+            // opt_pipeline.add_pass(CFG_SIMPLIFY);
+            // opt_pipeline.add_pass(CONSTANT_FOLDING);
+            // opt_pipeline.add_pass(SIMPLE_DCE);
+            // opt_pipeline.add_pass(INSTCOMBINE);
+            // opt_pipeline.add_pass(SIMPLE_DCE);
+            // opt_pipeline.add_pass(GVN);
+            // opt_pipeline.add_pass(SIMPLE_DCE);
 
-            let _iter = passman.run_pipeline(&mut ir, &opt_pipeline, 32, 8);
+            // let _iter = passman.run_pipeline(&mut ir, &opt_pipeline, 32, 8);
         }
 
         ir.alloc_all_names();

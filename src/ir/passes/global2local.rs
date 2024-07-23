@@ -1,20 +1,13 @@
-use std::{collections::{HashMap, HashSet}, ops::Deref, vec};
+use core::panic;
+use std::{collections::{HashMap, HashSet}, vec};
 
 use crate::{
-    backend::riscv64::inst, collections::{linked_list::{LinkedListContainerPtr, LinkedListNodePtr}, storage::ArenaPtr}, ir::{
-        debug, global::Symbol, passman::{GlobalPassMut, PassManager, PassResult, TransformPass}, ty::TyData, Constant, ConstantKind, Context, Func, GlobalSlot, Inst, InstKind, Ty
+    collections::{linked_list::{LinkedListContainerPtr, LinkedListNodePtr}, storage::ArenaPtr}, ir::{
+        global::Symbol, passman::{GlobalPassMut, PassManager, PassResult, TransformPass}, ty::TyData, ConstantKind, Context, Func, GlobalSlot, Inst, InstKind, Ty, Value
     }, utils::{cfg::CfgRegion, def_use::User}
 };
 
 pub const GLOBAL2LOCAL: &str = "global2local";
-
-// 用于对全局内容进行使用情况分析。
-// 全局分析：
-// 0. 参照User-Usable-Operand进行。
-// 1. 分析用户Inst及其所在函数。
-// 生成：
-// 1. 因为要调用Block::new_param(ctx, ty)生成Value，所以要存储ty（在slot中）；
-// 2. 因为要调用用户Func的entry_node(ctx)得到Block，所以要存储Func；
 
 #[derive(Default, Debug, Clone)]
 pub struct SlotUsers{
@@ -36,25 +29,46 @@ impl SlotUsers {
     }
 }
 
+enum GlobalSlotInitKind {
+    Undef,
+    Zeroinit,
+    BytesSingle,
+    BytesMultiple,
+}
+
 #[derive(Default, Debug)]
 pub struct Global2Local {
-    // Same as ValueData::users: FxHashMap<Inst, usize>,
-    // Here Symbol is the name of global_slot (GlobalSlot::name(self, ctx))
-    // Get global_slots from ctx.global_slots(),
-    // Get allocation infomation from Inst::GetGlobal(Symbol), remember to 
-    // check whether Symbol is a global slot or a function name.
+    // 全局槽到它的使用者的映射
+    slots_users: HashMap<Symbol, SlotUsers>,
 
-    slots: HashMap<Symbol, SlotUsers>,
+    // 之所以采用先存储后增添的方法是因为不同指令的创建位置不同：
+    // 1. 栈槽的创建位置：在入口块的最前面
+    // 2. 栈槽的初始化位置：在栈槽的创建之后（对于被移入局部的槽），或者在GetGlobal指令之后（对于无法移入局部的槽）
+    // 至于需要修改、删除的指令也采用先存储后修改、删除的方式，
+    // 这是因为必须先创建，才能修改，进而才能删除。
+
+    // 需要在入口块最前面创建的指令（包含StackSlot类型的指令）
+    insts_to_create_at_front: Vec<Inst>,
+    // 需要在上面的指令之后创建的指令（包含初始化上面指令创建的栈槽的指令）
+    insts_to_create_after_front: Vec<Inst>,
+    // 需要在每个全局槽的第一个GetGlobal指令之后创建的指令（包含复制及其相关的指令）
+    insts_to_create_after_inst: HashMap<Inst, Vec<Inst>>,
+    // 需要修改的指令（包含使用全局槽指针（ptrs_to_global）的指令）
+    insts_to_change: HashSet<(Inst, Value, Value)>,
+    // 需要被删除的全局槽（除了无法移入局部的槽）
+    slots_to_remove: HashSet<GlobalSlot>,
+    // 需要被删除的指令（包含多余的GetGlobal指令）
+    insts_to_remove: HashSet<Inst>,
 }
 
 impl Global2Local {
-    // 向slots中添加一个槽，或者向slots中现有的槽的user_funcs/user_insts中添加一个函数/指令。
+    // 向slots_users中添加一个槽，或者向slots_users中现有的槽的user_funcs/user_insts中添加一个函数/指令。
     pub fn add_global_slot_user(&mut self, symbol: &Symbol, user_inst: &Inst, user_func: &Func) {
-        if self.slots.get_mut(symbol).is_none() {
+        if self.slots_users.get_mut(symbol).is_none() {
             let slotusers = SlotUsers::new();
-            self.slots.insert(symbol.clone(), slotusers);
+            self.slots_users.insert(symbol.clone(), slotusers);
         }
-        let slotusers = self.slots.get_mut(symbol).unwrap();
+        let slotusers = self.slots_users.get_mut(symbol).unwrap();
         slotusers.user_funcs.insert(*user_func);
         slotusers.user_insts.insert(*user_inst);
     }
@@ -80,7 +94,7 @@ impl Global2Local {
     }
 
     pub fn display_usage_map(&self, ctx: &Context) {
-        for (symbol, slotusers) in self.slots.iter() {
+        for (symbol, slotusers) in self.slots_users.iter() {
             println!("{}: ", symbol);
             for func in slotusers.user_funcs.iter() {
                 println!("  func:{};", func.name(ctx));
@@ -88,193 +102,249 @@ impl Global2Local {
         }
     }
 
-    pub fn init_new_local_stack_slot(
-        &self,
-        ctx: &mut Context,
-        local_stack_slot: &Inst,
-        global_slot: &GlobalSlot,
-    ) -> bool {
-        let mut changed = false;
-        let slot_size = global_slot.ty(ctx).bytewidth(ctx).unwrap();
-
-        match global_slot.init(ctx).kind() {
-            // 对于创建好的局部槽，通过在Block中添加IR指令（Inst）进行初始化。
-
-            // (1) 如果全局槽为undef，则不需进行初始化，并删除全局槽（以及对全局槽的调用，后面一块删；剩下的相同）；
-            ConstantKind::Undef => {
-                global_slot.remove(ctx);
-            }
-            // (2)如果为zeroinit，则使用memset初始化，并删除全局槽；
-            ConstantKind::Zeroinit => {
-                let int_ty = Ty::int(ctx, 32);
-                let inst_zero_init = Inst::iconst(ctx, 0, int_ty);
-                let inst_size = Inst::iconst(ctx, slot_size as i32, int_ty);
-                let result_tys = vec![Ty::void(ctx)];
-                let inst_call_memset = Inst::call(
-                    ctx,
-                    "memset",
-                    vec![
-                        local_stack_slot.result(ctx, 0),
-                        inst_zero_init.result(ctx, 0),
-                        inst_size.result(ctx, 0),
-                    ],
-                    result_tys,
-                );
-                local_stack_slot.insert_after(ctx, inst_call_memset);
-
-                global_slot.remove(ctx);
-            }
-            // (3) 如果有bytes则使用memcpy或者常量指令：
-            ConstantKind::Bytes(_) => {
-                // 接下来的some_inst_constant是用于判断全局槽存储的是单个变量（三种）还是其他（例如数组）的，顺便携带单个变量的种类信息
-                let content_bytes = global_slot.init(ctx).get_bytes().unwrap().as_slice();
-                let some_inst_constant = match global_slot.ty(ctx).deref(ctx){
-                    TyData::Integer(_) => { Some(Inst::iconst(ctx, u32::from_le_bytes(content_bytes.try_into().unwrap()), global_slot.ty(ctx))) },
-                    TyData::Float32 => { Some(Inst::fconst(ctx, f32::from_le_bytes(content_bytes.try_into().unwrap()), global_slot.ty(ctx))) },
-                    TyData::Float64 => { Some(Inst::fconst(ctx, f64::from_le_bytes(content_bytes.try_into().unwrap()), global_slot.ty(ctx))) },
-                    TyData::Void | TyData::Ptr | TyData::Simd{ .. } | TyData::Array{ .. } | TyData::Struct{ .. } => { None }
-                };
-                if let Some(inst_constant) = some_inst_constant {
-                    // 如果全局槽存储单个变量(int,float32,float64)，则在局部槽之后：
-                    // 1.创建对应类型的常数
-                    // 2.将常数存储到局部槽
-                    // 3.删除全局槽
-                    let inst_store = Inst::store(ctx, inst_constant.result(ctx, 0), local_stack_slot.result(ctx, 0));
-                        local_stack_slot.extend_after(
-                            ctx,
-                            vec![
-                                inst_constant,
-                                inst_store,
-                            ]
-                        );
-                        global_slot.remove(ctx);
-                } else {
-                    // 对于其他情况，则在局部槽之后：
-                    // 1.获取全局槽指针
-                    // 2.设置槽的字节数
-                    // 3.调用memcpy函数（即使用Inst::call）将数组内容拷贝到局部槽
-                    // 注意，此处需要调用memcpy将全局槽复制过来，所以原全局槽不能删掉。但是调用全局槽的指令需要删掉。由于该指令的返回值仍被其他指令使用，所以应该先更改其他指令（即进行步骤三）再删除。
-                    let int_ty = Ty::int(ctx, 32);
-                    let inst_get_global = Inst::get_global(ctx, global_slot.name(ctx).clone());
-                    let inst_size = Inst::iconst(ctx, slot_size as i32, int_ty);
-                    let result_tys = vec![Ty::void(ctx)];
-                    let inst_call = Inst::call(
-                        ctx,
-                        "memcpy", 
-                        vec![
-                            local_stack_slot.result(ctx, 0),
-                            inst_get_global.result(ctx, 0),
-                            inst_size.result(ctx, 0),
-                        ],
-                        result_tys,
-                    );
-                    local_stack_slot.extend_after(
-                        ctx, 
-                        vec![
-                            inst_get_global,
-                            inst_size,
-                            inst_call,
-                        ],
-                    )
-                }
-            }
-        } // match global_slot.init(ctx).kind()
-        changed
-    }
-
     pub fn change_global_into_local(
-        &self,
+        &mut self,
         ctx: &mut Context,
         func: &Func,
         global_slot: &GlobalSlot,
         slotusers: &SlotUsers,
     ) -> bool {
-        let mut changed = true;
-
-        // 把全局槽移到这个函数中变为局部变量。步骤：
-        // 1.在局部（入口块）添加StackSlot类型的inst，确保这个局部槽具有与全局槽相同的特性。
-        // 2.遍历所有GetGlobal类型的inst，找到那些获取目标全局槽的指令，记录这些指令中代表全局槽的指针变量，并将这些变量存储到一个集合（old_ptrs）中，随后删除这些指令。
-        // 3.遍历所有Load和Store指令，检查它们的操作数是否在old_ptrs集合中。如果是，将操作数替换为新的局部指针变量（ptr_new）。
-
-        // 1.
-        let entry_block = func.entry_node(ctx);
-        let slot_size = global_slot.ty(ctx).bytewidth(ctx).unwrap();
-        let local_stack_slot = Inst::stack_slot(ctx, slot_size as u32);
-        entry_block.push_front(ctx, local_stack_slot);
-        entry_block.set_head(ctx, Some(local_stack_slot));
-
-        changed |= self.init_new_local_stack_slot(ctx, &local_stack_slot, global_slot);
-
-        println!("1st step done.");
-
-        // 2.遍历所有GetGlobal类型的inst，找到那些获取目标全局槽的指令，记录这些指令返回的指向全局槽的指针变量，并将这些变量存储到一个集合（ptrs_to_global_slot）中。之后的代码会删除这些指令。
-        let mut ptrs_to_global_slot = HashSet::new();
-        for inst in slotusers.user_insts.iter() {
-            // there are all GetGlobal insts in slotusers.user_insts
-            // 并且它们调用的全局槽也都是这个全局槽
-            let old_ptr = inst.result(ctx, 0);
-            ptrs_to_global_slot.insert(old_ptr);
+        // slot_global                              slot
+        // inst_create_slot_local           none -> (inst) -> ptr(value)
+        // inst(s)_get_global               slot -> (inst) -> ptr(value)
+        // inst_get_global_others           slot -> (inst) -> ptr(value)
+        // inst_users_of_ptrs_to_global     ptr  -> (inst) -> others
+        // ptr(s)_to_global                         ptr(value)
+        // ptr_to_local                             ptr(value)
+        if slotusers.user_funcs.len() != 1 {
+            panic!("G2L-162: Global slot is used by not one functions.");
         }
-        println!("2nd step done.");
+        let changed = true;
 
-        // 3.遍历所有Load、Store和Offset类型的指令，检查它们的操作数（旧全局槽的局部指针）是否在old_ptrs集合中。如果是，将操作数替换为新的局部指针变量（ptr_new）。
-        // 这个玩意是用来避免犯同时进行可变与不可变引用的错误（有关ctx）
-        let mut modifications = Vec::new();
-
-        for block in func.iter(ctx) {
-            for inst in block.iter(ctx) {
-                match inst.kind(ctx) {
-                    InstKind::Load => {
-                        let ptr_to_global_slot = inst.operand(ctx, 0);
-                        if ptrs_to_global_slot.contains(&ptr_to_global_slot) {
-                            // 收集需要替换的信息
-                            let new_ptr = local_stack_slot.result(ctx, 0);
-                            modifications.push((inst, ptr_to_global_slot, new_ptr));
-                        }
-                    }
-                    InstKind::Store => {
-                        let ptr_to_global_slot = inst.operand(ctx, 1);
-                        if ptrs_to_global_slot.contains(&ptr_to_global_slot) {
-                            // 收集需要替换的信息
-                            let new_ptr = local_stack_slot.result(ctx, 0);
-                            modifications.push((inst, ptr_to_global_slot, new_ptr));
-                        }
-                    }
-                    InstKind::Offset => {
-                        let ptr_to_global_slot = inst.operand(ctx, 0);
-                        if ptrs_to_global_slot.contains(&ptr_to_global_slot) {
-                            // 收集需要替换的信息
-                            let new_ptr = local_stack_slot.result(ctx, 0);
-                            modifications.push((inst, ptr_to_global_slot, new_ptr));
-                        }
-                    }
-                    InstKind::Call(_) => {
-                        for ptr in inst.operands(ctx) {
-                            if ptrs_to_global_slot.contains(&ptr) {
-                                // 收集需要替换的信息
-                                let new_ptr = local_stack_slot.result(ctx, 0);
-                                modifications.push((inst, ptr, new_ptr));
-                            }
-                        }
-                    }
-                    _ => {}
+        let initkind = match global_slot.init(ctx).kind() {
+            ConstantKind::Undef => GlobalSlotInitKind::Undef,
+            ConstantKind::Zeroinit => GlobalSlotInitKind::Zeroinit,
+            ConstantKind::Bytes(_) => {
+                if matches!(
+                    global_slot.ty(ctx).deref(ctx), 
+                    TyData::Integer(_) 
+                    | TyData::Float32 
+                    | TyData::Float64
+                ) {
+                    GlobalSlotInitKind::BytesSingle
+                } else {
+                    GlobalSlotInitKind::BytesMultiple
                 }
+            }
+        };
+        let size = global_slot.ty(ctx).bytewidth(ctx).unwrap();
+        let mut insts_get_global = slotusers.user_insts.clone(); // 此处insts一定都在当前函数中，且使用的global_slot一定是当前的全局槽。
+        let inst_first_get_global = func.iter(ctx)
+            .flat_map(|block| block.iter(ctx))
+            .find(|inst| { // 找到第一个GetGlobal类型的指令，而不是所有。
+                if let InstKind::GetGlobal(symbol) = inst.kind(ctx) {
+                    symbol == global_slot.name(ctx)
+                } else {
+                    false
+                }
+            }).unwrap();
+        let inst_create_slot_local: Inst = Inst::stack_slot(ctx, size as u32);
+        let ptrs_to_global = insts_get_global.iter()
+            .map(|inst| inst.result(ctx, 0))
+            .collect::<HashSet<_>>();
+        let ptr_to_local : Value = inst_create_slot_local.result(ctx, 0);
+        let insts_users_of_ptrs_to_global = func.iter(ctx)
+            .flat_map(|block| block.iter(ctx))
+            .filter(|inst| {
+                !inst.operands(ctx).iter()
+                .collect::<HashSet<_>>()
+                .is_disjoint(&ptrs_to_global.iter().collect())
+            }).collect::<HashSet<_>>();
+
+        // 0. 特殊判断：
+        if matches!(initkind, GlobalSlotInitKind::BytesMultiple)
+             && insts_get_global.len() == 1
+             && insts_users_of_ptrs_to_global.len() == 1 {
+            return false;
+        }
+
+        // 1. 确定inst_create_slot_local
+        self.insts_to_create_at_front.push(inst_create_slot_local);
+
+        // 2. 初始化inst_create_slot_local
+        match initkind {
+            GlobalSlotInitKind::Undef => {
+                // do nothing
+            }
+            GlobalSlotInitKind::Zeroinit => {
+                let type_int = Ty::int(ctx, 32);
+                let type_void = Ty::void(ctx);
+                let inst_zero_init = Inst::iconst(ctx, 0, type_int);
+                let inst_size = Inst::iconst(ctx, size as i32, type_int);
+                let inst_call_memset = Inst::call(
+                    ctx,
+                    "memset",
+                    vec![
+                        inst_create_slot_local.result(ctx, 0),
+                        inst_zero_init.result(ctx, 0),
+                        inst_size.result(ctx, 0),
+                    ],
+                    vec![type_void],
+                );
+
+                self.insts_to_create_after_front.extend(vec![
+                    inst_zero_init,
+                    inst_size,
+                    inst_call_memset,
+                ]);
+            }
+            GlobalSlotInitKind::BytesSingle => {
+                let content_bytes = global_slot.init(ctx).get_bytes().unwrap().as_slice();
+                let inst_constant = match global_slot.ty(ctx).deref(ctx){
+                    TyData::Integer(_) => { Inst::iconst(
+                        ctx, 
+                        u32::from_le_bytes(content_bytes.try_into().unwrap()), 
+                        global_slot.ty(ctx)
+                    ) },
+                    TyData::Float32 => { Inst::fconst(ctx, 
+                        f32::from_le_bytes(content_bytes.try_into().unwrap()), 
+                        global_slot.ty(ctx)
+                    ) },
+                    TyData::Float64 => { Inst::fconst(ctx, 
+                        f64::from_le_bytes(content_bytes.try_into().unwrap()), 
+                        global_slot.ty(ctx)
+                    ) },
+                    TyData::Void 
+                    | TyData::Ptr 
+                    | TyData::Simd{ .. } 
+                    | TyData::Array{ .. } 
+                    | TyData::Struct{ .. } => panic!("G2L: Unsupported global slot type"),
+                };
+                let inst_store = Inst::store(
+                    ctx, 
+                    inst_constant.result(ctx, 0), 
+                    inst_create_slot_local.result(ctx, 0)
+                );
+
+                self.insts_to_create_after_front.extend(
+                    vec![
+                        inst_constant,
+                        inst_store,
+                    ]
+                );
+            }
+            GlobalSlotInitKind::BytesMultiple => {
+                let type_inst = Ty::int(ctx, 32);
+                let type_void = Ty::void(ctx);
+                let inst_size = Inst::iconst(ctx, size as i32, type_inst);
+                let inst_call_memcpy = Inst::call(
+                    ctx,
+                    "memcpy",
+                    vec![
+                        inst_create_slot_local.result(ctx, 0),
+                        inst_first_get_global.result(ctx, 0),
+                        inst_size.result(ctx, 0),
+                    ],
+                    vec![type_void],
+                );
+
+                self.insts_to_create_after_inst.entry(inst_first_get_global).or_insert(vec![
+                    inst_size,
+                    inst_call_memcpy,
+                ]);
+            }
+        };
+
+        // 3. 分析需要删除的Inst（主要是GetGlobal）
+        match initkind {
+            GlobalSlotInitKind::Undef
+            | GlobalSlotInitKind::Zeroinit
+            | GlobalSlotInitKind::BytesSingle => {
+                self.insts_to_remove.extend(insts_get_global);
+            },
+            GlobalSlotInitKind::BytesMultiple => {
+                insts_get_global.remove(&inst_first_get_global);
+                self.insts_to_remove.extend(insts_get_global);
+            },
+        }
+
+        // 4. 分析需要更改的Inst
+        for inst in insts_users_of_ptrs_to_global.iter() {
+            for ptr_to_global in &ptrs_to_global{
+                self.insts_to_change.insert((*inst, *ptr_to_global, ptr_to_local));
             }
         }
 
-        // 在不再持有不可变引用的情况下进行修改
-        for (inst, old_ptr, new_ptr) in modifications {
-            inst.replace(ctx, old_ptr, new_ptr);
+        // 5. 分析需要删除的Slot
+        if !matches!(initkind, GlobalSlotInitKind::BytesMultiple) {
+            self.slots_to_remove.insert(*global_slot);
         }
-        println!("3rd step done.");
+        changed
+    }
 
-        // ctx.alloc_all_names();
-        // println!("{}", ctx.display(debug));
-        // let debug = true;
-        for old_get_global_inst in slotusers.user_insts.iter() {
-            // println!("Removing inst: {}", old_get_global_inst.display(ctx, debug));
-            old_get_global_inst.remove(ctx);
+    pub fn change_globals_into_locals(
+        &mut self,
+        ctx: &mut Context,
+        func: &Func,
+        globals: HashSet<GlobalSlot>,
+    ) -> bool {
+        let mut changed = false;
+
+        let slots_users = self.slots_users.clone();
+        for global in globals.iter() {
+            let slotusers = slots_users.get(global.name(ctx)).unwrap();
+            changed |= self.change_global_into_local(ctx, func, global, slotusers);
         }
+        println!("change analyzed.");
+
+        // 这里一定要注意增添、修改和删除的顺序：先增添、再修改、最后删除。
+        // 否则会导致后续的Inst的引用关系出错。
+        ctx.alloc_all_names();
+
+        let inst_head = func.entry_node(ctx).head(ctx).unwrap();
+        if let Some(inst_to_create_first) = &self.insts_to_create_at_front.first(){
+            for inst_to_create in &self.insts_to_create_at_front {
+                println!("inst creating: {}", inst_to_create.display(ctx, true));
+                inst_head.insert_before(ctx, *inst_to_create);
+            }
+            for inst_to_create in &self.insts_to_create_after_front {
+                println!("after front inst creating: {}", inst_to_create.display(ctx, true));
+                inst_head.insert_before(ctx, *inst_to_create);
+            }
+            func.entry_node(ctx).set_head(ctx, Some(**inst_to_create_first));
+            changed |= true;
+        }
+        println!("inst created.");
+
+        for (inst, insts_to_create) in self.insts_to_create_after_inst.iter() {
+            println!("else inst creating: {}", inst.display(ctx, true));
+            inst.extend_after(ctx, insts_to_create.clone());
+            changed |= true;
+        }
+        println!("else insts created.");
+
+        println!("{}", ctx.display(true));
+
+        for (inst, old_ptr, new_ptr) in &self.insts_to_change {
+            println!("inst changing: {}", inst.display(ctx, true));
+            println!("  old_ptr: {}, new_ptr: {}", old_ptr.name(ctx).unwrap(), new_ptr.name(ctx).unwrap());
+            inst.replace(ctx, *old_ptr, *new_ptr);
+            changed |= true;
+        }
+        println!("insts changed.");
+
+        for inst_to_remove in self.insts_to_remove.iter() {
+            println!("inst removing: {}", inst_to_remove.display(ctx, true));
+            inst_to_remove.remove(ctx);
+            changed |= true;
+        }
+        println!("insts removed.");
+
+        for slot_to_remove in self.slots_to_remove.iter() {
+            println!("slot removing: {}", slot_to_remove.display(ctx, true));
+            slot_to_remove.remove(ctx);
+        }
+        println!("slots removed.");
 
         changed
     }
@@ -284,34 +354,41 @@ impl GlobalPassMut for Global2Local {
     type Output = ();
 
     fn run(&mut self, ctx: &mut Context) -> PassResult<(Self::Output, bool)> {
+        // self.analyze_usage(ctx);
+        // println!("Usage analyzed.");
+        let mut changed = false;
+
         self.analyze_usage(ctx);
         println!("Usage analyzed.");
 
-        // let debug = true;
-        // ctx.alloc_all_names();
-        // println!("{}", ctx.display(debug));
-        let mut changed = false;
-
-        // 如果usage_map中的某个全局槽对应0个函数，删掉这个全局槽
-        // 如果usage_map中的某个全局槽对应1个函数，把这个全局槽的初始化移到这个函数中
-        // 如果usage_map中的某个全局槽对应多个函数，不管
-
+        // 先把需要G2L的全局槽按照函数分类，然后逐个函数进行G2L。
+        let mut funcs_to_pass_with_globals: HashMap<Func, HashSet<GlobalSlot>> = HashMap::new();
         for global_slot in ctx.global_slots() {
-            if let Some(slotusers) = self.slots.get(global_slot.name(ctx)) {
+            if let Some(slotusers) = self.slots_users.get(global_slot.name(ctx)) {
                 if let Some(func) = slotusers.single_func() {
-                    changed = self.change_global_into_local(ctx, &func, &global_slot, slotusers);
+                    // changed = self.change_global_into_local(ctx, &func, &global_slot, slotusers);
+                    funcs_to_pass_with_globals
+                        .entry(func)
+                        .or_default()
+                        .insert(global_slot);
                 } else {
                     /* do nothing */
                 }
             } else {
-                changed = true;
                 global_slot.remove(ctx);
+                changed |= true;
             }
         }
-        // 只需要定义Value即可，名称分配自动进行，无需担心
-        ctx.alloc_all_names();
+        // 只对那些只被调用一次的函数进行G2L。
+        let names_of_func_called_once = [String::from("main")];
+        // 进行G2L。
+        for (func, globals) in funcs_to_pass_with_globals {
+            if names_of_func_called_once.contains(&func.name(ctx).to_string()) {
+                changed |= self.change_globals_into_locals(ctx, &func, globals);
+            }
+        }
 
-        // println!("{}", ctx.display(debug));
+        ctx.alloc_all_names();
 
         Ok(((), changed))
     }
