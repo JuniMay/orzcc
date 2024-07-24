@@ -90,6 +90,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             opt_pipeline.add_pass(LOOP_UNROLL);
             opt_pipeline.add_pass(SIMPLE_DCE);
 
+            // cleanup the loop optimizations
+            opt_pipeline.add_pass(CFG_SIMPLIFY);
+            opt_pipeline.add_pass(SIMPLE_DCE);
+
             let iter = passman.run_pipeline(&mut ir, &opt_pipeline, 32, 8);
 
             println!("Optimization iterations: {}", iter);
