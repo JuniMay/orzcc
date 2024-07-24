@@ -13,6 +13,7 @@ use orzcc::{
                 CFG_SIMPLIFY,
             },
             fold::{ConstantFolding, CONSTANT_FOLDING},
+            gcm::{Gcm, GCM},
             gvn::{GlobalValueNumbering, GVN},
             inline::{Inline, INLINE},
             instcombine::{InstCombine, INSTCOMBINE},
@@ -81,11 +82,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             opt_pipeline.add_pass(SIMPLE_DCE);
             opt_pipeline.add_pass(INSTCOMBINE);
             opt_pipeline.add_pass(SIMPLE_DCE);
+            // opt_pipeline.add_pass(LOOP_INVARIANT_MOTION);
+            opt_pipeline.add_pass(GCM);
+            opt_pipeline.add_pass(SIMPLE_DCE);
             opt_pipeline.add_pass(GVN);
             opt_pipeline.add_pass(SIMPLE_DCE);
             opt_pipeline.add_pass(INLINE);
-            opt_pipeline.add_pass(SIMPLE_DCE);
-            opt_pipeline.add_pass(LOOP_INVARIANT_MOTION);
             opt_pipeline.add_pass(SIMPLE_DCE);
             opt_pipeline.add_pass(LOOP_UNROLL);
             opt_pipeline.add_pass(SIMPLE_DCE);
@@ -150,6 +152,7 @@ fn register_passes(passman: &mut PassManager) {
     LoopInvariantMotion::register(passman);
     LoopUnroll::register(passman);
     GlobalValueNumbering::register(passman);
+    Gcm::register(passman);
 
     BlockReorder::register(passman);
 }
