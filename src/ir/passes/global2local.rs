@@ -167,6 +167,7 @@ impl Global2Local {
              && insts_users_of_ptrs_to_global.len() == 1 {
             return false;
         }
+        if size > 8 { return false; }
 
         // 1. 确定inst_create_slot_local
         self.insts_to_create_at_front.push(inst_create_slot_local);
@@ -289,62 +290,59 @@ impl Global2Local {
         globals: HashSet<GlobalSlot>,
     ) -> bool {
         let mut changed = false;
-
+        let debug = false;
         let slots_users = self.slots_users.clone();
         for global in globals.iter() {
             let slotusers = slots_users.get(global.name(ctx)).unwrap();
             changed |= self.change_global_into_local(ctx, func, global, slotusers);
         }
-        println!("change analyzed.");
+       if debug { println!("change analyzed."); }
 
         // 这里一定要注意增添、修改和删除的顺序：先增添、再修改、最后删除。
         // 否则会导致后续的Inst的引用关系出错。
-        ctx.alloc_all_names();
 
         let inst_head = func.entry_node(ctx).head(ctx).unwrap();
         if let Some(inst_to_create_first) = &self.insts_to_create_at_front.first(){
             for inst_to_create in &self.insts_to_create_at_front {
-                println!("inst creating: {}", inst_to_create.display(ctx, true));
+                if debug { println!("inst creating: {}", inst_to_create.display(ctx, true)); }
                 inst_head.insert_before(ctx, *inst_to_create);
             }
             for inst_to_create in &self.insts_to_create_after_front {
-                println!("after front inst creating: {}", inst_to_create.display(ctx, true));
+                if debug { println!("after front inst creating: {}", inst_to_create.display(ctx, true)); }
                 inst_head.insert_before(ctx, *inst_to_create);
             }
             func.entry_node(ctx).set_head(ctx, Some(**inst_to_create_first));
             changed |= true;
         }
-        println!("inst created.");
+        if debug { println!("inst created."); }
 
         for (inst, insts_to_create) in self.insts_to_create_after_inst.iter() {
-            println!("else inst creating: {}", inst.display(ctx, true));
+            if debug {println!("else inst creating: {}", inst.display(ctx, true)); }
             inst.extend_after(ctx, insts_to_create.clone());
             changed |= true;
         }
-        println!("else insts created.");
-
-        println!("{}", ctx.display(true));
+        if debug {println!("else insts created."); }
 
         for (inst, old_ptr, new_ptr) in &self.insts_to_change {
-            println!("inst changing: {}", inst.display(ctx, true));
-            println!("  old_ptr: {}, new_ptr: {}", old_ptr.name(ctx).unwrap(), new_ptr.name(ctx).unwrap());
+            if debug { println!("inst changing: {}", inst.display(ctx, true)); }
+            if debug { println!("  old_ptr: {}, new_ptr: {}", old_ptr.name(ctx).unwrap(), new_ptr.name(ctx).unwrap()); }
             inst.replace(ctx, *old_ptr, *new_ptr);
             changed |= true;
         }
-        println!("insts changed.");
+        if debug {println!("insts changed."); }
 
         for inst_to_remove in self.insts_to_remove.iter() {
-            println!("inst removing: {}", inst_to_remove.display(ctx, true));
+            if debug { println!("inst removing: {}", inst_to_remove.display(ctx, true)); }
             inst_to_remove.remove(ctx);
             changed |= true;
         }
-        println!("insts removed.");
+        if debug { println!("insts removed."); }
 
         for slot_to_remove in self.slots_to_remove.iter() {
-            println!("slot removing: {}", slot_to_remove.display(ctx, true));
+            if debug { println!("slot removing: {}", slot_to_remove.display(ctx, true)); }
             slot_to_remove.remove(ctx);
         }
-        println!("slots removed.");
+        if debug { println!("slots removed."); }
 
         changed
     }
