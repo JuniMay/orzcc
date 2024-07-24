@@ -1,6 +1,6 @@
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 
-use super::control_flow::CfgCanonicalize;
+use super::{control_flow::CfgCanonicalize, gvn::GVNInst};
 use crate::{
     collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
     ir::{
@@ -15,7 +15,7 @@ use crate::{
     },
     utils::{
         cfg::{CfgInfo, CfgRegion},
-        def_use::Usable,
+        def_use::{Usable, User},
         dominance::Dominance,
         loop_info::LoopContext,
     },
@@ -182,6 +182,56 @@ impl Gcm {
 
         a
     }
+
+    fn gvn(&mut self, ctx: &mut Context, insts: &[Inst]) -> bool {
+        let mut vmap: FxHashMap<GVNInst, Vec<Value>> = FxHashMap::default();
+
+        let mut changed = false;
+
+        for inst in insts.iter() {
+            match inst.kind(ctx) {
+                InstKind::IConst(_)
+                | InstKind::FConst(_)
+                | InstKind::IBinary(_)
+                | InstKind::FBinary(_)
+                | InstKind::IUnary(_)
+                | InstKind::FUnary(_)
+                | InstKind::Cast(_)
+                | InstKind::Offset
+                | InstKind::GetGlobal(_) => {
+                    let gvn_inst = GVNInst::from_inst(ctx, *inst);
+
+                    if let Some(value) = vmap.get(&gvn_inst) {
+                        for (old_value, new_value) in inst
+                            .results(ctx)
+                            .to_vec()
+                            .iter()
+                            .copied()
+                            .zip(value.iter().copied())
+                        {
+                            for user in old_value.users(ctx) {
+                                user.replace(ctx, old_value, new_value);
+                                changed = true;
+                            }
+                        }
+                    } else {
+                        vmap.insert(gvn_inst, inst.results(ctx).to_vec());
+                    }
+                }
+                InstKind::Undef
+                | InstKind::StackSlot(_)
+                | InstKind::Jump
+                | InstKind::Br
+                | InstKind::Call(_)
+                | InstKind::CallIndirect(_)
+                | InstKind::Ret
+                | InstKind::Load
+                | InstKind::Store => {}
+            }
+        }
+
+        changed
+    }
 }
 
 impl LocalPassMut for Gcm {
@@ -199,6 +249,17 @@ impl LocalPassMut for Gcm {
         let rpo = self.dominance.rpo().to_vec();
 
         let mut insts = Vec::new();
+
+        // changed |= self.gvn(ctx, &insts);
+        let gvn_count = 0;
+        while self.gvn(ctx, &insts) {
+            changed = true;
+            if gvn_count > 100 {
+                break;
+            }
+        }
+
+        println!("[ gcm ] GVN iterations: {}", gvn_count);
 
         for block in rpo.iter() {
             for inst in block.iter(ctx) {
