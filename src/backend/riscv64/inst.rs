@@ -1430,6 +1430,57 @@ impl MInst for RvInst {
             }
         }
     }
+
+    fn match_conditional_branch(self, mctx: &MContext<Self>) -> Option<MBlock<Self>> {
+        match self.kind(mctx) {
+            RvInstKind::Br { block, .. } => Some(*block),
+            _ => None,
+        }
+    }
+
+    fn match_unconditional_branch(self, mctx: &MContext<Self>) -> Option<MBlock<Self>> {
+        match self.kind(mctx) {
+            RvInstKind::J { block } => Some(*block),
+            _ => None,
+        }
+    }
+
+    fn inverse_conditional_branch(self, mctx: &mut MContext<Self>, new_target: MBlock<Self>) {
+        use RvInstKind as Ik;
+
+        match &mut self.deref_mut(mctx).kind {
+            Ik::Br { op, block, .. } => {
+                *op = match op {
+                    BrOp::Beq => BrOp::Bne,
+                    BrOp::Bne => BrOp::Beq,
+                    BrOp::Blt => BrOp::Bge,
+                    BrOp::Bge => BrOp::Blt,
+                    BrOp::Bltu => BrOp::Bgeu,
+                    BrOp::Bgeu => BrOp::Bltu,
+                };
+                *block = new_target;
+            }
+            _ => {
+                panic!("not a conditional branch");
+            }
+        }
+    }
+
+    fn redirect_branch(self, mctx: &mut MContext<Self>, new_target: MBlock<Self>) {
+        use RvInstKind as Ik;
+
+        match &mut self.deref_mut(mctx).kind {
+            Ik::Br { block, .. } => {
+                *block = new_target;
+            }
+            Ik::J { block } => {
+                *block = new_target;
+            }
+            _ => {
+                panic!("not a branch");
+            }
+        }
+    }
 }
 
 impl ArenaPtr for RvInst {

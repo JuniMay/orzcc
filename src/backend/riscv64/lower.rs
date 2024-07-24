@@ -1082,6 +1082,7 @@ impl LowerSpec for RvLowerSpec {
 
         match op {
             ir::CastOp::Bitcast => MValue::new_reg(dst_ty, src),
+            // TODO: Use proper Zext
             ir::CastOp::ZExt => MValue::new_reg(dst_ty, src),
             ir::CastOp::SExt => {
                 // shl, asr

@@ -2,7 +2,7 @@
 
 use clap::{Arg, Command};
 use orzcc::{
-    backend::{riscv64, LowerConfig},
+    backend::{riscv64, simplify_cfg::SimplifyCfg, LowerConfig},
     ir::{
         passes::{
             control_flow::{
@@ -112,6 +112,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if cmd.opt > 0 {
             riscv64::run_peephole(lower_ctx.mctx_mut(), &cmd.lower_cfg);
+            SimplifyCfg::run(lower_ctx.mctx_mut(), &cmd.lower_cfg);
         }
 
         if let Some(emit_vcode) = &cmd.emit_vcode {
