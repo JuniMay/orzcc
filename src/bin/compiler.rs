@@ -84,7 +84,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             opt_pipeline.add_pass(SIMPLE_DCE);
             // opt_pipeline.add_pass(LOOP_INVARIANT_MOTION);
             opt_pipeline.add_pass(GCM);
-            opt_pipeline.add_pass(SIMPLE_DCE);
             opt_pipeline.add_pass(GVN);
             opt_pipeline.add_pass(SIMPLE_DCE);
             opt_pipeline.add_pass(INLINE);
@@ -92,7 +91,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             opt_pipeline.add_pass(LOOP_UNROLL);
             opt_pipeline.add_pass(SIMPLE_DCE);
 
-            // cleanup the loop optimizations
+            // // cleanup the loop optimizations
             opt_pipeline.add_pass(CFG_SIMPLIFY);
             opt_pipeline.add_pass(SIMPLE_DCE);
 

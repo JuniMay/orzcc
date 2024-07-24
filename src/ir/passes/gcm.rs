@@ -1,6 +1,6 @@
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use super::{control_flow::CfgCanonicalize, gvn::GVNInst};
+use super::{control_flow::CfgCanonicalize, gvn::GVNInst, simple_dce::SimpleDce};
 use crate::{
     collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
     ir::{
@@ -28,15 +28,14 @@ pub struct Gcm {
     visited: FxHashSet<Inst>,
     dominance: Dominance<Block>,
     loop_ctx: LoopContext<Block>,
+    dce: SimpleDce,
 }
 
 impl Gcm {
-    fn schedule_early(&mut self, ctx: &mut Context, inst: Inst, func: Func) -> bool {
+    fn schedule_early(&mut self, ctx: &mut Context, inst: Inst, func: Func) {
         if !self.visited.insert(inst) || Self::is_pinned(ctx, inst) {
-            return false;
+            return;
         }
-
-        let mut changed = false;
 
         let entry = func.entry_node(ctx);
         inst.unlink(ctx);
@@ -46,7 +45,7 @@ impl Gcm {
             let opd_block = match opd.kind(ctx) {
                 ValueKind::InstResult { inst, .. } => {
                     let inst = *inst;
-                    changed |= self.schedule_early(ctx, inst, func);
+                    self.schedule_early(ctx, inst, func);
                     inst.container(ctx).unwrap()
                 }
                 ValueKind::BlockParam { block, .. } => *block,
@@ -56,19 +55,14 @@ impl Gcm {
             {
                 inst.unlink(ctx);
                 opd_block.push_inst_before_terminator(ctx, inst);
-                changed = true;
             }
         }
-
-        changed
     }
 
-    fn schedule_late(&mut self, ctx: &mut Context, inst: Inst) -> bool {
+    fn schedule_late(&mut self, ctx: &mut Context, inst: Inst) {
         if !self.visited.insert(inst) || Self::is_pinned(ctx, inst) {
-            return false;
+            return;
         }
-
-        let mut changed = false;
 
         let mut lca = None;
         let mut has_uses = false;
@@ -76,7 +70,7 @@ impl Gcm {
         #[allow(clippy::unnecessary_to_owned)]
         for result in inst.results(ctx).to_vec() {
             for user in result.users(ctx) {
-                changed |= self.schedule_late(ctx, user);
+                self.schedule_late(ctx, user);
                 let user_block = user.container(ctx).unwrap();
                 lca = Some(match lca {
                     Some(lca) => self.lca(lca, user_block),
@@ -107,8 +101,6 @@ impl Gcm {
 
             inst.unlink(ctx);
             best_block.push_inst_before_terminator(ctx, inst);
-
-            changed = true;
         }
 
         let best_block = inst.container(ctx).unwrap();
@@ -132,8 +124,6 @@ impl Gcm {
                 break;
             }
         }
-
-        changed
     }
 
     fn is_pinned(ctx: &Context, inst: Inst) -> bool {
@@ -250,30 +240,30 @@ impl LocalPassMut for Gcm {
 
         let mut insts = Vec::new();
 
-        // changed |= self.gvn(ctx, &insts);
-        let gvn_count = 0;
-        while self.gvn(ctx, &insts) {
-            changed = true;
-            if gvn_count > 100 {
-                break;
-            }
-        }
-
-        println!("[ gcm ] GVN iterations: {}", gvn_count);
-
         for block in rpo.iter() {
             for inst in block.iter(ctx) {
                 insts.push(inst);
             }
         }
 
+        let mut gvn_count = 0;
+        while self.gvn(ctx, &insts) {
+            changed = true;
+            gvn_count += 1;
+            if gvn_count > 8 {
+                break;
+            }
+        }
+
+        println!("[ gcm ] GVN iterations: {}", gvn_count);
+
         for inst in insts.iter() {
-            changed |= self.schedule_early(ctx, *inst, func);
+            self.schedule_early(ctx, *inst, func);
         }
 
         self.visited.clear();
         for inst in insts.iter().rev() {
-            changed |= self.schedule_late(ctx, *inst);
+            self.schedule_late(ctx, *inst);
         }
 
         Ok(((), changed))
@@ -289,6 +279,7 @@ impl GlobalPassMut for Gcm {
             let (_, local_changed) = LocalPassMut::run(self, ctx, func)?;
             changed |= local_changed;
         }
+        changed |= GlobalPassMut::run(&mut self.dce, ctx)?.1;
         Ok(((), changed))
     }
 }
