@@ -2,12 +2,14 @@ use core::panic;
 use std::{collections::{HashMap, HashSet}, vec};
 
 use crate::{
-    collections::{linked_list::{LinkedListContainerPtr, LinkedListNodePtr}, storage::ArenaPtr}, ir::{
+    backend::riscv64::inst, collections::{linked_list::{LinkedListContainerPtr, LinkedListNodePtr}, storage::ArenaPtr}, ir::{
         global::Symbol, passman::{GlobalPassMut, PassManager, PassResult, TransformPass}, ty::TyData, ConstantKind, Context, Func, GlobalSlot, Inst, InstKind, Ty, Value
     }, utils::{cfg::CfgRegion, def_use::User}
 };
 
 pub const GLOBAL2LOCAL: &str = "global2local";
+
+pub const G2LDEBUG: bool = false;
 
 #[derive(Default, Debug, Clone)]
 pub struct SlotUsers{
@@ -38,8 +40,12 @@ enum GlobalSlotInitKind {
 
 #[derive(Default, Debug)]
 pub struct Global2Local {
+    // 一、全局信息：
+
     // 全局槽到它的使用者的映射
     slots_users: HashMap<Symbol, SlotUsers>,
+
+    // 二、单个函数的局部信息：
 
     // 之所以采用先存储后增添的方法是因为不同指令的创建位置不同：
     // 1. 栈槽的创建位置：在入口块的最前面
@@ -290,59 +296,68 @@ impl Global2Local {
         globals: HashSet<GlobalSlot>,
     ) -> bool {
         let mut changed = false;
-        let debug = false;
+
+        self.insts_to_create_at_front = Vec::new();
+        self.insts_to_create_after_front = Vec::new();
+        self.insts_to_create_after_inst = HashMap::new();
+        self.insts_to_change = HashSet::new();
+        self.insts_to_remove = HashSet::new();
+        self.slots_to_remove = HashSet::new();
+
         let slots_users = self.slots_users.clone();
         for global in globals.iter() {
             let slotusers = slots_users.get(global.name(ctx)).unwrap();
             changed |= self.change_global_into_local(ctx, func, global, slotusers);
         }
-       if debug { println!("change analyzed."); }
+       if G2LDEBUG { println!("change analyzed."); }
 
         // 这里一定要注意增添、修改和删除的顺序：先增添、再修改、最后删除。
         // 否则会导致后续的Inst的引用关系出错。
 
+        if G2LDEBUG { ctx.alloc_all_names();}
+
         let inst_head = func.entry_node(ctx).head(ctx).unwrap();
         if let Some(inst_to_create_first) = &self.insts_to_create_at_front.first(){
             for inst_to_create in &self.insts_to_create_at_front {
-                if debug { println!("inst creating: {}", inst_to_create.display(ctx, true)); }
+                if G2LDEBUG { println!("inst creating: {}", inst_to_create.display(ctx, true)); }
                 inst_head.insert_before(ctx, *inst_to_create);
             }
             for inst_to_create in &self.insts_to_create_after_front {
-                if debug { println!("after front inst creating: {}", inst_to_create.display(ctx, true)); }
+                if G2LDEBUG { println!("after front inst creating: {}", inst_to_create.display(ctx, true)); }
                 inst_head.insert_before(ctx, *inst_to_create);
             }
             func.entry_node(ctx).set_head(ctx, Some(**inst_to_create_first));
             changed |= true;
         }
-        if debug { println!("inst created."); }
+        if G2LDEBUG { println!("inst created."); }
 
         for (inst, insts_to_create) in self.insts_to_create_after_inst.iter() {
-            if debug {println!("else inst creating: {}", inst.display(ctx, true)); }
+            if G2LDEBUG {println!("else inst creating: {}", inst.display(ctx, true)); }
             inst.extend_after(ctx, insts_to_create.clone());
             changed |= true;
         }
-        if debug {println!("else insts created."); }
+        if G2LDEBUG {println!("else insts created."); }
 
         for (inst, old_ptr, new_ptr) in &self.insts_to_change {
-            if debug { println!("inst changing: {}", inst.display(ctx, true)); }
-            if debug { println!("  old_ptr: {}, new_ptr: {}", old_ptr.name(ctx).unwrap(), new_ptr.name(ctx).unwrap()); }
+            if G2LDEBUG { println!("inst changing: {}", inst.display(ctx, true)); }
+            if G2LDEBUG { println!("  old_ptr: {}, new_ptr: {}", old_ptr.name(ctx).unwrap(), new_ptr.name(ctx).unwrap()); }
             inst.replace(ctx, *old_ptr, *new_ptr);
             changed |= true;
         }
-        if debug {println!("insts changed."); }
+        if G2LDEBUG {println!("insts changed."); }
 
         for inst_to_remove in self.insts_to_remove.iter() {
-            if debug { println!("inst removing: {}", inst_to_remove.display(ctx, true)); }
+            if G2LDEBUG { println!("inst removing: {}", inst_to_remove.display(ctx, true)); }
             inst_to_remove.remove(ctx);
             changed |= true;
         }
-        if debug { println!("insts removed."); }
+        if G2LDEBUG { println!("insts removed."); }
 
         for slot_to_remove in self.slots_to_remove.iter() {
-            if debug { println!("slot removing: {}", slot_to_remove.display(ctx, true)); }
+            if G2LDEBUG { println!("slot removing: {}", slot_to_remove.display(ctx, true)); }
             slot_to_remove.remove(ctx);
         }
-        if debug { println!("slots removed."); }
+        if G2LDEBUG { println!("slots removed."); }
 
         changed
     }
@@ -356,8 +371,9 @@ impl GlobalPassMut for Global2Local {
         // println!("Usage analyzed.");
         let mut changed = false;
 
+        self.slots_users = HashMap::new();
         self.analyze_usage(ctx);
-        println!("Usage analyzed.");
+        if G2LDEBUG { println!("Usage analyzed."); }
 
         // 先把需要G2L的全局槽按照函数分类，然后逐个函数进行G2L。
         let mut funcs_to_pass_with_globals: HashMap<Func, HashSet<GlobalSlot>> = HashMap::new();
@@ -377,6 +393,7 @@ impl GlobalPassMut for Global2Local {
                 changed |= true;
             }
         }
+        if G2LDEBUG { println!("slots classified."); }
         // 只对那些只被调用一次的函数进行G2L。
         let names_of_func_called_once = [String::from("main")];
         // 进行G2L。
@@ -386,7 +403,7 @@ impl GlobalPassMut for Global2Local {
             }
         }
 
-        ctx.alloc_all_names();
+        // ctx.alloc_all_names();
 
         Ok(((), changed))
     }
