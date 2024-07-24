@@ -264,10 +264,10 @@ fn test_ir_display_0() {
     ctx.alloc_all_names();
 
     let s = format!("{}", i1.display(&ctx, true));
-    assert_eq!(s, "%v0 /* 0, uses: 0 */ = iconst 0x00000001i32 : i32");
+    assert_eq!(s, "%v0 /* 0, uses: 0 */ = iconst 0x1i32 : i32");
 
     let s = format!("{}", i2.display(&ctx, true));
-    assert_eq!(s, "%second /* 1, uses: 0 */ = iconst 0x00000002i32 : i32");
+    assert_eq!(s, "%second /* 1, uses: 0 */ = iconst 0x2i32 : i32");
 
     let s = format!("{}", f1.display(&ctx, true));
     let hex_1_0 = format!("0x{:08x}", f32::to_bits(1.0));
