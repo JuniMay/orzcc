@@ -6,10 +6,10 @@
 
 use rustc_hash::FxHashMap;
 
-use super::{constant::FloatConstant, Context, Inst, InstKind, Value};
+use super::{constant::FloatConstant, Context, IUnaryOp, Inst, InstKind, Value};
 use crate::{
     collections::apint::ApInt,
-    ir::{IBinaryOp, ICmpCond},
+    ir::{CastOp, FBinaryOp, FCmpCond, FUnaryOp, IBinaryOp, ICmpCond},
 };
 
 #[derive(Debug, Clone)]
@@ -160,10 +160,90 @@ impl Inst {
                 Some(FoldedConstant::Integer(lhs))
             }
             // TODO
-            InstKind::FBinary(_) => None,
-            InstKind::IUnary(_) => None,
-            InstKind::FUnary(_) => None,
-            InstKind::Cast(_) => None,
+            InstKind::FBinary(op) => {
+                let lhs = self.operand(ctx, 0);
+                let rhs = self.operand(ctx, 1);
+
+                let lhs_width = lhs.ty(ctx).bitwidth(ctx).unwrap();
+                let rhs_width = rhs.ty(ctx).bitwidth(ctx).unwrap();
+
+                assert_eq!(lhs_width, rhs_width);
+
+                let mut lhs = *fold_ctx.lookup(lhs)?.unwrap_float();
+                let rhs = fold_ctx.lookup(rhs)?.unwrap_float();
+
+                assert_eq!(lhs.width(), lhs_width);
+                assert_eq!(rhs.width(), rhs_width);
+                
+                match op {
+                    FBinaryOp::Add => {
+                        lhs.inplace_add(rhs);
+                    }
+                    FBinaryOp::Sub => {
+                        lhs.inplace_sub(rhs);
+                    }
+                    FBinaryOp::Mul => {
+                        lhs.inplace_mul(rhs);
+                    }
+                    FBinaryOp::Div => {
+                        lhs.inplace_div(rhs);
+                    }
+                    FBinaryOp::Rem => {
+                        lhs.inplace_rem(rhs);
+                    }
+                    FBinaryOp::Cmp(cond) => {
+                        let result = match cond {
+                            FCmpCond::OEq => &lhs == rhs,
+                            FCmpCond::ONe => &lhs != rhs,
+                            FCmpCond::OLt => lhs.lt(rhs),
+                            FCmpCond::OLe => lhs.le(rhs),
+                            FCmpCond::UEq => lhs.is_nan() || rhs.is_nan() || &lhs == rhs,
+                            FCmpCond::UNe => lhs.is_nan() || rhs.is_nan() || &lhs != rhs,
+                            FCmpCond::ULt => lhs.is_nan() || rhs.is_nan() || lhs.lt(rhs),
+                            FCmpCond::ULe => lhs.is_nan() || rhs.is_nan() || lhs.le(rhs),
+                        };
+
+                        lhs = FloatConstant::from(if result { 1.0 } else { 0.0 });
+                    }
+                }
+
+                Some(FoldedConstant::Float(lhs))
+            },
+            InstKind::IUnary(op) => {
+                let val = self.operand(ctx, 0);
+
+                let width = val.ty(ctx).bitwidth(ctx).unwrap();
+
+                let mut val = fold_ctx.lookup(val)?.unwrap_integer().clone();
+
+                assert_eq!(val.width(), width);
+
+                match op {
+                    IUnaryOp::Not => {
+                        val.inplace_bitnot();
+                    }
+                }
+
+                Some(FoldedConstant::Integer(val))
+            },
+            InstKind::FUnary(op) => {
+                let val = self.operand(ctx, 0);
+
+                let width = val.ty(ctx).bitwidth(ctx).unwrap();
+
+                let mut val = *fold_ctx.lookup(val)?.unwrap_float();
+
+                assert_eq!(val.width(), width);
+
+                match op {
+                    FUnaryOp::Neg => {
+                        val.inplace_neg();
+                    }
+                }
+
+                Some(FoldedConstant::Float(val))
+            },
+            InstKind::Cast(op) => None,
             InstKind::StackSlot(_)
             | InstKind::Load
             | InstKind::Store
