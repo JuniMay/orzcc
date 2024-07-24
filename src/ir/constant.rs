@@ -44,9 +44,9 @@ impl IntConstant {
 
     pub fn bits(&self) -> u64 { self.0 }
 
-    pub fn is_zero(&self) -> bool { self.0 == 0 }
+    pub fn is_zero(&self) -> bool { (self.0 & self.mask()) == 0 }
 
-    pub fn is_one(&self) -> bool { self.0 == 1 }
+    pub fn is_one(&self) -> bool { (self.0 & self.mask()) == 1 }
 
     pub fn is_power_of_two(&self) -> bool { self.0.is_power_of_two() }
 

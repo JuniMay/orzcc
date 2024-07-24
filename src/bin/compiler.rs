@@ -83,14 +83,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             opt_pipeline.add_pass(SIMPLE_DCE);
             opt_pipeline.add_pass(GVN);
             opt_pipeline.add_pass(SIMPLE_DCE);
-            opt_pipeline.add_pass(INLINE);
-            opt_pipeline.add_pass(SIMPLE_DCE);
+            // opt_pipeline.add_pass(INLINE);
+            // opt_pipeline.add_pass(SIMPLE_DCE);
             opt_pipeline.add_pass(LOOP_INVARIANT_MOTION);
             opt_pipeline.add_pass(SIMPLE_DCE);
             opt_pipeline.add_pass(LOOP_UNROLL);
             opt_pipeline.add_pass(SIMPLE_DCE);
 
-            let iter = passman.run_pipeline(&mut ir, &opt_pipeline, 32, 1);
+            let iter = passman.run_pipeline(&mut ir, &opt_pipeline, 32, 8);
 
             println!("Optimization iterations: {}", iter);
 
