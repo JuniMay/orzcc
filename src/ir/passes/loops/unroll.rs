@@ -1,6 +1,6 @@
-use super::{scalar_evolution::LoopScevRecord, LoopSimplify, Scev, ScevAnalysis};
+use super::{scalar_evolution::LoopScevRecord, Lcssa, LoopSimplify, Scev, ScevAnalysis};
 use crate::{
-    collections::linked_list::LinkedListContainerPtr,
+    collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
     ir::{
         deep_clone::DeepCloneMap,
         passes::{control_flow::CfgCanonicalize, loops::InductionOp},
@@ -12,6 +12,7 @@ use crate::{
             PassResult,
             TransformPass,
         },
+        remove_all_insts,
         Block,
         Context,
         Func,
@@ -20,7 +21,11 @@ use crate::{
         InstKind,
         Value,
     },
-    utils::loop_info::Loop,
+    utils::{
+        cfg::CfgNode,
+        def_use::User,
+        loop_info::{Loop, LoopWithDepth},
+    },
 };
 
 pub const LOOP_UNROLL: &str = "loop-unroll";
@@ -145,22 +150,22 @@ impl LoopUnroll {
             println!("[ loop-unroll (const) ] trip count: {:?}", trip_count_const);
 
             if let Some(_trip_count) = trip_count_const {
-                self.unroll_const(
+                changed |= self.unroll_const(
                     ctx,
                     lp,
                     *repr,
                     start_const.unwrap(),
                     step_const.unwrap(),
                     bound_const.unwrap(),
+                    trip_count_const.unwrap(),
                 );
-
-                changed = true;
             }
         }
 
         changed
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn unroll_const(
         &mut self,
         ctx: &mut Context,
@@ -169,18 +174,138 @@ impl LoopUnroll {
         start: i64,
         step: i64,
         bound: i64,
-    ) {
+        trip_count: usize,
+    ) -> bool {
+        self.deep_clone_map.clear();
+
         let header = lp.header(&self.scev.loop_ctx);
+        let mut curr_header = header;
+
         let preheader = lp.get_preheader(ctx, &self.scev.loop_ctx).unwrap();
 
         let blocks = lp.get_blocks(ctx, &self.scev.loop_ctx);
 
-        // create new start value in the front of the header, and replace use.
-        let iconst = Inst::iconst(ctx, start, repr.ty(ctx));
-        preheader.push_back(ctx, iconst);
+        let insn: usize = blocks.iter().map(|bb| bb.insn(ctx)).sum();
 
+        if insn * trip_count > 4096 {
+            return false;
+        }
+
+        // we preserve the original loop body first. after cloning and
+        // unrolling, we will remove the original loop body.
+
+        // firstly, we need to decide an insertion point, just after the
+        // preheader.
+        let mut insertion_point = preheader;
+
+        let mut loop_param = start;
+
+        // the instructions that need to be modified with the new header.
+        let mut jumps_to_modify = Vec::new();
+
+        jumps_to_modify.push(preheader.tail(ctx).unwrap());
+
+        while loop_param <= bound {
+            println!("[ loop-unroll (const) ] loop param: {}", loop_param);
+
+            let iconst = Inst::iconst(ctx, loop_param, repr.ty(ctx));
+
+            self.deep_clone_map
+                .insert_value(repr, iconst.result(ctx, 0));
+
+            // map blocks and block params
+            for block in blocks.iter() {
+                let new_block = Block::new(ctx);
+                self.deep_clone_map.insert_block(*block, new_block);
+
+                #[allow(clippy::unnecessary_to_owned)]
+                for param in block.params(ctx).to_vec() {
+                    let new_param = new_block.new_param(ctx, param.ty(ctx));
+                    if param != repr {
+                        // we need the param to replace block, so just map if it's not the loop
+                        // param
+                        self.deep_clone_map.insert_value(param, new_param);
+                    }
+                }
+
+                insertion_point.insert_after(ctx, new_block);
+                insertion_point = new_block;
+
+                if block == &header {
+                    new_block.push_back(ctx, iconst);
+
+                    // modify the jumps
+                    for jump in jumps_to_modify.drain(..) {
+                        jump.replace(ctx, curr_header, new_block);
+                    }
+                    // update the current header, so we can replace in the next iteration
+                    curr_header = new_block;
+                }
+            }
+
+            // clone instructions
+            for block in blocks.iter() {
+                let new_block = self.deep_clone_map.get_block(*block).unwrap();
+
+                let mut cursor = block.cursor();
+                while let Some(inst) = cursor.next(ctx) {
+                    let new_inst = inst.deep_clone(ctx, &mut self.deep_clone_map);
+                    new_block.push_back(ctx, new_inst);
+                }
+
+                for succ in block.succs(ctx) {
+                    if succ == header {
+                        jumps_to_modify.push(new_block.tail(ctx).unwrap());
+                        break;
+                    }
+                }
+            }
+
+            loop_param += step;
+        }
+
+        // one last header
+        let new_header = Block::new(ctx);
+        insertion_point.insert_after(ctx, new_header);
+
+        let iconst = Inst::iconst(ctx, loop_param, repr.ty(ctx));
+        new_header.push_back(ctx, iconst);
         self.deep_clone_map
             .insert_value(repr, iconst.result(ctx, 0));
+
+        #[allow(clippy::unnecessary_to_owned)]
+        for param in header.params(ctx).to_vec() {
+            let new_param = new_header.new_param(ctx, param.ty(ctx));
+            if param != repr {
+                self.deep_clone_map.insert_value(param, new_param);
+            }
+        }
+        for jump in jumps_to_modify {
+            jump.replace(ctx, curr_header, new_header);
+        }
+
+        // clone instructions
+        let mut cursor = header.cursor();
+        while let Some(inst) = cursor.next(ctx) {
+            let new_inst = inst.deep_clone(ctx, &mut self.deep_clone_map);
+            new_header.push_back(ctx, new_inst);
+        }
+
+        // remove all instructions in the original loop body
+        let mut insts_to_remove = Vec::new();
+        for block in blocks.iter() {
+            for inst in block.iter(ctx) {
+                insts_to_remove.push(inst);
+            }
+        }
+
+        remove_all_insts(ctx, insts_to_remove, false);
+
+        for block in blocks {
+            block.remove(ctx);
+        }
+
+        true
     }
 }
 
@@ -190,13 +315,23 @@ impl LocalPassMut for LoopUnroll {
     fn run(&mut self, ctx: &mut Context, func: Func) -> PassResult<(Self::Output, bool)> {
         let scevs = LocalPass::run(&mut self.scev, ctx, func)?;
 
-        let mut changed = false;
+        let mut loops = Vec::new();
 
         for lp in self.scev.loop_ctx.loops() {
-            changed |= self.process_loop(ctx, lp, &scevs);
+            let depth = lp.depth(&self.scev.loop_ctx);
+            loops.push(LoopWithDepth { lp, depth });
         }
 
-        Ok(((), changed))
+        loops.sort();
+        loops.reverse();
+
+        for LoopWithDepth { lp, .. } in loops {
+            if self.process_loop(ctx, lp, &scevs) {
+                return Ok(((), true));
+            }
+        }
+
+        Ok(((), false))
     }
 }
 
@@ -235,7 +370,11 @@ impl TransformPass for LoopUnroll {
         passman.register_transform(
             LOOP_UNROLL,
             pass,
-            vec![Box::new(CfgCanonicalize), Box::new(LoopSimplify::default())],
+            vec![
+                Box::new(CfgCanonicalize),
+                Box::new(LoopSimplify::default()),
+                Box::new(Lcssa::default()),
+            ],
         );
 
         passman.add_parameter("unroll-factor", 8);

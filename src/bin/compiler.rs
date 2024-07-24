@@ -5,12 +5,18 @@ use orzcc::{
     backend::{riscv64, LowerConfig},
     ir::{
         passes::{
-            control_flow::{CfgCanonicalize, CfgSimplify, CFG_SIMPLIFY},
+            control_flow::{
+                BlockReorder,
+                CfgCanonicalize,
+                CfgSimplify,
+                BLOCK_REORDER,
+                CFG_SIMPLIFY,
+            },
             fold::{ConstantFolding, CONSTANT_FOLDING},
             gvn::{GlobalValueNumbering, GVN},
             inline::{Inline, INLINE},
             instcombine::{InstCombine, INSTCOMBINE},
-            loops::{LoopInvariantMotion, LOOP_INVARIANT_MOTION},
+            loops::{LoopInvariantMotion, LoopUnroll, LOOP_INVARIANT_MOTION, LOOP_UNROLL},
             mem2reg::{Mem2reg, MEM2REG},
             simple_dce::{SimpleDce, SIMPLE_DCE},
         },
@@ -77,12 +83,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             opt_pipeline.add_pass(SIMPLE_DCE);
             opt_pipeline.add_pass(GVN);
             opt_pipeline.add_pass(SIMPLE_DCE);
-            opt_pipeline.add_pass(LOOP_INVARIANT_MOTION);
-            opt_pipeline.add_pass(SIMPLE_DCE);
             opt_pipeline.add_pass(INLINE);
             opt_pipeline.add_pass(SIMPLE_DCE);
+            opt_pipeline.add_pass(LOOP_INVARIANT_MOTION);
+            opt_pipeline.add_pass(SIMPLE_DCE);
+            opt_pipeline.add_pass(LOOP_UNROLL);
+            opt_pipeline.add_pass(SIMPLE_DCE);
 
-            let _iter = passman.run_pipeline(&mut ir, &opt_pipeline, 32, 8);
+            let iter = passman.run_pipeline(&mut ir, &opt_pipeline, 32, 1);
+
+            println!("Optimization iterations: {}", iter);
+
+            passman.run_transform(BLOCK_REORDER, &mut ir, 1);
         }
 
         ir.alloc_all_names();
@@ -131,7 +143,10 @@ fn register_passes(passman: &mut PassManager) {
     Inline::register(passman);
 
     LoopInvariantMotion::register(passman);
+    LoopUnroll::register(passman);
     GlobalValueNumbering::register(passman);
+
+    BlockReorder::register(passman);
 }
 
 fn cli(passman: &mut PassManager) -> Command {
