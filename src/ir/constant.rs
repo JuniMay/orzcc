@@ -145,6 +145,15 @@ impl FloatConstant {
         }
     }
 
+    pub fn truncate(self) -> Self {
+        match self {
+            FloatConstant::Float64(val) => {
+                FloatConstant::Float32((f64::from_bits(val) as f32).to_bits())
+            }
+            FloatConstant::Float32(_) => self,
+        }
+    }
+
     pub fn width(&self) -> usize {
         match self {
             FloatConstant::Float32(_) => 32,
