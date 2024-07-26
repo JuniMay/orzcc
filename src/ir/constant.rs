@@ -260,6 +260,13 @@ impl Constant {
     pub fn source_span(&self) -> Span { self.1 }
 
     pub fn kind(&self) -> &ConstantKind { &self.0 }
+
+    pub fn get_bytes(&self) -> Option<&Vec<u8>> {
+        match self.kind() {
+            ConstantKind::Bytes(bytes) => Some(bytes),
+            _ => None,
+        }
+    }
 }
 
 impl From<bool> for Constant {

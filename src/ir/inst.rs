@@ -450,7 +450,7 @@ pub enum InstKind {
     CallIndirect(Signature),
     /// Return instruction.
     Ret,
-    /// Get global symbol as local pinter.
+    /// Get global symbol as local pointer.
     ///
     /// This applies to function and global slot. The corresponding instruction
     /// in RISC-V is `LA`, i.e., load address (`LA` a pseudo instruction)

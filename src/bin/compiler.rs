@@ -20,6 +20,7 @@ use orzcc::{
             loops::{LoopInvariantMotion, LoopUnroll, LOOP_INVARIANT_MOTION, LOOP_UNROLL},
             mem2reg::{Mem2reg, MEM2REG},
             simple_dce::{SimpleDce, SIMPLE_DCE},
+            global2local::{Global2Local, GLOBAL2LOCAL}
         },
         passman::{PassManager, Pipeline, TransformPass},
     },
@@ -71,12 +72,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::fs::write(emit_typed_ast, format!("{:#?}", ast))?;
         }
 
-        let mut ir = sysy::irgen(&ast);
+        let mut ir = sysy::irgen(&ast); 
 
         if cmd.opt > 0 {
+            passman.run_transform(GLOBAL2LOCAL, &mut ir, 1);
             passman.run_transform(MEM2REG, &mut ir, 1);
 
             let mut opt_pipeline = Pipeline::default();
+            opt_pipeline.add_pass(GLOBAL2LOCAL);
             opt_pipeline.add_pass(CFG_SIMPLIFY);
             opt_pipeline.add_pass(CONSTANT_FOLDING);
             opt_pipeline.add_pass(SIMPLE_DCE);
@@ -147,6 +150,7 @@ fn register_passes(passman: &mut PassManager) {
     ConstantFolding::register(passman);
     InstCombine::register(passman);
     Inline::register(passman);
+    Global2Local::register(passman);
 
     LoopInvariantMotion::register(passman);
     LoopUnroll::register(passman);
