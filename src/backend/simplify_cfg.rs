@@ -32,10 +32,11 @@ impl SimplifyCfg {
     ///     bge r1, r2, bb2
     ///     j bb1
     /// .bb1:
-    pub fn reorder_branch<I>(mctx: &mut MContext<I>, config: &LowerConfig) -> bool
+    pub fn reorder_branch<I>(mctx: &mut MContext<I>, _config: &LowerConfig) -> bool
     where
         I: MInst,
     {
+        #[allow(unused_mut)] // TODO: fix point on assembly
         let mut changed = false;
 
         let funcs = mctx

@@ -14,13 +14,13 @@ use orzcc::{
             },
             fold::{ConstantFolding, CONSTANT_FOLDING},
             gcm::{Gcm, GCM},
+            global2local::{Global2Local, GLOBAL2LOCAL},
             gvn::{GlobalValueNumbering, GVN},
             inline::{Inline, INLINE},
             instcombine::{InstCombine, INSTCOMBINE},
-            loops::{LoopInvariantMotion, LoopUnroll, LOOP_INVARIANT_MOTION, LOOP_UNROLL},
+            loops::{LoopUnroll, LOOP_UNROLL},
             mem2reg::{Mem2reg, MEM2REG},
             simple_dce::{SimpleDce, SIMPLE_DCE},
-            global2local::{Global2Local, GLOBAL2LOCAL}
         },
         passman::{PassManager, Pipeline, TransformPass},
     },
@@ -72,20 +72,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::fs::write(emit_typed_ast, format!("{:#?}", ast))?;
         }
 
-        let mut ir = sysy::irgen(&ast); 
+        let mut ir = sysy::irgen(&ast);
 
         if cmd.opt > 0 {
-            passman.run_transform(GLOBAL2LOCAL, &mut ir, 1);
-            passman.run_transform(MEM2REG, &mut ir, 1);
+            // global2local might take effect after inlining, so just integrate it into the
+            // pipeline
 
             let mut opt_pipeline = Pipeline::default();
             opt_pipeline.add_pass(GLOBAL2LOCAL);
+            opt_pipeline.add_pass(MEM2REG);
             opt_pipeline.add_pass(CFG_SIMPLIFY);
             opt_pipeline.add_pass(CONSTANT_FOLDING);
             opt_pipeline.add_pass(SIMPLE_DCE);
             opt_pipeline.add_pass(INSTCOMBINE);
             opt_pipeline.add_pass(SIMPLE_DCE);
-            // opt_pipeline.add_pass(LOOP_INVARIANT_MOTION);
+            // GCM is better than LICM, only run GCM
             opt_pipeline.add_pass(GCM);
             opt_pipeline.add_pass(GVN);
             opt_pipeline.add_pass(SIMPLE_DCE);
@@ -152,7 +153,6 @@ fn register_passes(passman: &mut PassManager) {
     Inline::register(passman);
     Global2Local::register(passman);
 
-    LoopInvariantMotion::register(passman);
     LoopUnroll::register(passman);
     GlobalValueNumbering::register(passman);
     Gcm::register(passman);

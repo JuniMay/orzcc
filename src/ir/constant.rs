@@ -264,7 +264,7 @@ impl Constant {
     pub fn get_bytes(&self) -> Option<&Vec<u8>> {
         match self.kind() {
             ConstantKind::Bytes(bytes) => Some(bytes),
-            _ => None,
+            ConstantKind::Undef | ConstantKind::Zeroinit => None,
         }
     }
 }

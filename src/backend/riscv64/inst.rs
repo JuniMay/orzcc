@@ -1432,53 +1432,48 @@ impl MInst for RvInst {
     }
 
     fn match_conditional_branch(self, mctx: &MContext<Self>) -> Option<MBlock<Self>> {
-        match self.kind(mctx) {
-            RvInstKind::Br { block, .. } => Some(*block),
-            _ => None,
+        if let RvInstKind::Br { block, .. } = self.kind(mctx) {
+            Some(*block)
+        } else {
+            None
         }
     }
 
     fn match_unconditional_branch(self, mctx: &MContext<Self>) -> Option<MBlock<Self>> {
-        match self.kind(mctx) {
-            RvInstKind::J { block } => Some(*block),
-            _ => None,
+        if let RvInstKind::J { block } = self.kind(mctx) {
+            Some(*block)
+        } else {
+            None
         }
     }
 
     fn inverse_conditional_branch(self, mctx: &mut MContext<Self>, new_target: MBlock<Self>) {
         use RvInstKind as Ik;
 
-        match &mut self.deref_mut(mctx).kind {
-            Ik::Br { op, block, .. } => {
-                *op = match op {
-                    BrOp::Beq => BrOp::Bne,
-                    BrOp::Bne => BrOp::Beq,
-                    BrOp::Blt => BrOp::Bge,
-                    BrOp::Bge => BrOp::Blt,
-                    BrOp::Bltu => BrOp::Bgeu,
-                    BrOp::Bgeu => BrOp::Bltu,
-                };
-                *block = new_target;
-            }
-            _ => {
-                panic!("not a conditional branch");
-            }
+        if let Ik::Br { op, block, .. } = &mut self.deref_mut(mctx).kind {
+            *op = match op {
+                BrOp::Beq => BrOp::Bne,
+                BrOp::Bne => BrOp::Beq,
+                BrOp::Blt => BrOp::Bge,
+                BrOp::Bge => BrOp::Blt,
+                BrOp::Bltu => BrOp::Bgeu,
+                BrOp::Bgeu => BrOp::Bltu,
+            };
+            *block = new_target;
+        } else {
+            panic!("not a conditional branch");
         }
     }
 
     fn redirect_branch(self, mctx: &mut MContext<Self>, new_target: MBlock<Self>) {
         use RvInstKind as Ik;
 
-        match &mut self.deref_mut(mctx).kind {
-            Ik::Br { block, .. } => {
-                *block = new_target;
-            }
-            Ik::J { block } => {
-                *block = new_target;
-            }
-            _ => {
-                panic!("not a branch");
-            }
+        if let Ik::Br { block, .. } = &mut self.deref_mut(mctx).kind {
+            *block = new_target;
+        } else if let Ik::J { block } = &mut self.deref_mut(mctx).kind {
+            *block = new_target;
+        } else {
+            panic!("not a branch");
         }
     }
 }

@@ -1,6 +1,7 @@
 pub mod control_flow;
 pub mod fold;
 pub mod gcm;
+pub mod global2local;
 pub mod gvn;
 pub mod inline;
 pub mod instcombine;
@@ -8,4 +9,3 @@ pub mod loops;
 pub mod mem2reg;
 pub mod side_effect;
 pub mod simple_dce;
-pub mod global2local;

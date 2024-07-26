@@ -2,7 +2,6 @@ use super::inst::{RvInst, RvInstKind};
 use crate::{
     backend::{
         inst::MInst,
-        lower::MemLoc,
         peephole::{Peephole1, Peephole2, PeepholeRule, PeepholeRunner},
         riscv64::{
             inst::{AluOpRRI, AluOpRRR, BrOp, FpuOpRRR, LoadOp, StoreOp},

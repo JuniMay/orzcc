@@ -8,9 +8,9 @@ pub struct FunctionAnalysisResulf {
     /// Whether this function is pure (i.e., has no side effects).
     is_pure: bool,
     /// TODO: Global values that may be clobbered by this function.
-    may_clobber: Vec<Value>,
+    _may_clobber: Vec<Value>,
     /// TODO: Global values that may be read by this function.
-    may_read: Vec<Value>,
+    _may_read: Vec<Value>,
 }
 
 impl FunctionAnalysisResulf {
@@ -53,8 +53,8 @@ impl FunctionAnalysis {
             // In this case, we assume that the function is impure.
             return FunctionAnalysisResulf {
                 is_pure: false,
-                may_clobber: vec![],
-                may_read: vec![],
+                _may_clobber: vec![],
+                _may_read: vec![],
             };
         }
 
@@ -80,8 +80,8 @@ impl FunctionAnalysis {
                             // assume it is impure.
                             None => FunctionAnalysisResulf {
                                 is_pure: false,
-                                may_clobber: vec![],
-                                may_read: vec![],
+                                _may_clobber: vec![],
+                                _may_read: vec![],
                             },
                         };
                         // If the called function is not pure, then this function is not pure.
@@ -102,7 +102,21 @@ impl FunctionAnalysis {
                         break 'outer;
                     }
                     // TODO: Handle other instructions.
-                    _ => {}
+                    InstKind::Undef
+                    | InstKind::IConst(_)
+                    | InstKind::FConst(_)
+                    | InstKind::StackSlot(_)
+                    | InstKind::IBinary(_)
+                    | InstKind::FBinary(_)
+                    | InstKind::IUnary(_)
+                    | InstKind::FUnary(_)
+                    | InstKind::Cast(_)
+                    | InstKind::Offset
+                    | InstKind::Jump
+                    | InstKind::Br
+                    | InstKind::CallIndirect(_)
+                    | InstKind::Ret
+                    | InstKind::GetGlobal(_) => {}
                 }
             }
         }

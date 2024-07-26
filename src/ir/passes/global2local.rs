@@ -1,10 +1,28 @@
 use core::panic;
-use std::{collections::{HashMap, HashSet}, vec};
+use std::{
+    collections::{HashMap, HashSet},
+    vec,
+};
 
 use crate::{
-    backend::riscv64::inst, collections::{linked_list::{LinkedListContainerPtr, LinkedListNodePtr}, storage::ArenaPtr}, ir::{
-        global::Symbol, passman::{GlobalPassMut, PassManager, PassResult, TransformPass}, ty::TyData, ConstantKind, Context, Func, GlobalSlot, Inst, InstKind, Ty, Value
-    }, utils::{cfg::CfgRegion, def_use::User}
+    collections::{
+        linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
+        storage::ArenaPtr,
+    },
+    ir::{
+        global::Symbol,
+        passman::{GlobalPassMut, PassManager, PassResult, TransformPass},
+        ty::TyData,
+        ConstantKind,
+        Context,
+        Func,
+        GlobalSlot,
+        Inst,
+        InstKind,
+        Ty,
+        Value,
+    },
+    utils::{cfg::CfgRegion, def_use::User},
 };
 
 pub const GLOBAL2LOCAL: &str = "global2local";
@@ -12,15 +30,13 @@ pub const GLOBAL2LOCAL: &str = "global2local";
 pub const G2LDEBUG: bool = false;
 
 #[derive(Default, Debug, Clone)]
-pub struct SlotUsers{
+pub struct SlotUsers {
     user_funcs: HashSet<Func>,
     user_insts: HashSet<Inst>,
 }
 
 impl SlotUsers {
-    pub fn new() -> Self {
-        Self::default()
-    }
+    pub fn new() -> Self { Self::default() }
 
     pub fn single_func(&self) -> Option<Func> {
         if self.user_funcs.len() == 1 {
@@ -49,7 +65,8 @@ pub struct Global2Local {
 
     // 之所以采用先存储后增添的方法是因为不同指令的创建位置不同：
     // 1. 栈槽的创建位置：在入口块的最前面
-    // 2. 栈槽的初始化位置：在栈槽的创建之后（对于被移入局部的槽），或者在GetGlobal指令之后（对于无法移入局部的槽）
+    // 2. 栈槽的初始化位置：在栈槽的创建之后（对于被移入局部的槽），
+    //    或者在GetGlobal指令之后（对于无法移入局部的槽）
     // 至于需要修改、删除的指令也采用先存储后修改、删除的方式，
     // 这是因为必须先创建，才能修改，进而才能删除。
 
@@ -68,7 +85,8 @@ pub struct Global2Local {
 }
 
 impl Global2Local {
-    // 向slots_users中添加一个槽，或者向slots_users中现有的槽的user_funcs/user_insts中添加一个函数/指令。
+    // 向slots_users中添加一个槽，或者向slots_users中现有的槽的user_funcs/
+    // user_insts中添加一个函数/指令。
     pub fn add_global_slot_user(&mut self, symbol: &Symbol, user_inst: &Inst, user_func: &Func) {
         if self.slots_users.get_mut(symbol).is_none() {
             let slotusers = SlotUsers::new();
@@ -80,15 +98,15 @@ impl Global2Local {
     }
 
     pub fn analyze_usage(&mut self, ctx: &Context) {
-        let slot_names: HashMap<Symbol, GlobalSlot> = 
-            ctx.global_slots()
+        let slot_names: HashMap<Symbol, GlobalSlot> = ctx
+            .global_slots()
             .iter()
             .map(|&slot| (slot.name(ctx).clone(), slot))
             .collect::<HashMap<Symbol, GlobalSlot>>();
 
         for func in ctx.funcs() {
-            for block in func.iter(ctx){
-                for inst in block.iter(ctx){
+            for block in func.iter(ctx) {
+                for inst in block.iter(ctx) {
                     if let InstKind::GetGlobal(symbol) = inst.kind(ctx) {
                         if slot_names.contains_key(symbol) {
                             self.add_global_slot_user(symbol, &inst, &func);
@@ -132,10 +150,8 @@ impl Global2Local {
             ConstantKind::Zeroinit => GlobalSlotInitKind::Zeroinit,
             ConstantKind::Bytes(_) => {
                 if matches!(
-                    global_slot.ty(ctx).deref(ctx), 
-                    TyData::Integer(_) 
-                    | TyData::Float32 
-                    | TyData::Float64
+                    global_slot.ty(ctx).deref(ctx),
+                    TyData::Integer(_) | TyData::Float32 | TyData::Float64
                 ) {
                     GlobalSlotInitKind::BytesSingle
                 } else {
@@ -145,35 +161,46 @@ impl Global2Local {
         };
         let size = global_slot.ty(ctx).bytewidth(ctx).unwrap();
         let mut insts_get_global = slotusers.user_insts.clone(); // 此处insts一定都在当前函数中，且使用的global_slot一定是当前的全局槽。
-        let inst_first_get_global = func.iter(ctx)
+        let inst_first_get_global = func
+            .iter(ctx)
             .flat_map(|block| block.iter(ctx))
-            .find(|inst| { // 找到第一个GetGlobal类型的指令，而不是所有。
+            .find(|inst| {
+                // 找到第一个GetGlobal类型的指令，而不是所有。
                 if let InstKind::GetGlobal(symbol) = inst.kind(ctx) {
                     symbol == global_slot.name(ctx)
                 } else {
                     false
                 }
-            }).unwrap();
+            })
+            .unwrap();
         let inst_create_slot_local: Inst = Inst::stack_slot(ctx, size as u32);
-        let ptrs_to_global = insts_get_global.iter()
+        let ptrs_to_global = insts_get_global
+            .iter()
             .map(|inst| inst.result(ctx, 0))
             .collect::<HashSet<_>>();
-        let ptr_to_local : Value = inst_create_slot_local.result(ctx, 0);
-        let insts_users_of_ptrs_to_global = func.iter(ctx)
+        let ptr_to_local: Value = inst_create_slot_local.result(ctx, 0);
+        let insts_users_of_ptrs_to_global = func
+            .iter(ctx)
             .flat_map(|block| block.iter(ctx))
             .filter(|inst| {
-                !inst.operands(ctx).iter()
-                .collect::<HashSet<_>>()
-                .is_disjoint(&ptrs_to_global.iter().collect())
-            }).collect::<HashSet<_>>();
+                !inst
+                    .operands(ctx)
+                    .iter()
+                    .collect::<HashSet<_>>()
+                    .is_disjoint(&ptrs_to_global.iter().collect())
+            })
+            .collect::<HashSet<_>>();
 
         // 0. 特殊判断：
         if matches!(initkind, GlobalSlotInitKind::BytesMultiple)
-             && insts_get_global.len() == 1
-             && insts_users_of_ptrs_to_global.len() == 1 {
+            && insts_get_global.len() == 1
+            && insts_users_of_ptrs_to_global.len() == 1
+        {
             return false;
         }
-        if size > 8 { return false; }
+        if size > 8 {
+            return false;
+        }
 
         // 1. 确定inst_create_slot_local
         self.insts_to_create_at_front.push(inst_create_slot_local);
@@ -207,38 +234,36 @@ impl Global2Local {
             }
             GlobalSlotInitKind::BytesSingle => {
                 let content_bytes = global_slot.init(ctx).get_bytes().unwrap().as_slice();
-                let inst_constant = match global_slot.ty(ctx).deref(ctx){
-                    TyData::Integer(_) => { Inst::iconst(
-                        ctx, 
-                        u32::from_le_bytes(content_bytes.try_into().unwrap()), 
-                        global_slot.ty(ctx)
-                    ) },
-                    TyData::Float32 => { Inst::fconst(ctx, 
-                        f32::from_le_bytes(content_bytes.try_into().unwrap()), 
-                        global_slot.ty(ctx)
-                    ) },
-                    TyData::Float64 => { Inst::fconst(ctx, 
-                        f64::from_le_bytes(content_bytes.try_into().unwrap()), 
-                        global_slot.ty(ctx)
-                    ) },
-                    TyData::Void 
-                    | TyData::Ptr 
-                    | TyData::Simd{ .. } 
-                    | TyData::Array{ .. } 
-                    | TyData::Struct{ .. } => panic!("G2L: Unsupported global slot type"),
+                let inst_constant = match global_slot.ty(ctx).deref(ctx) {
+                    TyData::Integer(_) => Inst::iconst(
+                        ctx,
+                        u32::from_le_bytes(content_bytes.try_into().unwrap()),
+                        global_slot.ty(ctx),
+                    ),
+                    TyData::Float32 => Inst::fconst(
+                        ctx,
+                        f32::from_le_bytes(content_bytes.try_into().unwrap()),
+                        global_slot.ty(ctx),
+                    ),
+                    TyData::Float64 => Inst::fconst(
+                        ctx,
+                        f64::from_le_bytes(content_bytes.try_into().unwrap()),
+                        global_slot.ty(ctx),
+                    ),
+                    TyData::Void
+                    | TyData::Ptr
+                    | TyData::Simd { .. }
+                    | TyData::Array { .. }
+                    | TyData::Struct { .. } => panic!("G2L: Unsupported global slot type"),
                 };
                 let inst_store = Inst::store(
-                    ctx, 
-                    inst_constant.result(ctx, 0), 
-                    inst_create_slot_local.result(ctx, 0)
+                    ctx,
+                    inst_constant.result(ctx, 0),
+                    inst_create_slot_local.result(ctx, 0),
                 );
 
-                self.insts_to_create_after_front.extend(
-                    vec![
-                        inst_constant,
-                        inst_store,
-                    ]
-                );
+                self.insts_to_create_after_front
+                    .extend(vec![inst_constant, inst_store]);
             }
             GlobalSlotInitKind::BytesMultiple => {
                 let type_inst = Ty::int(ctx, 32);
@@ -255,10 +280,9 @@ impl Global2Local {
                     vec![type_void],
                 );
 
-                self.insts_to_create_after_inst.entry(inst_first_get_global).or_insert(vec![
-                    inst_size,
-                    inst_call_memcpy,
-                ]);
+                self.insts_to_create_after_inst
+                    .entry(inst_first_get_global)
+                    .or_insert(vec![inst_size, inst_call_memcpy]);
             }
         };
 
@@ -268,17 +292,18 @@ impl Global2Local {
             | GlobalSlotInitKind::Zeroinit
             | GlobalSlotInitKind::BytesSingle => {
                 self.insts_to_remove.extend(insts_get_global);
-            },
+            }
             GlobalSlotInitKind::BytesMultiple => {
                 insts_get_global.remove(&inst_first_get_global);
                 self.insts_to_remove.extend(insts_get_global);
-            },
+            }
         }
 
         // 4. 分析需要更改的Inst
         for inst in insts_users_of_ptrs_to_global.iter() {
-            for ptr_to_global in &ptrs_to_global{
-                self.insts_to_change.insert((*inst, *ptr_to_global, ptr_to_local));
+            for ptr_to_global in &ptrs_to_global {
+                self.insts_to_change
+                    .insert((*inst, *ptr_to_global, ptr_to_local));
             }
         }
 
@@ -309,55 +334,91 @@ impl Global2Local {
             let slotusers = slots_users.get(global.name(ctx)).unwrap();
             changed |= self.change_global_into_local(ctx, func, global, slotusers);
         }
-       if G2LDEBUG { println!("change analyzed."); }
+        if G2LDEBUG {
+            println!("change analyzed.");
+        }
 
         // 这里一定要注意增添、修改和删除的顺序：先增添、再修改、最后删除。
         // 否则会导致后续的Inst的引用关系出错。
 
-        if G2LDEBUG { ctx.alloc_all_names();}
+        if G2LDEBUG {
+            ctx.alloc_all_names();
+        }
 
         let inst_head = func.entry_node(ctx).head(ctx).unwrap();
-        if let Some(inst_to_create_first) = &self.insts_to_create_at_front.first(){
+        if let Some(inst_to_create_first) = &self.insts_to_create_at_front.first() {
             for inst_to_create in &self.insts_to_create_at_front {
-                if G2LDEBUG { println!("inst creating: {}", inst_to_create.display(ctx, true)); }
+                if G2LDEBUG {
+                    println!("inst creating: {}", inst_to_create.display(ctx, true));
+                }
                 inst_head.insert_before(ctx, *inst_to_create);
             }
             for inst_to_create in &self.insts_to_create_after_front {
-                if G2LDEBUG { println!("after front inst creating: {}", inst_to_create.display(ctx, true)); }
+                if G2LDEBUG {
+                    println!(
+                        "after front inst creating: {}",
+                        inst_to_create.display(ctx, true)
+                    );
+                }
                 inst_head.insert_before(ctx, *inst_to_create);
             }
-            func.entry_node(ctx).set_head(ctx, Some(**inst_to_create_first));
+            func.entry_node(ctx)
+                .set_head(ctx, Some(**inst_to_create_first));
             changed |= true;
         }
-        if G2LDEBUG { println!("inst created."); }
+        if G2LDEBUG {
+            println!("inst created.");
+        }
 
         for (inst, insts_to_create) in self.insts_to_create_after_inst.iter() {
-            if G2LDEBUG {println!("else inst creating: {}", inst.display(ctx, true)); }
+            if G2LDEBUG {
+                println!("else inst creating: {}", inst.display(ctx, true));
+            }
             inst.extend_after(ctx, insts_to_create.clone());
             changed |= true;
         }
-        if G2LDEBUG {println!("else insts created."); }
+        if G2LDEBUG {
+            println!("else insts created.");
+        }
 
         for (inst, old_ptr, new_ptr) in &self.insts_to_change {
-            if G2LDEBUG { println!("inst changing: {}", inst.display(ctx, true)); }
-            if G2LDEBUG { println!("  old_ptr: {}, new_ptr: {}", old_ptr.name(ctx).unwrap(), new_ptr.name(ctx).unwrap()); }
+            if G2LDEBUG {
+                println!("inst changing: {}", inst.display(ctx, true));
+            }
+            if G2LDEBUG {
+                println!(
+                    "  old_ptr: {}, new_ptr: {}",
+                    old_ptr.name(ctx).unwrap(),
+                    new_ptr.name(ctx).unwrap()
+                );
+            }
             inst.replace(ctx, *old_ptr, *new_ptr);
             changed |= true;
         }
-        if G2LDEBUG {println!("insts changed."); }
+        if G2LDEBUG {
+            println!("insts changed.");
+        }
 
         for inst_to_remove in self.insts_to_remove.iter() {
-            if G2LDEBUG { println!("inst removing: {}", inst_to_remove.display(ctx, true)); }
+            if G2LDEBUG {
+                println!("inst removing: {}", inst_to_remove.display(ctx, true));
+            }
             inst_to_remove.remove(ctx);
             changed |= true;
         }
-        if G2LDEBUG { println!("insts removed."); }
+        if G2LDEBUG {
+            println!("insts removed.");
+        }
 
         for slot_to_remove in self.slots_to_remove.iter() {
-            if G2LDEBUG { println!("slot removing: {}", slot_to_remove.display(ctx, true)); }
+            if G2LDEBUG {
+                println!("slot removing: {}", slot_to_remove.display(ctx, true));
+            }
             slot_to_remove.remove(ctx);
         }
-        if G2LDEBUG { println!("slots removed."); }
+        if G2LDEBUG {
+            println!("slots removed.");
+        }
 
         changed
     }
@@ -373,7 +434,9 @@ impl GlobalPassMut for Global2Local {
 
         self.slots_users = HashMap::new();
         self.analyze_usage(ctx);
-        if G2LDEBUG { println!("Usage analyzed."); }
+        if G2LDEBUG {
+            println!("Usage analyzed.");
+        }
 
         // 先把需要G2L的全局槽按照函数分类，然后逐个函数进行G2L。
         let mut funcs_to_pass_with_globals: HashMap<Func, HashSet<GlobalSlot>> = HashMap::new();
@@ -393,7 +456,9 @@ impl GlobalPassMut for Global2Local {
                 changed |= true;
             }
         }
-        if G2LDEBUG { println!("slots classified."); }
+        if G2LDEBUG {
+            println!("slots classified.");
+        }
         // 只对那些只被调用一次的函数进行G2L。
         let names_of_func_called_once = [String::from("main")];
         // 进行G2L。

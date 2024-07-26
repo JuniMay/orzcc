@@ -185,7 +185,7 @@ def test_native(
 
     test_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    commit_message = execute("git log -1 --pretty='%h %s'", exec_timeout)
+    commit_message = execute("git log -1 --pretty='%h %s'", exec_timeout)["stdout"]
 
     result[-1]["time"] = test_time
     result[-1]["commit"] = commit_message
