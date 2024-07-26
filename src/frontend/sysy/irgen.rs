@@ -860,8 +860,6 @@ impl IrGen for FuncDef {
         let ret_block = ir::Block::new(&mut irgen.ctx);
         irgen.curr_ret_block = Some(ret_block);
 
-        // let ret_slot = ir::Inst::stack_slot(&mut irgen.ctx, self.ret_ty.bytewidth()
-        // as u32);
         if !self.ret_ty.is_void() {
             let ret_slot = ir::Inst::stack_slot(&mut irgen.ctx, self.ret_ty.bytewidth() as u32);
             ret_slot.result(&irgen.ctx, 0).assign_name(
@@ -870,6 +868,25 @@ impl IrGen for FuncDef {
             );
             block.push_front(&mut irgen.ctx, ret_slot);
             irgen.curr_ret_slot = Some(ret_slot.result(&irgen.ctx, 0));
+
+            // store 0 into the slot as default value, check `sysy/2024/h_performance/h1`
+            if self.ret_ty.is_int() {
+                let ty = irgen.gen_type(&self.ret_ty);
+                let zero = ir::Inst::iconst(&mut irgen.ctx, 0i32, ty);
+                block.push_back(&mut irgen.ctx, zero);
+
+                let zero = zero.result(&irgen.ctx, 0);
+                let store = ir::Inst::store(&mut irgen.ctx, zero, irgen.curr_ret_slot.unwrap());
+                block.push_back(&mut irgen.ctx, store);
+            } else if self.ret_ty.is_float() {
+                let ty = irgen.gen_type(&self.ret_ty);
+                let zero = ir::Inst::fconst(&mut irgen.ctx, 0.0f32, ty);
+                block.push_back(&mut irgen.ctx, zero);
+
+                let zero = zero.result(&irgen.ctx, 0);
+                let store = ir::Inst::store(&mut irgen.ctx, zero, irgen.curr_ret_slot.unwrap());
+                block.push_back(&mut irgen.ctx, store);
+            }
         }
 
         // generate body
