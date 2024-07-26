@@ -173,7 +173,7 @@ def test_native(
     # create csv file if not exist
     if not os.path.isfile(csv_path):
         with open(csv_path, "w+") as f:
-            csv_writer = csv.DictWriter(f, fieldnames=["time"])
+            csv_writer = csv.DictWriter(f, fieldnames=["time", "commit"])
             csv_writer.writeheader()
 
     with open(csv_path, "r") as f:
@@ -185,7 +185,10 @@ def test_native(
 
     test_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    commit_message = execute("git log -1 --pretty='%h %s'", exec_timeout)
+
     result[-1]["time"] = test_time
+    result[-1]["commit"] = commit_message
 
     for testcase in testcase_list:
 
