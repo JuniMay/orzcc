@@ -15,6 +15,7 @@ use orzcc::{
             fold::{ConstantFolding, CONSTANT_FOLDING},
             gcm::{Gcm, GCM},
             global2local::{Global2Local, GLOBAL2LOCAL},
+            global_dce::{GlobalDce, GLOBAL_DCE},
             gvn::{GlobalValueNumbering, GVN},
             inline::{Inline, INLINE},
             instcombine::{InstCombine, INSTCOMBINE},
@@ -79,7 +80,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // pipeline
 
             let mut opt_pipeline = Pipeline::default();
-            opt_pipeline.add_pass(GLOBAL2LOCAL);
+            // opt_pipeline.add_pass(GLOBAL2LOCAL); // FIXME
             opt_pipeline.add_pass(MEM2REG);
             opt_pipeline.add_pass(CFG_SIMPLIFY);
             opt_pipeline.add_pass(CONSTANT_FOLDING);
@@ -91,6 +92,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             opt_pipeline.add_pass(GVN);
             opt_pipeline.add_pass(SIMPLE_DCE);
             opt_pipeline.add_pass(INLINE);
+            // remove functions that are not used after inlining
+            opt_pipeline.add_pass(GLOBAL_DCE);
             opt_pipeline.add_pass(SIMPLE_DCE);
             opt_pipeline.add_pass(LOOP_UNROLL);
             opt_pipeline.add_pass(SIMPLE_DCE);
@@ -151,7 +154,9 @@ fn register_passes(passman: &mut PassManager) {
     ConstantFolding::register(passman);
     InstCombine::register(passman);
     Inline::register(passman);
+
     Global2Local::register(passman);
+    GlobalDce::register(passman);
 
     LoopUnroll::register(passman);
     GlobalValueNumbering::register(passman);
