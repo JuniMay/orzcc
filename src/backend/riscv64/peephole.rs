@@ -2,9 +2,10 @@ use super::inst::{RvInst, RvInstKind};
 use crate::{
     backend::{
         inst::MInst,
+        lower::MemLoc,
         peephole::{Peephole1, Peephole2, PeepholeRule, PeepholeRunner},
         riscv64::{
-            inst::{AluOpRRI, AluOpRRR, BrOp, FpuOpRRR},
+            inst::{AluOpRRI, AluOpRRR, BrOp, FpuOpRRR, LoadOp, StoreOp},
             regs,
         },
         LowerConfig,
@@ -338,6 +339,106 @@ const fn remove_identity_move() -> Peephole1<RvInst> {
     }
 }
 
+/// s{b|h|w|d} r1, offset(r2)
+/// l{b|h|w|d} r1, offset(r2)
+/// =>
+/// l{b|h|w|d} r1, offset(r2)
+const fn remove_load_after_store() -> Peephole2<RvInst> {
+    PeepholeRule {
+        rewriter: |mctx, def_use, (a, b)| {
+            use RvInstKind as Ik;
+
+            match (a.kind(mctx), b.kind(mctx)) {
+                (
+                    Ik::Store {
+                        op: StoreOp::Sb,
+                        src: store_src,
+                        loc: store_loc,
+                    },
+                    Ik::Load {
+                        op: LoadOp::Lb,
+                        rd: load_rd,
+                        loc: load_loc,
+                    },
+                ) => {
+                    if store_src == load_rd && store_loc == load_loc {
+                        // remove load
+                        b.remove(mctx);
+                        def_use.remove_inst(b);
+                        true
+                    } else {
+                        false
+                    }
+                }
+                (
+                    Ik::Store {
+                        op: StoreOp::Sh,
+                        src: store_src,
+                        loc: store_loc,
+                    },
+                    Ik::Load {
+                        op: LoadOp::Lh,
+                        rd: load_rd,
+                        loc: load_loc,
+                    },
+                ) => {
+                    if store_src == load_rd && store_loc == load_loc {
+                        // remove load
+                        b.remove(mctx);
+                        def_use.remove_inst(b);
+                        true
+                    } else {
+                        false
+                    }
+                }
+                (
+                    Ik::Store {
+                        op: StoreOp::Sw,
+                        src: store_src,
+                        loc: store_loc,
+                    },
+                    Ik::Load {
+                        op: LoadOp::Lw,
+                        rd: load_rd,
+                        loc: load_loc,
+                    },
+                ) => {
+                    if store_src == load_rd && store_loc == load_loc {
+                        // remove load
+                        b.remove(mctx);
+                        def_use.remove_inst(b);
+                        true
+                    } else {
+                        false
+                    }
+                }
+                (
+                    Ik::Store {
+                        op: StoreOp::Sd,
+                        src: store_src,
+                        loc: store_loc,
+                    },
+                    Ik::Load {
+                        op: LoadOp::Ld,
+                        rd: load_rd,
+                        loc: load_loc,
+                    },
+                ) => {
+                    if store_src == load_rd && store_loc == load_loc {
+                        // remove load
+                        b.remove(mctx);
+                        def_use.remove_inst(b);
+                        true
+                    } else {
+                        false
+                    }
+                }
+                _ => false,
+            }
+        },
+    }
+}
+
 fn remove_redundant_jump(mctx: &mut MContext<RvInst>) -> bool {
     let mut changed = false;
 
@@ -392,12 +493,16 @@ pub fn run_peephole(mctx: &mut MContext<RvInst>, config: &LowerConfig) -> bool {
 
 pub fn run_peephole_after_regalloc(mctx: &mut MContext<RvInst>, config: &LowerConfig) -> bool {
     let mut runner1 = PeepholeRunner::new();
+    let mut runner2 = PeepholeRunner::new();
 
     runner1.add_rule(remove_identity_move());
+
+    runner2.add_rule(remove_load_after_store());
 
     let mut changed = false;
 
     changed |= runner1.run(mctx, config);
+    changed |= runner2.run(mctx, config);
     changed |= remove_redundant_jump(mctx);
 
     changed

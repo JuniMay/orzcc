@@ -156,4 +156,14 @@ impl<I: MInst + Hash> RegDefUse<I> {
             }
         }
     }
+
+    pub fn remove_inst(&mut self, inst: I) {
+        for uses in self.uses.values_mut() {
+            uses.remove(&inst);
+        }
+
+        for defs in self.defs.values_mut() {
+            defs.remove(&inst);
+        }
+    }
 }
