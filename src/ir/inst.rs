@@ -567,6 +567,9 @@ impl Inst {
     }
 
     /// Create a new iconst instruction.
+    ///
+    /// If the width of the constant does not match the width of the type,
+    /// [IntConstant::resize] will be called to resize the constant.
     pub fn iconst(ctx: &mut Context, constant: impl Into<IntConstant>, ty: Ty) -> Inst {
         let width = ty.bitwidth(ctx).unwrap();
         let constant: IntConstant = constant.into();
@@ -581,6 +584,13 @@ impl Inst {
     }
 
     /// Create a new fconst instruction for float32
+    ///
+    /// If the type is float64, and the constant is float32, the constant will
+    /// be promoted to float64.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the constant is a float64 and the type is float32.
     pub fn fconst(ctx: &mut Context, constant: impl Into<FloatConstant>, ty: Ty) -> Inst {
         let mut constant: FloatConstant = constant.into();
 

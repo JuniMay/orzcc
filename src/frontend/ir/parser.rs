@@ -1215,32 +1215,23 @@ impl<'a> Parser<'a> {
         // elem1, ... }, <{ elem0, elem1, .. }>
 
         let ty = match token.kind {
-            Tk::Tokenized(s) => {
-                if let Some(s) = s.strip_prefix('i') {
-                    // parse the bitwidth
-                    if let Ok(bits) = s.parse::<u16>() {
-                        Ty::int(&mut self.ctx, bits)
-                    } else {
-                        let snippet = Diagnostic::error("invalid integer")
-                            .annotate(token.span.into(), "invalid integer");
-                        self.diag.push(snippet);
-                        return None;
-                    }
-                } else {
-                    match s.as_ref() {
-                        "f32" => Ty::float32(&mut self.ctx),
-                        "f64" => Ty::float64(&mut self.ctx),
-                        "void" => Ty::void(&mut self.ctx),
-                        "ptr" => Ty::ptr(&mut self.ctx),
-                        _ => {
-                            let snippet = Diagnostic::error("unexpected token")
-                                .annotate(token.span.into(), "unexpected token");
-                            self.diag.push(snippet);
-                            return None;
-                        }
-                    }
+            Tk::Tokenized(s) => match s.as_ref() {
+                "i1" => Ty::int(&mut self.ctx, 1),
+                "i8" => Ty::int(&mut self.ctx, 8),
+                "i16" => Ty::int(&mut self.ctx, 16),
+                "i32" => Ty::int(&mut self.ctx, 32),
+                "i64" => Ty::int(&mut self.ctx, 64),
+                "f32" => Ty::float32(&mut self.ctx),
+                "f64" => Ty::float64(&mut self.ctx),
+                "void" => Ty::void(&mut self.ctx),
+                "ptr" => Ty::ptr(&mut self.ctx),
+                _ => {
+                    let snippet = Diagnostic::error("unexpected token")
+                        .annotate(token.span.into(), "unexpected token");
+                    self.diag.push(snippet);
+                    return None;
                 }
-            }
+            },
             Tk::Delimiter(s) => {
                 match s.as_ref() {
                     "<" => {
@@ -1565,11 +1556,11 @@ mod tests {
 
     #[test]
     fn test_parse_simd_ty() {
-        let mut parser = Parser::new("i11451");
+        let mut parser = Parser::new("i64");
         let (ty, _) = parser.parse_ty().unwrap();
         let ctx = &mut parser.ctx;
 
-        assert_eq!(ty, Ty::int(ctx, 11451));
+        assert_eq!(ty, Ty::int(ctx, 64));
 
         let mut parser = Parser::new("< f32; 128 >");
         let (ty, _) = parser.parse_ty().unwrap();

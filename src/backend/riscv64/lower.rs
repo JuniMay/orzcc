@@ -1106,10 +1106,10 @@ impl LowerSpec for RvLowerSpec {
             ir::CastOp::FpExt => unimplemented!(),
             ir::CastOp::SiToFp => {
                 let op = match (src_bitwidth, dst_bitwidth) {
-                    (0..=32, 32) => FpuOpRR::FcvtSW,
-                    (0..=32, 64) => FpuOpRR::FcvtDW,
-                    (33..=64, 32) => FpuOpRR::FcvtSL,
-                    (33..=64, 64) => FpuOpRR::FcvtDL,
+                    (1 | 8 | 16 | 32, 32) => FpuOpRR::FcvtSW,
+                    (1 | 8 | 16 | 32, 64) => FpuOpRR::FcvtDW,
+                    (64, 32) => FpuOpRR::FcvtSL,
+                    (64, 64) => FpuOpRR::FcvtDL,
                     _ => unreachable!(),
                 };
                 let (inst, rd) = RvInst::fpu_rr(&mut lower.mctx, op, Frm::Dyn, src);
@@ -1118,10 +1118,10 @@ impl LowerSpec for RvLowerSpec {
             }
             ir::CastOp::FpToSi => {
                 let op = match (src_bitwidth, dst_bitwidth) {
-                    (32, 0..=32) => FpuOpRR::FcvtWS,
-                    (64, 0..=32) => FpuOpRR::FcvtWD,
-                    (32, 33..=64) => FpuOpRR::FcvtLS,
-                    (64, 33..=64) => FpuOpRR::FcvtLD,
+                    (32, 1 | 8 | 16 | 32) => FpuOpRR::FcvtWS,
+                    (64, 1 | 8 | 16 | 32) => FpuOpRR::FcvtWD,
+                    (32, 64) => FpuOpRR::FcvtLS,
+                    (64, 64) => FpuOpRR::FcvtLD,
                     _ => unreachable!(),
                 };
                 let (inst, rd) = RvInst::fpu_rr(&mut lower.mctx, op, Frm::Rtz, src);
@@ -1130,10 +1130,10 @@ impl LowerSpec for RvLowerSpec {
             }
             ir::CastOp::UiToFp => {
                 let op = match (src_bitwidth, dst_bitwidth) {
-                    (0..=32, 32) => FpuOpRR::FcvtSWu,
-                    (0..=32, 64) => FpuOpRR::FcvtDWu,
-                    (33..=64, 32) => FpuOpRR::FcvtSLu,
-                    (33..=64, 64) => FpuOpRR::FcvtDLu,
+                    (1 | 8 | 16 | 32, 32) => FpuOpRR::FcvtSWu,
+                    (1 | 8 | 16 | 32, 64) => FpuOpRR::FcvtDWu,
+                    (64, 32) => FpuOpRR::FcvtSLu,
+                    (64, 64) => FpuOpRR::FcvtDLu,
                     _ => unreachable!(),
                 };
                 let (inst, rd) = RvInst::fpu_rr(&mut lower.mctx, op, Frm::Dyn, src);
@@ -1142,10 +1142,10 @@ impl LowerSpec for RvLowerSpec {
             }
             ir::CastOp::FpToUi => {
                 let op = match (src_bitwidth, dst_bitwidth) {
-                    (32, 0..=32) => FpuOpRR::FcvtWuS,
-                    (64, 0..=32) => FpuOpRR::FcvtWuD,
-                    (32, 33..=64) => FpuOpRR::FcvtLuS,
-                    (64, 33..=64) => FpuOpRR::FcvtLuD,
+                    (32, 1 | 8 | 16 | 32) => FpuOpRR::FcvtWuS,
+                    (64, 1 | 8 | 16 | 32) => FpuOpRR::FcvtWuD,
+                    (32, 64) => FpuOpRR::FcvtLuS,
+                    (64, 64) => FpuOpRR::FcvtLuD,
                     _ => unreachable!(),
                 };
                 // TODO: is the rounding mode correct?
@@ -1429,10 +1429,10 @@ impl LowerSpec for RvLowerSpec {
         let bitwidth = ty.bitwidth_with_ptr(lower.ctx, Self::pointer_size());
         if ty.is_integer(lower.ctx) || ty.is_ptr(lower.ctx) {
             let op = match bitwidth {
-                0..=8 => LoadOp::Lb,
-                9..=16 => LoadOp::Lh,
-                17..=32 => LoadOp::Lw,
-                33..=64 => LoadOp::Ld,
+                1 | 8 => LoadOp::Lb,
+                16 => LoadOp::Lh,
+                32 => LoadOp::Lw,
+                64 => LoadOp::Ld,
                 _ => unimplemented!(),
             };
             let (inst, rd) = RvInst::load(&mut lower.mctx, op, mem_loc);
@@ -1492,10 +1492,10 @@ impl LowerSpec for RvLowerSpec {
         let bitwidth = val.ty().bitwidth_with_ptr(lower.ctx, Self::pointer_size());
         if val.ty().is_integer(lower.ctx) || val.ty().is_ptr(lower.ctx) {
             let op = match bitwidth {
-                0..=8 => StoreOp::Sb,
-                9..=16 => StoreOp::Sh,
-                17..=32 => StoreOp::Sw,
-                33..=64 => StoreOp::Sd,
+                1 | 8 => StoreOp::Sb,
+                16 => StoreOp::Sh,
+                32 => StoreOp::Sw,
+                64 => StoreOp::Sd,
                 _ => unimplemented!(),
             };
             let inst = RvInst::store(&mut lower.mctx, op, src, mem_loc);

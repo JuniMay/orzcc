@@ -8,11 +8,18 @@ use crate::collections::storage::{ArenaAlloc, ArenaDeref, ArenaPtr, UniqueArenaP
 pub enum TyData {
     /// A void type.
     Void,
-    /// An integer type.
+    /// 1-bit integer.
     ///
-    /// The width (in bits) of an integer can be any positive integer under
-    /// [u16::MAX].
-    Integer(u16),
+    /// This is special because it is used for boolean values.
+    I1,
+    /// A byte integer.
+    I8,
+    /// A 16-bit integer.
+    I16,
+    /// A 32-bit integer.
+    I32,
+    /// A 64-bit integer.
+    I64,
     /// An IEEE 754 single precision floating point number.
     Float32,
     /// An IEEE 754 double precision floating point number.
@@ -29,6 +36,9 @@ pub enum TyData {
         exp: u16,
     },
     /// An array type.
+    ///
+    /// TODO: Array is only used in global variables, which should be changed
+    /// into size, and array type should be removed.
     Array {
         /// The element type.
         elem_ty: Ty,
@@ -139,7 +149,11 @@ impl<'a> fmt::Display for DisplayTy<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self.data {
             TyData::Void => write!(f, "void"),
-            TyData::Integer(bits) => write!(f, "i{}", bits),
+            TyData::I1 => write!(f, "i1"),
+            TyData::I8 => write!(f, "i8"),
+            TyData::I16 => write!(f, "i16"),
+            TyData::I32 => write!(f, "i32"),
+            TyData::I64 => write!(f, "i64"),
             TyData::Float32 => write!(f, "f32"),
             TyData::Float64 => write!(f, "f64"),
             TyData::Ptr => write!(f, "ptr"),
@@ -222,7 +236,16 @@ impl ArenaAlloc<TyData, Ty> for Context {
 impl Ty {
     pub fn void(ctx: &mut Context) -> Self { ctx.alloc(TyData::Void) }
 
-    pub fn int(ctx: &mut Context, bits: u16) -> Self { ctx.alloc(TyData::Integer(bits)) }
+    pub fn int(ctx: &mut Context, bits: u16) -> Self {
+        match bits {
+            1 => ctx.alloc(TyData::I1),
+            8 => ctx.alloc(TyData::I8),
+            16 => ctx.alloc(TyData::I16),
+            32 => ctx.alloc(TyData::I32),
+            64 => ctx.alloc(TyData::I64),
+            _ => panic!("unsupported integer bitwidth: {}", bits),
+        }
+    }
 
     pub fn float32(ctx: &mut Context) -> Self { ctx.alloc(TyData::Float32) }
 
@@ -247,7 +270,10 @@ impl Ty {
 
     /// Check if the type is integer.
     pub fn is_integer(&self, ctx: &Context) -> bool {
-        matches!(self.deref(ctx), TyData::Integer(_))
+        matches!(
+            self.deref(ctx),
+            TyData::I1 | TyData::I8 | TyData::I16 | TyData::I32 | TyData::I64
+        )
     }
 
     /// Check if the type is float32 or float64.
@@ -279,7 +305,11 @@ impl Ty {
     /// Panics if the type is/contains void.
     pub fn bitwidth(&self, ctx: &Context) -> Option<usize> {
         match self.deref(ctx) {
-            TyData::Integer(bits) => Some(*bits as usize),
+            TyData::I1 => Some(1),
+            TyData::I8 => Some(8),
+            TyData::I16 => Some(16),
+            TyData::I32 => Some(32),
+            TyData::I64 => Some(64),
             TyData::Float32 => Some(32),
             TyData::Float64 => Some(64),
             TyData::Ptr => None,
@@ -318,7 +348,11 @@ impl Ty {
     /// Panics if the type is/contains void.
     pub fn bitwidth_with_ptr(&self, ctx: &Context, ptr_width: usize) -> usize {
         match self.deref(ctx) {
-            TyData::Integer(bits) => *bits as usize,
+            TyData::I1 => 1,
+            TyData::I8 => 8,
+            TyData::I16 => 16,
+            TyData::I32 => 32,
+            TyData::I64 => 64,
             TyData::Float32 => 32,
             TyData::Float64 => 64,
             TyData::Ptr => ptr_width,

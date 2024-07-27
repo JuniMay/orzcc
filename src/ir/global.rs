@@ -203,6 +203,8 @@ impl LinkedListContainerPtr<Block> for Func {
 pub struct GlobalSlotData {
     self_ptr: GlobalSlot,
     name: Symbol,
+    // TODO: type is not appropriate to describe a global slot, size would be
+    // better.
     ty: Ty,
     init: Constant,
 }
