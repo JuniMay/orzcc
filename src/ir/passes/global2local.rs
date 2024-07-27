@@ -30,10 +30,17 @@ pub struct Global2Local {
 
 impl Global2Local {
     fn analyze_usage(&mut self, ctx: &Context) {
+        self.slots_users.clear();
+
         // only collect the global slots used in main function
         let func_main = ctx.lookup_func(&Symbol::from("main")).unwrap();
         for block in func_main.iter(ctx) {
             for inst in block.iter(ctx) {
+                if !inst.is_used(ctx) {
+                    // if the instruction is not used, just ignore.
+                    continue;
+                }
+
                 if let InstKind::GetGlobal(symbol) = inst.kind(ctx) {
                     self.slots_users
                         .entry(symbol.clone())
@@ -173,7 +180,6 @@ impl GlobalPassMut for Global2Local {
     fn run(&mut self, ctx: &mut Context) -> PassResult<(Self::Output, bool)> {
         let mut changed = false;
 
-        self.slots_users = HashMap::new();
         self.analyze_usage(ctx);
 
         let func_main = ctx.lookup_func(&Symbol::from("main")).unwrap();

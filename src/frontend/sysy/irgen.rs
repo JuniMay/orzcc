@@ -98,7 +98,8 @@ impl IrGenContext {
             // the type of zero and undef can be decided by the type of the variable/constants, and
             // will be recorded in [ir::GlobalSlotData]
             Cv::Zeros(_) => ir::Constant::zeroinit(),
-            Cv::Undef(_) => ir::Constant::undef(),
+            // XXX: global always initialized as zero.
+            Cv::Undef(_) => ir::Constant::zeroinit(),
         }
     }
 
