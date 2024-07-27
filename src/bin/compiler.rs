@@ -103,7 +103,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             opt_pipeline.add_pass(CFG_SIMPLIFY);
             opt_pipeline.add_pass(SIMPLE_DCE);
 
-            let iter = passman.run_pipeline(&mut ir, &opt_pipeline, 1, 8);
+            let iter = passman.run_pipeline(&mut ir, &opt_pipeline, 32, 8);
 
             println!("Optimization iterations: {}", iter);
 
