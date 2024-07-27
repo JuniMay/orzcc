@@ -2,6 +2,7 @@ pub mod control_flow;
 pub mod fold;
 pub mod gcm;
 pub mod global2local;
+pub mod global_dce;
 pub mod gvn;
 pub mod inline;
 pub mod instcombine;

@@ -1,6 +1,15 @@
 use std::{fmt, hash::Hash};
 
-use super::{debug::CommentPos, source_loc::Span, Block, Constant, Context, Signature, Ty};
+use super::{
+    debug::CommentPos,
+    remove_all_insts,
+    source_loc::Span,
+    Block,
+    Constant,
+    Context,
+    Signature,
+    Ty,
+};
 use crate::{
     collections::{
         linked_list::LinkedListContainerPtr,
@@ -116,6 +125,32 @@ impl Func {
 
     /// Get the number of instructions in the function.
     pub fn insn(self, ctx: &Context) -> usize { self.iter(ctx).map(|block| block.insn(ctx)).sum() }
+
+    /// Remove the function and all its blocks and instructions.
+    pub fn remove(self, ctx: &mut Context) {
+        let symbol = self.name(ctx).clone();
+
+        let mut insts_to_remove = Vec::new();
+        let mut blocks_to_remove = Vec::new();
+
+        for block in self.iter(ctx) {
+            for inst in block.iter(ctx) {
+                insts_to_remove.push(inst);
+            }
+            blocks_to_remove.push(block);
+        }
+
+        // remove instructions first, to avoid block uses.
+        remove_all_insts(ctx, insts_to_remove, false);
+
+        // remove all blocks
+        for block in blocks_to_remove {
+            block.remove(ctx);
+        }
+
+        ctx.symbols.remove(&symbol);
+        ctx.free(self);
+    }
 }
 
 impl CfgRegion for Func {
