@@ -241,7 +241,7 @@ impl Block {
     /// # Panics
     ///
     /// - Panics if the block is still in use, i.e., some instructions still
-    ///  refer to this block and maybe this block still has predecessors.
+    ///   refer to this block and maybe this block still has predecessors.
     /// - Panics if the block is not unlink-ed.
     /// - Panics if any parameters are still in use.
     ///

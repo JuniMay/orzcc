@@ -80,7 +80,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // pipeline
 
             let mut opt_pipeline = Pipeline::default();
-            // opt_pipeline.add_pass(GLOBAL2LOCAL); // FIXME
+            opt_pipeline.add_pass(GLOBAL2LOCAL);
+            opt_pipeline.add_pass(GLOBAL_DCE);
             opt_pipeline.add_pass(MEM2REG);
             opt_pipeline.add_pass(CFG_SIMPLIFY);
             opt_pipeline.add_pass(CONSTANT_FOLDING);
@@ -102,7 +103,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             opt_pipeline.add_pass(CFG_SIMPLIFY);
             opt_pipeline.add_pass(SIMPLE_DCE);
 
-            let iter = passman.run_pipeline(&mut ir, &opt_pipeline, 32, 8);
+            let iter = passman.run_pipeline(&mut ir, &opt_pipeline, 1, 8);
 
             println!("Optimization iterations: {}", iter);
 

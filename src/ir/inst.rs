@@ -582,7 +582,17 @@ impl Inst {
 
     /// Create a new fconst instruction for float32
     pub fn fconst(ctx: &mut Context, constant: impl Into<FloatConstant>, ty: Ty) -> Inst {
-        Self::new(ctx, InstKind::FConst(constant.into()), vec![ty], vec![])
+        let mut constant: FloatConstant = constant.into();
+
+        if ty.is_float32(ctx) {
+            if let FloatConstant::Float64(_) = constant {
+                panic!("fconst: expected f32, got f64");
+            }
+        } else if let FloatConstant::Float32(_) = constant {
+            constant = constant.promote();
+        }
+
+        Self::new(ctx, InstKind::FConst(constant), vec![ty], vec![])
     }
 
     /// Create a new stack slot instruction.
