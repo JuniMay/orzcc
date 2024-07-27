@@ -460,6 +460,26 @@ fn remove_redundant_jump(mctx: &mut MContext<RvInst>) -> bool {
                         // remove redundant jump
                         tail.remove(mctx);
                         changed = true;
+                    } else {
+                        let mut can_remove = true;
+                        let mut next = block.next(mctx);
+                        while let Some(block) = next {
+                            if block.head(mctx).is_none() {
+                                // the block is empty, continue to search.
+                                next = block.next(mctx);
+                            } else if block == *succ {
+                                // we found the target block, remove the jump
+                                break;
+                            } else {
+                                can_remove = false;
+                                break;
+                            }
+                        }
+
+                        if can_remove {
+                            tail.remove(mctx);
+                            changed = true;
+                        }
                     }
                 }
             }
