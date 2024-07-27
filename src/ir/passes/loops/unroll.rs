@@ -299,6 +299,7 @@ impl LoopUnroll {
             }
         }
 
+        // FIXME: h_functional 18 prim
         remove_all_insts(ctx, insts_to_remove, false);
 
         for block in blocks {
