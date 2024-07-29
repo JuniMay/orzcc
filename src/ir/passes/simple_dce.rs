@@ -48,33 +48,15 @@ impl LocalPassMut for SimpleDce {
                     | Ik::Load
                     | Ik::Offset
                     | Ik::StackSlot(_) => {
-                        let mut used = false;
-                        for result in inst.results(ctx) {
-                            if result.total_uses(ctx) != 0 {
-                                used = true;
-                                break;
-                            }
-                        }
-
-                        if !used {
+                        if !inst.is_used(ctx) {
                             insts_to_remove.push(inst);
                         }
                     }
                     Ik::Call(symbol) => {
                         if let Some(called_func) = ctx.lookup_func(symbol) {
                             // we can remove the call if the function is pure
-                            if self.func_analysis.is_pure(called_func) {
-                                let mut used = false;
-                                for result in inst.results(ctx) {
-                                    if result.total_uses(ctx) != 0 {
-                                        used = true;
-                                        break;
-                                    }
-                                }
-
-                                if !used {
-                                    insts_to_remove.push(inst);
-                                }
+                            if self.func_analysis.is_pure(called_func) && !inst.is_used(ctx) {
+                                insts_to_remove.push(inst);
                             }
                         }
                     }

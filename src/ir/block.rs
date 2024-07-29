@@ -215,14 +215,14 @@ impl Block {
             if !inst.is_terminator(ctx) {
                 unreachable!("block is used in a non-terminator instruction");
             }
-            let mut args_to_modify = FxHashSet::default();
+            let mut args_to_modify = Vec::default();
 
             for succ in inst.deref_mut(ctx).successors.iter_mut() {
                 if succ.block.inner() == self {
                     let arg = succ.args.remove(&param).expect(
                         "block parameter is not passed to the block in the terminator instruction",
                     );
-                    args_to_modify.insert(arg);
+                    args_to_modify.push(arg);
                 }
             }
             // now update the uses of the passed argument
