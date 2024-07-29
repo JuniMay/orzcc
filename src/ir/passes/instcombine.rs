@@ -72,6 +72,7 @@ impl Default for InstCombine {
                 distributive_one(), // aggressive
                 distributive(),     // aggressive
                 div_one_elim(),
+                div_neg_one_elim(),
                 div_to_shl(),
                 mod_to_shl(),
             ],
@@ -290,7 +291,7 @@ const fn mul_to_shl() -> Rule {
                             inst.insert_after(ctx, i_shamt);
                             i_shamt.insert_after(ctx, i_shl);
                             let dst_new = if is_v_neg {
-                                let i_zero = Inst::iconst(ctx, IntConstant::from(0), dst.ty(ctx));
+                                let i_zero = Inst::iconst(ctx, 0, dst.ty(ctx));
                                 let i_neg = Inst::ibinary(
                                     ctx,
                                     IBinaryOp::Sub,
@@ -1406,6 +1407,35 @@ const fn div_one_elim() -> Rule {
     }
 }
 
+// Eliminate division by negative one
+const fn div_neg_one_elim() -> Rule {
+    Rule {
+        rewriter: |ctx, inst| {
+            if let Ik::IBinary(IBinaryOp::SDiv) = inst.kind(ctx) {
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
+                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                    if let Ik::IConst(v) = rhs_inst.kind(ctx) {
+                        if v.as_signed() == -1 {
+                            let zero = Inst::iconst(ctx, 0, dst.ty(ctx));
+                            let neg = Inst::ibinary(ctx, IBinaryOp::Sub, zero.result(ctx, 0), lhs);
+                            inst.insert_after(ctx, zero);
+                            zero.insert_after(ctx, neg);
+                            for user in dst.users(ctx) {
+                                user.replace(ctx, dst, neg.result(ctx, 0));
+                            }
+                            return true;
+                        }
+                    }
+                }
+            }
+            false
+        },
+    }
+}
+
 /// Replace division with shift (and add).
 const fn div_to_shl() -> Rule {
     Rule {
@@ -1424,10 +1454,14 @@ const fn div_to_shl() -> Rule {
                             false
                         };
                         if v.is_power_of_two() {
+                            let k = v.trailing_zeros();
+                            if k == 0 {
+                                return false;
+                            }
                             let bitwidth = lhs.ty(ctx).bitwidth(ctx) as u8;
-                            let shamt_ks1 = IntConstant::from(v.trailing_zeros() - 1);
-                            let shamt_wsk = IntConstant::from(bitwidth as u32 - v.trailing_zeros());
-                            let shamt_k: IntConstant = IntConstant::from(v.trailing_zeros());
+                            let shamt_ks1 = IntConstant::from(k - 1);
+                            let shamt_wsk = IntConstant::from(bitwidth as u32 - k);
+                            let shamt_k: IntConstant = IntConstant::from(k);
 
                             let temp0 = Inst::iconst(ctx, shamt_ks1, lhs.ty(ctx));
                             let temp1 =
@@ -1455,7 +1489,7 @@ const fn div_to_shl() -> Rule {
                             temp4.insert_after(ctx, temp5);
                             temp5.insert_after(ctx, final_inst);
                             let dst_new = if is_v_neg {
-                                let i_zero = Inst::iconst(ctx, IntConstant::from(0), dst.ty(ctx));
+                                let i_zero = Inst::iconst(ctx, 0, dst.ty(ctx));
                                 let i_neg = Inst::ibinary(
                                     ctx,
                                     IBinaryOp::Sub,
@@ -1465,11 +1499,6 @@ const fn div_to_shl() -> Rule {
                                 final_inst.insert_after(ctx, i_zero);
                                 i_zero.insert_after(ctx, i_neg);
                                 i_neg.result(ctx, 0)
-                                // let i_not =
-                                //     Inst::iunary(ctx, IUnaryOp::Not,
-                                // final_inst.operand(ctx, 0));
-                                // final_inst.insert_after(ctx, i_not);
-                                // i_not.result(ctx, 0)
                             } else {
                                 final_inst.result(ctx, 0)
                             };
@@ -1502,15 +1531,19 @@ const fn mod_to_shl() -> Rule {
                             v = IntConstant::from(-v.as_signed())
                         }
                         if v.is_power_of_two() {
+                            let k = v.trailing_zeros();
+                            if k == 0 {
+                                return false;
+                            }
                             let bitwidth = lhs.ty(ctx).bitwidth(ctx) as u8;
-                            let shamt = IntConstant::from(bitwidth as u32 - v.trailing_zeros());
+                            let shamt_wsk = IntConstant::from(bitwidth as u32 - k);
                             let andwith = IntConstant::from(v.as_signed() as u32 - 1);
 
                             let tmp0 =
                                 Inst::iconst(ctx, IntConstant::from(bitwidth - 1), lhs.ty(ctx));
                             let tmp1 =
                                 Inst::ibinary(ctx, IBinaryOp::AShr, lhs, tmp0.result(ctx, 0));
-                            let tmp2 = Inst::iconst(ctx, shamt, dst.ty(ctx));
+                            let tmp2 = Inst::iconst(ctx, shamt_wsk, dst.ty(ctx));
                             let tmp3 = Inst::ibinary(
                                 ctx,
                                 IBinaryOp::LShr,
