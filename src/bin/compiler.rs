@@ -5,6 +5,7 @@ use orzcc::{
     backend::{riscv64, simplify_cfg::SimplifyCfg, LowerConfig},
     ir::{
         passes::{
+            constant_phi::{ElimConstantPhi, ELIM_CONSTANT_PHI},
             control_flow::{
                 BlockReorder,
                 CfgCanonicalize,
@@ -91,7 +92,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             pipe0.add_pass(GCM);
             pipe0.add_pass(GVN);
             pipe0.add_pass(CFG_SIMPLIFY);
+            pipe0.add_pass(ELIM_CONSTANT_PHI);
             pipe0.add_pass(SIMPLE_DCE);
+            pipe0.add_pass(CFG_SIMPLIFY);
 
             let mut pipe1 = Pipeline::default();
 
@@ -166,6 +169,8 @@ fn register_passes(passman: &mut PassManager) {
     SimpleDce::register(passman);
     ConstantFolding::register(passman);
     InstCombine::register(passman);
+    ElimConstantPhi::register(passman);
+
     Inline::register(passman);
 
     Global2Local::register(passman);
