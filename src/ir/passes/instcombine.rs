@@ -71,6 +71,10 @@ impl Default for InstCombine {
                 assoc_const(),      // aggressive
                 distributive_one(), // aggressive
                 distributive(),     // aggressive
+                div_one_elim(),
+                div_neg_one_elim(),
+                div_to_shl(),
+                mod_to_shl(),
             ],
         }
     }
@@ -1348,6 +1352,193 @@ const fn distributive() -> Rule {
                                     return true;
                                 }
                             }
+                        }
+                    }
+                }
+            }
+            false
+        },
+    }
+}
+
+// Eliminate division by one
+const fn div_one_elim() -> Rule {
+    Rule {
+        rewriter: |ctx, inst| {
+            if let Ik::IBinary(IBinaryOp::SDiv) = inst.kind(ctx) {
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
+                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                    if let Ik::IConst(v) = rhs_inst.kind(ctx) {
+                        if v.is_one() {
+                            for user in dst.users(ctx) {
+                                user.replace(ctx, dst, lhs);
+                            }
+                            return true;
+                        }
+                    }
+                }
+            }
+            false
+        },
+    }
+}
+
+// Eliminate division by negative one
+const fn div_neg_one_elim() -> Rule {
+    Rule {
+        rewriter: |ctx, inst| {
+            if let Ik::IBinary(IBinaryOp::SDiv) = inst.kind(ctx) {
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
+                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                    if let Ik::IConst(v) = rhs_inst.kind(ctx) {
+                        if v.as_signed() == -1 {
+                            let zero = Inst::iconst(ctx, -1, lhs.ty(ctx));
+                            let neg = Inst::ibinary(ctx, IBinaryOp::Sub, zero.result(ctx, 0), lhs);
+                            inst.insert_after(ctx, zero);
+                            zero.insert_after(ctx, neg);
+                            for user in dst.users(ctx) {
+                                user.replace(ctx, dst, neg.result(ctx, 0));
+                            }
+                            return true;
+                        }
+                    }
+                }
+            }
+            false
+        },
+    }
+}
+
+/// Replace division with shift (and add).
+///
+/// x / c (where c = 2 ^ k)
+///  =>
+/// shamt_bitwidth = bitwidth - 1
+/// sig = x >>(L) shamt31
+/// x = x + sig
+/// k = c.trailing_zeros()
+/// x = x >>(A) k
+///
+/// Here ">>(L)" is LShr and ">>(A)" is AShr.
+const fn div_to_shl() -> Rule {
+    Rule {
+        rewriter: |ctx, inst| {
+            if let Ik::IBinary(IBinaryOp::SDiv) = inst.kind(ctx) {
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
+                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                    if let Ik::IConst(v) = rhs_inst.kind(ctx) {
+                        if v.is_power_of_two() {
+                            let bitwidth = lhs.ty(ctx).bitwidth(ctx) as u8;
+                            let shamt31 = IntConstant::from(bitwidth - 1);
+                            let shamt = IntConstant::from(v.trailing_zeros());
+
+                            let i_shamt31 = Inst::iconst(ctx, shamt31, lhs.ty(ctx));
+                            let i_ashr31 =
+                                Inst::ibinary(ctx, IBinaryOp::AShr, lhs, i_shamt31.result(ctx, 0));
+                            let i_addsig =
+                                Inst::ibinary(ctx, IBinaryOp::Add, lhs, i_ashr31.result(ctx, 0));
+                            let i_shamt = Inst::iconst(ctx, shamt, dst.ty(ctx));
+                            let final_inst = Inst::ibinary(
+                                ctx,
+                                IBinaryOp::LShr,
+                                i_addsig.result(ctx, 0),
+                                i_shamt.result(ctx, 0),
+                            );
+
+                            inst.insert_after(ctx, i_shamt31);
+                            i_shamt31.insert_after(ctx, i_ashr31);
+                            i_ashr31.insert_after(ctx, i_addsig);
+                            i_addsig.insert_after(ctx, i_shamt);
+                            i_shamt.insert_after(ctx, final_inst);
+
+                            for user in dst.users(ctx) {
+                                user.replace(ctx, dst, final_inst.result(ctx, 0));
+                            }
+                            return true;
+                        }
+                    }
+                }
+            }
+            false
+        },
+    }
+}
+
+/// Replace modulo with shift (and sub).
+///
+/// x % c (where c = 2 ^ k)
+///  =>
+/// temp0 = (bitwidth - 1)
+/// temp1 = temp0 >>(A) temp0
+/// temp2 = (bitwidth - k)
+/// temp3 = temp1 >>(L) temp2
+/// temp4 = x + temp3
+/// temp5 = (c - 1)
+/// temp6 = temp4 & temp5
+/// x = temp6 - temp3
+const fn mod_to_shl() -> Rule {
+    Rule {
+        rewriter: |ctx, inst| {
+            if let Ik::IBinary(IBinaryOp::SRem) = inst.kind(ctx) {
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
+                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                    if let Ik::IConst(v) = rhs_inst.kind(ctx) {
+                        if v.is_power_of_two() {
+                            let bitwidth = lhs.ty(ctx).bitwidth(ctx) as u8;
+                            let shamt = IntConstant::from(bitwidth as u32 - v.trailing_zeros());
+                            let andwith = IntConstant::from(v.as_signed() as u32 - 1);
+
+                            let tmp0 =
+                                Inst::iconst(ctx, IntConstant::from(bitwidth - 1), lhs.ty(ctx));
+                            let tmp1 =
+                                Inst::ibinary(ctx, IBinaryOp::AShr, lhs, tmp0.result(ctx, 0));
+                            let tmp2 = Inst::iconst(ctx, shamt, dst.ty(ctx));
+                            let tmp3 = Inst::ibinary(
+                                ctx,
+                                IBinaryOp::LShr,
+                                tmp1.result(ctx, 0),
+                                tmp2.result(ctx, 0),
+                            );
+                            let tmp4 = Inst::ibinary(ctx, IBinaryOp::Add, lhs, tmp3.result(ctx, 0));
+                            let tmp5 = Inst::iconst(ctx, andwith, dst.ty(ctx));
+                            let tmp6 = Inst::ibinary(
+                                ctx,
+                                IBinaryOp::And,
+                                tmp4.result(ctx, 0),
+                                tmp5.result(ctx, 0),
+                            );
+                            let final_inst = Inst::ibinary(
+                                ctx,
+                                IBinaryOp::Sub,
+                                tmp6.result(ctx, 0),
+                                tmp3.result(ctx, 0),
+                            );
+
+                            inst.insert_after(ctx, tmp0);
+                            tmp0.insert_after(ctx, tmp1);
+                            tmp1.insert_after(ctx, tmp2);
+                            tmp2.insert_after(ctx, tmp3);
+                            tmp3.insert_after(ctx, tmp4);
+                            tmp4.insert_after(ctx, tmp5);
+                            tmp5.insert_after(ctx, tmp6);
+                            tmp6.insert_after(ctx, final_inst);
+
+                            for user in dst.users(ctx) {
+                                user.replace(ctx, dst, final_inst.result(ctx, 0));
+                            }
+                            return true;
                         }
                     }
                 }
