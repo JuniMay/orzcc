@@ -265,7 +265,7 @@ const fn mul_to_shl() -> Rule {
             if let Ik::IBinary(IBinaryOp::Mul) = inst.kind(ctx) {
                 let lhs = inst.operand(ctx, 0);
 
-                let bitwidth = lhs.ty(ctx).bitwidth(ctx).unwrap();
+                let bitwidth = lhs.ty(ctx).bitwidth(ctx);
 
                 let rhs = inst.operand(ctx, 1);
                 let dst = inst.result(ctx, 0);
@@ -378,7 +378,7 @@ const fn add_to_mul() -> Rule {
                 let rhs = inst.operand(ctx, 1);
                 let dst = inst.result(ctx, 0);
 
-                let width = dst.ty(ctx).bitwidth(ctx).unwrap() as u8;
+                let width = dst.ty(ctx).bitwidth(ctx) as u8;
 
                 if lhs == rhs {
                     let two = Inst::iconst(ctx, IntConstant::from(2).resize(width), dst.ty(ctx));
@@ -505,12 +505,12 @@ const fn sub_identity_to_zero() -> Rule {
                 let rhs = inst.operand(ctx, 1);
                 let dst = inst.result(ctx, 0);
 
-                let bitwidth = dst.ty(ctx).bitwidth(ctx).unwrap();
+                let bitwidth = dst.ty(ctx).bitwidth(ctx);
 
                 if lhs == rhs {
                     let zero = Inst::iconst(
                         ctx,
-                        IntConstant::zero(dst.ty(ctx).bitwidth(ctx).unwrap() as u8),
+                        IntConstant::zero(dst.ty(ctx).bitwidth(ctx) as u8),
                         dst.ty(ctx),
                     );
                     inst.insert_after(ctx, zero);
@@ -1070,7 +1070,7 @@ const fn distributive_one() -> Rule {
                 let rhs = inst.operand(ctx, 1);
                 let dst = inst.result(ctx, 0);
 
-                let bitwidth = dst.ty(ctx).bitwidth(ctx).unwrap();
+                let bitwidth = dst.ty(ctx).bitwidth(ctx);
 
                 if let ValueKind::InstResult { inst: lhs_inst, .. } = lhs.kind(ctx) {
                     if let Ik::IBinary(IBinaryOp::Mul) = lhs_inst.kind(ctx) {

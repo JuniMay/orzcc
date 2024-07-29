@@ -434,11 +434,11 @@ where
         for global in self.ctx.global_slots() {
             let symbol = global.name(self.ctx);
             let label = MLabel::from(symbol.to_string());
-            let ty = global.ty(self.ctx);
+            let size = global.size(self.ctx);
 
             match global.init(self.ctx).kind() {
                 ir::ConstantKind::Zeroinit | ir::ConstantKind::Undef => {
-                    let data = RawData::Bss(ty.bytewidth_with_ptr(self.ctx, S::pointer_size()));
+                    let data = RawData::Bss(size);
                     self.mctx.add_raw_data(label.clone(), data);
                 }
                 ir::ConstantKind::Bytes(bytes) => {

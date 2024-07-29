@@ -15,7 +15,7 @@ fn compile_src(path: &str) {
     let mut ast = SysYParser::new().parse(&src).unwrap();
 
     ast.type_check();
-    let mut ir = sysy::irgen(&ast);
+    let mut ir = sysy::irgen(&ast, 64);
 
     ir.alloc_all_names();
     let mut lower_ctx: LowerContext<RvLowerSpec> = LowerContext::new(&ir, LowerConfig::default());

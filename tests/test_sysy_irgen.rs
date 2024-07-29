@@ -8,7 +8,7 @@ fn test_sysy_irgen_80_chaos_token() {
     let src = sysy::preprocess(src);
     let mut ast = SysYParser::new().parse(&src).unwrap();
     ast.type_check();
-    let mut ir = sysy::irgen(&ast);
+    let mut ir = sysy::irgen(&ast, 64);
     ir.alloc_all_names();
     println!("{}", ir.display(true));
 }
@@ -19,7 +19,7 @@ fn test_sysy_irgen_85_long_code() {
     let src = sysy::preprocess(src);
     let mut ast = SysYParser::new().parse(&src).unwrap();
     ast.type_check();
-    let mut ir = sysy::irgen(&ast);
+    let mut ir = sysy::irgen(&ast, 64);
     ir.alloc_all_names();
     println!("{}", ir.display(true));
 }
@@ -30,7 +30,7 @@ fn test_sysy_irgen_95_float() {
     let src = sysy::preprocess(src);
     let mut ast = SysYParser::new().parse(&src).unwrap();
     ast.type_check();
-    let mut ir = sysy::irgen(&ast);
+    let mut ir = sysy::irgen(&ast, 64);
     ir.alloc_all_names();
     println!("{}", ir.display(true));
 }
@@ -41,7 +41,7 @@ fn test_sysy_irgen_05_arr_defn4() {
     let src = sysy::preprocess(src);
     let mut ast = SysYParser::new().parse(&src).unwrap();
     ast.type_check();
-    let mut ir = sysy::irgen(&ast);
+    let mut ir = sysy::irgen(&ast, 64);
     ir.alloc_all_names();
     println!("{}", ir.display(true));
 }

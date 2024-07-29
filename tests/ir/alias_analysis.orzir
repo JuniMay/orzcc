@@ -1,5 +1,5 @@
-slot @__GLOBAL_VAR_a /* 2 */  : [i32; 4] = zeroinit
-slot @__GLOBAL_VAR_b /* 2 */  : [i32; 4] = zeroinit
+slot @__GLOBAL_VAR_a /* 2 */  : 16 = zeroinit
+slot @__GLOBAL_VAR_b /* 2 */  : 16 = zeroinit
 func @main /* 2 */ () -> i32 {
 ^bb1:
     %__SLOT_VAR_main_a = stack_slot 16 : ptr

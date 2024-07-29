@@ -1101,7 +1101,24 @@ impl<'a> Parser<'a> {
 
         let symbol = self.parse_symbol()?;
         let _ = self.expect_delimiter(":")?;
-        let ty = self.parse_ty()?;
+
+        let token = self.lexer.next(&mut self.diag);
+        let size = if let TokenKind::Tokenized(s) = token.kind {
+            if let Ok(size) = s.parse::<usize>() {
+                (size, token.span.into())
+            } else {
+                let snippet = Diagnostic::error("invalid size")
+                    .annotate(self.lexer.offset..self.lexer.offset, "invalid size");
+                self.diag.push(snippet);
+                return None;
+            }
+        } else {
+            let snippet = Diagnostic::error("unexpected token")
+                .annotate(self.lexer.offset..self.lexer.offset, "expected size");
+            self.diag.push(snippet);
+            return None;
+        };
+
         let _ = self.expect_delimiter("=")?;
         let init = self.parse_slot_init()?;
 
@@ -1109,7 +1126,7 @@ impl<'a> Parser<'a> {
 
         Some(ParsingSlot {
             name: symbol,
-            ty,
+            size,
             init,
             span: ir::Span::from((start, end)),
         })
@@ -1264,30 +1281,6 @@ impl<'a> Parser<'a> {
                         }
 
                         Ty::simd(&mut self.ctx, elem_ty, len.trailing_zeros() as u16)
-                    }
-                    "[" => {
-                        // [ elem; len ]
-                        let (elem_ty, _) = self.parse_ty()?;
-                        let _ = self.expect_delimiter(";")?;
-                        let token = self.lexer.next(&mut self.diag);
-                        let len = if let Tk::Tokenized(s) = token.kind {
-                            if let Ok(len) = s.parse::<usize>() {
-                                len
-                            } else {
-                                let snippet = Diagnostic::error("invalid integer")
-                                    .annotate(token.span.into(), "invalid integer");
-                                self.diag.push(snippet);
-                                return None;
-                            }
-                        } else {
-                            let snippet = Diagnostic::error("unexpected token")
-                                .annotate(token.span.into(), "expected length of the array type");
-                            self.diag.push(snippet);
-                            return None;
-                        };
-                        let _ = self.expect_delimiter("]")?;
-
-                        Ty::array(&mut self.ctx, elem_ty, len)
                     }
                     "{" => {
                         // { elem0, elem1, ... }
@@ -1569,20 +1562,13 @@ mod tests {
         let float32 = Ty::float32(ctx);
         assert_eq!(ty, Ty::simd(ctx, float32, 7));
 
-        let mut parser = Parser::new("[ ptr  ; 128 ]");
-        let (ty, _) = parser.parse_ty().unwrap();
-        let ctx = &mut parser.ctx;
-
-        let ptr = Ty::ptr(ctx);
-        assert_eq!(ty, Ty::array(ctx, ptr, 128));
-
-        let mut parser = Parser::new("<{ i32, f32, [f64; 8], ptr, { i1, i8 } }> ");
+        let mut parser = Parser::new("<{ i32, f32, ptr, { i1, i8 } }> ");
         let (ty, _) = parser.parse_ty().unwrap();
         let ctx = &parser.ctx;
 
         assert_eq!(
             format!("{}", ty.display(ctx)),
-            "<{i32, f32, [f64; 8], ptr, {i1, i8}}>"
+            "<{i32, f32, ptr, {i1, i8}}>"
         )
     }
 
@@ -1600,16 +1586,15 @@ mod tests {
 
         assert_eq!(format!("{}", sig.display(ctx)), "(i32, f32) -> (f64, ptr)");
 
-        let mut parser = Parser::new(
-            "(i32, f32, [f64; 8], ptr, { i1, i8 }) -> <{ i32, f32, [f64; 8], ptr, { i1, i8 } }>",
-        );
+        let mut parser =
+            Parser::new("(i32, f32, ptr, { i1, i8 }) -> <{ i32, f32, ptr, { i1, i8 } }>");
         let sig = parser.parse_sig().unwrap();
         let ctx = &mut parser.ctx;
 
         assert_eq!(
             format!("{}", sig.display(ctx)),
             // just to test parsing, array should not be passed by value
-            "(i32, f32, [f64; 8], ptr, {i1, i8}) -> <{i32, f32, [f64; 8], ptr, {i1, i8}}>"
+            "(i32, f32, ptr, {i1, i8}) -> <{i32, f32, ptr, {i1, i8}}>"
         );
     }
 

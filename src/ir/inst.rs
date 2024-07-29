@@ -571,7 +571,7 @@ impl Inst {
     /// If the width of the constant does not match the width of the type,
     /// [IntConstant::resize] will be called to resize the constant.
     pub fn iconst(ctx: &mut Context, constant: impl Into<IntConstant>, ty: Ty) -> Inst {
-        let width = ty.bitwidth(ctx).unwrap();
+        let width = ty.bitwidth(ctx);
         let constant: IntConstant = constant.into();
         let constant = constant.resize(width as u8);
         Self::new(
@@ -708,7 +708,7 @@ impl Inst {
                 if !val_ty.is_integer(ctx) || !ty.is_integer(ctx) {
                     panic!("trunc only supports integer-like types");
                 }
-                if val_ty.bitwidth(ctx).unwrap() <= ty.bitwidth(ctx).unwrap() {
+                if val_ty.bitwidth(ctx) <= ty.bitwidth(ctx) {
                     panic!("trunc only supports truncating to a smaller type");
                 }
             }
@@ -716,7 +716,7 @@ impl Inst {
                 if !val_ty.is_integer(ctx) || !ty.is_integer(ctx) {
                     panic!("zext only supports integer-like types");
                 }
-                if val_ty.bitwidth(ctx).unwrap() >= ty.bitwidth(ctx).unwrap() {
+                if val_ty.bitwidth(ctx) >= ty.bitwidth(ctx) {
                     panic!("zext only supports extending to a larger type");
                 }
             }
@@ -734,7 +734,7 @@ impl Inst {
                 if val_ty.is_ptr(ctx) || ty.is_ptr(ctx) {
                     panic!("bitcast does not support pointer types");
                 }
-                if val_ty.bitwidth(ctx).unwrap() != ty.bitwidth(ctx).unwrap() {
+                if val_ty.bitwidth(ctx) != ty.bitwidth(ctx) {
                     panic!("bitcast only supports types with the same size");
                 }
             }
@@ -742,7 +742,7 @@ impl Inst {
                 if !val_ty.is_float(ctx) || !ty.is_float(ctx) {
                     panic!("fpext only supports float-like types");
                 }
-                if val_ty.bitwidth(ctx).unwrap() >= ty.bitwidth(ctx).unwrap() {
+                if val_ty.bitwidth(ctx) >= ty.bitwidth(ctx) {
                     panic!("fpext only supports extending to a larger type");
                 }
             }
@@ -750,7 +750,7 @@ impl Inst {
                 if !val_ty.is_float(ctx) || !ty.is_float(ctx) {
                     panic!("fptrunc only supports float-like types");
                 }
-                if val_ty.bitwidth(ctx).unwrap() <= ty.bitwidth(ctx).unwrap() {
+                if val_ty.bitwidth(ctx) <= ty.bitwidth(ctx) {
                     panic!("fptrunc only supports truncating to a smaller type");
                 }
             }

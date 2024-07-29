@@ -8,7 +8,6 @@ use super::{
     Constant,
     Context,
     Signature,
-    Ty,
 };
 use crate::{
     collections::{
@@ -203,9 +202,7 @@ impl LinkedListContainerPtr<Block> for Func {
 pub struct GlobalSlotData {
     self_ptr: GlobalSlot,
     name: Symbol,
-    // TODO: type is not appropriate to describe a global slot, size would be
-    // better.
-    ty: Ty,
+    size: usize,
     init: Constant,
 }
 
@@ -222,13 +219,13 @@ impl GlobalSlot {
     pub fn new(
         ctx: &mut Context,
         name: impl Into<Symbol>,
-        ty: Ty,
+        size: usize,
         init: impl Into<Constant>,
     ) -> GlobalSlot {
         let slot = ctx.alloc_with(|self_ptr| GlobalSlotData {
             self_ptr,
             name: name.into(),
-            ty,
+            size,
             init: init.into(),
         });
         ctx.insert_global_slot(slot);
@@ -237,7 +234,7 @@ impl GlobalSlot {
 
     pub fn name(self, ctx: &Context) -> &Symbol { &self.deref(ctx).name }
 
-    pub fn ty(self, ctx: &Context) -> Ty { self.deref(ctx).ty }
+    pub fn size(self, ctx: &Context) -> usize { self.deref(ctx).size }
 
     pub fn init(self, ctx: &Context) -> &Constant { &self.deref(ctx).init }
 
@@ -245,7 +242,6 @@ impl GlobalSlot {
 
     pub fn display(self, ctx: &Context, debug: bool) -> DisplayGlobalSlot<'_> {
         DisplayGlobalSlot {
-            ctx,
             data: self.deref(ctx),
             debug,
         }
@@ -271,7 +267,6 @@ impl GlobalSlot {
 }
 
 pub struct DisplayGlobalSlot<'a> {
-    ctx: &'a Context,
     data: &'a GlobalSlotData,
     debug: bool,
 }
@@ -284,12 +279,7 @@ impl fmt::Display for DisplayGlobalSlot<'_> {
             write!(f, " /* {} */ ", self.data.self_ptr().id())?;
         }
 
-        write!(
-            f,
-            " : {} = {}",
-            self.data.ty.display(self.ctx),
-            self.data.init
-        )
+        write!(f, " : {} = {}", self.data.size, self.data.init)
     }
 }
 

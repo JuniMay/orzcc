@@ -73,7 +73,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::fs::write(emit_typed_ast, format!("{:#?}", ast))?;
         }
 
-        let mut ir = sysy::irgen(&ast);
+        let mut ir = sysy::irgen(&ast, 64);
 
         if cmd.opt > 0 {
             // global2local might take effect after inlining, so just integrate it into the

@@ -11,6 +11,7 @@ use crate::{
         GlobalSlot,
         Inst,
         InstKind,
+        Ty,
     },
     utils::{
         cfg::CfgRegion,
@@ -25,12 +26,13 @@ pub struct Global2Local {
     /// Slot symbols to its users.
     ///
     /// The user instruction should be `get_global`.
-    slots_users: HashMap<Symbol, Vec<Inst>>,
+    slot_users: HashMap<Symbol, Vec<Inst>>,
+    slot_tys: HashMap<Symbol, Ty>,
 }
 
 impl Global2Local {
     fn analyze_usage(&mut self, ctx: &Context) {
-        self.slots_users.clear();
+        self.slot_users.clear();
 
         // only collect the global slots used in main function
         let func_main = ctx.lookup_func(&Symbol::from("main")).unwrap();
@@ -42,11 +44,40 @@ impl Global2Local {
                 }
 
                 if let InstKind::GetGlobal(symbol) = inst.kind(ctx) {
-                    self.slots_users
+                    // decide the type of the global slot, if the type cannot be decided, just
+                    // ignore it
+
+                    let ptr = inst.result(ctx, 0);
+                    let mut ty = None;
+                    for user in ptr.users(ctx) {
+                        if let InstKind::Offset = user.kind(ctx) {
+                            // it is used as a pointer, ignore it
+                            ty = None;
+                            break;
+                        }
+
+                        if let InstKind::Load = user.kind(ctx) {
+                            // look at the first load to decide the type of the global slot
+                            ty = Some(user.result(ctx, 0).ty(ctx));
+                            break;
+                        }
+                    }
+
+                    let ty = match ty {
+                        Some(ty) => ty,
+                        None => {
+                            // cannot decide the type of the global slot, just ignore it
+                            continue;
+                        }
+                    };
+
+                    self.slot_users
                         .entry(symbol.clone())
                         .or_default()
                         // there should be no duplicate instructions
                         .push(inst);
+
+                    self.slot_tys.insert(symbol.clone(), ty);
                 }
             }
         }
@@ -60,7 +91,7 @@ impl Global2Local {
                 for inst in block.iter(ctx) {
                     if let InstKind::GetGlobal(sym) = inst.kind(ctx) {
                         // exclude the global slots used in other functions
-                        self.slots_users.remove(sym);
+                        self.slot_users.remove(sym);
                     }
                 }
             }
@@ -79,7 +110,7 @@ impl Global2Local {
         }
 
         for slot in globals {
-            let slot_users = self.slots_users.remove(slot.name(ctx));
+            let slot_users = self.slot_users.remove(slot.name(ctx));
 
             if slot_users.is_none() {
                 // not used in main function or used in other functions, ignore
@@ -87,27 +118,27 @@ impl Global2Local {
             }
 
             let slot_users = slot_users.unwrap();
+            let ty = *self.slot_tys.get(slot.name(ctx)).unwrap();
+            let slot_size = slot.size(ctx);
 
-            let ty = slot.ty(ctx);
-            // TODO: eliminate the use of opaque pointer type, and use `R32` or `R64`
-            // instead
-            let bytewidth = ty.bytewidth(ctx).unwrap();
-
-            if !ty.is_float(ctx) && !ty.is_integer(ctx) {
-                // only internalize scalar types
-                // TODO: is array really not profitable to internalize? how about memory
-                // locality?
+            if slot_size <= 8 {
+                // only internalize small slots
                 continue;
             }
+
+            if !ty.is_float(ctx) && !ty.is_integer(ctx) {
+                // only internalize integer and float slots
+                continue;
+            }
+
+            changed = true; // we are going to internalize it
 
             // insert `stack_slot` of the same size at the beginning of the entry block
             let slot_name = slot.name(ctx).to_string();
 
-            let stack_slot = Inst::stack_slot(ctx, bytewidth as u32);
+            let stack_slot = Inst::stack_slot(ctx, slot_size as u32);
             // internalized slots are placed at the beginning of the entry block
             entry.push_front(ctx, stack_slot);
-
-            changed = true; // TODO: actually changed, not sure if this is correct
 
             let stack_slot = stack_slot.result(ctx, 0);
             stack_slot.alloc_name(ctx, format!("INTERNALIZED_{}_", slot_name));
@@ -117,8 +148,6 @@ impl Global2Local {
             match slot.init(ctx).kind() {
                 ConstantKind::Undef => {}
                 ConstantKind::Zeroinit => {
-                    // TODO: the type should be get by the usages of the global slot
-
                     if ty.is_float(ctx) {
                         let zero = Inst::fconst(ctx, 0.0, ty);
                         let store = Inst::store(ctx, zero.result(ctx, 0), stack_slot);
@@ -130,7 +159,6 @@ impl Global2Local {
                         insert_point.insert_before(ctx, zero);
                         insert_point.insert_before(ctx, store);
                     } else {
-                        // TODO: actually reachable, but just ignore it for now
                         unreachable!()
                     }
                 }
@@ -186,7 +214,7 @@ impl GlobalPassMut for Global2Local {
         let globals: Vec<GlobalSlot> = ctx
             .global_slots()
             .into_iter()
-            .filter(|global_slot| self.slots_users.contains_key(global_slot.name(ctx)))
+            .filter(|global_slot| self.slot_users.contains_key(global_slot.name(ctx)))
             .collect();
 
         changed |= self.internalize(ctx, func_main, globals);

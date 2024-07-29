@@ -227,7 +227,7 @@ impl LowerSpec for RvLowerSpec {
             panic!("gen_iconst: expected integer type, got {:?}", ty);
         }
 
-        let bitwidth = ty.bitwidth_with_ptr(lower.ctx, Self::pointer_size());
+        let bitwidth = ty.bitwidth(lower.ctx);
 
         if bitwidth > 64 {
             unimplemented!("gen_iconst: bitwidth > 64: {}", bitwidth);
@@ -308,7 +308,7 @@ impl LowerSpec for RvLowerSpec {
             return MValue::new_undef(dst_ty);
         }
 
-        let bitwidth = ty.bitwidth(lower.ctx).unwrap();
+        let bitwidth = ty.bitwidth(lower.ctx);
 
         match op {
             Ibop::Add => {
@@ -882,7 +882,7 @@ impl LowerSpec for RvLowerSpec {
 
         let ty = lhs.ty();
 
-        let bitwidth = ty.bitwidth(lower.ctx).unwrap();
+        let bitwidth = ty.bitwidth(lower.ctx);
 
         if lhs.is_undef() || rhs.is_undef() {
             return MValue::new_undef(dst_ty);
@@ -1001,7 +1001,7 @@ impl LowerSpec for RvLowerSpec {
             MValueKind::Undef => return MValue::new_undef(dst_ty),
         };
 
-        let bitwidth = ty.bitwidth(lower.ctx).unwrap();
+        let bitwidth = ty.bitwidth(lower.ctx);
 
         match op {
             ir::IUnaryOp::Not => {
@@ -1038,7 +1038,7 @@ impl LowerSpec for RvLowerSpec {
             MValueKind::Undef => return MValue::new_undef(dst_ty),
         };
 
-        let bitwidth = ty.bitwidth(lower.ctx).unwrap();
+        let bitwidth = ty.bitwidth(lower.ctx);
 
         match op {
             ir::FUnaryOp::Neg => {
@@ -1077,8 +1077,8 @@ impl LowerSpec for RvLowerSpec {
             MValueKind::Undef => return MValue::new_undef(dst_ty),
         };
 
-        let src_bitwidth = src_ty.bitwidth(lower.ctx).unwrap();
-        let dst_bitwidth = dst_ty.bitwidth(lower.ctx).unwrap();
+        let src_bitwidth = src_ty.bitwidth(lower.ctx);
+        let dst_bitwidth = dst_ty.bitwidth(lower.ctx);
 
         match op {
             ir::CastOp::Bitcast => MValue::new_reg(dst_ty, src),
@@ -1280,7 +1280,7 @@ impl LowerSpec for RvLowerSpec {
 
         for arg in args {
             let ty = arg.ty();
-            let bytewidth = ty.bytewidth_with_ptr(lower.ctx, Self::pointer_size()) as u64;
+            let bytewidth = ty.bytewidth(lower.ctx) as u64;
 
             if ty.is_integer(lower.ctx) || ty.is_ptr(lower.ctx) {
                 if used_int_regs < regs::INT_ARG_REGS.len() {
@@ -1358,7 +1358,7 @@ impl LowerSpec for RvLowerSpec {
                 }
             };
             Self::gen_store(lower, arg, loc);
-            let bytewidth = arg.ty().bytewidth_with_ptr(lower.ctx, Self::pointer_size()) as i64;
+            let bytewidth = arg.ty().bytewidth(lower.ctx) as i64;
             offset += bytewidth;
         }
 
@@ -1416,9 +1416,7 @@ impl LowerSpec for RvLowerSpec {
             let loc = MemLoc::Incoming { offset };
             let mval = Self::gen_load(lower, dst.ty(lower.ctx), loc);
             lower.lowered.insert(dst, mval);
-            let bytewidth =
-                dst.ty(lower.ctx)
-                    .bytewidth_with_ptr(lower.ctx, Self::pointer_size()) as i64;
+            let bytewidth = dst.ty(lower.ctx).bytewidth(lower.ctx) as i64;
             offset += bytewidth;
         }
     }
@@ -1426,7 +1424,7 @@ impl LowerSpec for RvLowerSpec {
     fn gen_load(lower: &mut LowerContext<Self>, ty: ir::Ty, mem_loc: MemLoc) -> MValue {
         let curr_block = lower.curr_block.unwrap();
 
-        let bitwidth = ty.bitwidth_with_ptr(lower.ctx, Self::pointer_size());
+        let bitwidth = ty.bitwidth(lower.ctx);
         if ty.is_integer(lower.ctx) || ty.is_ptr(lower.ctx) {
             let op = match bitwidth {
                 1 | 8 => LoadOp::Lb,
@@ -1489,7 +1487,7 @@ impl LowerSpec for RvLowerSpec {
             MValueKind::Undef => return,
         };
 
-        let bitwidth = val.ty().bitwidth_with_ptr(lower.ctx, Self::pointer_size());
+        let bitwidth = val.ty().bitwidth(lower.ctx);
         if val.ty().is_integer(lower.ctx) || val.ty().is_ptr(lower.ctx) {
             let op = match bitwidth {
                 1 | 8 => StoreOp::Sb,
