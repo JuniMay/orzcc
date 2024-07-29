@@ -76,38 +76,48 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut ir = sysy::irgen(&ast, 64);
 
         if cmd.opt > 0 {
-            // global2local might take effect after inlining, so just integrate it into the
-            // pipeline
+            let mut pipe0 = Pipeline::default();
 
-            let mut opt_pipeline = Pipeline::default();
-            opt_pipeline.add_pass(GLOBAL2LOCAL);
-            // remove redundant get_global
-            opt_pipeline.add_pass(SIMPLE_DCE);
-            opt_pipeline.add_pass(GLOBAL_DCE);
-            opt_pipeline.add_pass(MEM2REG);
-            opt_pipeline.add_pass(CFG_SIMPLIFY);
-            opt_pipeline.add_pass(CONSTANT_FOLDING);
-            opt_pipeline.add_pass(SIMPLE_DCE);
-            opt_pipeline.add_pass(INSTCOMBINE);
-            opt_pipeline.add_pass(SIMPLE_DCE);
-            // GCM is better than LICM, only run GCM
-            opt_pipeline.add_pass(GCM);
-            opt_pipeline.add_pass(GVN);
-            opt_pipeline.add_pass(SIMPLE_DCE);
-            opt_pipeline.add_pass(INLINE);
-            // remove functions that are not used after inlining
-            opt_pipeline.add_pass(SIMPLE_DCE);
-            opt_pipeline.add_pass(GLOBAL_DCE);
-            opt_pipeline.add_pass(LOOP_UNROLL);
-            opt_pipeline.add_pass(SIMPLE_DCE);
+            pipe0.add_pass(GLOBAL2LOCAL);
+            pipe0.add_pass(SIMPLE_DCE);
+            pipe0.add_pass(GLOBAL_DCE);
+            pipe0.add_pass(MEM2REG);
+            pipe0.add_pass(SIMPLE_DCE);
+            pipe0.add_pass(CFG_SIMPLIFY);
+            pipe0.add_pass(CONSTANT_FOLDING);
+            pipe0.add_pass(SIMPLE_DCE);
+            pipe0.add_pass(INSTCOMBINE);
+            pipe0.add_pass(SIMPLE_DCE);
+            pipe0.add_pass(GCM);
+            pipe0.add_pass(GVN);
+            pipe0.add_pass(CFG_SIMPLIFY);
+            pipe0.add_pass(SIMPLE_DCE);
 
-            // // cleanup the loop optimizations
-            opt_pipeline.add_pass(CFG_SIMPLIFY);
-            opt_pipeline.add_pass(SIMPLE_DCE);
+            let mut pipe1 = Pipeline::default();
 
-            let iter = passman.run_pipeline(&mut ir, &opt_pipeline, 32, 8);
+            pipe1.add_pass(INLINE);
+            pipe1.add_pass(CFG_SIMPLIFY);
+            pipe1.add_pass(SIMPLE_DCE);
+            pipe1.add_pass(GLOBAL_DCE);
 
-            println!("Optimization iterations: {}", iter);
+            let mut pipe2 = Pipeline::default();
+
+            pipe2.add_pass(LOOP_UNROLL); // FIXME
+            pipe2.add_pass(CFG_SIMPLIFY);
+            pipe2.add_pass(SIMPLE_DCE);
+
+            for i in 0..8 {
+                println!("Round {}", i);
+
+                let iter = passman.run_pipeline(&mut ir, &pipe0, 32, 8);
+                println!("pipeline 0 iterations: {}", iter);
+
+                let iter = passman.run_pipeline(&mut ir, &pipe1, 32, 8);
+                println!("pipeline 1 iterations: {}", iter);
+
+                let iter = passman.run_pipeline(&mut ir, &pipe2, 32, 8);
+                println!("pipeline 2 iterations: {}", iter);
+            }
 
             passman.run_transform(BLOCK_REORDER, &mut ir, 1);
         }
