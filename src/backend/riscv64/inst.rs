@@ -487,7 +487,13 @@ impl<'a> fmt::Display for DisplayRvInst<'a> {
         use RvInstKind as Ik;
 
         match &self.inst.deref(self.mctx).kind {
-            Ik::Li { rd, imm } => write!(f, "li {}, {:#018x}", regs::display(*rd), imm),
+            Ik::Li { rd, imm } => {
+                if *imm < 4096 {
+                    write!(f, "li {}, {}", regs::display(*rd), imm)
+                } else {
+                    write!(f, "li {}, {:#018x}", regs::display(*rd), imm)
+                }
+            }
             Ik::AluRR { op, rd, rs } => {
                 write!(f, "{} {}, {}", op, regs::display(*rd), regs::display(*rs))
             }

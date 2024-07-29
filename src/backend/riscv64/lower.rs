@@ -162,7 +162,7 @@ impl LowerSpec for RvLowerSpec {
                 };
                 curr_block.push_back(&mut lower.mctx, inst);
             }
-            MValueKind::Imm(imm) => {
+            MValueKind::Imm(_, imm) => {
                 if src_ty.is_integer(lower.ctx) || src_ty.is_ptr(lower.ctx) {
                     let li = RvInst::build_li(&mut lower.mctx, dst, imm as u64);
                     curr_block.push_back(&mut lower.mctx, li);
@@ -237,13 +237,16 @@ impl LowerSpec for RvLowerSpec {
             return MValue::new_reg(ty, regs::zero());
         }
 
+        // sign-extend to 64-bit, because we are working on rv64
+        let bits = x.into_signext().bits();
+        // keep a li instruction, because we may need to use it in the future for
+        // mul/div. this should be eliminated by dead code elimination.
+        let (li, t) = RvInst::li(&mut lower.mctx, bits);
+        lower.curr_block.unwrap().push_back(&mut lower.mctx, li);
+
         if let Some(imm) = Imm12::try_from_u64(x.bits()) {
-            MValue::new_imm(ty, imm.as_i16() as i64)
+            MValue::new_imm(ty, t, imm.as_i16() as i64)
         } else {
-            // sign-extend to 64-bit, because we are working on rv64
-            let bits = x.into_signext().bits();
-            let (li, t) = RvInst::li(&mut lower.mctx, bits);
-            lower.curr_block.unwrap().push_back(&mut lower.mctx, li);
             MValue::new_reg(ty, t)
         }
     }
@@ -337,7 +340,7 @@ impl LowerSpec for RvLowerSpec {
                         curr_block.push_back(&mut lower.mctx, inst);
                         MValue::new_reg(ty, reg)
                     }
-                    (MValueKind::Imm(imm), MValueKind::Reg(reg)) => {
+                    (MValueKind::Imm(_, imm), MValueKind::Reg(reg)) => {
                         // the imm must be valid as imm12
                         let (inst, reg) = RvInst::alu_rri(
                             &mut lower.mctx,
@@ -348,7 +351,7 @@ impl LowerSpec for RvLowerSpec {
                         curr_block.push_back(&mut lower.mctx, inst);
                         MValue::new_reg(ty, reg)
                     }
-                    (MValueKind::Reg(reg), MValueKind::Imm(imm)) => {
+                    (MValueKind::Reg(reg), MValueKind::Imm(_, imm)) => {
                         let (inst, reg) = RvInst::alu_rri(
                             &mut lower.mctx,
                             addi_op,
@@ -358,13 +361,11 @@ impl LowerSpec for RvLowerSpec {
                         curr_block.push_back(&mut lower.mctx, inst);
                         MValue::new_reg(ty, reg)
                     }
-                    (MValueKind::Imm(lhs), MValueKind::Imm(rhs)) => {
-                        let (li, t) = RvInst::li(&mut lower.mctx, lhs as u64);
-                        curr_block.push_back(&mut lower.mctx, li);
+                    (MValueKind::Imm(lhs, _), MValueKind::Imm(_, rhs)) => {
                         let (inst, reg) = RvInst::alu_rri(
                             &mut lower.mctx,
                             addi_op,
-                            t,
+                            lhs,
                             Imm12::try_from_i64(rhs).unwrap(),
                         );
                         curr_block.push_back(&mut lower.mctx, inst);
@@ -401,7 +402,7 @@ impl LowerSpec for RvLowerSpec {
                         curr_block.push_back(&mut lower.mctx, inst);
                         MValue::new_reg(ty, reg)
                     }
-                    (MValueKind::Imm(imm), MValueKind::Reg(reg)) => {
+                    (MValueKind::Imm(_, imm), MValueKind::Reg(reg)) => {
                         // not commutative
                         let (li, t) = RvInst::li(&mut lower.mctx, imm as u64);
                         curr_block.push_back(&mut lower.mctx, li);
@@ -409,31 +410,26 @@ impl LowerSpec for RvLowerSpec {
                         curr_block.push_back(&mut lower.mctx, inst);
                         MValue::new_reg(ty, reg)
                     }
-                    (MValueKind::Reg(reg), MValueKind::Imm(imm)) => {
+                    (MValueKind::Reg(reg), MValueKind::Imm(rhs, imm)) => {
                         // we cannot be sure if the negation of imm is a valid imm12
                         if let Some(imm) = Imm12::try_from_i64(-imm) {
                             let (inst, reg) = RvInst::alu_rri(&mut lower.mctx, addi_op, reg, imm);
                             curr_block.push_back(&mut lower.mctx, inst);
                             MValue::new_reg(ty, reg)
                         } else {
-                            let (li, t) = RvInst::li(&mut lower.mctx, imm as u64);
-                            curr_block.push_back(&mut lower.mctx, li);
-                            let (inst, reg) = RvInst::alu_rrr(&mut lower.mctx, sub_op, reg, t);
+                            let (inst, reg) = RvInst::alu_rrr(&mut lower.mctx, sub_op, reg, rhs);
                             curr_block.push_back(&mut lower.mctx, inst);
                             MValue::new_reg(ty, reg)
                         }
                     }
-                    (MValueKind::Imm(lhs), MValueKind::Imm(rhs)) => {
-                        let (li, lhs) = RvInst::li(&mut lower.mctx, lhs as u64);
-                        curr_block.push_back(&mut lower.mctx, li);
-                        if let Some(imm) = Imm12::try_from_i64(-rhs) {
+                    (MValueKind::Imm(lhs, _), MValueKind::Imm(rhs_reg, rhs_imm)) => {
+                        if let Some(imm) = Imm12::try_from_i64(-rhs_imm) {
                             let (inst, reg) = RvInst::alu_rri(&mut lower.mctx, addi_op, lhs, imm);
                             curr_block.push_back(&mut lower.mctx, inst);
                             MValue::new_reg(ty, reg)
                         } else {
-                            let (li, t) = RvInst::li(&mut lower.mctx, rhs as u64);
-                            curr_block.push_back(&mut lower.mctx, li);
-                            let (inst, reg) = RvInst::alu_rrr(&mut lower.mctx, sub_op, lhs, t);
+                            let (inst, reg) =
+                                RvInst::alu_rrr(&mut lower.mctx, sub_op, lhs, rhs_reg);
                             curr_block.push_back(&mut lower.mctx, inst);
                             MValue::new_reg(ty, reg)
                         }
@@ -442,22 +438,51 @@ impl LowerSpec for RvLowerSpec {
                 }
             }
             Ibop::Mul | Ibop::UDiv | Ibop::URem | Ibop::SDiv | Ibop::SRem => {
+                if op == Ibop::Mul && lower.mctx().arch().contains("zba") {
+                    // x * 3 -> sh1add rd, x, x
+                    // x * 5 -> sh2add rd, x, x
+                    // x * 9 -> sh3add rd, x, x
+                    match (lhs.kind(), rhs.kind()) {
+                        (MValueKind::Imm(_, imm), MValueKind::Reg(reg)) => {
+                            if lower.mctx().arch().contains("zba") && [3, 5, 9].contains(&imm) {
+                                let shadd_op = match imm {
+                                    3 => AluOpRRR::Sh1add,
+                                    5 => AluOpRRR::Sh2add,
+                                    9 => AluOpRRR::Sh3add,
+                                    _ => unreachable!(),
+                                };
+                                let (inst, reg) =
+                                    RvInst::alu_rrr(&mut lower.mctx, shadd_op, reg, reg);
+                                curr_block.push_back(&mut lower.mctx, inst);
+                                return MValue::new_reg(ty, reg);
+                            }
+                        }
+                        (MValueKind::Reg(reg), MValueKind::Imm(_, imm)) => {
+                            if lower.mctx().arch().contains("zba") && [3, 5, 9].contains(&imm) {
+                                let shadd_op = match imm {
+                                    3 => AluOpRRR::Sh1add,
+                                    5 => AluOpRRR::Sh2add,
+                                    9 => AluOpRRR::Sh3add,
+                                    _ => unreachable!(),
+                                };
+                                let (inst, reg) =
+                                    RvInst::alu_rrr(&mut lower.mctx, shadd_op, reg, reg);
+                                curr_block.push_back(&mut lower.mctx, inst);
+                                return MValue::new_reg(ty, reg);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+
                 let lhs = match lhs.kind() {
                     MValueKind::Reg(reg) => reg,
-                    MValueKind::Imm(imm) => {
-                        let (li, reg) = RvInst::li(&mut lower.mctx, imm as u64);
-                        curr_block.push_back(&mut lower.mctx, li);
-                        reg
-                    }
+                    MValueKind::Imm(reg, _) => reg,
                     MValueKind::Mem(_) | MValueKind::Undef => unreachable!(),
                 };
                 let rhs = match rhs.kind() {
                     MValueKind::Reg(reg) => reg,
-                    MValueKind::Imm(imm) => {
-                        let (li, reg) = RvInst::li(&mut lower.mctx, imm as u64);
-                        curr_block.push_back(&mut lower.mctx, li);
-                        reg
-                    }
+                    MValueKind::Imm(reg, _) => reg,
                     MValueKind::Mem(_) | MValueKind::Undef => unreachable!(),
                 };
                 let op = if bitwidth == 32 {
@@ -541,7 +566,7 @@ impl LowerSpec for RvLowerSpec {
                         curr_block.push_back(&mut lower.mctx, inst);
                         MValue::new_reg(ty, reg)
                     }
-                    (MValueKind::Imm(imm), MValueKind::Reg(reg)) => {
+                    (MValueKind::Imm(_, imm), MValueKind::Reg(reg)) => {
                         let (inst, reg) = RvInst::alu_rri(
                             &mut lower.mctx,
                             imm_op,
@@ -551,7 +576,7 @@ impl LowerSpec for RvLowerSpec {
                         curr_block.push_back(&mut lower.mctx, inst);
                         MValue::new_reg(ty, reg)
                     }
-                    (MValueKind::Reg(reg), MValueKind::Imm(imm)) => {
+                    (MValueKind::Reg(reg), MValueKind::Imm(_, imm)) => {
                         let (inst, reg) = RvInst::alu_rri(
                             &mut lower.mctx,
                             imm_op,
@@ -561,9 +586,7 @@ impl LowerSpec for RvLowerSpec {
                         curr_block.push_back(&mut lower.mctx, inst);
                         MValue::new_reg(ty, reg)
                     }
-                    (MValueKind::Imm(lhs), MValueKind::Imm(rhs)) => {
-                        let (li, lhs) = RvInst::li(&mut lower.mctx, lhs as u64);
-                        curr_block.push_back(&mut lower.mctx, li);
+                    (MValueKind::Imm(lhs, _), MValueKind::Imm(_, rhs)) => {
                         let (inst, reg) = RvInst::alu_rri(
                             &mut lower.mctx,
                             imm_op,
@@ -659,14 +682,12 @@ impl LowerSpec for RvLowerSpec {
                         curr_block.push_back(&mut lower.mctx, inst);
                         MValue::new_reg(ty, reg)
                     }
-                    (MValueKind::Imm(imm), MValueKind::Reg(reg)) => {
-                        let (li, lhs) = RvInst::li(&mut lower.mctx, imm as u64);
-                        curr_block.push_back(&mut lower.mctx, li);
+                    (MValueKind::Imm(lhs, _), MValueKind::Reg(reg)) => {
                         let (inst, reg) = RvInst::alu_rrr(&mut lower.mctx, reg_op, lhs, reg);
                         curr_block.push_back(&mut lower.mctx, inst);
                         MValue::new_reg(ty, reg)
                     }
-                    (MValueKind::Reg(reg), MValueKind::Imm(imm)) => {
+                    (MValueKind::Reg(reg), MValueKind::Imm(_, imm)) => {
                         let (inst, reg) = RvInst::alu_rri(
                             &mut lower.mctx,
                             imm_op,
@@ -676,9 +697,7 @@ impl LowerSpec for RvLowerSpec {
                         curr_block.push_back(&mut lower.mctx, inst);
                         MValue::new_reg(ty, reg)
                     }
-                    (MValueKind::Imm(lhs), MValueKind::Imm(rhs)) => {
-                        let (li, lhs) = RvInst::li(&mut lower.mctx, lhs as u64);
-                        curr_block.push_back(&mut lower.mctx, li);
+                    (MValueKind::Imm(lhs, _), MValueKind::Imm(_, rhs)) => {
                         let (inst, reg) = RvInst::alu_rri(
                             &mut lower.mctx,
                             imm_op,
@@ -718,42 +737,34 @@ impl LowerSpec for RvLowerSpec {
                                 curr_block.push_back(&mut lower.mctx, inst);
                                 reg
                             }
-                            (MValueKind::Imm(imm), MValueKind::Reg(reg)) => {
-                                let (li, lhs) = RvInst::li(&mut lower.mctx, imm as u64);
-                                curr_block.push_back(&mut lower.mctx, li);
+                            (MValueKind::Imm(lhs, _), MValueKind::Reg(reg)) => {
                                 let (inst, reg) =
                                     RvInst::alu_rrr(&mut lower.mctx, sub_op, lhs, reg);
                                 curr_block.push_back(&mut lower.mctx, inst);
                                 reg
                             }
-                            (MValueKind::Reg(reg), MValueKind::Imm(imm)) => {
-                                if let Some(imm) = Imm12::try_from_i64(-imm) {
+                            (MValueKind::Reg(reg), MValueKind::Imm(rhs_reg, rhs_imm)) => {
+                                if let Some(imm) = Imm12::try_from_i64(-rhs_imm) {
                                     let (inst, reg) =
                                         RvInst::alu_rri(&mut lower.mctx, addi_op, reg, imm);
                                     curr_block.push_back(&mut lower.mctx, inst);
                                     reg
                                 } else {
-                                    let (li, rhs) = RvInst::li(&mut lower.mctx, imm as u64);
-                                    curr_block.push_back(&mut lower.mctx, li);
                                     let (inst, reg) =
-                                        RvInst::alu_rrr(&mut lower.mctx, sub_op, reg, rhs);
+                                        RvInst::alu_rrr(&mut lower.mctx, sub_op, reg, rhs_reg);
                                     curr_block.push_back(&mut lower.mctx, inst);
                                     reg
                                 }
                             }
-                            (MValueKind::Imm(lhs), MValueKind::Imm(rhs)) => {
-                                let (li, lhs) = RvInst::li(&mut lower.mctx, lhs as u64);
-                                curr_block.push_back(&mut lower.mctx, li);
-                                if let Some(imm) = Imm12::try_from_i64(-rhs) {
+                            (MValueKind::Imm(lhs, _), MValueKind::Imm(rhs_reg, rhs_imm)) => {
+                                if let Some(imm) = Imm12::try_from_i64(-rhs_imm) {
                                     let (inst, reg) =
                                         RvInst::alu_rri(&mut lower.mctx, addi_op, lhs, imm);
                                     curr_block.push_back(&mut lower.mctx, inst);
                                     reg
                                 } else {
-                                    let (li, rhs) = RvInst::li(&mut lower.mctx, rhs as u64);
-                                    curr_block.push_back(&mut lower.mctx, li);
                                     let (inst, reg) =
-                                        RvInst::alu_rrr(&mut lower.mctx, sub_op, lhs, rhs);
+                                        RvInst::alu_rrr(&mut lower.mctx, sub_op, lhs, rhs_reg);
                                     curr_block.push_back(&mut lower.mctx, inst);
                                     reg
                                 }
@@ -814,16 +825,14 @@ impl LowerSpec for RvLowerSpec {
                                 curr_block.push_back(&mut lower.mctx, inst);
                                 reg
                             }
-                            (MValueKind::Imm(imm), MValueKind::Reg(reg)) => {
+                            (MValueKind::Imm(lhs, _), MValueKind::Reg(reg)) => {
                                 // TODO: can we optimize this?
-                                let (li, lhs) = RvInst::li(&mut lower.mctx, imm as u64);
-                                curr_block.push_back(&mut lower.mctx, li);
                                 let (inst, reg) =
                                     RvInst::alu_rrr(&mut lower.mctx, reg_op, lhs, reg);
                                 curr_block.push_back(&mut lower.mctx, inst);
                                 reg
                             }
-                            (MValueKind::Reg(reg), MValueKind::Imm(imm)) => {
+                            (MValueKind::Reg(reg), MValueKind::Imm(_, imm)) => {
                                 let (inst, reg) = RvInst::alu_rri(
                                     &mut lower.mctx,
                                     imm_op,
@@ -833,9 +842,7 @@ impl LowerSpec for RvLowerSpec {
                                 curr_block.push_back(&mut lower.mctx, inst);
                                 reg
                             }
-                            (MValueKind::Imm(lhs), MValueKind::Imm(rhs)) => {
-                                let (li, lhs) = RvInst::li(&mut lower.mctx, lhs as u64);
-                                curr_block.push_back(&mut lower.mctx, li);
+                            (MValueKind::Imm(lhs, _), MValueKind::Imm(_, rhs)) => {
                                 let (inst, reg) = RvInst::alu_rri(
                                     &mut lower.mctx,
                                     imm_op,
@@ -992,11 +999,7 @@ impl LowerSpec for RvLowerSpec {
         let ty = operand.ty();
         let operand = match operand.kind() {
             MValueKind::Reg(reg) => reg,
-            MValueKind::Imm(imm) => {
-                let (inst, reg) = RvInst::li(&mut lower.mctx, imm as u64);
-                curr_block.push_back(&mut lower.mctx, inst);
-                reg
-            }
+            MValueKind::Imm(reg, _) => reg,
             MValueKind::Mem(_) => unreachable!(),
             MValueKind::Undef => return MValue::new_undef(dst_ty),
         };
@@ -1034,7 +1037,7 @@ impl LowerSpec for RvLowerSpec {
 
         let operand = match operand.kind() {
             MValueKind::Reg(reg) => reg,
-            MValueKind::Mem(_) | MValueKind::Imm(_) => unreachable!(),
+            MValueKind::Mem(_) | MValueKind::Imm(..) => unreachable!(),
             MValueKind::Undef => return MValue::new_undef(dst_ty),
         };
 
@@ -1068,11 +1071,7 @@ impl LowerSpec for RvLowerSpec {
 
         let src = match val.kind() {
             MValueKind::Reg(reg) => reg,
-            MValueKind::Imm(imm) => {
-                let (inst, reg) = RvInst::li(&mut lower.mctx, imm as u64);
-                curr_block.push_back(&mut lower.mctx, inst);
-                reg
-            }
+            MValueKind::Imm(reg, _) => reg,
             MValueKind::Mem(_) => unreachable!(),
             MValueKind::Undef => return MValue::new_undef(dst_ty),
         };
@@ -1165,59 +1164,73 @@ impl LowerSpec for RvLowerSpec {
 
         let ty = base.ty(); // ptr
 
-        // keep the offset, merge later
-        let (base, slot_offset_imm) = match base.kind() {
-            MValueKind::Reg(reg) => (reg, 0i64),
-            MValueKind::Imm(_) => unreachable!(),
-            MValueKind::Mem(loc) => {
-                match loc {
-                    MemLoc::RegOffset { base, offset } => (base, offset),
-                    MemLoc::Slot { .. } | MemLoc::Incoming { .. } => {
-                        // load addr because we cannot determine the offset
-                        let (inst, rd) = RvInst::load_addr(&mut lower.mctx, loc);
-                        curr_block.push_back(&mut lower.mctx, inst);
-                        // TODO: we need peephole after regalloc to optimize this offset
-                        (rd, 0)
-                    }
-                }
-            }
-            MValueKind::Undef => return MValue::new_undef(ty),
-        };
-
         match offset.kind() {
             MValueKind::Reg(reg) => {
-                let base = if slot_offset_imm == 0 {
-                    base
-                } else if let Some(imm) = Imm12::try_from_i64(slot_offset_imm) {
-                    let (inst, rd) = RvInst::alu_rri(&mut lower.mctx, AluOpRRI::Addi, base, imm);
-                    curr_block.push_back(&mut lower.mctx, inst);
-                    rd
-                } else {
-                    let (li, rd) = RvInst::li(&mut lower.mctx, slot_offset_imm as u64);
-                    curr_block.push_back(&mut lower.mctx, li);
-                    let (inst, rd) = RvInst::alu_rrr(&mut lower.mctx, AluOpRRR::Add, base, rd);
-                    curr_block.push_back(&mut lower.mctx, inst);
-                    rd
+                // if rhs is a reg, we must add them.
+                let (base, slot_offset_imm) = match base.kind() {
+                    MValueKind::Reg(reg) => (reg, 0i64),
+                    MValueKind::Imm(..) => unreachable!(),
+                    MValueKind::Mem(loc) => {
+                        match loc {
+                            MemLoc::RegOffset { base, offset } => (base, offset),
+                            MemLoc::Slot { .. } => {
+                                // load addr because we cannot determine the offset
+                                let (inst, rd) = RvInst::load_addr(&mut lower.mctx, loc);
+                                curr_block.push_back(&mut lower.mctx, inst);
+                                (rd, 0)
+                            }
+                            // incoming is something we generate at backend, should not be an
+                            // operand of offset instructions in IR.
+                            MemLoc::Incoming { .. } => unreachable!(),
+                        }
+                    }
+                    MValueKind::Undef => return MValue::new_undef(ty),
                 };
-                // XXX: assumes all the operations produced proper sign-extended values
-                let (inst, rd) = RvInst::alu_rrr(&mut lower.mctx, AluOpRRR::Add, base, reg);
-                curr_block.push_back(&mut lower.mctx, inst);
-                MValue::new_reg(ty, rd)
-            }
-            MValueKind::Imm(imm) => {
-                let total_offset = slot_offset_imm + imm;
-                if total_offset == 0 {
-                    MValue::new_reg(ty, base)
-                } else if let Some(imm) = Imm12::try_from_i64(total_offset) {
-                    let (inst, rd) = RvInst::alu_rri(&mut lower.mctx, AluOpRRI::Addi, base, imm);
+
+                if slot_offset_imm == 0 {
+                    let (inst, rd) = RvInst::alu_rrr(&mut lower.mctx, AluOpRRR::Add, base, reg);
                     curr_block.push_back(&mut lower.mctx, inst);
                     MValue::new_reg(ty, rd)
                 } else {
-                    let (li, rd) = RvInst::li(&mut lower.mctx, total_offset as u64);
-                    curr_block.push_back(&mut lower.mctx, li);
-                    let (inst, rd) = RvInst::alu_rrr(&mut lower.mctx, AluOpRRR::Add, base, rd);
+                    // we add the base and the offset reg, but keep the offset imm
+                    let (inst, rd) = RvInst::alu_rrr(&mut lower.mctx, AluOpRRR::Add, base, reg);
                     curr_block.push_back(&mut lower.mctx, inst);
-                    MValue::new_reg(ty, rd)
+                    MValue::new_mem(
+                        ty,
+                        MemLoc::RegOffset {
+                            base: rd,
+                            offset: slot_offset_imm,
+                        },
+                    )
+                }
+            }
+            MValueKind::Imm(_, imm) => {
+                match base.kind() {
+                    MValueKind::Reg(reg) => {
+                        let loc = MemLoc::RegOffset {
+                            base: reg,
+                            offset: imm,
+                        };
+                        MValue::new_mem(ty, loc)
+                    }
+                    MValueKind::Mem(loc) => {
+                        // modify the offset and keep the base
+                        let loc = match loc {
+                            MemLoc::RegOffset { base, offset } => MemLoc::RegOffset {
+                                base,
+                                offset: offset + imm,
+                            },
+                            MemLoc::Slot { offset } => MemLoc::Slot {
+                                offset: offset + imm,
+                            },
+                            // incoming is something we generate at backend, should not be an
+                            // operand of offset instructions in IR.
+                            MemLoc::Incoming { .. } => unreachable!(),
+                        };
+                        MValue::new_mem(ty, loc)
+                    }
+                    MValueKind::Imm(..) => unreachable!(),
+                    MValueKind::Undef => MValue::new_undef(ty),
                 }
             }
             MValueKind::Mem(_) => unreachable!(),
@@ -1238,7 +1251,7 @@ impl LowerSpec for RvLowerSpec {
                 let inst = RvInst::br(&mut lower.mctx, BrOp::Bne, reg, regs::zero().into(), dst);
                 curr_block.push_back(&mut lower.mctx, inst);
             }
-            MValueKind::Imm(imm) => {
+            MValueKind::Imm(_, imm) => {
                 if imm as u64 & 1 == 0 {
                     // do nothing, never jump
                 } else {
@@ -1454,11 +1467,7 @@ impl LowerSpec for RvLowerSpec {
 
         let src = match val.kind() {
             MValueKind::Reg(reg) => reg,
-            MValueKind::Imm(imm) => {
-                let (inst, rd) = RvInst::li(&mut lower.mctx, imm as u64);
-                curr_block.push_back(&mut lower.mctx, inst);
-                rd
-            }
+            MValueKind::Imm(reg, _) => reg,
             MValueKind::Mem(loc) => {
                 match loc {
                     MemLoc::RegOffset { base, offset } => {

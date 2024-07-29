@@ -280,6 +280,31 @@ const fn remove_redundant_move() -> Peephole1<RvInst> {
     }
 }
 
+const fn li_dce() -> Peephole1<RvInst> {
+    PeepholeRule {
+        rewriter: |mctx, def_use, a| {
+            use RvInstKind as Ik;
+
+            #[allow(clippy::wildcard_enum_match_arm)]
+            match a.kind(mctx) {
+                Ik::Li { rd, .. } => {
+                    let rd = *rd;
+
+                    if def_use.num_defs(rd) == 1 && def_use.num_uses(rd) == 0 && rd.is_vreg() {
+                        def_use.remove_def(rd, a);
+                        a.remove(mctx);
+
+                        true
+                    } else {
+                        false
+                    }
+                }
+                _ => false,
+            }
+        },
+    }
+}
+
 const fn remove_identity_move() -> Peephole1<RvInst> {
     PeepholeRule {
         rewriter: |mctx, def_use, a| {
@@ -493,6 +518,7 @@ pub fn run_peephole(mctx: &mut MContext<RvInst>, config: &LowerConfig) -> bool {
     let mut runner1 = PeepholeRunner::new();
     let mut runner2 = PeepholeRunner::new();
 
+    runner1.add_rule(li_dce());
     runner1.add_rule(remove_identity_move());
     runner1.add_rule(remove_redundant_move());
 

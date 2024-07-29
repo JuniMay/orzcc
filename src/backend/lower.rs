@@ -85,19 +85,17 @@ pub enum MemLoc {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MValueKind {
-    /// The IR value is lowered to a register.
-    Reg(Reg),
-    /// The IR value is lowered to a memory location.
-    ///
-    /// Memory location must be pointer type.
     Mem(MemLoc),
-    /// The IR value is lowered into a immediate
-    Imm(i64),
-    /// The IR value is undefined.
+    /// Keep a register for all immediate values. Used for better codegen
+    /// quality.
+    ///
+    /// Another solution is codegen in postorder (like Cranelift), but due to
+    /// historical reasons, we use this solution.
+    Imm(Reg, i64),
+    Reg(Reg),
     Undef,
 }
 
-/// A lowered machine value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MValue {
     ty: ir::Ty,
@@ -125,10 +123,10 @@ impl MValue {
         }
     }
 
-    pub fn new_imm(ty: ir::Ty, imm: i64) -> Self {
+    pub fn new_imm(ty: ir::Ty, reg: impl Into<Reg>, imm: i64) -> Self {
         Self {
             ty,
-            kind: MValueKind::Imm(imm),
+            kind: MValueKind::Imm(reg.into(), imm),
         }
     }
 
@@ -652,7 +650,7 @@ where
                         offset: 0,
                     },
                     MValueKind::Mem(loc) => loc,
-                    MValueKind::Imm(_) => unreachable!(),
+                    MValueKind::Imm(..) => unreachable!(),
                     MValueKind::Undef => {
                         self.lowered
                             .insert(inst.result(self.ctx, 0), MValue::new_undef(ty));
@@ -671,7 +669,7 @@ where
                         offset: 0,
                     },
                     MValueKind::Mem(loc) => loc,
-                    MValueKind::Imm(_) => unreachable!(),
+                    MValueKind::Imm(..) => unreachable!(),
                     MValueKind::Undef => return,
                 };
 
@@ -845,7 +843,7 @@ where
 
             if let MValueKind::Reg(reg) = self.lowered[param].kind() {
                 match mval.kind() {
-                    MValueKind::Imm(_) => {
+                    MValueKind::Imm(..) => {
                         S::gen_move(self, reg, mval);
                     }
                     MValueKind::Mem(loc) => match loc {
@@ -911,7 +909,7 @@ where
                 let src_reg = match mval.kind() {
                     MValueKind::Reg(reg) => reg,
                     MValueKind::Mem(MemLoc::RegOffset { base, .. }) => base,
-                    MValueKind::Mem(_) | MValueKind::Imm(_) | MValueKind::Undef => unreachable!(),
+                    MValueKind::Mem(_) | MValueKind::Imm(..) | MValueKind::Undef => unreachable!(),
                 };
 
                 if let Some(out) = reg_outgoing.get_mut(&src_reg) {

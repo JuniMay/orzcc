@@ -26,6 +26,10 @@ impl IntConstant {
     }
 
     pub fn into_signext(self) -> Self {
+        if self.1 == 1 {
+            // do not signext a single bit, which is boolean
+            return self;
+        }
         let signed = self.0 as i64;
         let shamt = 64 - self.1;
         let value = (signed << shamt) >> shamt;
