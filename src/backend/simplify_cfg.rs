@@ -111,7 +111,7 @@ impl SimplifyCfg {
                             && !j_block.succs(mctx).contains(&block)
                             && !(block.next(mctx).is_some() && block.next(mctx).unwrap() == j_block)
                             && j_block.next(mctx).is_some() // j_block is not the ret block
-                            && j_block.size(mctx) < 100
+                            && j_block.size(mctx) < 10
                             && !visited.contains(&(block, j_block))
                             {
                                 if visited.len() > 100 {
