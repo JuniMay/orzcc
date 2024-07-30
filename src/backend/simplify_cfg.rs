@@ -108,7 +108,7 @@ impl SimplifyCfg {
                     if let Some(maybe_j) = block.tail(mctx) {
                         if let Some(j_block) = maybe_j.match_unconditional_branch(mctx) {
                             if j_block != block
-                            && !j_block.succs(mctx).contains(&block)
+                            // && !j_block.succs(mctx).contains(&block)
                             && !(block.next(mctx).is_some() && block.next(mctx).unwrap() == j_block)
                             && j_block.next(mctx).is_some() // j_block is not the ret block
                             && j_block.size(mctx) < 10
