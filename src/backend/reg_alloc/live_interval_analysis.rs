@@ -81,6 +81,19 @@ impl Interval {
 
     /// Get the number of ranges in the interval.
     pub fn range_count(&self) -> usize { self.ranges.len() }
+
+    /// Union two intervals.
+    pub fn union(&self, other: &Interval) -> Interval {
+        let mut new_interval = Interval::new();
+        for range in self.ranges.iter() {
+            new_interval.add_range(*range);
+        }
+        for range in other.ranges.iter() {
+            new_interval.add_range(*range);
+        }
+        new_interval.optimize();
+        new_interval
+    }
 }
 
 impl Display for Interval {
