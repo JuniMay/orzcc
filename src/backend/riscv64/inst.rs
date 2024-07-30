@@ -1482,6 +1482,18 @@ impl MInst for RvInst {
             panic!("not a branch");
         }
     }
+
+    fn match_move(self, mctx: &MContext<Self>) -> Option<(Reg, Reg)> {
+        match self.kind(mctx) {
+            RvInstKind::AluRRI {
+                op: AluOpRRI::Addi,
+                rd,
+                rs,
+                imm,
+            } if imm.as_i16() == 0 => Some((*rd, *rs)),
+            _ => None,
+        }
+    }
 }
 
 impl ArenaPtr for RvInst {
