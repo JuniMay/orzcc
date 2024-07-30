@@ -548,6 +548,8 @@ pub fn run_peephole_after_regalloc(mctx: &mut MContext<RvInst>, config: &LowerCo
 
     changed |= runner1.run(mctx, config);
     changed |= runner2.run(mctx, config);
+
+    // NOTE: remove redundant jump need to be run after tail duplication
     changed |= remove_redundant_jump(mctx);
 
     changed

@@ -25,6 +25,17 @@ pub struct RvInstData {
     parent: Option<MBlock<RvInst>>,
 }
 
+impl Clone for RvInstData {
+    fn clone(&self) -> Self {
+        Self {
+            kind: self.kind.clone(),
+            next: None,
+            prev: None,
+            parent: None,
+        }
+    }
+}
+
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
 pub struct RvInst(BaseArenaPtr<RvInstData>);
 
@@ -385,6 +396,7 @@ impl RvInst {
     }
 }
 
+#[derive(Clone)]
 pub enum RvInstKind {
     Li {
         rd: Reg,
@@ -629,6 +641,7 @@ impl<'a> fmt::Display for DisplayRvInst<'a> {
     }
 }
 
+#[derive(Copy, Clone)]
 pub enum BrOp {
     Beq,
     Bne,
@@ -651,6 +664,7 @@ impl fmt::Display for BrOp {
     }
 }
 
+#[derive(Copy, Clone)]
 pub enum AluOpRRR {
     // gc
     Add,
@@ -758,6 +772,7 @@ impl fmt::Display for AluOpRRR {
     }
 }
 
+#[derive(Copy, Clone)]
 pub enum AluOpRRI {
     Addi,
     Addiw,
@@ -802,6 +817,7 @@ impl fmt::Display for AluOpRRI {
     }
 }
 
+#[derive(Copy, Clone)]
 pub enum AluOpRR {
     // zbb
     Clz,
@@ -835,6 +851,7 @@ impl fmt::Display for AluOpRR {
     }
 }
 
+#[derive(Copy, Clone)]
 pub enum FpuOpRR {
     FsqrtS,
     FsqrtD,
@@ -905,6 +922,7 @@ impl fmt::Display for FpuOpRR {
     }
 }
 
+#[derive(Copy, Clone)]
 pub enum FpuOpRRR {
     FaddS,
     FaddD,
@@ -963,6 +981,7 @@ impl fmt::Display for FpuOpRRR {
     }
 }
 
+#[derive(Copy, Clone)]
 pub enum FpuOpRRRR {
     FmaddS,
     FmaddD,
@@ -989,6 +1008,7 @@ impl fmt::Display for FpuOpRRRR {
     }
 }
 
+#[derive(Copy, Clone)]
 pub enum LoadOp {
     Lb,
     Lh,
@@ -1017,6 +1037,7 @@ impl fmt::Display for LoadOp {
     }
 }
 
+#[derive(Copy, Clone)]
 pub enum StoreOp {
     Sb,
     Sh,
@@ -1039,6 +1060,7 @@ impl fmt::Display for StoreOp {
     }
 }
 
+#[derive(Copy, Clone)]
 pub enum Frm {
     Rne,
     Rtz,

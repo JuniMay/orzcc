@@ -1,5 +1,13 @@
+use rustc_hash::FxHashSet;
+
 use super::{inst::MInst, LowerConfig, MContext};
-use crate::collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr};
+use crate::{
+    collections::{
+        linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
+        storage::ArenaAlloc,
+    },
+    utils::cfg::CfgNode,
+};
 
 pub struct SimplifyCfg {}
 
@@ -72,5 +80,75 @@ impl SimplifyCfg {
         }
 
         changed
+    }
+
+    pub fn tail_duplication<I>(mctx: &mut MContext<I>, _config: &LowerConfig)
+    where
+        I: MInst,
+        I::T: Clone,
+    {
+        let mut visited = FxHashSet::default();
+
+        for _i in 0..10 {
+            let mut changed = false;
+
+            let funcs = mctx
+                .funcs
+                .iter_mut()
+                .map(|(_, func_data)| func_data.self_ptr())
+                .collect::<Vec<_>>();
+
+            for func in funcs {
+                if func.is_external(mctx) {
+                    continue;
+                }
+
+                let mut cursor = func.cursor();
+                while let Some(block) = cursor.next(mctx) {
+                    if let Some(maybe_j) = block.tail(mctx) {
+                        if let Some(j_block) = maybe_j.match_unconditional_branch(mctx) {
+                            if j_block != block
+                            && !j_block.succs(mctx).contains(&block)
+                            && !(block.next(mctx).is_some() && block.next(mctx).unwrap() == j_block)
+                            && j_block.next(mctx).is_some() // j_block is not the ret block
+                            && j_block.size(mctx) < 100
+                            && !visited.contains(&(block, j_block))
+                            {
+                                if visited.len() > 100 {
+                                    return;
+                                }
+
+                                visited.insert((block, j_block));
+                                println!(
+                                    "Tail duplication on block {:?}, merging {:?}",
+                                    block.label(mctx),
+                                    j_block.label(mctx)
+                                );
+                                // remove the tail jump
+                                maybe_j.remove(mctx);
+                                let mut insts_to_copy = Vec::new();
+                                // copy the block
+                                for inst in j_block.iter(mctx) {
+                                    insts_to_copy.push(inst);
+                                }
+                                let mut copied_insts = Vec::new();
+                                for inst in insts_to_copy {
+                                    copied_insts.push(mctx.alloc(inst.deref(mctx).clone()));
+                                }
+                                // insert the copied block
+                                for inst in copied_insts {
+                                    block.push_back(mctx, inst);
+                                }
+                                changed = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if !changed {
+                break;
+            }
+        }
     }
 }
