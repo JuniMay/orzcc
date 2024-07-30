@@ -234,6 +234,28 @@ impl Block {
         param.drop(ctx);
     }
 
+    /// Drop a parameter without removing its incomings.
+    ///
+    /// Used in aggressive DCE to remove dead block parameters.
+    pub fn drop_param_without_removing_args(self, ctx: &mut Context, idx: usize) {
+        let param = self.deref(ctx).params[idx];
+        if !param.users(ctx).is_empty() {
+            panic!("cannot remove block parameter because it is still in use");
+        }
+
+        self.deref_mut(ctx).params.remove(idx);
+
+        let params = self.params(ctx).to_vec();
+
+        for param in params.iter().skip(idx) {
+            if let ValueKind::BlockParam { idx, .. } = param.kind_mut(ctx) {
+                *idx -= 1;
+            } else {
+                unreachable!()
+            }
+        }
+    }
+
     /// Free the block from the context.
     ///
     /// This will also free all the parameters of the block.

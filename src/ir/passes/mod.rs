@@ -1,3 +1,4 @@
+pub mod adce;
 pub mod constant_phi;
 pub mod control_flow;
 pub mod fold;

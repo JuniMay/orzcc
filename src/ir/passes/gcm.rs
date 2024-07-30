@@ -261,9 +261,6 @@ impl LocalPassMut for Gcm {
             self.schedule_early(ctx, *inst, func);
         }
 
-        ctx.alloc_all_names();
-        eprintln!("{}", ctx.display(true));
-
         self.visited.clear();
         for inst in insts.iter().rev() {
             self.schedule_late(ctx, *inst);

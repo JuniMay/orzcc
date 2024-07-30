@@ -5,6 +5,7 @@ use orzcc::{
     backend::{riscv64, simplify_cfg::SimplifyCfg, LowerConfig},
     ir::{
         passes::{
+            adce::{Adce, ADCE},
             constant_phi::{ElimConstantPhi, ELIM_CONSTANT_PHI},
             control_flow::{
                 BlockReorder,
@@ -109,7 +110,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             pipe2.add_pass(CFG_SIMPLIFY);
             pipe2.add_pass(SIMPLE_DCE);
 
-            for i in 0..8 {
+            for i in 0..4 {
                 println!("Round {}", i);
 
                 let iter = passman.run_pipeline(&mut ir, &pipe0, 32, 8);
@@ -120,6 +121,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 let iter = passman.run_pipeline(&mut ir, &pipe2, 32, 8);
                 println!("pipeline 2 iterations: {}", iter);
+
+                passman.run_transform(ADCE, &mut ir, 1); // a little expensive, run once per round
+                passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
             }
 
             passman.run_transform(BLOCK_REORDER, &mut ir, 1);
@@ -167,6 +171,7 @@ fn register_passes(passman: &mut PassManager) {
 
     Mem2reg::register(passman);
     SimpleDce::register(passman);
+    Adce::register(passman);
     ConstantFolding::register(passman);
     InstCombine::register(passman);
     ElimConstantPhi::register(passman);

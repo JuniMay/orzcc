@@ -1104,6 +1104,9 @@ impl Inst {
         self.deref(ctx).operands[idx].inner()
     }
 
+    /// Get all the operands.
+    ///
+    /// Note that this does not include the block arguments.
     pub fn operands(self, ctx: &Context) -> Vec<Value> {
         self.deref(ctx)
             .operands
@@ -1162,6 +1165,29 @@ impl Inst {
             .successors
             .iter()
             .filter(move |s| s.block.inner() == block)
+    }
+
+    /// Remove all the arguments passed to a certain block parameter.
+    ///
+    /// Used in aggressive DCE to remove dead block parameters
+    pub fn remove_args_passing_to_param(self, ctx: &mut Context, param: Value) {
+        let mut args_to_drop = Vec::new();
+        for succ in self.deref_mut(ctx).successors.iter_mut() {
+            let mut new_args = FxHashMap::default();
+            for (p, arg) in succ.args.drain() {
+                if p != param {
+                    new_args.insert(p, arg);
+                } else {
+                    args_to_drop.push(arg);
+                }
+            }
+            succ.args = new_args;
+        }
+
+        for arg in args_to_drop {
+            // drop the use of the arguments
+            arg.drop(ctx);
+        }
     }
 
     pub fn replace_succ_with_args(
