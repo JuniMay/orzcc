@@ -2,6 +2,7 @@ use super::{scalar_evolution::LoopScevRecord, Lcssa, LoopSimplify, Scev, ScevAna
 use crate::{
     collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
     ir::{
+        debug::CommentPos,
         deep_clone::DeepCloneMap,
         passes::{control_flow::CfgCanonicalize, loops::InductionOp},
         passman::{
@@ -176,6 +177,10 @@ impl LoopUnroll {
         bound: i64,
         trip_count: usize,
     ) -> bool {
+        if trip_count == 0 {
+            return false;
+        }
+
         self.deep_clone_map.clear();
 
         let header = lp.header(&self.scev.loop_ctx);
@@ -232,6 +237,7 @@ impl LoopUnroll {
                 insertion_point = new_block;
 
                 if block == &header {
+                    // the header dominates all the loop bodies, so insert the loop param here
                     new_block.push_back(ctx, iconst);
 
                     // modify the jumps
@@ -264,7 +270,7 @@ impl LoopUnroll {
             loop_param += step;
         }
 
-        // one last header
+        // one last header, should jump outside the loop
         let new_header = Block::new(ctx);
         insertion_point.insert_after(ctx, new_header);
 
@@ -291,19 +297,9 @@ impl LoopUnroll {
             new_header.push_back(ctx, new_inst);
         }
 
-        // remove all instructions in the original loop body
-        let mut insts_to_remove = Vec::new();
-        for block in blocks.iter() {
-            for inst in block.iter(ctx) {
-                insts_to_remove.push(inst);
-            }
-        }
-
-        // FIXME: h_functional 18 prim
-        remove_all_insts(ctx, insts_to_remove, false);
-
+        // old loop body should be unreachable
         for block in blocks {
-            block.remove(ctx);
+            block.comment(ctx, CommentPos::Before, "should unreachable");
         }
 
         true

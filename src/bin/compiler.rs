@@ -26,7 +26,7 @@ use orzcc::{
             gvn::{GlobalValueNumbering, GVN},
             inline::{Inline, INLINE},
             instcombine::{InstCombine, INSTCOMBINE},
-            loops::{LoopUnroll, LOOP_UNROLL},
+            loops::{Lcssa, LoopSimplify, LoopUnroll, LOOP_UNROLL},
             mem2reg::{Mem2reg, MEM2REG},
             simple_dce::{SimpleDce, SIMPLE_DCE},
         },
@@ -111,7 +111,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let mut pipe2 = Pipeline::default();
 
-            pipe2.add_pass(LOOP_UNROLL); // FIXME
+            pipe2.add_pass(LOOP_UNROLL);
+            pipe2.add_pass(CONSTANT_FOLDING);
             pipe2.add_pass(CFG_SIMPLIFY);
             pipe2.add_pass(SIMPLE_DCE);
 
@@ -188,6 +189,9 @@ fn register_passes(passman: &mut PassManager) {
     GlobalDce::register(passman);
 
     LoopUnroll::register(passman);
+    LoopSimplify::register(passman);
+    Lcssa::register(passman);
+
     GlobalValueNumbering::register(passman);
     Gcm::register(passman);
 
