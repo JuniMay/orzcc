@@ -157,8 +157,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         lower_ctx.after_regalloc();
 
         if cmd.opt > 0 {
-            SimplifyCfg::tail_duplication(lower_ctx.mctx_mut(), &cmd.lower_cfg);
+            // SimplifyCfg::tail_duplication(lower_ctx.mctx_mut(), &cmd.lower_cfg);
             riscv64::run_peephole_after_regalloc(lower_ctx.mctx_mut(), &cmd.lower_cfg);
+            SimplifyCfg::ret_duplication(lower_ctx.mctx_mut(), &cmd.lower_cfg);
         }
 
         let mctx = lower_ctx.finish();

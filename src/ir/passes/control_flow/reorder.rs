@@ -1,5 +1,3 @@
-use std::collections::VecDeque;
-
 use super::CfgCanonicalize;
 use crate::{
     collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
@@ -9,11 +7,7 @@ use crate::{
         Context,
         Func,
     },
-    utils::{
-        cfg::{CfgInfo, CfgRegion},
-        dfs::DfsContext,
-        dominance::Dominance,
-    },
+    utils::dfs::DfsContext,
 };
 
 pub const BLOCK_REORDER: &str = "block-reorder";

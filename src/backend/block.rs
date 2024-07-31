@@ -52,6 +52,11 @@ where
         }
         size
     }
+
+    pub fn remove(self, arena: &mut MContext<I>) {
+        self.unlink(arena);
+        arena.free(self);
+    }
 }
 
 impl<I> Hash for MBlock<I> {
