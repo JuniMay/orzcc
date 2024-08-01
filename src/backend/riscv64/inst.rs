@@ -1513,6 +1513,13 @@ impl MInst for RvInst {
                 rs,
                 imm,
             } if imm.as_i16() == 0 => Some((*rd, *rs)),
+            RvInstKind::FpuRRR {
+                op: FpuOpRRR::FsgnjS,
+                rd,
+                rs1,
+                rs2,
+                ..
+            } if *rs1 == *rs2 => Some((*rd, *rs1)),
             _ => None,
         }
     }
