@@ -71,6 +71,10 @@ impl Default for InstCombine {
                 assoc_const(),      // aggressive
                 distributive_one(), // aggressive
                 distributive(),     // aggressive
+                div_one_elim(),
+                div_neg_one_elim(),
+                div_to_shl(),
+                mod_to_shl(),
             ],
         }
     }
@@ -271,7 +275,13 @@ const fn mul_to_shl() -> Rule {
                 let dst = inst.result(ctx, 0);
 
                 if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
-                    if let Ik::IConst(v) = rhs_inst.kind(ctx) {
+                    if let Ik::IConst(mut v) = rhs_inst.kind(ctx) {
+                        let is_v_neg = if v.as_signed() < 0 {
+                            v = IntConstant::from(-v.as_signed());
+                            true
+                        } else {
+                            false
+                        };
                         if v.is_power_of_two() {
                             let shamt =
                                 IntConstant::from(v.trailing_zeros()).resize(bitwidth as u8);
@@ -280,8 +290,23 @@ const fn mul_to_shl() -> Rule {
                                 Inst::ibinary(ctx, IBinaryOp::Shl, lhs, i_shamt.result(ctx, 0));
                             inst.insert_after(ctx, i_shamt);
                             i_shamt.insert_after(ctx, i_shl);
+                            let dst_new = if is_v_neg {
+                                let i_zero = Inst::iconst(ctx, 0, dst.ty(ctx));
+                                let i_neg = Inst::ibinary(
+                                    ctx,
+                                    IBinaryOp::Sub,
+                                    i_zero.result(ctx, 0),
+                                    i_shl.result(ctx, 0),
+                                );
+                                i_shl.insert_after(ctx, i_zero);
+                                i_zero.insert_after(ctx, i_neg);
+                                i_neg.result(ctx, 0)
+                            } else {
+                                i_shl.result(ctx, 0)
+                            };
+
                             for user in dst.users(ctx) {
-                                user.replace(ctx, dst, i_shl.result(ctx, 0));
+                                user.replace(ctx, dst, dst_new);
                             }
                             // we cannot remove the instruction here because we are iterating
                             return true;
@@ -1348,6 +1373,211 @@ const fn distributive() -> Rule {
                                     return true;
                                 }
                             }
+                        }
+                    }
+                }
+            }
+            false
+        },
+    }
+}
+
+// Eliminate division by one
+const fn div_one_elim() -> Rule {
+    Rule {
+        rewriter: |ctx, inst| {
+            if let Ik::IBinary(IBinaryOp::SDiv) = inst.kind(ctx) {
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
+                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                    if let Ik::IConst(v) = rhs_inst.kind(ctx) {
+                        if v.is_one() {
+                            for user in dst.users(ctx) {
+                                user.replace(ctx, dst, lhs);
+                            }
+                            return true;
+                        }
+                    }
+                }
+            }
+            false
+        },
+    }
+}
+
+// Eliminate division by negative one
+const fn div_neg_one_elim() -> Rule {
+    Rule {
+        rewriter: |ctx, inst| {
+            if let Ik::IBinary(IBinaryOp::SDiv) = inst.kind(ctx) {
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
+                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                    if let Ik::IConst(v) = rhs_inst.kind(ctx) {
+                        if v.as_signed() == -1 {
+                            let zero = Inst::iconst(ctx, 0, dst.ty(ctx));
+                            let neg = Inst::ibinary(ctx, IBinaryOp::Sub, zero.result(ctx, 0), lhs);
+                            inst.insert_after(ctx, zero);
+                            zero.insert_after(ctx, neg);
+                            for user in dst.users(ctx) {
+                                user.replace(ctx, dst, neg.result(ctx, 0));
+                            }
+                            return true;
+                        }
+                    }
+                }
+            }
+            false
+        },
+    }
+}
+
+/// Replace division with shift (and add).
+const fn div_to_shl() -> Rule {
+    Rule {
+        rewriter: |ctx, inst| {
+            if let Ik::IBinary(IBinaryOp::SDiv) = inst.kind(ctx) {
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
+                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                    if let Ik::IConst(mut v) = rhs_inst.kind(ctx) {
+                        let is_v_neg = if v.as_signed() < 0 {
+                            v = IntConstant::from(-v.as_signed());
+                            true
+                        } else {
+                            false
+                        };
+                        if v.is_power_of_two() {
+                            let k = v.trailing_zeros();
+                            if k == 0 {
+                                return false;
+                            }
+                            let bitwidth = lhs.ty(ctx).bitwidth(ctx) as u8;
+                            let shamt_ks1 = IntConstant::from(k - 1);
+                            let shamt_wsk = IntConstant::from(bitwidth as u32 - k);
+                            let shamt_k: IntConstant = IntConstant::from(k);
+
+                            let temp0 = Inst::iconst(ctx, shamt_ks1, lhs.ty(ctx));
+                            let temp1 =
+                                Inst::ibinary(ctx, IBinaryOp::AShr, lhs, temp0.result(ctx, 0));
+                            let temp2 = Inst::iconst(ctx, shamt_wsk, lhs.ty(ctx));
+                            let temp3 = Inst::ibinary(
+                                ctx,
+                                IBinaryOp::LShr,
+                                temp1.result(ctx, 0),
+                                temp2.result(ctx, 0),
+                            );
+                            let temp4 =
+                                Inst::ibinary(ctx, IBinaryOp::Add, lhs, temp3.result(ctx, 0));
+                            let temp5 = Inst::iconst(ctx, shamt_k, dst.ty(ctx));
+                            let final_inst = Inst::ibinary(
+                                ctx,
+                                IBinaryOp::AShr,
+                                temp4.result(ctx, 0),
+                                temp5.result(ctx, 0),
+                            );
+
+                            inst.insert_after(ctx, temp0);
+                            temp0.insert_after(ctx, temp1);
+                            temp1.insert_after(ctx, temp4);
+                            temp4.insert_after(ctx, temp5);
+                            temp5.insert_after(ctx, final_inst);
+                            let dst_new = if is_v_neg {
+                                let i_zero = Inst::iconst(ctx, 0, dst.ty(ctx));
+                                let i_neg = Inst::ibinary(
+                                    ctx,
+                                    IBinaryOp::Sub,
+                                    i_zero.result(ctx, 0),
+                                    final_inst.result(ctx, 0),
+                                );
+                                final_inst.insert_after(ctx, i_zero);
+                                i_zero.insert_after(ctx, i_neg);
+                                i_neg.result(ctx, 0)
+                            } else {
+                                final_inst.result(ctx, 0)
+                            };
+
+                            for user in dst.users(ctx) {
+                                user.replace(ctx, dst, dst_new);
+                            }
+                            return true;
+                        }
+                    }
+                }
+            }
+            false
+        },
+    }
+}
+
+/// Replace modulo with shift (and sub).
+const fn mod_to_shl() -> Rule {
+    Rule {
+        rewriter: |ctx, inst| {
+            if let Ik::IBinary(IBinaryOp::SRem) = inst.kind(ctx) {
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
+                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                    if let Ik::IConst(mut v) = rhs_inst.kind(ctx) {
+                        if v.as_signed() < 0 {
+                            v = IntConstant::from(-v.as_signed())
+                        }
+                        if v.is_power_of_two() {
+                            let k = v.trailing_zeros();
+                            if k == 0 {
+                                return false;
+                            }
+                            let bitwidth = lhs.ty(ctx).bitwidth(ctx) as u8;
+                            let shamt_wsk = IntConstant::from(bitwidth as u32 - k);
+                            let andwith = IntConstant::from(v.as_signed() as u32 - 1);
+
+                            let tmp0 =
+                                Inst::iconst(ctx, IntConstant::from(bitwidth - 1), lhs.ty(ctx));
+                            let tmp1 =
+                                Inst::ibinary(ctx, IBinaryOp::AShr, lhs, tmp0.result(ctx, 0));
+                            let tmp2 = Inst::iconst(ctx, shamt_wsk, dst.ty(ctx));
+                            let tmp3 = Inst::ibinary(
+                                ctx,
+                                IBinaryOp::LShr,
+                                tmp1.result(ctx, 0),
+                                tmp2.result(ctx, 0),
+                            );
+                            let tmp4 = Inst::ibinary(ctx, IBinaryOp::Add, lhs, tmp3.result(ctx, 0));
+                            let tmp5 = Inst::iconst(ctx, andwith, dst.ty(ctx));
+                            let tmp6 = Inst::ibinary(
+                                ctx,
+                                IBinaryOp::And,
+                                tmp4.result(ctx, 0),
+                                tmp5.result(ctx, 0),
+                            );
+                            let final_inst = Inst::ibinary(
+                                ctx,
+                                IBinaryOp::Sub,
+                                tmp6.result(ctx, 0),
+                                tmp3.result(ctx, 0),
+                            );
+
+                            inst.insert_after(ctx, tmp0);
+                            tmp0.insert_after(ctx, tmp1);
+                            tmp1.insert_after(ctx, tmp2);
+                            tmp2.insert_after(ctx, tmp3);
+                            tmp3.insert_after(ctx, tmp4);
+                            tmp4.insert_after(ctx, tmp5);
+                            tmp5.insert_after(ctx, tmp6);
+                            tmp6.insert_after(ctx, final_inst);
+
+                            for user in dst.users(ctx) {
+                                user.replace(ctx, dst, final_inst.result(ctx, 0));
+                            }
+                            return true;
                         }
                     }
                 }
