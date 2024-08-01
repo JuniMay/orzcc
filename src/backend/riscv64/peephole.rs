@@ -1,3 +1,5 @@
+use rustc_hash::{FxHashMap, FxHashSet};
+
 use super::inst::{RvInst, RvInstKind};
 use crate::{
     backend::{
@@ -489,7 +491,7 @@ fn remove_redundant_jump(mctx: &mut MContext<RvInst>) -> bool {
                         let mut can_remove = true;
                         let mut next = block.next(mctx);
                         while let Some(block) = next {
-                            if block.head(mctx).is_none() {
+                            if block.size(mctx) == 0 {
                                 // the block is empty, continue to search.
                                 next = block.next(mctx);
                             } else if block == *succ {
@@ -508,6 +510,101 @@ fn remove_redundant_jump(mctx: &mut MContext<RvInst>) -> bool {
                     }
                 }
             }
+        }
+    }
+
+    changed
+}
+
+/// Need-ssa: False
+/// Need-before-regalloc: False
+/// Need-canonicalized-form: False
+/// Need-unique-terminator: False
+/// This pass can work on any location.
+pub fn remove_redundant_labels(mctx: &mut MContext<RvInst>) -> bool {
+    let mut changed = false;
+
+    loop {
+        let mut local_changed = false;
+
+        let funcs = mctx
+            .funcs
+            .iter_mut()
+            .map(|(_, func_data)| func_data.self_ptr())
+            .collect::<Vec<_>>();
+
+        for func in funcs {
+            if func.is_external(mctx) {
+                continue;
+            }
+
+            let mut label_usage = FxHashMap::default();
+
+            for block in func.iter(mctx) {
+                for inst in block.iter(mctx) {
+                    match inst.kind(mctx) {
+                        RvInstKind::J { block } => {
+                            label_usage
+                                .entry(block.label(mctx).clone())
+                                .or_insert_with(FxHashSet::default)
+                                .insert(inst);
+                        }
+                        RvInstKind::Br { block, .. } => {
+                            label_usage
+                                .entry(block.label(mctx).clone())
+                                .or_insert_with(FxHashSet::default)
+                                .insert(inst);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+
+            let mut cursor = func.cursor();
+            while let Some(block) = cursor.next(mctx) {
+                // rule 1: if the block's label is not used, merge it with the previous block
+                if !label_usage.contains_key(block.label(mctx)) {
+                    if let Some(prev) = block.prev(mctx) {
+                        // merge block with prev
+                        let mut curr_inst = block.head(mctx);
+                        while let Some(inst) = curr_inst {
+                            curr_inst = inst.next(mctx);
+                            inst.unlink(mctx);
+                            prev.push_back(mctx, inst);
+                        }
+                        cursor.next(mctx);
+                        block.remove(mctx);
+                        local_changed = true;
+                    }
+                }
+                // rule 2: if the block is empty, remove it, then retarget all jumps to it to the
+                // next block
+                else if block.size(mctx) == 0 && block.next(mctx).is_some() {
+                    for inst in label_usage
+                        .remove(block.label(mctx))
+                        .unwrap_or(FxHashSet::default())
+                    {
+                        match inst.kind(mctx) {
+                            RvInstKind::J { .. } => {
+                                inst.redirect_branch(mctx, block.next(mctx).unwrap());
+                            }
+                            RvInstKind::Br { .. } => {
+                                inst.redirect_branch(mctx, block.next(mctx).unwrap());
+                            }
+                            _ => unreachable!(),
+                        }
+                    }
+                    cursor.next(mctx);
+                    block.remove(mctx);
+                    local_changed = true;
+                }
+            }
+        }
+
+        if !local_changed {
+            break;
+        } else {
+            changed = true;
         }
     }
 
@@ -548,6 +645,10 @@ pub fn run_peephole_after_regalloc(mctx: &mut MContext<RvInst>, config: &LowerCo
 
     changed |= runner1.run(mctx, config);
     changed |= runner2.run(mctx, config);
+
+    // NOTE: remove redundant jump need to be run after tail duplication
+    changed |= remove_redundant_jump(mctx);
+    changed |= remove_redundant_labels(mctx);
     changed |= remove_redundant_jump(mctx);
 
     changed
