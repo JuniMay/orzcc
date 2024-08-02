@@ -37,7 +37,7 @@ impl Lcssa {
 
         let exits = lp.get_exit_blocks(ctx, &self.loop_ctx);
 
-        println!("[ lcssa ] found {} unclosed values", unclosed.len());
+        // println!("[ lcssa ] found {} unclosed values", unclosed.len());
 
         // exit block -> block param mapping, for each unclosed value.
         let mut lcssa_params = FxHashMap::default();
@@ -60,8 +60,8 @@ impl Lcssa {
                 // create a new receiver parameter for the incoming unclosed value.
                 let param = exit_block.new_param(ctx, ty);
 
-                let name = Self::alloc_name_for_lcssa_param(ctx, value, param);
-                println!("[ lcssa ] created {} in an exit block", name);
+                let _name = Self::alloc_name_for_lcssa_param(ctx, value, param);
+                // println!("[ lcssa ] created {} in an exit block", name);
 
                 for pred_inst in exit_block.users(ctx) {
                     // add arguments for all predecessors that jumps to the exit block.
@@ -121,8 +121,8 @@ impl Lcssa {
             let ty = unclosed_value.ty(ctx);
             let param = user_block.new_param(ctx, ty);
 
-            let name = Self::alloc_name_for_lcssa_param(ctx, unclosed_value, param);
-            println!("[ lcssa ] created {} in a non-exit block", name);
+            let _name = Self::alloc_name_for_lcssa_param(ctx, unclosed_value, param);
+            // println!("[ lcssa ] created {} in a non-exit block", name);
 
             for pred_inst in user_block.users(ctx) {
                 let pred_block = pred_inst.container(ctx).unwrap();
