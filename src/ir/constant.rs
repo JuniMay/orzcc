@@ -161,64 +161,72 @@ impl FloatConstant {
         }
     }
 
-    pub fn inplace_add(&mut self, other: &Self) -> Self {
+    pub fn add(&mut self, other: &Self) -> Self {
         match (self, other) {
-            (FloatConstant::Float32(a), FloatConstant::Float32(b)) 
-                => { (f32::from_bits(*a) + f32::from_bits(*b)).into() },
-            (FloatConstant::Float64(a), FloatConstant::Float64(b)) 
-                => { (f64::from_bits(*a) + f64::from_bits(*b)).into() },
+            (FloatConstant::Float32(a), FloatConstant::Float32(b)) => {
+                (f32::from_bits(*a) + f32::from_bits(*b)).into()
+            }
+            (FloatConstant::Float64(a), FloatConstant::Float64(b)) => {
+                (f64::from_bits(*a) + f64::from_bits(*b)).into()
+            }
             _ => panic!("invalid float constant to add"),
         }
     }
 
-    pub fn inplace_sub(&mut self, other: &Self) -> Self {
+    pub fn sub(&mut self, other: &Self) -> Self {
         match (self, other) {
-            (FloatConstant::Float32(a), FloatConstant::Float32(b)) 
-                => { (f32::from_bits(*a) - f32::from_bits(*b)).into() },
-            (FloatConstant::Float64(a), FloatConstant::Float64(b)) 
-                => { (f64::from_bits(*a) - f64::from_bits(*b)).into() },
+            (FloatConstant::Float32(a), FloatConstant::Float32(b)) => {
+                (f32::from_bits(*a) - f32::from_bits(*b)).into()
+            }
+            (FloatConstant::Float64(a), FloatConstant::Float64(b)) => {
+                (f64::from_bits(*a) - f64::from_bits(*b)).into()
+            }
             _ => panic!("invalid float constant to subtract"),
         }
     }
 
-    pub fn inplace_mul(&mut self, other: &Self) -> Self {
+    pub fn mul(&mut self, other: &Self) -> Self {
         match (self, other) {
-            (FloatConstant::Float32(a), FloatConstant::Float32(b)) 
-                => { (f32::from_bits(*a) * f32::from_bits(*b)).into() },
-            (FloatConstant::Float64(a), FloatConstant::Float64(b)) 
-                => { (f64::from_bits(*a) * f64::from_bits(*b)).into() },
+            (FloatConstant::Float32(a), FloatConstant::Float32(b)) => {
+                (f32::from_bits(*a) * f32::from_bits(*b)).into()
+            }
+            (FloatConstant::Float64(a), FloatConstant::Float64(b)) => {
+                (f64::from_bits(*a) * f64::from_bits(*b)).into()
+            }
             _ => panic!("invalid float constant to multiply"),
         }
     }
 
-    pub fn inplace_div(&mut self, other: &Self) -> Self {
+    pub fn div(&mut self, other: &Self) -> Self {
         match (self, other) {
-            (FloatConstant::Float32(a), FloatConstant::Float32(b)) 
-                => { (f32::from_bits(*a) / f32::from_bits(*b)).into() },
-            (FloatConstant::Float64(a), FloatConstant::Float64(b)) 
-                => { (f64::from_bits(*a) / f64::from_bits(*b)).into() },
+            (FloatConstant::Float32(a), FloatConstant::Float32(b)) => {
+                (f32::from_bits(*a) / f32::from_bits(*b)).into()
+            }
+            (FloatConstant::Float64(a), FloatConstant::Float64(b)) => {
+                (f64::from_bits(*a) / f64::from_bits(*b)).into()
+            }
             _ => panic!("invalid float constant to divide"),
         }
     }
 
-    pub fn inplace_rem(&mut self, other: &Self) -> Self {
+    pub fn rem(&mut self, other: &Self) -> Self {
         match (self, other) {
-            (FloatConstant::Float32(a), FloatConstant::Float32(b)) 
-                => { f32::from_bits(*a).rem_euclid(f32::from_bits(*b)).into() },
-            (FloatConstant::Float64(a), FloatConstant::Float64(b)) 
-                => { f64::from_bits(*a).rem_euclid(f64::from_bits(*b)).into() },
+            (FloatConstant::Float32(a), FloatConstant::Float32(b)) => {
+                f32::from_bits(*a).rem_euclid(f32::from_bits(*b)).into()
+            }
+            (FloatConstant::Float64(a), FloatConstant::Float64(b)) => {
+                f64::from_bits(*a).rem_euclid(f64::from_bits(*b)).into()
+            }
             _ => panic!("invalid float constant to remainder"),
         }
     }
 
-    pub fn inplace_neg(&mut self) -> Self {
+    pub fn neg(&mut self) -> Self {
         match self {
             FloatConstant::Float32(a) => (-f32::from_bits(*a)).into(),
             FloatConstant::Float64(a) => (-f64::from_bits(*a)).into(),
         }
     }
-
-
 
     pub fn is_nan(&self) -> bool {
         match self {
@@ -229,20 +237,24 @@ impl FloatConstant {
 
     pub fn lt(&self, other: &Self) -> bool {
         match (self, other) {
-            (FloatConstant::Float32(a), FloatConstant::Float32(b)) 
-                => f32::from_bits(*a) < f32::from_bits(*b),
-            (FloatConstant::Float64(a), FloatConstant::Float64(b)) 
-                => f64::from_bits(*a) < f64::from_bits(*b),
+            (FloatConstant::Float32(a), FloatConstant::Float32(b)) => {
+                f32::from_bits(*a) < f32::from_bits(*b)
+            }
+            (FloatConstant::Float64(a), FloatConstant::Float64(b)) => {
+                f64::from_bits(*a) < f64::from_bits(*b)
+            }
             _ => panic!("invalid float constant to compare"),
         }
     }
 
     pub fn le(&self, other: &Self) -> bool {
         match (self, other) {
-            (FloatConstant::Float32(a), FloatConstant::Float32(b)) 
-                => f32::from_bits(*a) <= f32::from_bits(*b),
-            (FloatConstant::Float64(a), FloatConstant::Float64(b)) 
-                => f64::from_bits(*a) <= f64::from_bits(*b),
+            (FloatConstant::Float32(a), FloatConstant::Float32(b)) => {
+                f32::from_bits(*a) <= f32::from_bits(*b)
+            }
+            (FloatConstant::Float64(a), FloatConstant::Float64(b)) => {
+                f64::from_bits(*a) <= f64::from_bits(*b)
+            }
             _ => panic!("invalid float constant to compare"),
         }
     }

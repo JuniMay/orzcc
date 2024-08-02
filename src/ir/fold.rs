@@ -173,22 +173,27 @@ impl Inst {
 
                 assert_eq!(lhs.width(), lhs_width);
                 assert_eq!(rhs.width(), rhs_width);
-                
+
                 match op {
                     FBinaryOp::Add => {
-                        lhs.inplace_add(rhs);
+                        let result = lhs.add(rhs);
+                        Some(FoldedConstant::Float(result))
                     }
                     FBinaryOp::Sub => {
-                        lhs.inplace_sub(rhs);
+                        let result = lhs.sub(rhs);
+                        Some(FoldedConstant::Float(result))
                     }
                     FBinaryOp::Mul => {
-                        lhs.inplace_mul(rhs);
+                        let result = lhs.mul(rhs);
+                        Some(FoldedConstant::Float(result))
                     }
                     FBinaryOp::Div => {
-                        lhs.inplace_div(rhs);
+                        let result = lhs.div(rhs);
+                        Some(FoldedConstant::Float(result))
                     }
                     FBinaryOp::Rem => {
-                        lhs.inplace_rem(rhs);
+                        let result = lhs.rem(rhs);
+                        Some(FoldedConstant::Float(result))
                     }
                     FBinaryOp::Cmp(cond) => {
                         let result = match cond {
@@ -202,12 +207,10 @@ impl Inst {
                             FCmpCond::ULe => lhs.is_nan() || rhs.is_nan() || lhs.le(rhs),
                         };
 
-                        lhs = FloatConstant::from(if result { 1.0 } else { 0.0 });
+                        Some(FoldedConstant::Integer(ApInt::from(result)))
                     }
                 }
-
-                Some(FoldedConstant::Float(lhs))
-            },
+            }
             InstKind::IUnary(op) => {
                 let val = self.operand(ctx, 0);
 
@@ -224,7 +227,7 @@ impl Inst {
                 }
 
                 Some(FoldedConstant::Integer(val))
-            },
+            }
             InstKind::FUnary(op) => {
                 let val = self.operand(ctx, 0);
 
@@ -236,22 +239,32 @@ impl Inst {
 
                 match op {
                     FUnaryOp::Neg => {
-                        val.inplace_neg();
+                        val = val.neg();
                     }
                 }
 
                 Some(FoldedConstant::Float(val))
-            },
+            }
             InstKind::Cast(op) => {
                 let val = self.operand(ctx, 0);
 
                 let width = val.ty(ctx).bitwidth(ctx).unwrap();
 
-                match op { // fixme: 这几个CastOp并不会被折叠，如果折叠了则会报错，届时请把仇科文找来让他自裁（）
-                    CastOp::IntToPtr
-                    | CastOp::PtrToInt
-                    | CastOp::Bitcast => {panic!("FOLD: CastInst can be folded but not written yet. Please check here and contact Kevin Chou to do it.")}
-                    CastOp::Trunc | CastOp::FpTrunc | CastOp::ZExt | CastOp::SExt | CastOp::FpToUi | CastOp::FpToSi | CastOp::UiToFp | CastOp::SiToFp | CastOp::FpExt => {}
+                match op {
+                    // fixme: 这几个CastOp并不会被折叠，如果折叠了则会报错，
+                    // 届时请把仇科文找来让他自裁（）
+                    CastOp::IntToPtr | CastOp::PtrToInt | CastOp::Bitcast => {
+                        panic!("FOLD: CastInst can be folded but not written yet. Please check here and contact Kevin Chou to do it.")
+                    }
+                    CastOp::Trunc
+                    | CastOp::FpTrunc
+                    | CastOp::ZExt
+                    | CastOp::SExt
+                    | CastOp::FpToUi
+                    | CastOp::FpToSi
+                    | CastOp::UiToFp
+                    | CastOp::SiToFp
+                    | CastOp::FpExt => {}
                 }
 
                 // 由于Cast的操作数类型不确定，这里需要按照其类型进行分类处理。
@@ -262,62 +275,66 @@ impl Inst {
                         assert_eq!(val.width(), width);
                         match op {
                             CastOp::Trunc => {
-                                let target_width = self.result(ctx, 0).ty(ctx).bitwidth(ctx).unwrap();
+                                let target_width =
+                                    self.result(ctx, 0).ty(ctx).bitwidth(ctx).unwrap();
                                 Some(FoldedConstant::Integer(mut_int_val.truncate(target_width)))
                             }
                             CastOp::ZExt => {
-                                let target_width = self.result(ctx, 0).ty(ctx).bitwidth(ctx).unwrap();
+                                let target_width =
+                                    self.result(ctx, 0).ty(ctx).bitwidth(ctx).unwrap();
                                 mut_int_val.zeroext(target_width);
                                 Some(FoldedConstant::Integer(mut_int_val.clone()))
                             }
                             CastOp::SExt => {
-                                let target_width = self.result(ctx, 0).ty(ctx).bitwidth(ctx).unwrap();
+                                let target_width =
+                                    self.result(ctx, 0).ty(ctx).bitwidth(ctx).unwrap();
                                 mut_int_val.signext(target_width);
                                 Some(FoldedConstant::Integer(mut_int_val.clone()))
                             }
-                            CastOp::UiToFp =>{ 
-                                // fixme: 在38_light2d中，存在cast int 100000006 to float 100000010的情况。
+                            CastOp::UiToFp => {
+                                // fixme: 在38_light2d中，存在cast int 100000006 to float
+                                // 100000010的情况。
                                 let target_ty = self.result(ctx, 0).ty(ctx);
                                 let u64_val: u64 = mut_int_val.into();
                                 let float_val = if target_ty.is_float32(ctx) {
                                     FloatConstant::from(u64_val as f32)
                                 } else if target_ty.is_float64(ctx) {
                                     FloatConstant::from(u64_val as f64)
-                                } else { return None; };
+                                } else {
+                                    return None;
+                                };
                                 Some(FoldedConstant::Float(float_val))
                             }
                             CastOp::SiToFp => {
                                 let target_ty = self.result(ctx, 0).ty(ctx);
                                 let u64_val: u64 = mut_int_val.into();
-                                let i64_val: i64 = (u64_val as i64) * if int_val.highest_bit() { -1 } else { 1 };
+                                let i64_val: i64 =
+                                    (u64_val as i64) * if int_val.highest_bit() { -1 } else { 1 };
                                 let float_val = if target_ty.is_float32(ctx) {
                                     FloatConstant::from(i64_val as f32)
                                 } else if target_ty.is_float64(ctx) {
                                     FloatConstant::from(i64_val as f64)
-                                } else { return None; };
+                                } else {
+                                    return None;
+                                };
                                 Some(FoldedConstant::Float(float_val))
                             }
-                            CastOp::FpTrunc 
-                            | CastOp::FpToUi 
-                            | CastOp::FpToSi 
-                            | CastOp::Bitcast 
+                            CastOp::FpTrunc
+                            | CastOp::FpToUi
+                            | CastOp::FpToSi
+                            | CastOp::Bitcast
                             | CastOp::FpExt
                             | CastOp::PtrToInt
-                            | CastOp::IntToPtr  => None,
+                            | CastOp::IntToPtr => None,
                         }
                     }
                     FoldedConstant::Float(float_val) => {
                         let val = *fold_ctx.lookup(val)?.unwrap_float();
                         assert_eq!(val.width(), width);
                         match op {
-                            CastOp::FpTrunc => {
-                                Some(FoldedConstant::Float(float_val.truncate()))
-                            }
-                            CastOp::FpExt => {
-                                Some(FoldedConstant::Float(float_val.promote()))
-                            }
-                            CastOp::FpToUi 
-                            | CastOp::FpToSi => {
+                            CastOp::FpTrunc => Some(FoldedConstant::Float(float_val.truncate())),
+                            CastOp::FpExt => Some(FoldedConstant::Float(float_val.promote())),
+                            CastOp::FpToUi | CastOp::FpToSi => {
                                 let u64_val: u64 = match float_val {
                                     FloatConstant::Float32(val) => (*val).into(),
                                     FloatConstant::Float64(val) => *val,
@@ -325,19 +342,19 @@ impl Inst {
                                 let int_val = ApInt::from(u64_val);
                                 Some(FoldedConstant::Integer(int_val))
                             }
-                            CastOp::Trunc 
-                            | CastOp::ZExt 
-                            | CastOp::SExt 
-                            | CastOp::UiToFp 
-                            | CastOp::SiToFp 
-                            | CastOp::Bitcast 
-                            | CastOp::PtrToInt 
+                            CastOp::Trunc
+                            | CastOp::ZExt
+                            | CastOp::SExt
+                            | CastOp::UiToFp
+                            | CastOp::SiToFp
+                            | CastOp::Bitcast
+                            | CastOp::PtrToInt
                             | CastOp::IntToPtr => None,
                         }
                     }
                     _ => None,
                 }
-            },
+            }
             InstKind::StackSlot(_)
             | InstKind::Load
             | InstKind::Store
