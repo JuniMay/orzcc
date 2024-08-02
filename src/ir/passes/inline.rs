@@ -99,19 +99,19 @@ impl Inline {
         }
 
         // do not inline recursive calls
-        for callee_block in callee.iter(ctx) {
-            for calee_inst in callee_block.iter(ctx) {
-                if let InstKind::Call(calee_sym) = calee_inst.kind(ctx) {
-                    if let SymbolKind::FuncDef(callee_callee) =
-                        ctx.lookup_symbol(calee_sym).unwrap()
-                    {
-                        if *callee_callee == callee {
-                            return false;
-                        }
-                    }
-                }
-            }
-        }
+        // for callee_block in callee.iter(ctx) {
+        //     for calee_inst in callee_block.iter(ctx) {
+        //         if let InstKind::Call(calee_sym) = calee_inst.kind(ctx) {
+        //             if let SymbolKind::FuncDef(callee_callee) =
+        //                 ctx.lookup_symbol(calee_sym).unwrap()
+        //             {
+        //                 if *callee_callee == callee {
+        //                     return false;
+        //                 }
+        //             }
+        //         }
+        //     }
+        // }
 
         let results = inst.results(ctx).to_vec();
 
