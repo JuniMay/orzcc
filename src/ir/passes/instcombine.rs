@@ -25,15 +25,20 @@
 // TODO: Find a way to test these rules one by one.
 
 use crate::{
-    collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
+    collections::{
+        apint::ApInt,
+        linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
+    },
     ir::{
         passman::{GlobalPassMut, LocalPassMut, PassResult, TransformPass},
+        CastOp,
         Context,
         Func,
         IBinaryOp,
         Inst,
         InstKind as Ik,
         IntConstant,
+        Ty,
         ValueKind,
     },
     utils::def_use::{Usable, User},
@@ -74,7 +79,8 @@ impl Default for InstCombine {
                 div_one_elim(),
                 div_neg_one_elim(),
                 div_to_shl(),
-                mod_to_shl(),
+                rem_to_shl(),
+                div_rem_to_mul(),
             ],
         }
     }
@@ -1516,8 +1522,11 @@ const fn div_to_shl() -> Rule {
     }
 }
 
+// todo!("模和除以1（-1）的优化似乎不能作为2的幂次进行优化，
+// 似乎32位的数字不能移位32位（会报错CE），看起来得单独写一下这个优化。");
+
 /// Replace modulo with shift (and sub).
-const fn mod_to_shl() -> Rule {
+const fn rem_to_shl() -> Rule {
     Rule {
         rewriter: |ctx, inst| {
             if let Ik::IBinary(IBinaryOp::SRem) = inst.kind(ctx) {
@@ -1585,4 +1594,130 @@ const fn mod_to_shl() -> Rule {
             false
         },
     }
+}
+
+const fn div_rem_to_mul() -> Rule {
+    Rule {
+        rewriter: |ctx, inst| {
+            if let Ik::IBinary(op) = inst.kind(ctx) {
+                let is_div = matches!(op, IBinaryOp::SDiv);
+                let is_rem = matches!(op, IBinaryOp::SRem);
+                if !is_div && !is_rem {
+                    return false;
+                }
+
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
+                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                    if let Ik::IConst(mut v) = rhs_inst.kind(ctx) {
+                        let is_v_neg = if v.as_signed() < 0 {
+                            v = IntConstant::from(-v.as_signed());
+                            true
+                        } else {
+                            false
+                        };
+                        if !v.is_power_of_two() {
+                            let bitwidth = lhs.ty(ctx).bitwidth(ctx);
+                            if bitwidth != 32 {
+                                return false;
+                            }
+                            // TODO:
+                            // (magi, disp) = magic(rhs);
+                            // bitwidth = 32
+                            //
+                            // // mulh v1= lhs, magi
+                            // let v2 = i64 (Ty::int(64))
+                            //
+                            // srai v2= v1, (disp - bitwidth)
+                            // srli v3= lhs, (bitwidth - 1)
+                            // add ans= v2, v3
+                            //
+                            let int64 = Ty::int(ctx, 64);
+                            let (magi, disp) = magic(bitwidth as u64, v.as_signed() as u64);
+
+                            let temp0 = Inst::cast(ctx, CastOp::SExt, lhs, int64);
+                            let temp1 = Inst::iconst(ctx, IntConstant::from(magi), int64);
+                            let temp2 = Inst::ibinary(
+                                ctx,
+                                IBinaryOp::Mul,
+                                temp0.result(ctx, 0),
+                                temp1.result(ctx, 0),
+                            );
+                            let temp3 = Inst::iconst(ctx, IntConstant::from(disp), int64);
+                            let temp4 = Inst::ibinary(
+                                ctx,
+                                IBinaryOp::AShr,
+                                temp2.result(ctx, 0),
+                                temp3.result(ctx, 0),
+                            );
+                            let temp5 =
+                                Inst::cast(ctx, CastOp::Trunc, temp4.result(ctx, 0), lhs.ty(ctx));
+                            let temp6 = Inst::iconst(
+                                ctx,
+                                IntConstant::from(bitwidth as u64 - 1),
+                                lhs.ty(ctx),
+                            );
+                            let temp7 =
+                                Inst::ibinary(ctx, IBinaryOp::LShr, lhs, temp6.result(ctx, 0));
+                            let final_inst = Inst::ibinary(
+                                ctx,
+                                IBinaryOp::Add,
+                                temp5.result(ctx, 0),
+                                temp7.result(ctx, 0),
+                            );
+
+                            inst.insert_after(ctx, temp0);
+                            temp0.insert_after(ctx, temp1);
+                            temp1.insert_after(ctx, temp2);
+                            temp2.insert_after(ctx, temp3);
+                            temp3.insert_after(ctx, temp4);
+                            temp4.insert_after(ctx, temp5);
+                            temp5.insert_after(ctx, temp6);
+                            temp6.insert_after(ctx, temp7);
+                            temp7.insert_after(ctx, final_inst);
+
+                            let dst_new = if is_v_neg {
+                                let i_zero = Inst::iconst(ctx, 0, dst.ty(ctx));
+                                let i_neg = Inst::ibinary(
+                                    ctx,
+                                    IBinaryOp::Sub,
+                                    i_zero.result(ctx, 0),
+                                    final_inst.result(ctx, 0),
+                                );
+                                final_inst.insert_after(ctx, i_zero);
+                                i_zero.insert_after(ctx, i_neg);
+                                i_neg.result(ctx, 0)
+                            } else {
+                                final_inst.result(ctx, 0)
+                            };
+
+                            for user in dst.users(ctx) {
+                                user.replace(ctx, dst, dst_new);
+                            }
+                            return true;
+                        }
+                    }
+                }
+            }
+            false
+        },
+    }
+}
+
+fn magic(w: u64, d: u64) -> (u64, u64) {
+    // w = bitwidth
+    // d = divisor
+    let nc = (1 << (w - 1)) - (1 << (w - 1)) % d - 1;
+    let mut p = w;
+    while 1 << p <= nc * (d - (1 << p) % d) {
+        p += 1;
+    }
+    let s = p - w;
+    let m = ((1 << p) + d - (1 << p) % d) / d;
+
+    // m = magi(c number)
+    // s = disp(lacement)
+    (m, s)
 }

@@ -1,5 +1,4 @@
 pub mod control_flow;
-pub mod div2mul;
 pub mod fold;
 pub mod gcm;
 pub mod global2local;
