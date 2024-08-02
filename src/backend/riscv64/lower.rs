@@ -437,7 +437,13 @@ impl LowerSpec for RvLowerSpec {
                     _ => unreachable!(),
                 }
             }
-            Ibop::Mul | Ibop::UDiv | Ibop::URem | Ibop::SDiv | Ibop::SRem => {
+            Ibop::Mul
+            | Ibop::UDiv
+            | Ibop::URem
+            | Ibop::SDiv
+            | Ibop::SRem
+            | Ibop::Max
+            | Ibop::Min => {
                 if op == Ibop::Mul && lower.mctx().arch().contains("zba") {
                     // x * 3 -> sh1add rd, x, x
                     // x * 5 -> sh2add rd, x, x
@@ -492,6 +498,8 @@ impl LowerSpec for RvLowerSpec {
                         Ibop::URem => AluOpRRR::Remuw,
                         Ibop::SDiv => AluOpRRR::Divw,
                         Ibop::SRem => AluOpRRR::Remw,
+                        Ibop::Max => AluOpRRR::Max,
+                        Ibop::Min => AluOpRRR::Min,
                         Ibop::Add
                         | Ibop::Sub
                         | Ibop::And
@@ -509,6 +517,8 @@ impl LowerSpec for RvLowerSpec {
                         Ibop::URem => AluOpRRR::Remu,
                         Ibop::SDiv => AluOpRRR::Div,
                         Ibop::SRem => AluOpRRR::Rem,
+                        Ibop::Max => AluOpRRR::Max,
+                        Ibop::Min => AluOpRRR::Min,
                         Ibop::Add
                         | Ibop::Sub
                         | Ibop::And
@@ -541,6 +551,8 @@ impl LowerSpec for RvLowerSpec {
                     | Ibop::Shl
                     | Ibop::LShr
                     | Ibop::AShr
+                    | Ibop::Max
+                    | Ibop::Min
                     | Ibop::Cmp(_) => unreachable!(),
                 };
                 let reg_op = match op {
@@ -557,6 +569,8 @@ impl LowerSpec for RvLowerSpec {
                     | Ibop::Shl
                     | Ibop::LShr
                     | Ibop::AShr
+                    | Ibop::Max
+                    | Ibop::Min
                     | Ibop::Cmp(_) => unreachable!(),
                 };
 
@@ -615,6 +629,8 @@ impl LowerSpec for RvLowerSpec {
                         | Ibop::And
                         | Ibop::Or
                         | Ibop::Xor
+                        | Ibop::Max
+                        | Ibop::Min
                         | Ibop::Cmp(_) => unreachable!(),
                     }
                 } else if bitwidth == 64 {
@@ -632,6 +648,8 @@ impl LowerSpec for RvLowerSpec {
                         | Ibop::And
                         | Ibop::Or
                         | Ibop::Xor
+                        | Ibop::Max
+                        | Ibop::Min
                         | Ibop::Cmp(_) => unreachable!(),
                     }
                 } else {
@@ -653,6 +671,8 @@ impl LowerSpec for RvLowerSpec {
                         | Ibop::And
                         | Ibop::Or
                         | Ibop::Xor
+                        | Ibop::Max
+                        | Ibop::Min
                         | Ibop::Cmp(_) => unreachable!(),
                     }
                 } else if bitwidth == 64 {
@@ -670,6 +690,8 @@ impl LowerSpec for RvLowerSpec {
                         | Ibop::And
                         | Ibop::Or
                         | Ibop::Xor
+                        | Ibop::Max
+                        | Ibop::Min
                         | Ibop::Cmp(_) => unreachable!(),
                     }
                 } else {

@@ -11,6 +11,7 @@ use orzcc::{
     ir::{
         passes::{
             adce::{Adce, ADCE},
+            branch2select::{Branch2Select, BRANCH2SELECT},
             constant_phi::{ElimConstantPhi, ELIM_CONSTANT_PHI},
             control_flow::{
                 BlockReorder,
@@ -101,6 +102,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             pipe0.add_pass(ELIM_CONSTANT_PHI);
             pipe0.add_pass(SIMPLE_DCE);
             pipe0.add_pass(CFG_SIMPLIFY);
+            pipe0.add_pass(BRANCH2SELECT);
+            pipe0.add_pass(CFG_SIMPLIFY);
 
             let mut pipe1 = Pipeline::default();
 
@@ -184,6 +187,7 @@ fn register_passes(passman: &mut PassManager) {
     ConstantFolding::register(passman);
     InstCombine::register(passman);
     ElimConstantPhi::register(passman);
+    Branch2Select::register(passman);
 
     Inline::register(passman);
 
