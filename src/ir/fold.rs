@@ -66,7 +66,7 @@ impl Inst {
         match self.kind(ctx) {
             InstKind::Undef => Some(FoldedConstant::Undef),
             InstKind::IConst(value) => {
-                let width = self.result(ctx, 0).ty(ctx).bitwidth(ctx).unwrap();
+                let width = self.result(ctx, 0).ty(ctx).bitwidth(ctx);
                 let apint = value.resize(width as u8).into_apint();
                 Some(FoldedConstant::Integer(apint))
             }
@@ -75,8 +75,8 @@ impl Inst {
                 let lhs = self.operand(ctx, 0);
                 let rhs = self.operand(ctx, 1);
 
-                let lhs_width = lhs.ty(ctx).bitwidth(ctx).unwrap();
-                let rhs_width = rhs.ty(ctx).bitwidth(ctx).unwrap();
+                let lhs_width = lhs.ty(ctx).bitwidth(ctx);
+                let rhs_width = rhs.ty(ctx).bitwidth(ctx);
 
                 // TODO: we really should verify the IR
 
@@ -155,6 +155,7 @@ impl Inst {
 
                         lhs = ApInt::from(result);
                     }
+                    IBinaryOp::Max | IBinaryOp::Min => return None,
                 }
 
                 Some(FoldedConstant::Integer(lhs))

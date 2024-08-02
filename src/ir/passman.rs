@@ -280,7 +280,7 @@ impl PassManager {
             }
             total_iter += 1;
 
-            if total_iter > max_iter {
+            if total_iter >= max_iter {
                 break;
             }
         }

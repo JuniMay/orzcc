@@ -152,6 +152,10 @@ pub enum IBinaryOp {
     LShr,
     /// Arithmetic shift right.
     AShr,
+    /// Min signed
+    Min,
+    /// Max signed
+    Max,
     /// Comparison.
     Cmp(ICmpCond),
 }
@@ -172,6 +176,8 @@ impl fmt::Display for IBinaryOp {
             Self::Shl => write!(f, "shl"),
             Self::LShr => write!(f, "lshr"),
             Self::AShr => write!(f, "ashr"),
+            Self::Min => write!(f, "min"),
+            Self::Max => write!(f, "max"),
             Self::Cmp(cond) => write!(f, "icmp.{}", cond),
         }
     }
@@ -450,7 +456,7 @@ pub enum InstKind {
     CallIndirect(Signature),
     /// Return instruction.
     Ret,
-    /// Get global symbol as local pinter.
+    /// Get global symbol as local pointer.
     ///
     /// This applies to function and global slot. The corresponding instruction
     /// in RISC-V is `LA`, i.e., load address (`LA` a pseudo instruction)
@@ -567,13 +573,42 @@ impl Inst {
     }
 
     /// Create a new iconst instruction.
+    ///
+    /// If the width of the constant does not match the width of the type,
+    /// [IntConstant::resize] will be called to resize the constant.
     pub fn iconst(ctx: &mut Context, constant: impl Into<IntConstant>, ty: Ty) -> Inst {
-        Self::new(ctx, InstKind::IConst(constant.into()), vec![ty], vec![])
+        let width = ty.bitwidth(ctx);
+        let constant: IntConstant = constant.into();
+        let constant = constant.resize(width as u8);
+        Self::new(
+            ctx,
+            // resize the constant to the width of the type
+            InstKind::IConst(constant),
+            vec![ty],
+            vec![],
+        )
     }
 
     /// Create a new fconst instruction for float32
+    ///
+    /// If the type is float64, and the constant is float32, the constant will
+    /// be promoted to float64.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the constant is a float64 and the type is float32.
     pub fn fconst(ctx: &mut Context, constant: impl Into<FloatConstant>, ty: Ty) -> Inst {
-        Self::new(ctx, InstKind::FConst(constant.into()), vec![ty], vec![])
+        let mut constant: FloatConstant = constant.into();
+
+        if ty.is_float32(ctx) {
+            if let FloatConstant::Float64(_) = constant {
+                panic!("fconst: expected f32, got f64");
+            }
+        } else if let FloatConstant::Float32(_) = constant {
+            constant = constant.promote();
+        }
+
+        Self::new(ctx, InstKind::FConst(constant), vec![ty], vec![])
     }
 
     /// Create a new stack slot instruction.
@@ -612,6 +647,8 @@ impl Inst {
             | Op::Xor
             | Op::Shl
             | Op::LShr
+            | Op::Max
+            | Op::Min
             | Op::AShr => lhs.ty(ctx),
             Op::Cmp(_) => Ty::int(ctx, 1),
         };
@@ -679,7 +716,7 @@ impl Inst {
                 if !val_ty.is_integer(ctx) || !ty.is_integer(ctx) {
                     panic!("trunc only supports integer-like types");
                 }
-                if val_ty.bitwidth(ctx).unwrap() <= ty.bitwidth(ctx).unwrap() {
+                if val_ty.bitwidth(ctx) <= ty.bitwidth(ctx) {
                     panic!("trunc only supports truncating to a smaller type");
                 }
             }
@@ -687,7 +724,7 @@ impl Inst {
                 if !val_ty.is_integer(ctx) || !ty.is_integer(ctx) {
                     panic!("zext only supports integer-like types");
                 }
-                if val_ty.bitwidth(ctx).unwrap() >= ty.bitwidth(ctx).unwrap() {
+                if val_ty.bitwidth(ctx) >= ty.bitwidth(ctx) {
                     panic!("zext only supports extending to a larger type");
                 }
             }
@@ -705,7 +742,7 @@ impl Inst {
                 if val_ty.is_ptr(ctx) || ty.is_ptr(ctx) {
                     panic!("bitcast does not support pointer types");
                 }
-                if val_ty.bitwidth(ctx).unwrap() != ty.bitwidth(ctx).unwrap() {
+                if val_ty.bitwidth(ctx) != ty.bitwidth(ctx) {
                     panic!("bitcast only supports types with the same size");
                 }
             }
@@ -713,7 +750,7 @@ impl Inst {
                 if !val_ty.is_float(ctx) || !ty.is_float(ctx) {
                     panic!("fpext only supports float-like types");
                 }
-                if val_ty.bitwidth(ctx).unwrap() >= ty.bitwidth(ctx).unwrap() {
+                if val_ty.bitwidth(ctx) >= ty.bitwidth(ctx) {
                     panic!("fpext only supports extending to a larger type");
                 }
             }
@@ -721,7 +758,7 @@ impl Inst {
                 if !val_ty.is_float(ctx) || !ty.is_float(ctx) {
                     panic!("fptrunc only supports float-like types");
                 }
-                if val_ty.bitwidth(ctx).unwrap() <= ty.bitwidth(ctx).unwrap() {
+                if val_ty.bitwidth(ctx) <= ty.bitwidth(ctx) {
                     panic!("fptrunc only supports truncating to a smaller type");
                 }
             }
@@ -1075,6 +1112,9 @@ impl Inst {
         self.deref(ctx).operands[idx].inner()
     }
 
+    /// Get all the operands.
+    ///
+    /// Note that this does not include the block arguments.
     pub fn operands(self, ctx: &Context) -> Vec<Value> {
         self.deref(ctx)
             .operands
@@ -1135,6 +1175,29 @@ impl Inst {
             .filter(move |s| s.block.inner() == block)
     }
 
+    /// Remove all the arguments passed to a certain block parameter.
+    ///
+    /// Used in aggressive DCE to remove dead block parameters
+    pub fn remove_args_passing_to_param(self, ctx: &mut Context, param: Value) {
+        let mut args_to_drop = Vec::new();
+        for succ in self.deref_mut(ctx).successors.iter_mut() {
+            let mut new_args = FxHashMap::default();
+            for (p, arg) in succ.args.drain() {
+                if p != param {
+                    new_args.insert(p, arg);
+                } else {
+                    args_to_drop.push(arg);
+                }
+            }
+            succ.args = new_args;
+        }
+
+        for arg in args_to_drop {
+            // drop the use of the arguments
+            arg.drop(ctx);
+        }
+    }
+
     pub fn replace_succ_with_args(
         self,
         ctx: &mut Context,
@@ -1182,6 +1245,35 @@ impl Inst {
         for _ in 0..num_blocks_to_replace {
             old.remove_user(ctx, self);
             new.add_user(ctx, self);
+        }
+    }
+
+    /// Replace all the arguments passed to the `param` with the `arg`.
+    pub fn replace_args(self, ctx: &mut Context, param: Value, arg: Value) {
+        let mut operands_to_drop = Vec::new();
+
+        let mut param_count = 0;
+        for succ in self.deref_mut(ctx).successors.iter_mut() {
+            if succ.args.contains_key(&param) {
+                param_count += 1;
+            }
+        }
+
+        let mut new_arg_opds = Vec::new();
+        for _ in 0..param_count {
+            new_arg_opds.push(Operand::new(ctx, arg, self));
+        }
+
+        for succ in self.deref_mut(ctx).successors.iter_mut() {
+            let old = succ
+                .args
+                .insert(param, new_arg_opds.pop().unwrap())
+                .unwrap();
+            operands_to_drop.push(old);
+        }
+
+        for opd in operands_to_drop {
+            opd.drop(ctx);
         }
     }
 

@@ -58,6 +58,10 @@ pub trait MInst:
     /// Redirect the branch to new target.
     /// Panics if the instruction is not a branch.
     fn redirect_branch(self, mctx: &mut MContext<Self>, new_target: MBlock<Self>);
+
+    /// Return to_reg and from_reg for move instruction.
+    /// Otherwise return None
+    fn match_move(self, mctx: &MContext<Self>) -> Option<(Reg, Reg)>;
 }
 
 pub trait DisplayMInst<'a>: MInst {

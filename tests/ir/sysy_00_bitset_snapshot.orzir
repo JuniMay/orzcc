@@ -1,6 +1,6 @@
-slot @__GLOBAL_VAR_seed /* 0 */  : [i32; 3] = [0x9f, 0xbc, 0x30, 0x01, 0xd5, 0xe2, 0x30, 0x01, 0x07, 0xca, 0x9a, 0x3b]
-slot @__GLOBAL_VAR_a /* 2 */  : [i32; 10000] = zeroinit
-slot @__GLOBAL_VAR_staticvalue /* 1 */  : i32 = zeroinit
+slot @__GLOBAL_VAR_seed /* 0 */  : 12 = [0x9f, 0xbc, 0x30, 0x01, 0xd5, 0xe2, 0x30, 0x01, 0x07, 0xca, 0x9a, 0x3b]
+slot @__GLOBAL_VAR_a /* 2 */  : 40000 = zeroinit
+slot @__GLOBAL_VAR_staticvalue /* 1 */  : 4 = zeroinit
 decl @getarray(ptr) -> i32
 decl @_sysy_starttime(i32) -> void
 decl @getint() -> i32

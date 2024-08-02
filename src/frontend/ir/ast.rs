@@ -107,8 +107,8 @@ pub struct ParsingDecl {
 pub struct ParsingSlot {
     /// The name of the global slot.
     pub name: Symbol,
-    /// The type of the global slot.
-    pub ty: (Ty, Span),
+    /// The size of the global slot.
+    pub size: (usize, Span),
     /// The initial value of the global slot.
     pub init: Constant,
     /// The span of the global slot.
@@ -195,12 +195,14 @@ pub fn into_ir(ast: Vec<Item>, ctx: &mut Context, diag: &mut DiagnosticList) -> 
                 }
                 ctx.add_func_decl(name, sig)
             }
-            Item::Slot(ParsingSlot { name, ty, init, .. }) => {
+            Item::Slot(ParsingSlot {
+                name, size, init, ..
+            }) => {
                 if ctx.lookup_symbol(&name).is_some() {
                     errors.push(ConversionError::DuplicateValueName(name.source_span()));
                     continue;
                 }
-                let _slot = GlobalSlot::new(ctx, name, ty.0, init);
+                let _slot = GlobalSlot::new(ctx, name, size.0, init);
             }
         }
     }

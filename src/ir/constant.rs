@@ -26,6 +26,10 @@ impl IntConstant {
     }
 
     pub fn into_signext(self) -> Self {
+        if self.1 == 1 {
+            // do not signext a single bit, which is boolean
+            return self;
+        }
         let signed = self.0 as i64;
         let shamt = 64 - self.1;
         let value = (signed << shamt) >> shamt;
@@ -44,13 +48,15 @@ impl IntConstant {
 
     pub fn bits(&self) -> u64 { self.0 }
 
-    pub fn is_zero(&self) -> bool { self.0 == 0 }
+    pub fn is_zero(&self) -> bool { (self.0 & self.mask()) == 0 }
 
-    pub fn is_one(&self) -> bool { self.0 == 1 }
+    pub fn is_one(&self) -> bool { (self.0 & self.mask()) == 1 }
 
     pub fn is_power_of_two(&self) -> bool { self.0.is_power_of_two() }
 
     pub fn trailing_zeros(&self) -> u32 { self.0.trailing_zeros().min(self.1 as u32) }
+
+    pub fn as_signed(&self) -> i64 { self.into_signext().0 as i64 }
 }
 
 impl From<bool> for IntConstant {
@@ -372,6 +378,13 @@ impl Constant {
     pub fn source_span(&self) -> Span { self.1 }
 
     pub fn kind(&self) -> &ConstantKind { &self.0 }
+
+    pub fn get_bytes(&self) -> Option<&Vec<u8>> {
+        match self.kind() {
+            ConstantKind::Bytes(bytes) => Some(bytes),
+            ConstantKind::Undef | ConstantKind::Zeroinit => None,
+        }
+    }
 }
 
 impl From<bool> for Constant {

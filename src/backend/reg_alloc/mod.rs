@@ -12,3 +12,4 @@ pub mod block_defuse_analysis;
 pub mod graph_coloring_allocation;
 pub mod live_interval_analysis;
 pub mod liveness_analysis;
+pub mod reg_coalescing;

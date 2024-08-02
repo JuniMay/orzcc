@@ -4,6 +4,7 @@
 //! applicable to the IR and backend target. The goal is to provide a unified
 //! interface for the compiler to use, and make the infrastructure reusable.
 
+pub mod cdg;
 pub mod cfg;
 pub mod def_use;
 pub mod dfs;

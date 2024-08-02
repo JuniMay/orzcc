@@ -115,6 +115,38 @@ impl Loop<ir::Block> {
         None
     }
 
+    pub fn get_blocks(
+        self,
+        ctx: &ir::Context,
+        loop_ctx: &LoopContext<ir::Block>,
+    ) -> Vec<ir::Block> {
+        let header = self.header(loop_ctx);
+
+        let mut queue = VecDeque::new();
+        let mut visited = FxHashSet::default();
+
+        queue.push_back(header);
+
+        let mut blocks = Vec::default();
+
+        while let Some(block) = queue.pop_front() {
+            if !visited.insert(block) {
+                continue;
+            }
+
+            // visited set already removed the duplicate blocks, so we can just push it
+            blocks.push(block);
+
+            for succ in block.succs(ctx) {
+                if loop_ctx.is_in_loop(succ, self) {
+                    queue.push_back(succ);
+                }
+            }
+        }
+
+        blocks
+    }
+
     /// Get all the values that are defined in the loop but used outside the
     /// loop.
     pub fn get_unclosed_values(

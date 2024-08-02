@@ -25,6 +25,8 @@ where
     domtree: FxHashMap<N, Vec<N>>,
     /// The reverse postorder of the CFG.
     rpo: Vec<N>,
+    /// The dom level of each node.
+    levels: FxHashMap<N, usize>,
 }
 
 impl<N> Default for Dominance<N>
@@ -37,6 +39,7 @@ where
             frontiers: FxHashMap::default(),
             domtree: FxHashMap::default(),
             rpo: Vec::new(),
+            levels: FxHashMap::default(),
         }
     }
 }
@@ -70,6 +73,22 @@ where
     }
 
     pub fn rpo(&self) -> &[N] { &self.rpo }
+
+    pub fn level(&mut self, node: N) -> usize {
+        // lazily compute the levels
+        match self.levels.get(&node) {
+            Some(&level) => level,
+            None => {
+                let level = if let Some(idom) = self.idoms[&node] {
+                    self.level(idom) + 1
+                } else {
+                    0
+                };
+                self.levels.insert(node, level);
+                level
+            }
+        }
+    }
 
     fn intersect(
         n1: N,
@@ -191,6 +210,7 @@ where
             frontiers,
             domtree,
             rpo,
+            levels: FxHashMap::default(),
         }
     }
 }

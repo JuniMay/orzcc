@@ -14,12 +14,12 @@ mem2reg 的 Pass 位于 `src/ir/passes` 下。
 
 - [x] CFG Canonicalization
 - [x] mem2reg
-  - [ ] Block Argument Reduction `sysy/hidden_functional/29_long_line`
+  - [x] Block Argument Reduction `sysy/hidden_functional/29_long_line`
     - [x] Dead Argument Elimination
-    - [ ] Other Reduction
-- [ ] Dead Code Elimination (maybe aggressive DCE)
+    - [x] Other Reduction
+- [x] Dead Code Elimination (maybe aggressive DCE)
   - [x] Simple DCE
-  - [ ] Aggressive DCE
+  - [x] Aggressive DCE
 - [ ] Constant Folding & Propagation
   - [x] Integer
   - [ ] Floating Point
@@ -29,27 +29,30 @@ mem2reg 的 Pass 位于 `src/ir/passes` 下。
 - [x] Function Inlining
   - [x] Simple Inlining
   - [x] Recursive Inlining
-  - [ ] Mutually Recursive Inlining
+  - [x] ~~Mutually Recursive Inlining~~
 - [x] Global Value Numbering
   - [x] Simple GVN
   - [x] Load Elimination
     - [x] Simple Load Elimination
     - [ ] Load Elimination with Function Call
   - [ ] Store Elimination
-  - [ ] GVN with PRE
+  - [x] GVN with PRE (Done by GCM)
+  - [ ] Load PRE Elimination
   - [x] Pure Func Call Elimination
-- [ ] Global Code Motion
+- [x] Global Code Motion
   - [x] Loop Invariant Code Motion
   - [ ] Sink
-- [ ] Global2local
+- [x] Global2local
 - [ ] Strength Reduction
   - [x] Math Optimization (instcombine)
-  - [ ] Multiplication Optimization
-  - [ ] Division Optimization
+  - [x] Multiplication Optimization
+  - [x] Division Optimization
   - [ ] DivMod To MulShift
 - [ ] Loop Unrolling
+  - [x] Constant Unrolling
+  - [ ] Dynamic Unrolling
 - [x] Scalar Evolution Analysis
-- [ ] ~~Tail Call Optimization~~
+- [ ] Tail Call Optimization
 - [x] Alias Analysis (basicaa)
 - [ ] Function Analysis
   - [x] Pure Function
@@ -73,9 +76,11 @@ mem2reg 的 Pass 位于 `src/ir/passes` 下。
 - [ ] Register Allocation
   - [x] Better Block Argument Passing
   - [x] Tune the spill weight
-  - [ ] ~~RISC-V `ra` register for allocation.~~
+  - [ ] RISC-V `ra` register for allocation.
   - [ ] Constraint & Hint
-  - [ ] Coalescing & Splitting
+  - [x] Coalescing
+    - [ ] Further Coalescing
+  - [ ] Splitting
 - [ ] Scheduling
   - [ ] For dual-issue
   - [ ] For register pressure
@@ -83,4 +88,4 @@ mem2reg 的 Pass 位于 `src/ir/passes` 下。
   - [x] `shNadd`
   - [ ] `Rol`
   - [ ] `Mulh`
-  - [ ] remove redundant direct jump
+  - [x] remove redundant direct jump

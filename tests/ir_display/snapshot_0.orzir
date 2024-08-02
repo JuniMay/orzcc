@@ -1,9 +1,9 @@
 // Just a test function
 func @test /* 0 */ () -> void {
 ^bb0 /* 0 */ :
-    %v0 /* 2, uses: 4 */ = iconst 0x00000001i32 : i32
+    %v0 /* 2, uses: 4 */ = iconst 0x1i32 : i32
     %v1 /* 3, uses: 2 */ = fconst 0x40000000 : f32
-    %dummy_cond /* 4, uses: 1 */ = iconst 0x00000001i32 : i1
+    %dummy_cond /* 4, uses: 1 */ = iconst 0x1i1 : i1
     /* no result */ br %dummy_cond, ^bb1, ^bb2
 
 ^bb1 /* 1 */ :

@@ -8,16 +8,23 @@ use crate::collections::storage::{ArenaAlloc, ArenaDeref, ArenaPtr, UniqueArenaP
 pub enum TyData {
     /// A void type.
     Void,
-    /// An integer type.
+    /// 1-bit integer.
     ///
-    /// The width (in bits) of an integer can be any positive integer under
-    /// [u16::MAX].
-    Integer(u16),
+    /// This is special because it is used for boolean values.
+    I1,
+    /// A byte integer.
+    I8,
+    /// A 16-bit integer.
+    I16,
+    /// A 32-bit integer.
+    I32,
+    /// A 64-bit integer.
+    I64,
     /// An IEEE 754 single precision floating point number.
     Float32,
     /// An IEEE 754 double precision floating point number.
     Float64,
-    /// A pointer type.
+    /// An opaque pointer.
     Ptr,
     /// A SIMD type.
     Simd {
@@ -27,13 +34,6 @@ pub enum TyData {
         ///
         /// The number of elements in a SIMD type is usually a power of 2.
         exp: u16,
-    },
-    /// An array type.
-    Array {
-        /// The element type.
-        elem_ty: Ty,
-        /// The number of elements in the array.
-        len: usize,
     },
     /// A struct type.
     Struct {
@@ -139,13 +139,14 @@ impl<'a> fmt::Display for DisplayTy<'a> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match &self.data {
             TyData::Void => write!(f, "void"),
-            TyData::Integer(bits) => write!(f, "i{}", bits),
+            TyData::I1 => write!(f, "i1"),
+            TyData::I8 => write!(f, "i8"),
+            TyData::I16 => write!(f, "i16"),
+            TyData::I32 => write!(f, "i32"),
+            TyData::I64 => write!(f, "i64"),
             TyData::Float32 => write!(f, "f32"),
             TyData::Float64 => write!(f, "f64"),
             TyData::Ptr => write!(f, "ptr"),
-            TyData::Array { elem_ty, len } => {
-                write!(f, "[{}; {}]", elem_ty.display(self.ctx), len)
-            }
             TyData::Struct {
                 field_tys,
                 is_packed,
@@ -222,17 +223,22 @@ impl ArenaAlloc<TyData, Ty> for Context {
 impl Ty {
     pub fn void(ctx: &mut Context) -> Self { ctx.alloc(TyData::Void) }
 
-    pub fn int(ctx: &mut Context, bits: u16) -> Self { ctx.alloc(TyData::Integer(bits)) }
+    pub fn int(ctx: &mut Context, bits: u16) -> Self {
+        match bits {
+            1 => ctx.alloc(TyData::I1),
+            8 => ctx.alloc(TyData::I8),
+            16 => ctx.alloc(TyData::I16),
+            32 => ctx.alloc(TyData::I32),
+            64 => ctx.alloc(TyData::I64),
+            _ => panic!("unsupported integer bitwidth: {}", bits),
+        }
+    }
 
     pub fn float32(ctx: &mut Context) -> Self { ctx.alloc(TyData::Float32) }
 
     pub fn float64(ctx: &mut Context) -> Self { ctx.alloc(TyData::Float64) }
 
     pub fn ptr(ctx: &mut Context) -> Self { ctx.alloc(TyData::Ptr) }
-
-    pub fn array(ctx: &mut Context, elem_ty: Ty, len: usize) -> Self {
-        ctx.alloc(TyData::Array { elem_ty, len })
-    }
 
     pub fn struct_(ctx: &mut Context, field_tys: Vec<Ty>, is_packed: bool) -> Self {
         ctx.alloc(TyData::Struct {
@@ -247,7 +253,10 @@ impl Ty {
 
     /// Check if the type is integer.
     pub fn is_integer(&self, ctx: &Context) -> bool {
-        matches!(self.deref(ctx), TyData::Integer(_))
+        matches!(
+            self.deref(ctx),
+            TyData::I1 | TyData::I8 | TyData::I16 | TyData::I32 | TyData::I64
+        )
     }
 
     /// Check if the type is float32 or float64.
@@ -269,68 +278,27 @@ impl Ty {
     ///
     /// - `ctx`: The context.
     ///
-    /// # Returns
-    ///
-    /// - If the type is/contains pointers, return `None`.
-    /// - If the type is/contains integers, return the bitwidth.
-    ///
     /// # Panics
     ///
     /// Panics if the type is/contains void.
-    pub fn bitwidth(&self, ctx: &Context) -> Option<usize> {
+    pub fn bitwidth(&self, ctx: &Context) -> usize {
         match self.deref(ctx) {
-            TyData::Integer(bits) => Some(*bits as usize),
-            TyData::Float32 => Some(32),
-            TyData::Float64 => Some(64),
-            TyData::Ptr => None,
-            TyData::Array { elem_ty, len } => elem_ty.bitwidth(ctx).map(|bw| bw * len),
-            TyData::Struct { field_tys, .. } => {
-                let mut bw = 0;
-                for ty in field_tys {
-                    if let Some(ty_bw) = ty.bitwidth(ctx) {
-                        bw += ty_bw;
-                    } else {
-                        return None;
-                    }
-                }
-                Some(bw)
-            }
-            TyData::Simd { elem_ty, exp } => elem_ty.bitwidth(ctx).map(|bw| bw * (1 << exp)),
-            TyData::Void => unreachable!(
-                "should not get bitwidth of void, which only appears in function return type"
-            ),
-        }
-    }
-
-    /// Get the bitwidth of the type.
-    ///
-    /// # Parameters
-    ///
-    /// - `ctx`: The context.
-    /// - `ptr_width`: The bitwidth of the pointer.
-    ///
-    /// # Returns
-    ///
-    /// The bitwidth of the type.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the type is/contains void.
-    pub fn bitwidth_with_ptr(&self, ctx: &Context, ptr_width: usize) -> usize {
-        match self.deref(ctx) {
-            TyData::Integer(bits) => *bits as usize,
+            TyData::I1 => 1,
+            TyData::I8 => 8,
+            TyData::I16 => 16,
+            TyData::I32 => 32,
+            TyData::I64 => 64,
             TyData::Float32 => 32,
             TyData::Float64 => 64,
-            TyData::Ptr => ptr_width,
-            TyData::Array { elem_ty, len } => elem_ty.bitwidth_with_ptr(ctx, ptr_width) * len,
+            TyData::Ptr => ctx.pointer_width() as usize,
             TyData::Struct { field_tys, .. } => {
                 let mut bw = 0;
                 for ty in field_tys {
-                    bw += ty.bitwidth_with_ptr(ctx, ptr_width);
+                    bw += ty.bitwidth(ctx);
                 }
                 bw
             }
-            TyData::Simd { elem_ty, exp } => elem_ty.bitwidth_with_ptr(ctx, ptr_width) * (1 << exp),
+            TyData::Simd { elem_ty, exp } => elem_ty.bitwidth(ctx) * (1 << exp),
             TyData::Void => unreachable!(
                 "should not get bitwidth of void, which only appears in function return type"
             ),
@@ -343,34 +311,10 @@ impl Ty {
     ///
     /// - `ctx`: The context.
     ///
-    /// # Returns
-    ///
-    /// - If the type is/contains pointers, return `None`.
-    /// - If the type is/contains integers, return the byte width.
-    ///
     /// # Panics
     ///
     /// Panics if the type is/contains void.
-    pub fn bytewidth(&self, ctx: &Context) -> Option<usize> {
-        self.bitwidth(ctx).map(|bw| (bw + 7) / 8)
-    }
-
-    /// Get the byte width of the type.
-    ///
-    /// # Parameters
-    ///
-    /// - `ctx`: The context.
-    ///
-    /// # Returns
-    ///
-    /// The byte width of the type.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the type is/contains void.
-    pub fn bytewidth_with_ptr(&self, ctx: &Context, ptr_width: usize) -> usize {
-        (self.bitwidth_with_ptr(ctx, ptr_width) + 7) / 8
-    }
+    pub fn bytewidth(&self, ctx: &Context) -> usize { (self.bitwidth(ctx) + 7) / 8 }
 
     pub fn display(self, ctx: &Context) -> DisplayTy<'_> {
         DisplayTy {
@@ -418,22 +362,6 @@ mod tests {
         let pointer2 = Ty::ptr(&mut ctx);
 
         assert_eq!(pointer1, pointer2);
-
-        let array1 = Ty::array(&mut ctx, int1, 10);
-        let array2 = Ty::array(&mut ctx, int1, 10);
-        let array3 = Ty::array(&mut ctx, int1, 20);
-
-        assert_eq!(array1, array2);
-        assert_ne!(array1, array3); // 10 != 20
-
-        let array_array1 = Ty::array(&mut ctx, array1, 10);
-        let array_array2 = Ty::array(&mut ctx, array1, 10);
-        let array_array3 = Ty::array(&mut ctx, array1, 20);
-        let array_array4 = Ty::array(&mut ctx, array3, 10);
-
-        assert_eq!(array_array1, array_array2);
-        assert_ne!(array_array1, array_array3); // 10 != 20
-        assert_ne!(array_array1, array_array4); // array1 != array3
     }
 
     #[test]
@@ -458,14 +386,6 @@ mod tests {
         let pointer = Ty::ptr(&mut ctx);
         let s = format!("{}", pointer.display(&ctx));
         assert_eq!(s, "ptr");
-
-        let array = Ty::array(&mut ctx, int32, 10);
-        let s = format!("{}", array.display(&ctx));
-        assert_eq!(s, "[i32; 10]");
-
-        let array_array = Ty::array(&mut ctx, array, 10);
-        let s = format!("{}", array_array.display(&ctx));
-        assert_eq!(s, "[[i32; 10]; 10]");
 
         let struct_ty = Ty::struct_(&mut ctx, vec![int32, float32], false);
         let s = format!("{}", struct_ty.display(&ctx));

@@ -70,6 +70,9 @@ pub struct Context {
     // other information
     /// The source of the IR.
     pub(super) source: Source,
+
+    /// Target pointer width
+    target_pointer_width: u8,
 }
 
 impl Default for Context {
@@ -98,38 +101,16 @@ impl Default for Context {
             comment_info: CommentInfo::default(),
 
             source: Source::default(),
+
+            target_pointer_width: 32,
         }
     }
 }
 
 impl Context {
-    pub fn new_in_memory(name: impl Into<String>) -> Self {
-        Self {
-            // +-----------------+
-            // |    storages     |
-            // +-----------------+
-            tys: UniqueArena::default(),
-            blocks: BaseArena::default(),
-            insts: BaseArena::default(),
-            values: BaseArena::default(),
-            funcs: BaseArena::default(),
-            global_slots: BaseArena::default(),
-            symbols: FxHashMap::default(),
+    pub fn set_pointer_width(&mut self, width: u8) { self.target_pointer_width = width }
 
-            // +-----------------+
-            // | name management |
-            // +-----------------+
-            value_name_alloc: NameAlloc::new(),
-            block_name_alloc: NameAlloc::new(),
-
-            // +-----------------+
-            // | debug interface |
-            // +-----------------+
-            comment_info: CommentInfo::default(),
-
-            source: Source::in_memory(name),
-        }
-    }
+    pub fn pointer_width(&self) -> u8 { self.target_pointer_width }
 
     /// Insert function definition into the context and map the name.
     ///

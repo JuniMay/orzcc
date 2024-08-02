@@ -4,6 +4,7 @@ use super::control_flow::{CfgCanonicalize, CfgSimplify};
 use crate::{
     collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
     ir::{
+        debug::CommentPos,
         deep_clone::DeepCloneMap,
         passman::{GlobalPassMut, LocalPassMut, ParamStorage, PassResult, TransformPass},
         Block,
@@ -36,6 +37,10 @@ pub struct Inline {
     /// function before doing other optimizations, but we do want to inline
     /// it later. So we must maintain this depth counter to prevent infinite
     /// inlining.
+    ///
+    /// FIXME: loop-unroll does not preserve the depth. A temporary solution is
+    /// check how many times a function is called in the caller, and set a
+    /// threshold for that.
     depths: FxHashMap<Inst, usize>,
 }
 
@@ -52,7 +57,13 @@ impl Default for Inline {
 }
 
 impl Inline {
-    fn inline_one_call(&mut self, ctx: &mut Context, func: Func, inst: Inst) -> bool {
+    fn inline_one_call(
+        &mut self,
+        ctx: &mut Context,
+        func: Func,
+        inst: Inst,
+        call_count: &FxHashMap<Func, usize>,
+    ) -> bool {
         self.deep_clone_map.clear();
 
         let callee = if let InstKind::Call(sym) = inst.kind(ctx) {
@@ -70,6 +81,11 @@ impl Inline {
             return false;
         }
 
+        if call_count.get(&callee).unwrap_or(&0) > &8 {
+            // do not inline too many times
+            return false;
+        }
+
         let depth = *self.depths.get(&inst).unwrap_or(&0);
 
         if depth >= self.max_inline_depth {
@@ -81,6 +97,21 @@ impl Inline {
             // do not inline too large functions
             return false;
         }
+
+        // do not inline recursive calls
+        // for callee_block in callee.iter(ctx) {
+        //     for calee_inst in callee_block.iter(ctx) {
+        //         if let InstKind::Call(calee_sym) = calee_inst.kind(ctx) {
+        //             if let SymbolKind::FuncDef(callee_callee) =
+        //                 ctx.lookup_symbol(calee_sym).unwrap()
+        //             {
+        //                 if *callee_callee == callee {
+        //                     return false;
+        //                 }
+        //             }
+        //         }
+        //     }
+        // }
 
         let results = inst.results(ctx).to_vec();
 
@@ -181,6 +212,7 @@ impl Inline {
                             // they will not cause infinite inlining. As long as the insn limit
                             // is not reached, we can expand them.
                             self.depths.insert(cloned, depth + 1);
+                            cloned.comment(ctx, CommentPos::Before, format!("depth={}", depth + 1));
                         }
                     }
                 }
@@ -201,6 +233,19 @@ impl LocalPassMut for Inline {
     fn run(&mut self, ctx: &mut Context, func: Func) -> PassResult<(Self::Output, bool)> {
         let mut changed = false;
 
+        let mut call_count = FxHashMap::default();
+
+        // TODO: temporary solution, not very good.
+        for block in func.iter(ctx) {
+            for inst in block.iter(ctx) {
+                if let InstKind::Call(sym) = inst.kind(ctx) {
+                    if let Some(func) = ctx.lookup_func(sym) {
+                        *call_count.entry(func).or_insert(0) += 1;
+                    }
+                }
+            }
+        }
+
         // using cursor, because after inlining, we want to continue from the newly
         // inlined block.
         let mut cursor = func.cursor();
@@ -211,7 +256,7 @@ impl LocalPassMut for Inline {
             while let Some(inst) = curr_inst {
                 curr_inst = inst.next(ctx);
                 if inst.is_call(ctx) {
-                    changed |= self.inline_one_call(ctx, func, inst)
+                    changed |= self.inline_one_call(ctx, func, inst, &call_count);
                 }
             }
         }
@@ -245,7 +290,7 @@ impl GlobalPassMut for Inline {
             .unwrap_or(self.max_inlinable_insn);
 
         println!(
-            "[ pass config ] inline: max_depth={}, max_insn={}",
+            "[ inline config ] inline: max_depth={}, max_insn={}",
             self.max_inline_depth, self.max_inlinable_insn
         );
     }

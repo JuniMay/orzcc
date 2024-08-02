@@ -182,7 +182,7 @@ where
     /// - `arena`: The arena to allocate the nodes.
     /// - `other`: The container to store the nodes after the position.
     /// - `pos`: The position to split the linked list, and the position itself
-    ///  will be in the `self` container.
+    ///   will be in the `self` container.
     ///
     /// # Panics
     ///

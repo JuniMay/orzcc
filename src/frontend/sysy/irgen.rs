@@ -30,8 +30,10 @@ use crate::{
     utils::cfg::CfgRegion,
 };
 
-pub fn irgen(ast: &CompUnit) -> ir::Context {
+pub fn irgen(ast: &CompUnit, pointer_width: u8) -> ir::Context {
     let mut irgen = IrGenContext::default();
+    irgen.ctx.set_pointer_width(pointer_width);
+
     ast.irgen(&mut irgen);
     irgen.finish()
 }
@@ -98,7 +100,8 @@ impl IrGenContext {
             // the type of zero and undef can be decided by the type of the variable/constants, and
             // will be recorded in [ir::GlobalSlotData]
             Cv::Zeros(_) => ir::Constant::zeroinit(),
-            Cv::Undef(_) => ir::Constant::undef(),
+            // XXX: global always initialized as zero.
+            Cv::Undef(_) => ir::Constant::zeroinit(),
         }
     }
 
@@ -108,12 +111,9 @@ impl IrGenContext {
             Tk::Bool => ir::Ty::int(&mut self.ctx, 1),
             Tk::Int => ir::Ty::int(&mut self.ctx, 32),
             Tk::Float => ir::Ty::float32(&mut self.ctx),
-            Tk::Array(ty, len) => {
-                let elem_ty = self.gen_type(ty);
-                ir::Ty::array(&mut self.ctx, elem_ty, *len)
-            }
             Tk::Ptr(_) => ir::Ty::ptr(&mut self.ctx),
             Tk::Func(..) => unreachable!("function type should be handled separately"),
+            Tk::Array(..) => unreachable!("array type should be handled separately"),
         }
     }
 
@@ -702,11 +702,11 @@ impl IrGen for Item {
                             .try_fold(&irgen.symtable)
                             .expect("global def expected to have constant initializer");
                         let constant = IrGenContext::gen_global_comptime(&comptime);
-                        let ir_ty = irgen.gen_type(&comptime.get_type());
+                        let size = comptime.get_type().bytewidth();
                         let slot = ir::GlobalSlot::new(
                             &mut irgen.ctx,
                             format!("__GLOBAL_CONST_{}", ident),
-                            ir_ty,
+                            size,
                             constant,
                         );
                         irgen.symtable.insert(
@@ -727,11 +727,11 @@ impl IrGen for Item {
                             .try_fold(&irgen.symtable)
                             .expect("global def expected to have constant initializer");
                         let constant = IrGenContext::gen_global_comptime(&comptime);
-                        let ir_ty = irgen.gen_type(&comptime.get_type());
+                        let size = comptime.get_type().bytewidth();
                         let slot = ir::GlobalSlot::new(
                             &mut irgen.ctx,
                             format!("__GLOBAL_VAR_{}", ident),
-                            ir_ty,
+                            size,
                             constant,
                         );
                         irgen.symtable.insert(
@@ -860,8 +860,6 @@ impl IrGen for FuncDef {
         let ret_block = ir::Block::new(&mut irgen.ctx);
         irgen.curr_ret_block = Some(ret_block);
 
-        // let ret_slot = ir::Inst::stack_slot(&mut irgen.ctx, self.ret_ty.bytewidth()
-        // as u32);
         if !self.ret_ty.is_void() {
             let ret_slot = ir::Inst::stack_slot(&mut irgen.ctx, self.ret_ty.bytewidth() as u32);
             ret_slot.result(&irgen.ctx, 0).assign_name(
@@ -870,6 +868,25 @@ impl IrGen for FuncDef {
             );
             block.push_front(&mut irgen.ctx, ret_slot);
             irgen.curr_ret_slot = Some(ret_slot.result(&irgen.ctx, 0));
+
+            // store 0 into the slot as default value, check `sysy/2024/h_performance/h1`
+            if self.ret_ty.is_int() {
+                let ty = irgen.gen_type(&self.ret_ty);
+                let zero = ir::Inst::iconst(&mut irgen.ctx, 0i32, ty);
+                block.push_back(&mut irgen.ctx, zero);
+
+                let zero = zero.result(&irgen.ctx, 0);
+                let store = ir::Inst::store(&mut irgen.ctx, zero, irgen.curr_ret_slot.unwrap());
+                block.push_back(&mut irgen.ctx, store);
+            } else if self.ret_ty.is_float() {
+                let ty = irgen.gen_type(&self.ret_ty);
+                let zero = ir::Inst::fconst(&mut irgen.ctx, 0.0f32, ty);
+                block.push_back(&mut irgen.ctx, zero);
+
+                let zero = zero.result(&irgen.ctx, 0);
+                let store = ir::Inst::store(&mut irgen.ctx, zero, irgen.curr_ret_slot.unwrap());
+                block.push_back(&mut irgen.ctx, store);
+            }
         }
 
         // generate body
@@ -965,16 +982,18 @@ impl IrGen for Decl {
                                 Cv::List(_) => {
                                     // create global and memcpy
                                     let constant = IrGenContext::gen_global_comptime(val);
-                                    let ty = irgen.gen_type(init.ty());
-
+                                    let size = init.ty().bytewidth();
                                     let name = format!("__DATA{}", stack_slot_name,); // to avoid conflict
-                                    ir::GlobalSlot::new(&mut irgen.ctx, name.clone(), ty, constant);
+                                    ir::GlobalSlot::new(
+                                        &mut irgen.ctx,
+                                        name.clone(),
+                                        size,
+                                        constant,
+                                    );
                                     let get_global = ir::Inst::get_global(&mut irgen.ctx, name);
                                     curr_block.push_back(&mut irgen.ctx, get_global);
 
-                                    let bytewidth = init.ty().bytewidth();
-                                    let size =
-                                        ir::Inst::iconst(&mut irgen.ctx, bytewidth as i32, int);
+                                    let size = ir::Inst::iconst(&mut irgen.ctx, size as i32, int);
                                     curr_block.push_back(&mut irgen.ctx, size);
 
                                     let args = vec![
@@ -1103,9 +1122,8 @@ impl IrGen for Decl {
                         } else {
                             // memcpy
                             let constant = IrGenContext::gen_global_comptime(&global_init);
-                            let ty = irgen.gen_type(init.ty());
                             let name = format!("__DATA{}", stack_slot_name,); // to avoid conflict
-                            ir::GlobalSlot::new(&mut irgen.ctx, name.clone(), ty, constant);
+                            ir::GlobalSlot::new(&mut irgen.ctx, name.clone(), bytewidth, constant);
                             let get_global = ir::Inst::get_global(&mut irgen.ctx, name);
                             curr_block.push_back(&mut irgen.ctx, get_global);
 

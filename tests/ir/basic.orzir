@@ -1,5 +1,5 @@
-slot @a: i32 = undef
-slot @arr: [i32; 1] = [ 0xef, 0xbe, 0xad, 0xde ]
+slot @a: 4 = undef
+slot @arr: 4 = [ 0xef, 0xbe, 0xad, 0xde ]
 
 decl @x /* 0 */ () -> void
 

@@ -1,15 +1,17 @@
 use rustc_hash::FxHashMap;
 
 use crate::{
-    collections::{linked_list::LinkedListNodePtr, union_find::UnionFind},
+    collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
     ir::{
         passman::{GlobalPass, LocalPass, PassResult},
         Block,
         Context,
         Func,
         IBinaryOp,
+        ICmpCond,
         InstKind,
         Value,
+        ValueKind,
     },
     utils::{
         cfg::CfgInfo,
@@ -24,7 +26,6 @@ pub enum InductionOp {
     Sub,
     Mul,
     SDiv,
-    UDiv,
     Shl,
 }
 
@@ -38,7 +39,6 @@ impl TryFrom<IBinaryOp> for InductionOp {
             IBinaryOp::Sub => Ok(Self::Sub),
             IBinaryOp::Mul => Ok(Self::Mul),
             IBinaryOp::SDiv => Ok(Self::SDiv),
-            IBinaryOp::UDiv => Ok(Self::UDiv),
             IBinaryOp::Shl => Ok(Self::Shl),
             _ => Err(()),
         }
@@ -47,6 +47,9 @@ impl TryFrom<IBinaryOp> for InductionOp {
 
 /// A record of an induction variable.
 pub struct Scev {
+    /// The representative value of this induction variable, typically the loop
+    /// parameter.
+    pub repr: Value,
     /// The start value of this induction variable.
     pub start: Value,
     /// The evolving step of this induction variable.
@@ -74,12 +77,11 @@ impl<'a> std::fmt::Display for DisplayScev<'a> {
             .unwrap_or("none".to_string());
 
         let op = match self.scev.op {
-            InductionOp::Add => "+",
-            InductionOp::Sub => "-",
-            InductionOp::Mul => "*",
-            InductionOp::SDiv => "/",
-            InductionOp::UDiv => "/",
-            InductionOp::Shl => "<<",
+            InductionOp::Add => "add",
+            InductionOp::Sub => "sub",
+            InductionOp::Mul => "mul",
+            InductionOp::SDiv => "sdiv",
+            InductionOp::Shl => "shl",
         };
 
         write!(f, "{} {} {} (mod {})", start, op, step, modulus)
@@ -93,14 +95,16 @@ impl Scev {
 }
 
 /// The analysis pass of scalar evolution.
+///
+/// This analysis currently only do the most basic detection of induction
+/// variables. No chain of recurrences, no nested SCEVs, just simple binary
+/// operations.
 #[derive(Default)]
 pub struct ScevAnalysis {
-    loop_ctx: LoopContext<Block>,
-    dominance: Dominance<Block>,
+    pub(super) loop_ctx: LoopContext<Block>,
+    pub(super) dominance: Dominance<Block>,
     // TODO: union-find might be useful for some complex tree-shaped operations, and maybe we can
     // re-associate the operations to get a indvar expression.
-    _indvars: UnionFind<Value>,
-
     indvars: Vec<Scev>,
 }
 
@@ -117,6 +121,7 @@ impl ScevAnalysis {
             let mut start = None;
             let mut evolving = None;
 
+            // should be exactly two users, preheader and dedicated exit.
             for pred_inst in header.users(ctx) {
                 let incomings = pred_inst
                     .succ_to(ctx, header)
@@ -153,7 +158,25 @@ impl ScevAnalysis {
                 continue;
             }
 
-            let start = start.unwrap();
+            // get the most initial start value.
+            let mut start = start.unwrap();
+            // the start can be a block param in the preheader, so get the def block of the
+            // start value, if the start is a block param and there is only one predecessor,
+            // get the incoming value.
+            while let ValueKind::BlockParam { block, .. } = start.kind(ctx) {
+                if block.preds(ctx).len() == 1 {
+                    // one predecessor -> one inst & one succ in the inst -> just get the 0-th user
+                    if let Some(succ) = block.users(ctx)[0].succ_to(ctx, *block).next() {
+                        start = succ.get_arg(start).unwrap();
+                        break;
+                    }
+                } else {
+                    // multiple predecessors, we cannot determine the start value, just use the
+                    // block param as the start value.
+                    break;
+                }
+            }
+
             let evolving = evolving.unwrap();
 
             // secondly, find the induction operation.
@@ -205,6 +228,7 @@ impl ScevAnalysis {
                 };
 
                 let indvar = Scev {
+                    repr: *param,
                     start,
                     step,
                     op: ind_op,
@@ -215,27 +239,110 @@ impl ScevAnalysis {
             }
         }
     }
+
+    pub fn find_loop_bound(
+        &mut self,
+        ctx: &Context,
+        lp: Loop<Block>,
+    ) -> Option<(Value, ICmpCond, Value)> {
+        let header = lp.header(&self.loop_ctx);
+
+        let tail = header.tail(ctx).unwrap();
+        let mut loop_bound = None;
+
+        if let InstKind::Br = tail.kind(ctx) {
+            let cond = tail.operand(ctx, 0);
+
+            if let Some(inst) = cond.def_inst(ctx) {
+                if let InstKind::IBinary(IBinaryOp::Cmp(cmp_cond)) = inst.kind(ctx) {
+                    let lhs = inst.operand(ctx, 0);
+                    let rhs = inst.operand(ctx, 1);
+
+                    // not checing if lhs/rhs is the block param/indvar
+                    loop_bound = Some((lhs, *cmp_cond, rhs));
+                }
+            }
+        }
+
+        loop_bound
+    }
+}
+
+#[derive(Default)]
+pub struct LoopScevRecord {
+    /// The loop parameter.
+    pub loop_bounds: FxHashMap<Loop<Block>, Option<(Value, ICmpCond, Value)>>,
+    /// The detected loop induction variables.
+    pub scevs: FxHashMap<Loop<Block>, Vec<Scev>>,
+}
+
+impl LoopScevRecord {
+    pub fn iter(&self) -> impl Iterator<Item = &Scev> {
+        self.scevs.iter().flat_map(|(_, v)| v.iter())
+    }
+}
+
+pub struct DisplayLoopScevRecord<'a> {
+    ctx: &'a Context,
+    record: &'a LoopScevRecord,
+}
+
+impl<'a> std::fmt::Display for DisplayLoopScevRecord<'a> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (lp, bound) in self.record.loop_bounds.iter() {
+            if let Some(bound) = bound {
+                let (lhs, cond, rhs) = bound;
+                writeln!(
+                    f,
+                    "loop bound: {} {} {}",
+                    lhs.name(self.ctx).unwrap(),
+                    cond,
+                    rhs.name(self.ctx).unwrap()
+                )?;
+            } else {
+                writeln!(f, "loop bound: none")?;
+            }
+
+            for scev in self.record.scevs.get(lp).unwrap() {
+                writeln!(f, "  {}", scev.display(self.ctx))?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl LoopScevRecord {
+    pub fn display<'a>(&'a self, ctx: &'a Context) -> DisplayLoopScevRecord<'a> {
+        DisplayLoopScevRecord { ctx, record: self }
+    }
 }
 
 impl LocalPass for ScevAnalysis {
-    type Output = Vec<Scev>;
+    type Output = LoopScevRecord;
 
     fn run(&mut self, ctx: &Context, func: Func) -> PassResult<Self::Output> {
         let cfg = CfgInfo::new(ctx, func);
 
         self.dominance = Dominance::new(ctx, &cfg);
         self.loop_ctx = LoopContext::new(&cfg, &self.dominance);
+        self.indvars.clear();
+
+        let mut result = LoopScevRecord::default();
 
         for lp in self.loop_ctx.loops() {
             self.process_loop(ctx, lp);
+            let bound = self.find_loop_bound(ctx, lp);
+            result.loop_bounds.insert(lp, bound);
+            result.scevs.insert(lp, self.indvars.drain(..).collect());
         }
 
-        Ok(self.indvars.drain(..).collect())
+        Ok(result)
     }
 }
 
 impl GlobalPass for ScevAnalysis {
-    type Output = FxHashMap<Func, Vec<Scev>>;
+    type Output = FxHashMap<Func, LoopScevRecord>;
 
     fn run(&mut self, ctx: &Context) -> PassResult<Self::Output> {
         let mut result = FxHashMap::default();

@@ -96,7 +96,10 @@ where
 /// operand.
 ///
 /// As for the drop/replace, the user type can implement or maintain on its own.
-#[derive(Debug, PartialEq, Eq, Hash)]
+///
+/// Because each operand represents a unique use, so it cannot be compared or
+/// hashed.
+#[derive(Debug)]
 pub struct Operand<T>
 where
     T: Usable,

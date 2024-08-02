@@ -1,10 +1,18 @@
 use std::{fmt, hash::Hash};
 
-use super::{debug::CommentPos, source_loc::Span, Block, Constant, Context, Signature, Ty};
+use super::{
+    debug::CommentPos,
+    remove_all_insts,
+    source_loc::Span,
+    Block,
+    Constant,
+    Context,
+    Signature,
+};
 use crate::{
     collections::{
         linked_list::LinkedListContainerPtr,
-        storage::{ArenaAlloc, ArenaPtr, BaseArenaPtr},
+        storage::{ArenaAlloc, ArenaFree, ArenaPtr, BaseArenaPtr},
     },
     impl_arena,
     utils::cfg::CfgRegion,
@@ -116,6 +124,32 @@ impl Func {
 
     /// Get the number of instructions in the function.
     pub fn insn(self, ctx: &Context) -> usize { self.iter(ctx).map(|block| block.insn(ctx)).sum() }
+
+    /// Remove the function and all its blocks and instructions.
+    pub fn remove(self, ctx: &mut Context) {
+        let symbol = self.name(ctx).clone();
+
+        let mut insts_to_remove = Vec::new();
+        let mut blocks_to_remove = Vec::new();
+
+        for block in self.iter(ctx) {
+            for inst in block.iter(ctx) {
+                insts_to_remove.push(inst);
+            }
+            blocks_to_remove.push(block);
+        }
+
+        // remove instructions first, to avoid block uses.
+        remove_all_insts(ctx, insts_to_remove, false);
+
+        // remove all blocks
+        for block in blocks_to_remove {
+            block.remove(ctx);
+        }
+
+        ctx.symbols.remove(&symbol);
+        ctx.free(self);
+    }
 }
 
 impl CfgRegion for Func {
@@ -168,7 +202,7 @@ impl LinkedListContainerPtr<Block> for Func {
 pub struct GlobalSlotData {
     self_ptr: GlobalSlot,
     name: Symbol,
-    ty: Ty,
+    size: usize,
     init: Constant,
 }
 
@@ -185,13 +219,13 @@ impl GlobalSlot {
     pub fn new(
         ctx: &mut Context,
         name: impl Into<Symbol>,
-        ty: Ty,
+        size: usize,
         init: impl Into<Constant>,
     ) -> GlobalSlot {
         let slot = ctx.alloc_with(|self_ptr| GlobalSlotData {
             self_ptr,
             name: name.into(),
-            ty,
+            size,
             init: init.into(),
         });
         ctx.insert_global_slot(slot);
@@ -200,7 +234,7 @@ impl GlobalSlot {
 
     pub fn name(self, ctx: &Context) -> &Symbol { &self.deref(ctx).name }
 
-    pub fn ty(self, ctx: &Context) -> Ty { self.deref(ctx).ty }
+    pub fn size(self, ctx: &Context) -> usize { self.deref(ctx).size }
 
     pub fn init(self, ctx: &Context) -> &Constant { &self.deref(ctx).init }
 
@@ -208,7 +242,6 @@ impl GlobalSlot {
 
     pub fn display(self, ctx: &Context, debug: bool) -> DisplayGlobalSlot<'_> {
         DisplayGlobalSlot {
-            ctx,
             data: self.deref(ctx),
             debug,
         }
@@ -217,10 +250,23 @@ impl GlobalSlot {
     pub fn comment(&self, ctx: &mut Context, pos: CommentPos, content: impl Into<String>) {
         self.deref(ctx).name.clone().comment(ctx, pos, content);
     }
+
+    pub fn remove(self, ctx: &mut Context) {
+        let symbol = self.name(ctx).clone();
+        // 如果：
+        // 1. symbols: HashMap<Symbol, SymbolKind, FxBuildHasher>中有以symbol为键的项
+        // 2. 该项的值是GlobalSlot类型
+        // 则删除该项及对应的GlobalSlot，并返回GlobalSlot
+        if let Some(SymbolKind::GlobalSlot(_)) = ctx.symbols.get(&symbol) {
+            ctx.symbols.remove(&symbol);
+            ctx.global_slots.free(self.0);
+        } else {
+            panic!("symbol {:?} is not a global slot", symbol);
+        }
+    }
 }
 
 pub struct DisplayGlobalSlot<'a> {
-    ctx: &'a Context,
     data: &'a GlobalSlotData,
     debug: bool,
 }
@@ -233,12 +279,7 @@ impl fmt::Display for DisplayGlobalSlot<'_> {
             write!(f, " /* {} */ ", self.data.self_ptr().id())?;
         }
 
-        write!(
-            f,
-            " : {} = {}",
-            self.data.ty.display(self.ctx),
-            self.data.init
-        )
+        write!(f, " : {} = {}", self.data.size, self.data.init)
     }
 }
 
