@@ -263,6 +263,49 @@ impl CfgSimplify {
 
         changed
     }
+
+    /// change the branch to jump if the arguments and destination blocks are
+    /// the same.
+    fn reduce_branch_to_jump(&mut self, ctx: &mut Context, func: Func) -> bool {
+        let mut changed = false;
+
+        let mut cursor = func.cursor();
+
+        while let Some(block) = cursor.next(ctx) {
+            let tail = block.tail(ctx).unwrap();
+
+            if !tail.is_br(ctx) {
+                continue;
+            }
+
+            let block_then = tail.succ(ctx, 0).block();
+            let block_else = tail.succ(ctx, 1).block();
+
+            if block_then != block_else {
+                continue;
+            }
+
+            let params = block_then.params(ctx).to_vec();
+
+            let args_then = params
+                .iter()
+                .map(|param| tail.succ(ctx, 0).get_arg(*param).unwrap())
+                .collect::<Vec<_>>();
+            let args_else = params
+                .iter()
+                .map(|param| tail.succ(ctx, 1).get_arg(*param).unwrap())
+                .collect::<Vec<_>>();
+
+            if args_then == args_else {
+                let jump = Inst::jump(ctx, block_then, args_then);
+                tail.remove(ctx);
+                block.push_back(ctx, jump);
+                changed = true;
+            }
+        }
+
+        changed
+    }
 }
 
 impl LocalPassMut for CfgSimplify {
@@ -275,6 +318,7 @@ impl LocalPassMut for CfgSimplify {
         changed |= self.remove_jump_only_blocks(ctx, func);
         changed |= self.remove_single_pred_params(ctx, func);
         changed |= self.reduce_always_jump(ctx, func);
+        changed |= self.reduce_branch_to_jump(ctx, func);
 
         Ok(((), changed))
     }

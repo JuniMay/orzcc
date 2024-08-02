@@ -152,6 +152,10 @@ pub enum IBinaryOp {
     LShr,
     /// Arithmetic shift right.
     AShr,
+    /// Min signed
+    Min,
+    /// Max signed
+    Max,
     /// Comparison.
     Cmp(ICmpCond),
 }
@@ -172,6 +176,8 @@ impl fmt::Display for IBinaryOp {
             Self::Shl => write!(f, "shl"),
             Self::LShr => write!(f, "lshr"),
             Self::AShr => write!(f, "ashr"),
+            Self::Min => write!(f, "min"),
+            Self::Max => write!(f, "max"),
             Self::Cmp(cond) => write!(f, "icmp.{}", cond),
         }
     }
@@ -641,6 +647,8 @@ impl Inst {
             | Op::Xor
             | Op::Shl
             | Op::LShr
+            | Op::Max
+            | Op::Min
             | Op::AShr => lhs.ty(ctx),
             Op::Cmp(_) => Ty::int(ctx, 1),
         };
@@ -1237,6 +1245,35 @@ impl Inst {
         for _ in 0..num_blocks_to_replace {
             old.remove_user(ctx, self);
             new.add_user(ctx, self);
+        }
+    }
+
+    /// Replace all the arguments passed to the `param` with the `arg`.
+    pub fn replace_args(self, ctx: &mut Context, param: Value, arg: Value) {
+        let mut operands_to_drop = Vec::new();
+
+        let mut param_count = 0;
+        for succ in self.deref_mut(ctx).successors.iter_mut() {
+            if succ.args.contains_key(&param) {
+                param_count += 1;
+            }
+        }
+
+        let mut new_arg_opds = Vec::new();
+        for _ in 0..param_count {
+            new_arg_opds.push(Operand::new(ctx, arg, self));
+        }
+
+        for succ in self.deref_mut(ctx).successors.iter_mut() {
+            let old = succ
+                .args
+                .insert(param, new_arg_opds.pop().unwrap())
+                .unwrap();
+            operands_to_drop.push(old);
+        }
+
+        for opd in operands_to_drop {
+            opd.drop(ctx);
         }
     }
 

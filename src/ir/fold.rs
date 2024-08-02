@@ -155,6 +155,7 @@ impl Inst {
 
                         lhs = ApInt::from(result);
                     }
+                    IBinaryOp::Max | IBinaryOp::Min => return None,
                 }
 
                 Some(FoldedConstant::Integer(lhs))

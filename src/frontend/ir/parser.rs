@@ -769,6 +769,8 @@ impl<'a> Parser<'a> {
                         "shl" => Ik::IBinary(Ib::Shl),
                         "lshr" => Ik::IBinary(Ib::LShr),
                         "ashr" => Ik::IBinary(Ib::AShr),
+                        "min" => Ik::IBinary(Ib::Min),
+                        "max" => Ik::IBinary(Ib::Max),
                         "icmp.eq" => Ik::IBinary(Ib::Cmp(ICmpCond::Eq)),
                         "icmp.ne" => Ik::IBinary(Ib::Cmp(ICmpCond::Ne)),
                         "icmp.slt" => Ik::IBinary(Ib::Cmp(ICmpCond::Slt)),
