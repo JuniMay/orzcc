@@ -1,9 +1,12 @@
 use rustc_hash::FxHashSet;
 
 use super::{inst::MInst, LowerConfig, MContext};
-use crate::collections::{
-    linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
-    storage::ArenaAlloc,
+use crate::{
+    collections::{
+        linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
+        storage::ArenaAlloc,
+    },
+    utils::cfg::CfgNode,
 };
 
 pub struct SimplifyCfg {}
@@ -106,18 +109,23 @@ impl SimplifyCfg {
                         if let Some(j_block) = maybe_j.match_unconditional_branch(mctx) {
                             if j_block != block
                             // && !j_block.succs(mctx).contains(&block)
-                            && !(block.next(mctx).is_some() && block.next(mctx).unwrap() == j_block)
+                            // && !(block.next(mctx).is_some() && block.next(mctx).unwrap() == j_block)
                             && j_block.next(mctx).is_some() // j_block is not the ret block
-                            && j_block.size(mctx) < 10
                             && !visited.contains(&(block, j_block))
                             {
                                 if visited.len() > 100 {
                                     return;
                                 }
 
+                                for inst in j_block.iter(mctx) {
+                                    if inst.match_conditional_branch(mctx).is_some() {
+                                        return;
+                                    }
+                                }
+
                                 visited.insert((block, j_block));
                                 println!(
-                                    "Tail duplication on block {:?}, merging {:?}",
+                                    "[ tail-dup ] Tail duplication on block {:?}, merging {:?}",
                                     block.label(mctx),
                                     j_block.label(mctx)
                                 );
