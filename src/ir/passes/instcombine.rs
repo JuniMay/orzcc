@@ -1637,8 +1637,9 @@ const fn div_rem_to_mul() -> Rule {
                             let int64 = Ty::int(ctx, 64);
                             let (magi, disp) = magic(bitwidth as u64, v.as_signed() as u64);
 
+                            // temp0-temp5: 使用64位整数的乘法和右移来模拟32位整数与魔数的高位乘法。
                             let temp0 = Inst::cast(ctx, CastOp::SExt, lhs, int64);
-                            let temp1 = Inst::iconst(ctx, IntConstant::from(magi), int64);
+                            let temp1 = Inst::iconst(ctx, magi, int64);
                             let temp2 = Inst::ibinary(
                                 ctx,
                                 IBinaryOp::Mul,
@@ -1654,6 +1655,7 @@ const fn div_rem_to_mul() -> Rule {
                             );
                             let temp5 =
                                 Inst::cast(ctx, CastOp::Trunc, temp4.result(ctx, 0), lhs.ty(ctx));
+                            // temp6-temp7: 获得符号位用于修正
                             let temp6 = Inst::iconst(
                                 ctx,
                                 IntConstant::from(bitwidth as u64 - 1),
@@ -1661,7 +1663,8 @@ const fn div_rem_to_mul() -> Rule {
                             );
                             let temp7 =
                                 Inst::ibinary(ctx, IBinaryOp::LShr, lhs, temp6.result(ctx, 0));
-                            let final_inst = Inst::ibinary(
+                            // final_inst: 使用符号位修正结果，得到除法结果。
+                            let temp8 = Inst::ibinary(
                                 ctx,
                                 IBinaryOp::Add,
                                 temp5.result(ctx, 0),
@@ -1676,8 +1679,32 @@ const fn div_rem_to_mul() -> Rule {
                             temp4.insert_after(ctx, temp5);
                             temp5.insert_after(ctx, temp6);
                             temp6.insert_after(ctx, temp7);
-                            temp7.insert_after(ctx, final_inst);
+                            temp7.insert_after(ctx, temp8);
 
+                            // 处理取模的情况，并确定final_inst。
+                            let final_inst = if is_div {
+                                temp8
+                            } else if is_rem {
+                                let temp9 = Inst::iconst(ctx, v, lhs.ty(ctx));
+                                let temp10 = Inst::ibinary(
+                                    ctx,
+                                    IBinaryOp::Mul,
+                                    temp8.result(ctx, 0),
+                                    temp9.result(ctx, 0),
+                                );
+                                let temp11 =
+                                    Inst::ibinary(ctx, IBinaryOp::Sub, lhs, temp10.result(ctx, 0));
+
+                                temp8.insert_after(ctx, temp9);
+                                temp9.insert_after(ctx, temp10);
+                                temp10.insert_after(ctx, temp11);
+
+                                temp11
+                            } else {
+                                panic!("unreachable")
+                            };
+
+                            // 处理结果的符号，并确定dst_new。
                             let dst_new = if is_v_neg {
                                 let i_zero = Inst::iconst(ctx, 0, dst.ty(ctx));
                                 let i_neg = Inst::ibinary(
@@ -1714,7 +1741,7 @@ fn magic(w: u64, d: u64) -> (u64, u64) {
     while 1 << p <= nc * (d - (1 << p) % d) {
         p += 1;
     }
-    let s = p - w;
+    let s = p;
     let m = ((1 << p) + d - (1 << p) % d) / d;
 
     // m = magi(c number)

@@ -12,7 +12,12 @@ use crate::collections::apint::ApInt;
 pub struct IntConstant(u64, u8);
 
 impl IntConstant {
-    fn mask(self) -> u64 { (1u64 << self.1) - 1 }
+    fn mask(self) -> u64 {
+        (1u64.checked_shl(self.1 as u32))
+            .unwrap_or(0)
+            .overflowing_sub(1)
+            .0
+    }
 
     pub fn into_apint(self) -> ApInt {
         let width = self.1;
@@ -37,7 +42,10 @@ impl IntConstant {
     }
 
     pub fn resize(self, width: u8) -> Self {
-        let mask = (1u64 << width) - 1;
+        let mask = (1u64.checked_shl(width as u32))
+            .unwrap_or(0)
+            .overflowing_sub(1)
+            .0;
         let value = self.0 & mask;
         Self(value, width)
     }
@@ -76,7 +84,10 @@ impl From<u32> for IntConstant {
 }
 
 impl From<u64> for IntConstant {
-    fn from(value: u64) -> Self { Self(value, 64) }
+    fn from(value: u64) -> Self {
+        dbg!(value);
+        Self(value, 64)
+    }
 }
 
 impl From<i8> for IntConstant {
