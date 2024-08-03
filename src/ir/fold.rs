@@ -164,8 +164,8 @@ impl Inst {
                 let lhs = self.operand(ctx, 0);
                 let rhs = self.operand(ctx, 1);
 
-                let lhs_width = lhs.ty(ctx).bitwidth(ctx).unwrap();
-                let rhs_width = rhs.ty(ctx).bitwidth(ctx).unwrap();
+                let lhs_width = lhs.ty(ctx).bitwidth(ctx);
+                let rhs_width = rhs.ty(ctx).bitwidth(ctx);
 
                 assert_eq!(lhs_width, rhs_width);
 
@@ -215,7 +215,7 @@ impl Inst {
             InstKind::IUnary(op) => {
                 let val = self.operand(ctx, 0);
 
-                let width = val.ty(ctx).bitwidth(ctx).unwrap();
+                let width = val.ty(ctx).bitwidth(ctx);
 
                 let mut val = fold_ctx.lookup(val)?.unwrap_integer().clone();
 
@@ -232,7 +232,7 @@ impl Inst {
             InstKind::FUnary(op) => {
                 let val = self.operand(ctx, 0);
 
-                let width = val.ty(ctx).bitwidth(ctx).unwrap();
+                let width = val.ty(ctx).bitwidth(ctx);
 
                 let mut val = *fold_ctx.lookup(val)?.unwrap_float();
 
@@ -249,7 +249,7 @@ impl Inst {
             InstKind::Cast(op) => {
                 let val = self.operand(ctx, 0);
 
-                let width = val.ty(ctx).bitwidth(ctx).unwrap();
+                let width = val.ty(ctx).bitwidth(ctx);
 
                 match op {
                     // fixme: 这几个CastOp并不会被折叠，如果折叠了则会报错，
@@ -276,19 +276,16 @@ impl Inst {
                         assert_eq!(val.width(), width);
                         match op {
                             CastOp::Trunc => {
-                                let target_width =
-                                    self.result(ctx, 0).ty(ctx).bitwidth(ctx).unwrap();
+                                let target_width = self.result(ctx, 0).ty(ctx).bitwidth(ctx);
                                 Some(FoldedConstant::Integer(mut_int_val.truncate(target_width)))
                             }
                             CastOp::ZExt => {
-                                let target_width =
-                                    self.result(ctx, 0).ty(ctx).bitwidth(ctx).unwrap();
+                                let target_width = self.result(ctx, 0).ty(ctx).bitwidth(ctx);
                                 mut_int_val.zeroext(target_width);
                                 Some(FoldedConstant::Integer(mut_int_val.clone()))
                             }
                             CastOp::SExt => {
-                                let target_width =
-                                    self.result(ctx, 0).ty(ctx).bitwidth(ctx).unwrap();
+                                let target_width = self.result(ctx, 0).ty(ctx).bitwidth(ctx);
                                 mut_int_val.signext(target_width);
                                 Some(FoldedConstant::Integer(mut_int_val.clone()))
                             }
