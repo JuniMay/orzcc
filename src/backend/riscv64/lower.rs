@@ -1103,7 +1103,7 @@ impl LowerSpec for RvLowerSpec {
 
         match op {
             ir::CastOp::Bitcast => MValue::new_reg(dst_ty, src),
-            // TODO: Use proper Zext
+            // TODO: Use proper Zext, currently only ok for boolean.
             ir::CastOp::ZExt => MValue::new_reg(dst_ty, src),
             ir::CastOp::SExt => {
                 // shl, asr
@@ -1174,10 +1174,31 @@ impl LowerSpec for RvLowerSpec {
                 curr_block.push_back(&mut lower.mctx, inst);
                 MValue::new_reg(dst_ty, rd)
             }
-            ir::CastOp::Trunc
-            | ir::CastOp::FpTrunc
-            | ir::CastOp::IntToPtr
-            | ir::CastOp::PtrToInt => unimplemented!(),
+            ir::CastOp::Trunc => {
+                match (src_bitwidth, dst_bitwidth) {
+                    (64, 32) => {
+                        // XXX: not sure sra or srl, but offset require sign extension.
+                        // slli + srai
+                        let (inst, rd) = RvInst::alu_rri(
+                            &mut lower.mctx,
+                            AluOpRRI::Slli,
+                            src,
+                            Imm12::try_from_i64(32).unwrap(),
+                        );
+                        curr_block.push_back(&mut lower.mctx, inst);
+                        let (inst, rd) = RvInst::alu_rri(
+                            &mut lower.mctx,
+                            AluOpRRI::Srai,
+                            rd,
+                            Imm12::try_from_i64(32).unwrap(),
+                        );
+                        curr_block.push_back(&mut lower.mctx, inst);
+                        MValue::new_reg(dst_ty, rd)
+                    }
+                    _ => unimplemented!(),
+                }
+            }
+            ir::CastOp::FpTrunc | ir::CastOp::IntToPtr | ir::CastOp::PtrToInt => unimplemented!(),
         }
     }
 
@@ -1209,6 +1230,7 @@ impl LowerSpec for RvLowerSpec {
                     MValueKind::Undef => return MValue::new_undef(ty),
                 };
 
+                // XXX: assume all registers are properly sign extended.
                 if slot_offset_imm == 0 {
                     let (inst, rd) = RvInst::alu_rrr(&mut lower.mctx, AluOpRRR::Add, base, reg);
                     curr_block.push_back(&mut lower.mctx, inst);
