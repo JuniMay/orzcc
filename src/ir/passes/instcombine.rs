@@ -79,8 +79,11 @@ impl Default for InstCombine {
                 div_one_elim(),
                 div_neg_one_elim(),
                 div_to_shl(),
+                rem_one_elim(),
                 rem_to_shl(),
                 div_rem_to_mul(),
+                shl_zero_elim(), // not tested
+                shr_zero_elim(), // not tested
             ],
         }
     }
@@ -1522,8 +1525,35 @@ const fn div_to_shl() -> Rule {
     }
 }
 
-// todo!("模和除以1（-1）的优化似乎不能作为2的幂次进行优化，
-// 似乎32位的数字不能移位32位（会报错CE），看起来得单独写一下这个优化。");
+// Eliminate modulo by (negative) one
+const fn rem_one_elim() -> Rule {
+    Rule {
+        rewriter: |ctx, inst| {
+            if let Ik::IBinary(IBinaryOp::SRem) = inst.kind(ctx) {
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
+                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                    if let Ik::IConst(mut v) = rhs_inst.kind(ctx) {
+                        if v.as_signed() < 0 {
+                            v = IntConstant::from(-v.as_signed())
+                        }
+                        if v.is_one() {
+                            let zero = Inst::iconst(ctx, 0, dst.ty(ctx));
+                            inst.insert_after(ctx, zero);
+
+                            for user in dst.users(ctx) {
+                                user.replace(ctx, dst, zero.result(ctx, 0));
+                            }
+                            return true;
+                        }
+                    }
+                }
+            }
+            false
+        },
+    }
+}
 
 /// Replace modulo with shift (and sub).
 const fn rem_to_shl() -> Rule {
@@ -1733,6 +1763,7 @@ const fn div_rem_to_mul() -> Rule {
     }
 }
 
+// 仅用于div_rem_to_mul。
 fn magic(w: u64, d: u64) -> (u64, u64) {
     // w = bitwidth
     // d = divisor
@@ -1747,4 +1778,54 @@ fn magic(w: u64, d: u64) -> (u64, u64) {
     // m = magi(c number)
     // s = disp(lacement)
     (m, s)
+}
+
+// Eliminate shift by zero
+const fn shl_zero_elim() -> Rule {
+    Rule {
+        rewriter: |ctx, inst| {
+            if let Ik::IBinary(IBinaryOp::Shl) = inst.kind(ctx) {
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
+                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                    if let Ik::IConst(v) = rhs_inst.kind(ctx) {
+                        if v.is_zero() {
+                            for user in dst.users(ctx) {
+                                user.replace(ctx, dst, lhs);
+                            }
+                            return true;
+                        }
+                    }
+                }
+            }
+            false
+        },
+    }
+}
+
+// Eliminate shift by zero
+const fn shr_zero_elim() -> Rule {
+    Rule {
+        rewriter: |ctx, inst| {
+            if let Ik::IBinary(IBinaryOp::LShr | IBinaryOp::AShr) = inst.kind(ctx) {
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
+                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                    if let Ik::IConst(v) = rhs_inst.kind(ctx) {
+                        if v.is_zero() {
+                            for user in dst.users(ctx) {
+                                user.replace(ctx, dst, lhs);
+                            }
+                            return true;
+                        }
+                    }
+                }
+            }
+            false
+        },
+    }
 }
