@@ -3,7 +3,7 @@ use std::hash::Hash;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use super::{inst::MInst, LowerConfig, MContext};
+use super::{inst::MInst, LowerConfig, MContext, MFunc};
 use crate::collections::linked_list::LinkedListContainerPtr;
 
 /// The kind of a register.
@@ -121,6 +121,34 @@ impl<I: MInst + Hash> RegDefUse<I> {
                     for use_ in uses {
                         reg_def_use.uses.entry(use_).or_default().insert(inst);
                     }
+                }
+            }
+        }
+
+        reg_def_use
+    }
+
+    pub fn compute_on_function(mctx: &MContext<I>, func: &MFunc<I>, config: &LowerConfig) -> Self {
+        let mut reg_def_use = RegDefUse {
+            defs: FxHashMap::default(),
+            uses: FxHashMap::default(),
+        };
+
+        if func.is_external(mctx) {
+            return reg_def_use;
+        }
+
+        for block in func.iter(mctx) {
+            for inst in block.iter(mctx) {
+                let defs = inst.defs(mctx, config);
+                let uses = inst.uses(mctx, config);
+
+                for def in defs {
+                    reg_def_use.defs.entry(def).or_default().insert(inst);
+                }
+
+                for use_ in uses {
+                    reg_def_use.uses.entry(use_).or_default().insert(inst);
                 }
             }
         }

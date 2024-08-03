@@ -105,7 +105,7 @@ impl Gcm {
 
         let best_block = inst.container(ctx).unwrap();
 
-        // place the block before its users
+        // place the instruction before its users
         let results: FxHashSet<Value> = inst.results(ctx).iter().copied().collect();
 
         for best_block_inst in best_block.iter(ctx) {

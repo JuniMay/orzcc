@@ -25,6 +25,17 @@ pub struct RvInstData {
     parent: Option<MBlock<RvInst>>,
 }
 
+impl Clone for RvInstData {
+    fn clone(&self) -> Self {
+        Self {
+            kind: self.kind.clone(),
+            next: None,
+            prev: None,
+            parent: None,
+        }
+    }
+}
+
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
 pub struct RvInst(BaseArenaPtr<RvInstData>);
 
@@ -385,6 +396,7 @@ impl RvInst {
     }
 }
 
+#[derive(Clone)]
 pub enum RvInstKind {
     Li {
         rd: Reg,
@@ -487,7 +499,13 @@ impl<'a> fmt::Display for DisplayRvInst<'a> {
         use RvInstKind as Ik;
 
         match &self.inst.deref(self.mctx).kind {
-            Ik::Li { rd, imm } => write!(f, "li {}, {:#018x}", regs::display(*rd), imm),
+            Ik::Li { rd, imm } => {
+                if *imm < 4096 {
+                    write!(f, "li {}, {}", regs::display(*rd), imm)
+                } else {
+                    write!(f, "li {}, {:#018x}", regs::display(*rd), imm)
+                }
+            }
             Ik::AluRR { op, rd, rs } => {
                 write!(f, "{} {}, {}", op, regs::display(*rd), regs::display(*rs))
             }
@@ -623,6 +641,7 @@ impl<'a> fmt::Display for DisplayRvInst<'a> {
     }
 }
 
+#[derive(Copy, Clone)]
 pub enum BrOp {
     Beq,
     Bne,
@@ -645,6 +664,7 @@ impl fmt::Display for BrOp {
     }
 }
 
+#[derive(Copy, Clone)]
 pub enum AluOpRRR {
     // gc
     Add,
@@ -752,6 +772,7 @@ impl fmt::Display for AluOpRRR {
     }
 }
 
+#[derive(Copy, Clone)]
 pub enum AluOpRRI {
     Addi,
     Addiw,
@@ -796,6 +817,7 @@ impl fmt::Display for AluOpRRI {
     }
 }
 
+#[derive(Copy, Clone)]
 pub enum AluOpRR {
     // zbb
     Clz,
@@ -829,6 +851,7 @@ impl fmt::Display for AluOpRR {
     }
 }
 
+#[derive(Copy, Clone)]
 pub enum FpuOpRR {
     FsqrtS,
     FsqrtD,
@@ -899,6 +922,7 @@ impl fmt::Display for FpuOpRR {
     }
 }
 
+#[derive(Copy, Clone)]
 pub enum FpuOpRRR {
     FaddS,
     FaddD,
@@ -957,6 +981,7 @@ impl fmt::Display for FpuOpRRR {
     }
 }
 
+#[derive(Copy, Clone)]
 pub enum FpuOpRRRR {
     FmaddS,
     FmaddD,
@@ -983,6 +1008,7 @@ impl fmt::Display for FpuOpRRRR {
     }
 }
 
+#[derive(Copy, Clone)]
 pub enum LoadOp {
     Lb,
     Lh,
@@ -1011,6 +1037,7 @@ impl fmt::Display for LoadOp {
     }
 }
 
+#[derive(Copy, Clone)]
 pub enum StoreOp {
     Sb,
     Sh,
@@ -1033,6 +1060,7 @@ impl fmt::Display for StoreOp {
     }
 }
 
+#[derive(Copy, Clone)]
 pub enum Frm {
     Rne,
     Rtz,
@@ -1474,6 +1502,25 @@ impl MInst for RvInst {
             *block = new_target;
         } else {
             panic!("not a branch");
+        }
+    }
+
+    fn match_move(self, mctx: &MContext<Self>) -> Option<(Reg, Reg)> {
+        match self.kind(mctx) {
+            RvInstKind::AluRRI {
+                op: AluOpRRI::Addi,
+                rd,
+                rs,
+                imm,
+            } if imm.as_i16() == 0 => Some((*rd, *rs)),
+            RvInstKind::FpuRRR {
+                op: FpuOpRRR::FsgnjS,
+                rd,
+                rs1,
+                rs2,
+                ..
+            } if *rs1 == *rs2 => Some((*rd, *rs1)),
+            _ => None,
         }
     }
 }

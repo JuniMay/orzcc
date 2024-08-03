@@ -2,9 +2,17 @@
 
 use clap::{Arg, Command};
 use orzcc::{
-    backend::{riscv64, simplify_cfg::SimplifyCfg, LowerConfig},
+    backend::{
+        reg_alloc::reg_coalescing::RegisterCoalescing,
+        riscv64,
+        simplify_cfg::SimplifyCfg,
+        LowerConfig,
+    },
     ir::{
         passes::{
+            adce::{Adce, ADCE},
+            branch2select::{Branch2Select, BRANCH2SELECT},
+            constant_phi::{ElimConstantPhi, ELIM_CONSTANT_PHI},
             control_flow::{
                 BlockReorder,
                 CfgCanonicalize,
@@ -19,7 +27,7 @@ use orzcc::{
             gvn::{GlobalValueNumbering, GVN},
             inline::{Inline, INLINE},
             instcombine::{InstCombine, INSTCOMBINE},
-            loops::{LoopUnroll, LOOP_UNROLL},
+            loops::{Lcssa, LoopSimplify, LoopUnroll, LOOP_UNROLL},
             mem2reg::{Mem2reg, MEM2REG},
             simple_dce::{SimpleDce, SIMPLE_DCE},
         },
@@ -76,38 +84,56 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut ir = sysy::irgen(&ast, 64);
 
         if cmd.opt > 0 {
-            // global2local might take effect after inlining, so just integrate it into the
-            // pipeline
+            let mut pipe0 = Pipeline::default();
 
-            let mut opt_pipeline = Pipeline::default();
-            opt_pipeline.add_pass(GLOBAL2LOCAL);
-            // remove redundant get_global
-            opt_pipeline.add_pass(SIMPLE_DCE);
-            opt_pipeline.add_pass(GLOBAL_DCE);
-            opt_pipeline.add_pass(MEM2REG);
-            opt_pipeline.add_pass(CFG_SIMPLIFY);
-            opt_pipeline.add_pass(CONSTANT_FOLDING);
-            opt_pipeline.add_pass(SIMPLE_DCE);
-            opt_pipeline.add_pass(INSTCOMBINE);
-            opt_pipeline.add_pass(SIMPLE_DCE);
-            // GCM is better than LICM, only run GCM
-            opt_pipeline.add_pass(GCM);
-            opt_pipeline.add_pass(GVN);
-            opt_pipeline.add_pass(SIMPLE_DCE);
-            opt_pipeline.add_pass(INLINE);
-            // remove functions that are not used after inlining
-            opt_pipeline.add_pass(SIMPLE_DCE);
-            opt_pipeline.add_pass(GLOBAL_DCE);
-            opt_pipeline.add_pass(LOOP_UNROLL);
-            opt_pipeline.add_pass(SIMPLE_DCE);
+            pipe0.add_pass(GLOBAL2LOCAL);
+            pipe0.add_pass(SIMPLE_DCE);
+            pipe0.add_pass(GLOBAL_DCE);
+            pipe0.add_pass(MEM2REG);
+            pipe0.add_pass(SIMPLE_DCE);
+            pipe0.add_pass(CFG_SIMPLIFY);
+            pipe0.add_pass(CONSTANT_FOLDING);
+            pipe0.add_pass(SIMPLE_DCE);
+            pipe0.add_pass(INSTCOMBINE);
+            pipe0.add_pass(SIMPLE_DCE);
+            pipe0.add_pass(GCM);
+            pipe0.add_pass(GVN);
+            pipe0.add_pass(CFG_SIMPLIFY);
+            pipe0.add_pass(ELIM_CONSTANT_PHI);
+            pipe0.add_pass(SIMPLE_DCE);
+            pipe0.add_pass(CFG_SIMPLIFY);
+            pipe0.add_pass(BRANCH2SELECT);
+            pipe0.add_pass(CFG_SIMPLIFY);
 
-            // // cleanup the loop optimizations
-            opt_pipeline.add_pass(CFG_SIMPLIFY);
-            opt_pipeline.add_pass(SIMPLE_DCE);
+            let mut pipe1 = Pipeline::default();
 
-            let iter = passman.run_pipeline(&mut ir, &opt_pipeline, 32, 8);
+            pipe1.add_pass(INLINE);
+            pipe1.add_pass(CFG_SIMPLIFY);
+            pipe1.add_pass(SIMPLE_DCE);
+            pipe1.add_pass(GLOBAL_DCE);
 
-            println!("Optimization iterations: {}", iter);
+            let mut pipe2 = Pipeline::default();
+
+            pipe2.add_pass(LOOP_UNROLL);
+            pipe2.add_pass(CONSTANT_FOLDING);
+            pipe2.add_pass(CFG_SIMPLIFY);
+            pipe2.add_pass(SIMPLE_DCE);
+
+            for i in 0..4 {
+                println!("Round {}", i);
+
+                let iter = passman.run_pipeline(&mut ir, &pipe0, 32, 8);
+                println!("pipeline 0 iterations: {}", iter);
+
+                let iter = passman.run_pipeline(&mut ir, &pipe1, 32, 8);
+                println!("pipeline 1 iterations: {}", iter);
+
+                let iter = passman.run_pipeline(&mut ir, &pipe2, 32, 8);
+                println!("pipeline 2 iterations: {}", iter);
+
+                passman.run_transform(ADCE, &mut ir, 1); // a little expensive, run once per round
+                passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
+            }
 
             passman.run_transform(BLOCK_REORDER, &mut ir, 1);
         }
@@ -128,6 +154,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if cmd.opt > 0 {
             riscv64::run_peephole(lower_ctx.mctx_mut(), &cmd.lower_cfg);
             SimplifyCfg::run(lower_ctx.mctx_mut(), &cmd.lower_cfg);
+            RegisterCoalescing::run::<RvLowerSpec>(&mut lower_ctx, &cmd.lower_cfg);
         }
 
         if let Some(emit_vcode) = &cmd.emit_vcode {
@@ -138,7 +165,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         lower_ctx.after_regalloc();
 
         if cmd.opt > 0 {
+            // SimplifyCfg::tail_duplication(lower_ctx.mctx_mut(), &cmd.lower_cfg);
             riscv64::run_peephole_after_regalloc(lower_ctx.mctx_mut(), &cmd.lower_cfg);
+            SimplifyCfg::ret_duplication(lower_ctx.mctx_mut(), &cmd.lower_cfg);
         }
 
         let mctx = lower_ctx.finish();
@@ -154,14 +183,21 @@ fn register_passes(passman: &mut PassManager) {
 
     Mem2reg::register(passman);
     SimpleDce::register(passman);
+    Adce::register(passman);
     ConstantFolding::register(passman);
     InstCombine::register(passman);
+    ElimConstantPhi::register(passman);
+    Branch2Select::register(passman);
+
     Inline::register(passman);
 
     Global2Local::register(passman);
     GlobalDce::register(passman);
 
     LoopUnroll::register(passman);
+    LoopSimplify::register(passman);
+    Lcssa::register(passman);
+
     GlobalValueNumbering::register(passman);
     Gcm::register(passman);
 

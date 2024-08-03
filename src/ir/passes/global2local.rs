@@ -47,6 +47,17 @@ impl Global2Local {
                     // decide the type of the global slot, if the type cannot be decided, just
                     // ignore it
 
+                    self.slot_users
+                        .entry(symbol.clone())
+                        .or_default()
+                        // there should be no duplicate instructions
+                        .push(inst);
+
+                    if self.slot_tys.contains_key(symbol) {
+                        // already analyzed the type, no need to analyze again
+                        continue;
+                    }
+
                     let ptr = inst.result(ctx, 0);
                     let mut ty = None;
                     for user in ptr.users(ctx) {
@@ -70,12 +81,6 @@ impl Global2Local {
                             continue;
                         }
                     };
-
-                    self.slot_users
-                        .entry(symbol.clone())
-                        .or_default()
-                        // there should be no duplicate instructions
-                        .push(inst);
 
                     self.slot_tys.insert(symbol.clone(), ty);
                 }
@@ -117,11 +122,17 @@ impl Global2Local {
                 continue;
             }
 
+            let ty = if let Some(ty) = self.slot_tys.get(slot.name(ctx)) {
+                *ty
+            } else {
+                // cannot decide the type of the global slot, just ignore it
+                continue;
+            };
+
             let slot_users = slot_users.unwrap();
-            let ty = *self.slot_tys.get(slot.name(ctx)).unwrap();
             let slot_size = slot.size(ctx);
 
-            if slot_size <= 8 {
+            if slot_size > 8 {
                 // only internalize small slots
                 continue;
             }

@@ -1,3 +1,6 @@
+pub mod adce;
+pub mod branch2select;
+pub mod constant_phi;
 pub mod control_flow;
 pub mod fold;
 pub mod gcm;

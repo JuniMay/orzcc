@@ -215,14 +215,14 @@ impl Block {
             if !inst.is_terminator(ctx) {
                 unreachable!("block is used in a non-terminator instruction");
             }
-            let mut args_to_modify = FxHashSet::default();
+            let mut args_to_modify = Vec::default();
 
             for succ in inst.deref_mut(ctx).successors.iter_mut() {
                 if succ.block.inner() == self {
                     let arg = succ.args.remove(&param).expect(
                         "block parameter is not passed to the block in the terminator instruction",
                     );
-                    args_to_modify.insert(arg);
+                    args_to_modify.push(arg);
                 }
             }
             // now update the uses of the passed argument
@@ -232,6 +232,28 @@ impl Block {
         }
         // now free the parameter
         param.drop(ctx);
+    }
+
+    /// Drop a parameter without removing its incomings.
+    ///
+    /// Used in aggressive DCE to remove dead block parameters.
+    pub fn drop_param_without_removing_args(self, ctx: &mut Context, idx: usize) {
+        let param = self.deref(ctx).params[idx];
+        if !param.users(ctx).is_empty() {
+            panic!("cannot remove block parameter because it is still in use");
+        }
+
+        self.deref_mut(ctx).params.remove(idx);
+
+        let params = self.params(ctx).to_vec();
+
+        for param in params.iter().skip(idx) {
+            if let ValueKind::BlockParam { idx, .. } = param.kind_mut(ctx) {
+                *idx -= 1;
+            } else {
+                unreachable!()
+            }
+        }
     }
 
     /// Free the block from the context.

@@ -44,6 +44,19 @@ where
     }
 
     pub fn label(self, arena: &MContext<I>) -> &MLabel { &self.deref(arena).label }
+
+    pub fn size(self, arena: &MContext<I>) -> usize {
+        let mut size = 0;
+        for _ in self.iter(arena) {
+            size += 1;
+        }
+        size
+    }
+
+    pub fn remove(self, arena: &mut MContext<I>) {
+        self.unlink(arena);
+        arena.free(self);
+    }
 }
 
 impl<I> Hash for MBlock<I> {

@@ -1,5 +1,3 @@
-use std::collections::VecDeque;
-
 use super::CfgCanonicalize;
 use crate::{
     collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
@@ -9,10 +7,7 @@ use crate::{
         Context,
         Func,
     },
-    utils::{
-        cfg::{CfgInfo, CfgRegion},
-        dominance::Dominance,
-    },
+    utils::dfs::DfsContext,
 };
 
 pub const BLOCK_REORDER: &str = "block-reorder";
@@ -23,35 +18,38 @@ impl LocalPassMut for BlockReorder {
     type Output = ();
 
     fn run(&mut self, ctx: &mut Context, func: Func) -> PassResult<(Self::Output, bool)> {
-        let cfg = CfgInfo::new(ctx, func);
-        let dominance = Dominance::new(ctx, &cfg);
+        // let cfg = CfgInfo::new(ctx, func);
+        let mut dfs = DfsContext::<Block>::default();
 
         let blocks: Vec<Block> = func.iter(ctx).collect();
 
-        let entry = func.entry_node(ctx);
         let mut exit = None;
 
         for block in blocks.iter() {
-            block.unlink(ctx);
             if block.tail(ctx).unwrap().is_ret(ctx) {
                 exit = Some(*block);
             }
         }
 
         let exit = exit.unwrap();
-        let mut queue = VecDeque::new();
 
-        queue.push_back(entry);
-        while let Some(block) = queue.pop_front() {
+        let mut blocks = Vec::new();
+
+        for block in dfs.pre_order_iter(ctx, func) {
             if block != exit {
-                func.push_back(ctx, block);
-            }
-            for child in dominance.children(block) {
-                queue.push_back(*child);
+                blocks.push(block);
             }
         }
 
-        func.push_back(ctx, exit);
+        blocks.push(exit);
+
+        for block in blocks.iter() {
+            block.unlink(ctx);
+        }
+
+        for block in blocks.iter() {
+            func.push_back(ctx, *block);
+        }
 
         Ok(((), false))
     }
