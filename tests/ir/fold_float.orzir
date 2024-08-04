@@ -1,0 +1,127 @@
+slot @__GLOBAL_CONST_THREE /* 13 */  : i32 = [0x03, 0x00, 0x00, 0x00]
+slot @__GLOBAL_CONST_EVAL1 /* 6 */  : f32 = [0xfe, 0x10, 0xbe, 0x42]
+slot @__GLOBAL_CONST_PI_HEX /* 3 */  : f32 = [0xdb, 0x0f, 0x49, 0x40]
+slot @__GLOBAL_CONST_FIVE /* 14 */  : i32 = [0x05, 0x00, 0x00, 0x00]
+slot @__DATA__SLOT_VAR_main_arr_0 /* 15 */  : [f32; 10] = [0x00, 0x00, 0x80, 0x3f, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]
+slot @__GLOBAL_CONST_EVAL2 /* 7 */  : f32 = [0xe7, 0x3a, 0x0a, 0x42]
+slot @__GLOBAL_CONST_RADIUS /* 0 */  : f32 = [0x00, 0x00, 0xb0, 0x40]
+slot @__GLOBAL_CONST_TWO /* 12 */  : i32 = [0x02, 0x00, 0x00, 0x00]
+slot @__GLOBAL_CONST_PI /* 1 */  : f32 = [0xdb, 0x0f, 0x49, 0x40]
+slot @__GLOBAL_CONST_HEX2 /* 4 */  : f32 = [0x00, 0x00, 0xa0, 0x3d]
+slot @__GLOBAL_CONST_EPS /* 2 */  : f32 = [0xbd, 0x37, 0x86, 0x35]
+slot @__GLOBAL_CONST_EVAL3 /* 8 */  : f32 = [0xe7, 0x3a, 0x0a, 0x42]
+slot @__GLOBAL_CONST_CONV2 /* 10 */  : f32 = [0x00, 0xf0, 0x7f, 0x45]
+slot @__GLOBAL_CONST_MAX /* 11 */  : i32 = [0x00, 0xca, 0x9a, 0x3b]
+slot @__GLOBAL_CONST_CONV1 /* 9 */  : f32 = [0x00, 0x00, 0x69, 0x43]
+slot @__GLOBAL_CONST_FACT /* 5 */  : f32 = [0x00, 0xe8, 0x00, 0xc7]
+decl @_sysy_starttime(i32) -> void
+decl @getfloat() -> f32
+decl @putfarray(i32, ptr) -> void
+decl @putfloat(f32) -> void
+decl @getch() -> i32
+decl @getfarray(ptr) -> i32
+decl @putch(i32) -> void
+decl @putint(i32) -> void
+decl @getarray(ptr) -> i32
+decl @memcpy(ptr, ptr, i32) -> void
+decl @getint() -> i32
+decl @memset(ptr, i32, i32) -> void
+decl @putarray(i32, ptr) -> void
+decl @_sysy_stoptime(i32) -> void
+func @ok /* 4 */ () -> void {
+^bb6 /* 16 */ :
+    %v46 /* 52, uses: 1 */ = iconst 0x6fi32 : i32
+    /* no result */ call @putch(%v46)
+    %v47 /* 53, uses: 1 */ = iconst 0x6bi32 : i32
+    /* no result */ call @putch(%v47)
+    %v48 /* 54, uses: 1 */ = iconst 0xai32 : i32
+    /* no result */ call @putch(%v48)
+    /* no result */ ret void
+
+}
+func @float_eq /* 2 */ (f32, f32) -> i32 {
+^bb3 /* 8 */ (%__PARAM_float_eq_a: f32 /* 32, no.0 */, %__PARAM_float_eq_b: f32 /* 33, no.1 */):
+    %v116 /* 147, uses: 0 */ = undef : i32
+    %v117 /* 148, uses: 0 */ = undef : f32
+    %v118 /* 149, uses: 0 */ = undef : f32
+    %v33 /* 39, uses: 1 */ = fsub %__PARAM_float_eq_a, %__PARAM_float_eq_b : f32
+    %v34 /* 40, uses: 1 */ = call @float_abs(%v33) : f32
+    %v35 /* 41, uses: 1 */ = fconst 0x358637bd : f32
+    %v36 /* 42, uses: 1 */ = fcmp.ult %v34, %v35 : i1
+    /* no result */ br %v36, ^if.then_1, ^if.else_1
+
+^if.then_1 /* 11 */ :
+    %v37 /* 43, uses: 1 */ = iconst 0x1i32 : i32
+    /* no result */ jump ^bb4(%v37)
+
+^if.else_1 /* 12 */ :
+    %v38 /* 44, uses: 1 */ = iconst 0x0i32 : i32
+    /* no result */ jump ^bb4(%v38)
+
+^bb4 /* 9 */ (%v119: i32 /* 150, no.0 */):
+    /* no result */ ret %v119
+
+}
+
+func @float_abs /* 0 */ (f32) -> f32 {
+^bb0 /* 0 */ (%__PARAM_float_abs_x: f32 /* 0, no.0 */):
+    %v30 /* 36, uses: 0 */ = undef : f32
+    %v29 /* 35, uses: 0 */ = undef : f32
+    %v1 /* 4, uses: 1 */ = iconst 0x0i32 : i32
+    %v2 /* 5, uses: 1 */ = sitofp %v1 : f32
+    %v3 /* 6, uses: 1 */ = fcmp.ult %__PARAM_float_abs_x, %v2 : i1
+    /* no result */ br %v3, ^if.then_0, ^bb1(%__PARAM_float_abs_x)
+
+^if.then_0 /* 3 */ :
+    %v5 /* 8, uses: 1 */ = fneg %__PARAM_float_abs_x : f32
+    /* no result */ jump ^bb1(%v5)
+
+^bb1 /* 1 */ (%v28: f32 /* 34, no.0 */):
+    /* no result */ ret %v28
+
+}
+func @main /* 7 */ () -> i32 {
+^bb9 /* 30 */ :
+    %v62 /* 73, uses: 1 */ = fconst 0x420a3ae7 : f32
+    %v63 /* 74, uses: 1 */ = fconst 0x420a3ae7 : f32
+    %v64 /* 75, uses: 1 */ = call @float_eq(%v62, %v63) : i32
+    /* no result */ call @assert(%v64)
+    /* no result */ ret void
+}
+func @error /* 3 */ () -> void {
+^bb5 /* 14 */ :
+    %v40 /* 46, uses: 1 */ = iconst 0x65i32 : i32
+    /* no result */ call @putch(%v40)
+    %v41 /* 47, uses: 1 */ = iconst 0x72i32 : i32
+    /* no result */ call @putch(%v41)
+    %v42 /* 48, uses: 1 */ = iconst 0x72i32 : i32
+    /* no result */ call @putch(%v42)
+    %v43 /* 49, uses: 1 */ = iconst 0x6fi32 : i32
+    /* no result */ call @putch(%v43)
+    %v44 /* 50, uses: 1 */ = iconst 0x72i32 : i32
+    /* no result */ call @putch(%v44)
+    %v45 /* 51, uses: 1 */ = iconst 0xai32 : i32
+    /* no result */ call @putch(%v45)
+    /* no result */ ret void
+
+}
+func @assert /* 5 */ (i32) -> void {
+^bb7 /* 18 */ (%__PARAM_assert_cond: i32 /* 55, no.0 */):
+    %v4 /* 7, uses: 0 */ = undef : i32
+    %v49 /* 58, uses: 1 */ = iconst 0x0i32 : i32
+    %v50 /* 59, uses: 1 */ = icmp.ne %__PARAM_assert_cond, %v49 : i1
+    %v51 /* 60, uses: 1 */ = not %v50 : i1
+    /* no result */ br %v51, ^if.then_2, ^if.else_2
+
+^if.then_2 /* 21 */ :
+    /* no result */ call @error()
+    /* no result */ jump ^if.exit_2
+
+^if.else_2 /* 22 */ :
+    /* no result */ call @ok()
+    /* no result */ jump ^if.exit_2
+
+^if.exit_2 /* 23 */ :
+    /* no result */ ret void
+
+}
