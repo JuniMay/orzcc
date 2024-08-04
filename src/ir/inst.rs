@@ -1419,6 +1419,25 @@ impl Inst {
         )
     }
 
+    /// AGGRESSIVE: FBinary associations can result in precision and rounding
+    /// errors
+    pub fn is_associative(self, ctx: &Context) -> bool {
+        use InstKind as Ik;
+
+        matches!(
+            self.kind(ctx),
+            Ik::IBinary(IBinaryOp::Add)
+                | Ik::IBinary(IBinaryOp::Mul)
+                | Ik::IBinary(IBinaryOp::And)
+                | Ik::IBinary(IBinaryOp::Or)
+                | Ik::IBinary(IBinaryOp::Xor)
+                | Ik::IBinary(IBinaryOp::Min)
+                | Ik::IBinary(IBinaryOp::Max)
+                | Ik::FBinary(FBinaryOp::Add)  // aggressive
+                | Ik::FBinary(FBinaryOp::Mul) // aggressive
+        )
+    }
+
     pub fn commute_operands(self, ctx: &mut Context) {
         if !self.is_commutative(ctx) {
             panic!("instruction is not commutative");

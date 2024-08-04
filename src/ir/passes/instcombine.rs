@@ -5,6 +5,51 @@
 //! matches, the instruction is modified in place and the function returns
 //! `true`. The rule should not remove the instruction, but can modify the
 //! def-use chain of the instruction result.
+//!
+//! The rules include:
+//！
+//! - `c @ x => x @ c` ^[1] [`mv_const_rhs`]
+//!
+//! - `x +- 0 => x` [`add_zero_elim`] [`sub_zero_elim`]
+//! - `x -+ (0 - y) => x +- y` [`assoc_sub_zero`]
+//! - `(0 - x) + y => y - x`
+//!
+//! - `x - x => 0` [`sub_identity_to_zero`]
+//! - `x - (x + y)` or `x - (y + x)` => `0 - y`
+//! - `(x + y) - x` or `(y + x) - x` => `y`
+//! - `(x +- c) + d` or `d + (x +- c)` => `x +- (c +- d)` [`assoc_const`]
+//! - `(x +- c) - d => x +- (c -+ d)`
+//! - `d - (c - x) => x + (d - c)`
+//!
+//! - `x + x => x * 2` [`add_to_mul`]
+//! - `(x * c) + x` or `x + (x * c)` => `x * (c + 1)` [`distributive_one`]
+//! - `(x * c) - x` => `x * (c - 1)
+//! - `x - (x * c)` => `x * (1 - c)`
+//! - `x * y +- x * z => x * (y +- z)` [`distributive`]
+//! - `x * y +- z * y => (x +- z) * y`
+//! - `x / y +- z / y => (x +- z) / y`
+//!
+//! - `v * 1 => v` [`mul_one_elim`]
+//! - `v * 0 => 0` [`mul_zero_elim`]
+//! - `v / 1 => v` [`div_one_elim`]
+//! - `v / -1 => -v` [`div_neg_one_elim`]
+//! - `v % 1 => 0` [`rem_one_elim`]
+//!
+//! - `(x * c) * d => x * (c * d)` [`assoc_const`]
+//! - `d * (x * c) => x * (c * d)`
+//!
+//! - `v << 0 => v` [`shl_zero_elim`]
+//! - `v >> 0 => v` [`shr_zero_elim`]
+//!
+//! - `v / (2^n)` => `v >> n` [`div_to_shl`]
+//! - `v * (2^n)` => `v << n` [`mul_to_shl`]
+//! - `v % (2^n)` => `v & (2^n - 1)` [`rem_to_shl`]
+//! - `v / c` => `(v * magic) >> disp + sign` [`div_rem_to_mul`]
+//! - `v % c` => `v - (v / c) * c`
+//!
+//! - `p[0] => *p` [`offset_zero_elim`]
+//!
+//! [1]: where @ is a commutative binary operator.
 
 // TODO: Now this pass only contains a few simple rules, we need to add more
 // rules to make it more powerful.
@@ -25,10 +70,7 @@
 // TODO: Find a way to test these rules one by one.
 
 use crate::{
-    collections::{
-        apint::ApInt,
-        linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
-    },
+    collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
     ir::{
         passman::{GlobalPassMut, LocalPassMut, PassResult, TransformPass},
         CastOp,
@@ -63,6 +105,7 @@ impl Default for InstCombine {
     fn default() -> Self {
         Self {
             rules: vec![
+                mv_same_together(),     // aggressive
                 sub_identity_to_zero(), // aggressive
                 mul_zero_elim(),
                 mul_one_elim(),
@@ -100,14 +143,15 @@ impl LocalPassMut for InstCombine {
             let mut cursor = block.cursor();
             while let Some(inst) = cursor.next(ctx) {
                 if !inst.is_used(ctx) {
-                    // if the instruction has no uses, we can move to the next instruction.
+                    // if the instruction's results have no users, we can move to the next
+                    // instruction.
                     continue;
                 }
                 for rule in &self.rules {
                     if (rule.rewriter)(ctx, inst) {
                         changed = true;
                         if !inst.is_used(ctx) {
-                            // if the modified instruction has no uses, we can move to the next
+                            // if the instruction's results have no users, we can move to the next
                             // instruction without applying other rules
                             break;
                         }
@@ -1255,7 +1299,7 @@ const fn distributive_one() -> Rule {
 /// Distributive property for strength reduction.
 ///
 /// - `x * y + x * z => x * (y + z)`
-/// - `x * y - z * y => (x + z) * y`
+/// - `x * y - z * y => (x - z) * y`
 /// - `x * y - x * z => x * (y - z)`
 /// - `x * y + z * y => (x + z) * y`
 /// - `x / y + z / y => (x + z) / y`
@@ -1384,6 +1428,86 @@ const fn distributive() -> Rule {
                             }
                         }
                     }
+                }
+            }
+            false
+        },
+    }
+}
+
+/// Move same instructions' same operands together,
+/// instruction that can be moved together must be associative.
+///
+/// `(x @ y) @ x` or `x @ (x @ y)` or `x @ (y @ x)` or `(y @ x) @ x` => `(x @ x)
+/// @ y`
+///
+/// note: this rule better to run after add_to_mul
+/// AGGRESSIVE: float may cause accuracy problem
+const fn mv_same_together() -> Rule {
+    Rule {
+        rewriter: |ctx, inst| {
+            if inst.is_associative(ctx) {
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+                let inst_kind = inst.kind(ctx).clone();
+                let ty = dst.ty(ctx);
+
+                let mut insts_to_move =
+                    if let ValueKind::InstResult { inst: lhs_inst, .. } = lhs.kind(ctx) {
+                        if lhs_inst.kind(ctx) == &inst_kind {
+                            let lhs_lhs = lhs_inst.operand(ctx, 0);
+                            let lhs_rhs = lhs_inst.operand(ctx, 1);
+                            if lhs_lhs == rhs {
+                                Some((rhs, lhs_rhs))
+                            } else if lhs_rhs == rhs {
+                                Some((rhs, lhs_lhs))
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+                if insts_to_move.is_none() {
+                    insts_to_move =
+                        if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                            if rhs_inst.kind(ctx) == &inst_kind {
+                                let rhs_lhs = rhs_inst.operand(ctx, 0);
+                                let rhs_rhs = rhs_inst.operand(ctx, 1);
+                                if rhs_lhs == lhs {
+                                    Some((lhs, rhs_rhs))
+                                } else if rhs_rhs == lhs {
+                                    Some((lhs, rhs_lhs))
+                                } else {
+                                    None
+                                }
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        };
+                }
+                if let Some((twice, other)) = insts_to_move {
+                    let inst_inner =
+                        Inst::new(ctx, inst_kind.clone(), vec![ty], vec![twice, twice]);
+                    let inst_outer = Inst::new(
+                        ctx,
+                        inst_kind.clone(),
+                        vec![ty],
+                        vec![inst_inner.result(ctx, 0), other],
+                    );
+                    inst.insert_after(ctx, inst_inner);
+                    inst_inner.insert_after(ctx, inst_outer);
+                    for user in dst.users(ctx) {
+                        user.replace(ctx, dst, inst_outer.result(ctx, 0));
+                    }
+                    return true;
+                } else {
+                    return false;
                 }
             }
             false
