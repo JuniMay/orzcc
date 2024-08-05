@@ -5,51 +5,6 @@
 //! matches, the instruction is modified in place and the function returns
 //! `true`. The rule should not remove the instruction, but can modify the
 //! def-use chain of the instruction result.
-//!
-//! The rules include:
-//！
-//! - `c @ x => x @ c` ^[1] [`mv_const_rhs`]
-//!
-//! - `x +- 0 => x` [`add_zero_elim`] [`sub_zero_elim`]
-//! - `x -+ (0 - y) => x +- y` [`assoc_sub_zero`]
-//! - `(0 - x) + y => y - x`
-//!
-//! - `x - x => 0` [`sub_identity_to_zero`]
-//! - `x - (x + y)` or `x - (y + x)` => `0 - y`
-//! - `(x + y) - x` or `(y + x) - x` => `y`
-//! - `(x +- c) + d` or `d + (x +- c)` => `x +- (c +- d)` [`assoc_const`]
-//! - `(x +- c) - d => x +- (c -+ d)`
-//! - `d - (c - x) => x + (d - c)`
-//!
-//! - `x + x => x * 2` [`add_to_mul`]
-//! - `(x * c) + x` or `x + (x * c)` => `x * (c + 1)` [`distributive_one`]
-//! - `(x * c) - x` => `x * (c - 1)
-//! - `x - (x * c)` => `x * (1 - c)`
-//! - `x * y +- x * z => x * (y +- z)` [`distributive`]
-//! - `x * y +- z * y => (x +- z) * y`
-//! - `x / y +- z / y => (x +- z) / y`
-//!
-//! - `v * 1 => v` [`mul_one_elim`]
-//! - `v * 0 => 0` [`mul_zero_elim`]
-//! - `v / 1 => v` [`div_one_elim`]
-//! - `v / -1 => -v` [`div_neg_one_elim`]
-//! - `v % 1 => 0` [`rem_one_elim`]
-//!
-//! - `(x * c) * d => x * (c * d)` [`assoc_const`]
-//! - `d * (x * c) => x * (c * d)`
-//!
-//! - `v << 0 => v` [`shl_zero_elim`]
-//! - `v >> 0 => v` [`shr_zero_elim`]
-//!
-//! - `v / (2^n)` => `v >> n` [`div_to_shl`]
-//! - `v * (2^n)` => `v << n` [`mul_to_shl`]
-//! - `v % (2^n)` => `v & (2^n - 1)` [`rem_to_shl`]
-//! - `v / c` => `(v * magic) >> disp + sign` [`div_rem_to_mul`]
-//! - `v % c` => `v - (v / c) * c`
-//!
-//! - `p[0] => *p` [`offset_zero_elim`]
-//!
-//! [1]: where @ is a commutative binary operator.
 
 // TODO: Now this pass only contains a few simple rules, we need to add more
 // rules to make it more powerful.
@@ -75,6 +30,8 @@ use crate::{
         passman::{GlobalPassMut, LocalPassMut, PassResult, TransformPass},
         CastOp,
         Context,
+        FBinaryOp,
+        FloatConstant,
         Func,
         IBinaryOp,
         Inst,
@@ -105,28 +62,28 @@ impl Default for InstCombine {
     fn default() -> Self {
         Self {
             rules: vec![
-                mv_same_together(),     // aggressive
-                sub_identity_to_zero(), // aggressive
-                mul_zero_elim(),
+                // sub_identity_to_zero(), // aggressive, also float
+                mul_zero_elim(), // also float
                 mul_one_elim(),
                 mv_const_rhs(),
-                add_zero_elim(),
-                assoc_sub_zero(),
+                add_zero_elim(),  // also float
+                assoc_sub_zero(), // also float
                 sub_zero_elim(),
                 offset_zero_elim(),
-                add_to_mul(),
+                add_to_mul(), // also float
                 mul_to_shl(),
-                assoc_const(),      // aggressive
-                distributive_one(), // aggressive
-                distributive(),     // aggressive
-                div_one_elim(),
-                div_neg_one_elim(),
+                // assoc_const(),      // aggressive, also float
+                distributive_one(), // aggressive, also float
+                distributive(),     // aggressive, also float
+                div_one_elim(),     // also float
+                div_neg_one_elim(), // also float
                 div_to_shl(),
                 rem_one_elim(),
                 rem_to_shl(),
                 div_rem_to_mul(),
                 shl_zero_elim(), // not tested
                 shr_zero_elim(), // not tested
+                div_to_mul(),    // only float
             ],
         }
     }
@@ -143,15 +100,14 @@ impl LocalPassMut for InstCombine {
             let mut cursor = block.cursor();
             while let Some(inst) = cursor.next(ctx) {
                 if !inst.is_used(ctx) {
-                    // if the instruction's results have no users, we can move to the next
-                    // instruction.
+                    // if the instruction has no uses, we can move to the next instruction.
                     continue;
                 }
                 for rule in &self.rules {
                     if (rule.rewriter)(ctx, inst) {
                         changed = true;
                         if !inst.is_used(ctx) {
-                            // if the instruction's results have no users, we can move to the next
+                            // if the modified instruction has no uses, we can move to the next
                             // instruction without applying other rules
                             break;
                         }
@@ -197,7 +153,7 @@ const fn mv_const_rhs() -> Rule {
                 let lhs = inst.operand(ctx, 0);
                 let rhs = inst.operand(ctx, 1);
 
-                // lhs is const and rhs is not, than we commute
+                // lhs is const and rhs is not, then we commute
                 if let ValueKind::InstResult { inst: lhs_inst, .. } = lhs.kind(ctx) {
                     if let Ik::IConst(_) = lhs_inst.kind(ctx) {
                     } else if let Ik::FConst(_) = lhs_inst.kind(ctx) {
@@ -235,18 +191,24 @@ const fn add_zero_elim() -> Rule {
                 let rhs = inst.operand(ctx, 1);
                 let dst = inst.result(ctx, 0);
 
-                if let ValueKind::InstResult { inst: lhs_inst, .. } = lhs.kind(ctx) {
-                    if let Ik::IConst(v) = lhs_inst.kind(ctx) {
+                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                    if let Ik::IConst(v) = rhs_inst.kind(ctx) {
                         if v.is_zero() {
                             for user in dst.users(ctx) {
-                                user.replace(ctx, dst, rhs);
+                                user.replace(ctx, dst, lhs);
                             }
                             return true;
                         }
                     }
                 }
+            }
+            if let Ik::FBinary(FBinaryOp::Add) = inst.kind(ctx) {
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
                 if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
-                    if let Ik::IConst(v) = rhs_inst.kind(ctx) {
+                    if let Ik::FConst(v) = rhs_inst.kind(ctx) {
                         if v.is_zero() {
                             for user in dst.users(ctx) {
                                 user.replace(ctx, dst, lhs);
@@ -271,6 +233,22 @@ const fn sub_zero_elim() -> Rule {
 
                 if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
                     if let Ik::IConst(v) = rhs_inst.kind(ctx) {
+                        if v.is_zero() {
+                            for user in dst.users(ctx) {
+                                user.replace(ctx, dst, lhs);
+                            }
+                            return true;
+                        }
+                    }
+                }
+            }
+            if let Ik::FBinary(FBinaryOp::Sub) = inst.kind(ctx) {
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
+                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                    if let Ik::FConst(v) = rhs_inst.kind(ctx) {
                         if v.is_zero() {
                             for user in dst.users(ctx) {
                                 user.replace(ctx, dst, lhs);
@@ -381,18 +359,24 @@ const fn mul_one_elim() -> Rule {
                 let rhs = inst.operand(ctx, 1);
                 let dst = inst.result(ctx, 0);
 
-                if let ValueKind::InstResult { inst: lhs_inst, .. } = lhs.kind(ctx) {
-                    if let Ik::IConst(v) = lhs_inst.kind(ctx) {
+                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                    if let Ik::IConst(v) = rhs_inst.kind(ctx) {
                         if v.is_one() {
                             for user in dst.users(ctx) {
-                                user.replace(ctx, dst, rhs);
+                                user.replace(ctx, dst, lhs);
                             }
                             return true;
                         }
                     }
                 }
+            }
+            if let Ik::FBinary(FBinaryOp::Mul) = inst.kind(ctx) {
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
                 if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
-                    if let Ik::IConst(v) = rhs_inst.kind(ctx) {
+                    if let Ik::FConst(v) = rhs_inst.kind(ctx) {
                         if v.is_one() {
                             for user in dst.users(ctx) {
                                 user.replace(ctx, dst, lhs);
@@ -411,22 +395,26 @@ const fn mul_zero_elim() -> Rule {
     Rule {
         rewriter: |ctx, inst| {
             if let Ik::IBinary(IBinaryOp::Mul) = inst.kind(ctx) {
-                let lhs = inst.operand(ctx, 0);
                 let rhs = inst.operand(ctx, 1);
                 let dst = inst.result(ctx, 0);
 
-                if let ValueKind::InstResult { inst: lhs_inst, .. } = lhs.kind(ctx) {
-                    if let Ik::IConst(v) = lhs_inst.kind(ctx) {
+                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                    if let Ik::IConst(v) = rhs_inst.kind(ctx) {
                         if v.is_zero() {
                             for user in dst.users(ctx) {
-                                user.replace(ctx, dst, lhs);
+                                user.replace(ctx, dst, rhs);
                             }
                             return true;
                         }
                     }
                 }
+            }
+            if let Ik::FBinary(FBinaryOp::Mul) = inst.kind(ctx) {
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
                 if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
-                    if let Ik::IConst(v) = rhs_inst.kind(ctx) {
+                    if let Ik::FConst(v) = rhs_inst.kind(ctx) {
                         if v.is_zero() {
                             for user in dst.users(ctx) {
                                 user.replace(ctx, dst, rhs);
@@ -461,6 +449,22 @@ const fn add_to_mul() -> Rule {
                 if lhs == rhs {
                     let two = Inst::iconst(ctx, IntConstant::from(2).resize(width), dst.ty(ctx));
                     let mul = Inst::ibinary(ctx, IBinaryOp::Mul, lhs, two.result(ctx, 0));
+                    inst.insert_after(ctx, two);
+                    two.insert_after(ctx, mul);
+                    for user in dst.users(ctx) {
+                        user.replace(ctx, dst, mul.result(ctx, 0));
+                    }
+                    return true;
+                }
+            }
+            if let Ik::FBinary(FBinaryOp::Add) = inst.kind(ctx) {
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
+                if lhs == rhs {
+                    let two = Inst::fconst(ctx, FloatConstant::from(2.0), dst.ty(ctx));
+                    let mul = Inst::fbinary(ctx, FBinaryOp::Mul, lhs, two.result(ctx, 0));
                     inst.insert_after(ctx, two);
                     two.insert_after(ctx, mul);
                     for user in dst.users(ctx) {
@@ -560,6 +564,85 @@ const fn assoc_sub_zero() -> Rule {
                     }
                 }
             }
+
+            if let Ik::FBinary(FBinaryOp::Sub) = inst.kind(ctx) {
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
+                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                    if let Ik::FBinary(FBinaryOp::Sub) = rhs_inst.kind(ctx) {
+                        let rhs_lhs = rhs_inst.operand(ctx, 0);
+                        let rhs_rhs = rhs_inst.operand(ctx, 1);
+                        if let ValueKind::InstResult {
+                            inst: rhs_lhs_inst, ..
+                        } = rhs_lhs.kind(ctx)
+                        {
+                            if let Ik::FConst(v) = rhs_lhs_inst.kind(ctx) {
+                                if v.is_zero() {
+                                    // x - (0 - y) => x + y
+                                    let add = Inst::fbinary(ctx, FBinaryOp::Add, lhs, rhs_rhs);
+                                    inst.insert_after(ctx, add);
+                                    for user in dst.users(ctx) {
+                                        user.replace(ctx, dst, add.result(ctx, 0));
+                                    }
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
+            } else if let Ik::FBinary(FBinaryOp::Add) = inst.kind(ctx) {
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
+                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                    if let Ik::FBinary(FBinaryOp::Sub) = rhs_inst.kind(ctx) {
+                        let rhs_lhs = rhs_inst.operand(ctx, 0);
+                        let rhs_rhs = rhs_inst.operand(ctx, 1);
+                        if let ValueKind::InstResult {
+                            inst: rhs_lhs_inst, ..
+                        } = rhs_lhs.kind(ctx)
+                        {
+                            if let Ik::FConst(v) = rhs_lhs_inst.kind(ctx) {
+                                if v.is_zero() {
+                                    // x + (0 - y) => x - y
+                                    let sub = Inst::fbinary(ctx, FBinaryOp::Sub, lhs, rhs_rhs);
+                                    inst.insert_after(ctx, sub);
+                                    for user in dst.users(ctx) {
+                                        user.replace(ctx, dst, sub.result(ctx, 0));
+                                    }
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if let ValueKind::InstResult { inst: lhs_inst, .. } = lhs.kind(ctx) {
+                    if let Ik::FBinary(FBinaryOp::Sub) = lhs_inst.kind(ctx) {
+                        let lhs_lhs = lhs_inst.operand(ctx, 0);
+                        let lhs_rhs = lhs_inst.operand(ctx, 1);
+                        if let ValueKind::InstResult {
+                            inst: lhs_lhs_inst, ..
+                        } = lhs_lhs.kind(ctx)
+                        {
+                            if let Ik::FConst(v) = lhs_lhs_inst.kind(ctx) {
+                                if v.is_zero() {
+                                    // (0 - x) + y => y - x
+                                    let sub = Inst::fbinary(ctx, FBinaryOp::Sub, rhs, lhs_rhs);
+                                    inst.insert_after(ctx, sub);
+                                    for user in dst.users(ctx) {
+                                        user.replace(ctx, dst, sub.result(ctx, 0));
+                                    }
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             false
         },
     }
@@ -636,6 +719,75 @@ const fn sub_identity_to_zero() -> Rule {
 
                 if let ValueKind::InstResult { inst: lhs_inst, .. } = lhs.kind(ctx) {
                     if let Ik::IBinary(IBinaryOp::Add) = lhs_inst.kind(ctx) {
+                        let lhs_lhs = lhs_inst.operand(ctx, 0);
+                        let lhs_rhs = lhs_inst.operand(ctx, 1);
+                        if rhs == lhs_lhs {
+                            // (x + y) - x => y
+                            for user in dst.users(ctx) {
+                                user.replace(ctx, dst, lhs_rhs);
+                            }
+                            return true;
+                        } else if rhs == lhs_rhs {
+                            // (y + x) - x => y
+                            for user in dst.users(ctx) {
+                                user.replace(ctx, dst, lhs_lhs);
+                            }
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            if let Ik::FBinary(FBinaryOp::Sub) = inst.kind(ctx) {
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
+                if lhs == rhs {
+                    let zero = Inst::fconst(ctx, FloatConstant::from(0.0), dst.ty(ctx));
+                    inst.insert_after(ctx, zero);
+                    for user in dst.users(ctx) {
+                        user.replace(ctx, dst, zero.result(ctx, 0));
+                    }
+                    return true;
+                }
+
+                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                    if let Ik::FBinary(FBinaryOp::Add) = rhs_inst.kind(ctx) {
+                        let rhs_lhs = rhs_inst.operand(ctx, 0);
+                        let rhs_rhs = rhs_inst.operand(ctx, 1);
+                        if lhs == rhs_lhs {
+                            // x - (x + y) => 0 - y
+                            let zero = Inst::fconst(ctx, FloatConstant::from(0.0), dst.ty(ctx));
+                            let neg_rhs =
+                                Inst::fbinary(ctx, FBinaryOp::Sub, zero.result(ctx, 0), rhs_rhs);
+
+                            inst.insert_after(ctx, zero);
+                            zero.insert_after(ctx, neg_rhs);
+
+                            for user in dst.users(ctx) {
+                                user.replace(ctx, dst, neg_rhs.result(ctx, 0));
+                            }
+                            return true;
+                        } else if lhs == rhs_rhs {
+                            // x - (y + x) => 0 - y
+                            let zero = Inst::fconst(ctx, FloatConstant::from(0.0), dst.ty(ctx));
+                            let neg_rhs =
+                                Inst::fbinary(ctx, FBinaryOp::Sub, zero.result(ctx, 0), rhs_lhs);
+
+                            inst.insert_after(ctx, zero);
+                            zero.insert_after(ctx, neg_rhs);
+
+                            for user in dst.users(ctx) {
+                                user.replace(ctx, dst, neg_rhs.result(ctx, 0));
+                            }
+                            return true;
+                        }
+                    }
+                }
+
+                if let ValueKind::InstResult { inst: lhs_inst, .. } = lhs.kind(ctx) {
+                    if let Ik::FBinary(FBinaryOp::Add) = lhs_inst.kind(ctx) {
                         let lhs_lhs = lhs_inst.operand(ctx, 0);
                         let lhs_rhs = lhs_inst.operand(ctx, 1);
                         if rhs == lhs_lhs {
@@ -1122,6 +1274,436 @@ const fn assoc_const() -> Rule {
                     }
                 }
             }
+
+            if let Ik::FBinary(op) = inst.kind(ctx) {
+                if !matches!(op, FBinaryOp::Add | FBinaryOp::Sub | FBinaryOp::Mul) {
+                    return false;
+                }
+
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
+                // consider the situation when lhs is a binary
+                if let ValueKind::InstResult { inst: lhs_inst, .. } = lhs.kind(ctx) {
+                    if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                        match (lhs_inst.kind(ctx), rhs_inst.kind(ctx)) {
+                            (Ik::FBinary(lhs_op), Ik::FConst(_)) => {
+                                // `(x + c) + d => x + (c + d)`
+                                // `(x - c) + d => x - (c - d)`
+                                // `(x + c) - d => x + (c - d)`
+                                // `(x - c) - d => x - (c + d)`
+                                // `(x * c) * d => x * (c * d)`
+
+                                let lhs_lhs = lhs_inst.operand(ctx, 0);
+                                let lhs_rhs = lhs_inst.operand(ctx, 1);
+
+                                match (lhs_op, op) {
+                                    (FBinaryOp::Add, FBinaryOp::Add) => {
+                                        if let ValueKind::InstResult {
+                                            inst: lhs_lhs_inst, ..
+                                        } = lhs_lhs.kind(ctx)
+                                        {
+                                            if let Ik::FConst(_) = lhs_lhs_inst.kind(ctx) {
+                                                // (c + x) + d => x + (c + d)
+                                                let new_rhs = Inst::fbinary(
+                                                    ctx,
+                                                    FBinaryOp::Add,
+                                                    lhs_lhs,
+                                                    rhs,
+                                                );
+                                                let new_add = Inst::fbinary(
+                                                    ctx,
+                                                    FBinaryOp::Add,
+                                                    lhs_rhs,
+                                                    new_rhs.result(ctx, 0),
+                                                );
+                                                inst.insert_after(ctx, new_rhs);
+                                                new_rhs.insert_after(ctx, new_add);
+                                                for user in dst.users(ctx) {
+                                                    user.replace(ctx, dst, new_add.result(ctx, 0));
+                                                }
+                                                return true;
+                                            }
+                                        }
+                                        if let ValueKind::InstResult {
+                                            inst: lhs_rhs_inst, ..
+                                        } = lhs_rhs.kind(ctx)
+                                        {
+                                            if let Ik::FConst(_) = lhs_rhs_inst.kind(ctx) {
+                                                // (x + c) + d => x + (c + d)
+                                                let new_rhs = Inst::fbinary(
+                                                    ctx,
+                                                    FBinaryOp::Add,
+                                                    lhs_rhs,
+                                                    rhs,
+                                                );
+                                                let new_add = Inst::fbinary(
+                                                    ctx,
+                                                    FBinaryOp::Add,
+                                                    lhs_lhs,
+                                                    new_rhs.result(ctx, 0),
+                                                );
+                                                inst.insert_after(ctx, new_rhs);
+                                                new_rhs.insert_after(ctx, new_add);
+                                                for user in dst.users(ctx) {
+                                                    user.replace(ctx, dst, new_add.result(ctx, 0));
+                                                }
+                                                return true;
+                                            }
+                                        }
+                                    }
+                                    (FBinaryOp::Sub, FBinaryOp::Add) => {
+                                        if let ValueKind::InstResult {
+                                            inst: lhs_rhs_inst, ..
+                                        } = lhs_rhs.kind(ctx)
+                                        {
+                                            if let Ik::FConst(_) = lhs_rhs_inst.kind(ctx) {
+                                                // (x - c) + d => x - (c - d)
+                                                let new_rhs = Inst::fbinary(
+                                                    ctx,
+                                                    FBinaryOp::Sub,
+                                                    lhs_rhs,
+                                                    rhs,
+                                                );
+                                                let new_sub = Inst::fbinary(
+                                                    ctx,
+                                                    FBinaryOp::Sub,
+                                                    lhs_lhs,
+                                                    new_rhs.result(ctx, 0),
+                                                );
+                                                inst.insert_after(ctx, new_rhs);
+                                                new_rhs.insert_after(ctx, new_sub);
+                                                for user in dst.users(ctx) {
+                                                    user.replace(ctx, dst, new_sub.result(ctx, 0));
+                                                }
+                                                return true;
+                                            }
+                                        }
+                                    }
+                                    (FBinaryOp::Add, FBinaryOp::Sub) => {
+                                        if let ValueKind::InstResult {
+                                            inst: lhs_lhs_inst, ..
+                                        } = lhs_lhs.kind(ctx)
+                                        {
+                                            if let Ik::FConst(_) = lhs_lhs_inst.kind(ctx) {
+                                                // (c + x) - d => x + (c - d)
+                                                let new_rhs = Inst::fbinary(
+                                                    ctx,
+                                                    FBinaryOp::Sub,
+                                                    lhs_lhs,
+                                                    rhs,
+                                                );
+                                                let new_add = Inst::fbinary(
+                                                    ctx,
+                                                    FBinaryOp::Add,
+                                                    lhs_rhs,
+                                                    new_rhs.result(ctx, 0),
+                                                );
+                                                inst.insert_after(ctx, new_rhs);
+                                                new_rhs.insert_after(ctx, new_add);
+                                                for user in dst.users(ctx) {
+                                                    user.replace(ctx, dst, new_add.result(ctx, 0));
+                                                }
+                                                return true;
+                                            }
+                                        }
+                                        if let ValueKind::InstResult {
+                                            inst: lhs_rhs_inst, ..
+                                        } = lhs_rhs.kind(ctx)
+                                        {
+                                            if let Ik::FConst(_) = lhs_rhs_inst.kind(ctx) {
+                                                // (x + c) - d => x + (c - d)
+                                                let new_rhs = Inst::fbinary(
+                                                    ctx,
+                                                    FBinaryOp::Sub,
+                                                    lhs_rhs,
+                                                    rhs,
+                                                );
+                                                let new_add = Inst::fbinary(
+                                                    ctx,
+                                                    FBinaryOp::Add,
+                                                    lhs_lhs,
+                                                    new_rhs.result(ctx, 0),
+                                                );
+                                                inst.insert_after(ctx, new_rhs);
+                                                new_rhs.insert_after(ctx, new_add);
+                                                for user in dst.users(ctx) {
+                                                    user.replace(ctx, dst, new_add.result(ctx, 0));
+                                                }
+                                                return true;
+                                            }
+                                        }
+                                    }
+                                    (FBinaryOp::Sub, FBinaryOp::Sub) => {
+                                        if let ValueKind::InstResult {
+                                            inst: lhs_rhs_inst, ..
+                                        } = lhs_rhs.kind(ctx)
+                                        {
+                                            if let Ik::FConst(_) = lhs_rhs_inst.kind(ctx) {
+                                                // (x - c) - d => x - (c + d)
+                                                let new_rhs = Inst::fbinary(
+                                                    ctx,
+                                                    FBinaryOp::Add,
+                                                    lhs_rhs,
+                                                    rhs,
+                                                );
+                                                let new_sub = Inst::fbinary(
+                                                    ctx,
+                                                    FBinaryOp::Sub,
+                                                    lhs_lhs,
+                                                    new_rhs.result(ctx, 0),
+                                                );
+                                                inst.insert_after(ctx, new_rhs);
+                                                new_rhs.insert_after(ctx, new_sub);
+                                                for user in dst.users(ctx) {
+                                                    user.replace(ctx, dst, new_sub.result(ctx, 0));
+                                                }
+                                                return true;
+                                            }
+                                        }
+                                    }
+                                    (FBinaryOp::Mul, FBinaryOp::Mul) => {
+                                        if let ValueKind::InstResult {
+                                            inst: lhs_lhs_inst, ..
+                                        } = lhs_lhs.kind(ctx)
+                                        {
+                                            if let Ik::FConst(_) = lhs_lhs_inst.kind(ctx) {
+                                                // (c * x) * d => x * (c * d)
+                                                let new_rhs = Inst::fbinary(
+                                                    ctx,
+                                                    FBinaryOp::Mul,
+                                                    lhs_lhs,
+                                                    rhs,
+                                                );
+                                                let new_mul = Inst::fbinary(
+                                                    ctx,
+                                                    FBinaryOp::Mul,
+                                                    lhs_rhs,
+                                                    new_rhs.result(ctx, 0),
+                                                );
+                                                inst.insert_after(ctx, new_rhs);
+                                                new_rhs.insert_after(ctx, new_mul);
+                                                for user in dst.users(ctx) {
+                                                    user.replace(ctx, dst, new_mul.result(ctx, 0));
+                                                }
+                                                return true;
+                                            }
+                                        }
+                                        if let ValueKind::InstResult {
+                                            inst: lhs_rhs_inst, ..
+                                        } = lhs_rhs.kind(ctx)
+                                        {
+                                            if let Ik::FConst(_) = lhs_rhs_inst.kind(ctx) {
+                                                // (x * c) * d => x * (c * d)
+                                                let new_rhs = Inst::fbinary(
+                                                    ctx,
+                                                    FBinaryOp::Mul,
+                                                    lhs_rhs,
+                                                    rhs,
+                                                );
+                                                let new_mul = Inst::fbinary(
+                                                    ctx,
+                                                    FBinaryOp::Mul,
+                                                    lhs_lhs,
+                                                    new_rhs.result(ctx, 0),
+                                                );
+                                                inst.insert_after(ctx, new_rhs);
+                                                new_rhs.insert_after(ctx, new_mul);
+                                                for user in dst.users(ctx) {
+                                                    user.replace(ctx, dst, new_mul.result(ctx, 0));
+                                                }
+                                                return true;
+                                            }
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            (Ik::FConst(_), Ik::FBinary(rhs_op)) => {
+                                // - `d + (x + c) => x + (c + d)`
+                                // - `d + (x - c) => x + (d - c)`
+                                // - `d - (x + c)`: NOT COMBINABLE, we need an additional `0 - x`,
+                                //   not profitable
+                                // - `d - (c - x) => x + (d - c)`
+                                // - `d * (x * c) => x * (c * d)`
+
+                                let rhs_lhs = rhs_inst.operand(ctx, 0);
+                                let rhs_rhs = rhs_inst.operand(ctx, 1);
+
+                                match (op, rhs_op) {
+                                    (FBinaryOp::Add, FBinaryOp::Add) => {
+                                        if let ValueKind::InstResult {
+                                            inst: rhs_lhs_inst, ..
+                                        } = rhs_lhs.kind(ctx)
+                                        {
+                                            if let Ik::FConst(_) = rhs_lhs_inst.kind(ctx) {
+                                                // d + (c + x) => x + (c + d)
+                                                let new_rhs = Inst::fbinary(
+                                                    ctx,
+                                                    FBinaryOp::Add,
+                                                    rhs_lhs,
+                                                    lhs,
+                                                );
+                                                let new_add = Inst::fbinary(
+                                                    ctx,
+                                                    FBinaryOp::Add,
+                                                    rhs_rhs,
+                                                    new_rhs.result(ctx, 0),
+                                                );
+                                                inst.insert_after(ctx, new_rhs);
+                                                new_rhs.insert_after(ctx, new_add);
+                                                for user in dst.users(ctx) {
+                                                    user.replace(ctx, dst, new_add.result(ctx, 0));
+                                                }
+                                                return true;
+                                            }
+                                        }
+                                        if let ValueKind::InstResult {
+                                            inst: rhs_rhs_inst, ..
+                                        } = rhs_rhs.kind(ctx)
+                                        {
+                                            if let Ik::FConst(_) = rhs_rhs_inst.kind(ctx) {
+                                                // d + (x + c) => x + (c + d)
+                                                let new_rhs = Inst::fbinary(
+                                                    ctx,
+                                                    FBinaryOp::Add,
+                                                    rhs_rhs,
+                                                    lhs,
+                                                );
+                                                let new_add = Inst::fbinary(
+                                                    ctx,
+                                                    FBinaryOp::Add,
+                                                    rhs_lhs,
+                                                    new_rhs.result(ctx, 0),
+                                                );
+                                                inst.insert_after(ctx, new_rhs);
+                                                new_rhs.insert_after(ctx, new_add);
+                                                for user in dst.users(ctx) {
+                                                    user.replace(ctx, dst, new_add.result(ctx, 0));
+                                                }
+                                                return true;
+                                            }
+                                        }
+                                    }
+                                    (FBinaryOp::Add, FBinaryOp::Sub) => {
+                                        if let ValueKind::InstResult {
+                                            inst: rhs_rhs_inst, ..
+                                        } = rhs_rhs.kind(ctx)
+                                        {
+                                            if let Ik::FConst(_) = rhs_rhs_inst.kind(ctx) {
+                                                // d + (x - c) => x + (d - c)
+                                                let new_rhs = Inst::fbinary(
+                                                    ctx,
+                                                    FBinaryOp::Sub,
+                                                    lhs,
+                                                    rhs_rhs,
+                                                );
+                                                let new_add = Inst::fbinary(
+                                                    ctx,
+                                                    FBinaryOp::Add,
+                                                    rhs_lhs,
+                                                    new_rhs.result(ctx, 0),
+                                                );
+                                                inst.insert_after(ctx, new_rhs);
+                                                new_rhs.insert_after(ctx, new_add);
+                                                for user in dst.users(ctx) {
+                                                    user.replace(ctx, dst, new_add.result(ctx, 0));
+                                                }
+                                                return true;
+                                            }
+                                        }
+                                    }
+                                    (FBinaryOp::Sub, FBinaryOp::Sub) => {
+                                        if let ValueKind::InstResult {
+                                            inst: rhs_lhs_inst, ..
+                                        } = rhs_lhs.kind(ctx)
+                                        {
+                                            if let Ik::FConst(_) = rhs_lhs_inst.kind(ctx) {
+                                                // d - (c - x) => x + (d - c)
+                                                let new_rhs = Inst::fbinary(
+                                                    ctx,
+                                                    FBinaryOp::Sub,
+                                                    lhs,
+                                                    rhs_lhs,
+                                                );
+                                                let new_add = Inst::fbinary(
+                                                    ctx,
+                                                    FBinaryOp::Add,
+                                                    rhs_rhs,
+                                                    new_rhs.result(ctx, 0),
+                                                );
+                                                inst.insert_after(ctx, new_rhs);
+                                                new_rhs.insert_after(ctx, new_add);
+                                                for user in dst.users(ctx) {
+                                                    user.replace(ctx, dst, new_add.result(ctx, 0));
+                                                }
+                                                return true;
+                                            }
+                                        }
+                                    }
+                                    (FBinaryOp::Mul, FBinaryOp::Mul) => {
+                                        if let ValueKind::InstResult {
+                                            inst: rhs_lhs_inst, ..
+                                        } = rhs_lhs.kind(ctx)
+                                        {
+                                            if let Ik::FConst(_) = rhs_lhs_inst.kind(ctx) {
+                                                // d * (c * x) => x * (c * d)
+                                                let new_rhs = Inst::fbinary(
+                                                    ctx,
+                                                    FBinaryOp::Mul,
+                                                    rhs_lhs,
+                                                    lhs,
+                                                );
+                                                let new_mul = Inst::fbinary(
+                                                    ctx,
+                                                    FBinaryOp::Mul,
+                                                    rhs_rhs,
+                                                    new_rhs.result(ctx, 0),
+                                                );
+                                                inst.insert_after(ctx, new_rhs);
+                                                new_rhs.insert_after(ctx, new_mul);
+                                                for user in dst.users(ctx) {
+                                                    user.replace(ctx, dst, new_mul.result(ctx, 0));
+                                                }
+                                                return true;
+                                            }
+                                        }
+                                        if let ValueKind::InstResult {
+                                            inst: rhs_rhs_inst, ..
+                                        } = rhs_rhs.kind(ctx)
+                                        {
+                                            if let Ik::FConst(_) = rhs_rhs_inst.kind(ctx) {
+                                                // d * (x * c) => x * (c * d)
+                                                let new_rhs = Inst::fbinary(
+                                                    ctx,
+                                                    FBinaryOp::Mul,
+                                                    rhs_rhs,
+                                                    lhs,
+                                                );
+                                                let new_mul = Inst::fbinary(
+                                                    ctx,
+                                                    FBinaryOp::Mul,
+                                                    rhs_lhs,
+                                                    new_rhs.result(ctx, 0),
+                                                );
+                                                inst.insert_after(ctx, new_rhs);
+                                                new_rhs.insert_after(ctx, new_mul);
+                                                for user in dst.users(ctx) {
+                                                    user.replace(ctx, dst, new_mul.result(ctx, 0));
+                                                }
+                                                return true;
+                                            }
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
             false
         },
     }
@@ -1291,6 +1873,145 @@ const fn distributive_one() -> Rule {
                 }
             }
 
+            if let Ik::FBinary(op) = inst.kind(ctx) {
+                if !matches!(op, FBinaryOp::Add | FBinaryOp::Sub) {
+                    return false;
+                }
+                let op = *op;
+
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
+                if let ValueKind::InstResult { inst: lhs_inst, .. } = lhs.kind(ctx) {
+                    if let Ik::FBinary(FBinaryOp::Mul) = lhs_inst.kind(ctx) {
+                        let lhs_lhs = lhs_inst.operand(ctx, 0);
+                        let lhs_rhs = lhs_inst.operand(ctx, 1);
+
+                        if lhs_lhs == rhs {
+                            // (x * c) +- x => x * (c +- 1.0)
+                            if let ValueKind::InstResult {
+                                inst: lhs_rhs_inst, ..
+                            } = lhs_rhs.kind(ctx)
+                            {
+                                if let Ik::FConst(_) = lhs_rhs_inst.kind(ctx) {
+                                    let one =
+                                        Inst::fconst(ctx, FloatConstant::from(1.0), dst.ty(ctx));
+                                    let new_rhs =
+                                        Inst::fbinary(ctx, op, lhs_rhs, one.result(ctx, 0));
+                                    let new_mul = Inst::fbinary(
+                                        ctx,
+                                        FBinaryOp::Mul,
+                                        lhs_lhs,
+                                        new_rhs.result(ctx, 0),
+                                    );
+                                    inst.insert_after(ctx, one);
+                                    one.insert_after(ctx, new_rhs);
+                                    new_rhs.insert_after(ctx, new_mul);
+                                    for user in dst.users(ctx) {
+                                        user.replace(ctx, dst, new_mul.result(ctx, 0));
+                                    }
+
+                                    return true;
+                                }
+                            }
+                        }
+                        if lhs_rhs == rhs {
+                            // (c * x) +- x => x * (c +- 1.0)
+                            if let ValueKind::InstResult {
+                                inst: lhs_lhs_inst, ..
+                            } = lhs_lhs.kind(ctx)
+                            {
+                                if let Ik::FConst(_) = lhs_lhs_inst.kind(ctx) {
+                                    let one =
+                                        Inst::fconst(ctx, FloatConstant::from(1.0), dst.ty(ctx));
+                                    let new_rhs =
+                                        Inst::fbinary(ctx, op, lhs_lhs, one.result(ctx, 0));
+                                    let new_mul = Inst::fbinary(
+                                        ctx,
+                                        FBinaryOp::Mul,
+                                        lhs_rhs,
+                                        new_rhs.result(ctx, 0),
+                                    );
+                                    inst.insert_after(ctx, one);
+                                    one.insert_after(ctx, new_rhs);
+                                    new_rhs.insert_after(ctx, new_mul);
+                                    for user in dst.users(ctx) {
+                                        user.replace(ctx, dst, new_mul.result(ctx, 0));
+                                    }
+
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                    if let Ik::FBinary(FBinaryOp::Mul) = rhs_inst.kind(ctx) {
+                        let rhs_lhs = rhs_inst.operand(ctx, 0);
+                        let rhs_rhs = rhs_inst.operand(ctx, 1);
+
+                        if rhs_lhs == lhs {
+                            // x +- (x * c) => x * (1.0 +- c)
+                            if let ValueKind::InstResult {
+                                inst: rhs_rhs_inst, ..
+                            } = rhs_rhs.kind(ctx)
+                            {
+                                if let Ik::FConst(_) = rhs_rhs_inst.kind(ctx) {
+                                    let one =
+                                        Inst::fconst(ctx, FloatConstant::from(1.0), dst.ty(ctx));
+                                    let new_rhs =
+                                        Inst::fbinary(ctx, op, one.result(ctx, 0), rhs_rhs);
+                                    let new_mul = Inst::fbinary(
+                                        ctx,
+                                        FBinaryOp::Mul,
+                                        lhs,
+                                        new_rhs.result(ctx, 0),
+                                    );
+                                    inst.insert_after(ctx, one);
+                                    one.insert_after(ctx, new_rhs);
+                                    new_rhs.insert_after(ctx, new_mul);
+                                    for user in dst.users(ctx) {
+                                        user.replace(ctx, dst, new_mul.result(ctx, 0));
+                                    }
+
+                                    return true;
+                                }
+                            }
+                        }
+                        if rhs_rhs == lhs {
+                            // x +- (c * x) => x * (1.0 +- c)
+                            if let ValueKind::InstResult {
+                                inst: rhs_lhs_inst, ..
+                            } = rhs_lhs.kind(ctx)
+                            {
+                                if let Ik::FConst(_) = rhs_lhs_inst.kind(ctx) {
+                                    let one =
+                                        Inst::fconst(ctx, FloatConstant::from(1.0), dst.ty(ctx));
+                                    let new_rhs =
+                                        Inst::fbinary(ctx, op, one.result(ctx, 0), rhs_lhs);
+                                    let new_mul = Inst::fbinary(
+                                        ctx,
+                                        FBinaryOp::Mul,
+                                        lhs,
+                                        new_rhs.result(ctx, 0),
+                                    );
+                                    inst.insert_after(ctx, one);
+                                    one.insert_after(ctx, new_rhs);
+                                    new_rhs.insert_after(ctx, new_mul);
+                                    for user in dst.users(ctx) {
+                                        user.replace(ctx, dst, new_mul.result(ctx, 0));
+                                    }
+
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             false
         },
     }
@@ -1299,7 +2020,7 @@ const fn distributive_one() -> Rule {
 /// Distributive property for strength reduction.
 ///
 /// - `x * y + x * z => x * (y + z)`
-/// - `x * y - z * y => (x - z) * y`
+/// - `x * y - z * y => (x + z) * y`
 /// - `x * y - x * z => x * (y - z)`
 /// - `x * y + z * y => (x + z) * y`
 /// - `x / y + z / y => (x + z) / y`
@@ -1310,6 +2031,7 @@ const fn distributive_one() -> Rule {
 ///
 /// TODO: SDiv is considered, but how about UDiv?
 const fn distributive() -> Rule {
+    use FBinaryOp as FOp;
     use IBinaryOp as Op;
 
     Rule {
@@ -1430,86 +2152,124 @@ const fn distributive() -> Rule {
                     }
                 }
             }
-            false
-        },
-    }
-}
 
-/// Move same instructions' same operands together,
-/// instruction that can be moved together must be associative.
-///
-/// `(x @ y) @ x` or `x @ (x @ y)` or `x @ (y @ x)` or `(y @ x) @ x` => `(x @ x)
-/// @ y`
-///
-/// note: this rule better to run after add_to_mul
-/// AGGRESSIVE: float may cause accuracy problem
-const fn mv_same_together() -> Rule {
-    Rule {
-        rewriter: |ctx, inst| {
-            if inst.is_associative(ctx) {
+            if let Ik::FBinary(op) = inst.kind(ctx) {
                 let lhs = inst.operand(ctx, 0);
                 let rhs = inst.operand(ctx, 1);
                 let dst = inst.result(ctx, 0);
-                let inst_kind = inst.kind(ctx).clone();
-                let ty = dst.ty(ctx);
 
-                let mut insts_to_move =
-                    if let ValueKind::InstResult { inst: lhs_inst, .. } = lhs.kind(ctx) {
-                        if lhs_inst.kind(ctx) == &inst_kind {
-                            let lhs_lhs = lhs_inst.operand(ctx, 0);
-                            let lhs_rhs = lhs_inst.operand(ctx, 1);
-                            if lhs_lhs == rhs {
-                                Some((rhs, lhs_rhs))
-                            } else if lhs_rhs == rhs {
-                                Some((rhs, lhs_lhs))
-                            } else {
-                                None
-                            }
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    };
-                if insts_to_move.is_none() {
-                    insts_to_move =
-                        if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
-                            if rhs_inst.kind(ctx) == &inst_kind {
-                                let rhs_lhs = rhs_inst.operand(ctx, 0);
-                                let rhs_rhs = rhs_inst.operand(ctx, 1);
-                                if rhs_lhs == lhs {
-                                    Some((lhs, rhs_rhs))
-                                } else if rhs_rhs == lhs {
-                                    Some((lhs, rhs_lhs))
-                                } else {
-                                    None
-                                }
-                            } else {
-                                None
-                            }
-                        } else {
-                            None
-                        };
-                }
-                if let Some((twice, other)) = insts_to_move {
-                    let inst_inner =
-                        Inst::new(ctx, inst_kind.clone(), vec![ty], vec![twice, twice]);
-                    let inst_outer = Inst::new(
-                        ctx,
-                        inst_kind.clone(),
-                        vec![ty],
-                        vec![inst_inner.result(ctx, 0), other],
-                    );
-                    inst.insert_after(ctx, inst_inner);
-                    inst_inner.insert_after(ctx, inst_outer);
-                    for user in dst.users(ctx) {
-                        user.replace(ctx, dst, inst_outer.result(ctx, 0));
-                    }
-                    return true;
-                } else {
+                if !matches!(op, FOp::Add | FOp::Sub) {
                     return false;
                 }
+
+                let op = *op;
+
+                if let (
+                    ValueKind::InstResult { inst: lhs_inst, .. },
+                    ValueKind::InstResult { inst: rhs_inst, .. },
+                ) = (lhs.kind(ctx), rhs.kind(ctx))
+                {
+                    if let (Ik::FBinary(lhs_op), Ik::FBinary(rhs_op)) =
+                        (lhs_inst.kind(ctx), rhs_inst.kind(ctx))
+                    {
+                        if lhs_op == rhs_op && matches!(lhs_op, FOp::Mul | FOp::Div) {
+                            let lhs_lhs = lhs_inst.operand(ctx, 0);
+                            let lhs_rhs = lhs_inst.operand(ctx, 1);
+                            let rhs_lhs = rhs_inst.operand(ctx, 0);
+                            let rhs_rhs = rhs_inst.operand(ctx, 1);
+
+                            if let FOp::Mul = lhs_op {
+                                if lhs_lhs == rhs_lhs {
+                                    // x * y + x * z => x * (y + z)
+                                    // x * y - x * z => x * (y - z)
+                                    let new_rhs = Inst::fbinary(ctx, op, lhs_rhs, rhs_rhs);
+                                    let new_mul = Inst::fbinary(
+                                        ctx,
+                                        FOp::Mul,
+                                        lhs_lhs,
+                                        new_rhs.result(ctx, 0),
+                                    );
+                                    inst.insert_after(ctx, new_rhs);
+                                    new_rhs.insert_after(ctx, new_mul);
+                                    for user in dst.users(ctx) {
+                                        user.replace(ctx, dst, new_mul.result(ctx, 0));
+                                    }
+                                    return true;
+                                } else if lhs_lhs == rhs_rhs {
+                                    // x * y + z * x => x * (y + z)
+                                    // x * y - z * x => x * (y - z)
+                                    let new_rhs = Inst::fbinary(ctx, op, lhs_rhs, rhs_lhs);
+                                    let new_mul = Inst::fbinary(
+                                        ctx,
+                                        FOp::Mul,
+                                        lhs_lhs,
+                                        new_rhs.result(ctx, 0),
+                                    );
+                                    inst.insert_after(ctx, new_rhs);
+                                    new_rhs.insert_after(ctx, new_mul);
+                                    for user in dst.users(ctx) {
+                                        user.replace(ctx, dst, new_mul.result(ctx, 0));
+                                    }
+                                    return true;
+                                } else if lhs_rhs == rhs_lhs {
+                                    // y * x + x * z => x * (y + z)
+                                    // y * x - x * z => x * (y - z)
+                                    let new_rhs = Inst::fbinary(ctx, op, lhs_lhs, rhs_rhs);
+                                    let new_mul = Inst::fbinary(
+                                        ctx,
+                                        FOp::Mul,
+                                        lhs_rhs,
+                                        new_rhs.result(ctx, 0),
+                                    );
+                                    inst.insert_after(ctx, new_rhs);
+                                    new_rhs.insert_after(ctx, new_mul);
+                                    for user in dst.users(ctx) {
+                                        user.replace(ctx, dst, new_mul.result(ctx, 0));
+                                    }
+                                    return true;
+                                } else if lhs_rhs == rhs_rhs {
+                                    // y * x + z * x => x * (y + z)
+                                    // y * x - z * x => x * (y - z)
+                                    let new_rhs = Inst::fbinary(ctx, op, lhs_lhs, rhs_lhs);
+                                    let new_mul = Inst::fbinary(
+                                        ctx,
+                                        FOp::Mul,
+                                        lhs_rhs,
+                                        new_rhs.result(ctx, 0),
+                                    );
+                                    inst.insert_after(ctx, new_rhs);
+                                    new_rhs.insert_after(ctx, new_mul);
+                                    for user in dst.users(ctx) {
+                                        user.replace(ctx, dst, new_mul.result(ctx, 0));
+                                    }
+                                    return true;
+                                }
+                            }
+
+                            if let FOp::Div = lhs_op {
+                                if lhs_rhs == rhs_rhs {
+                                    // x / y + z / y => (x + z) / y
+                                    // x / y - z / y => (x - z) / y
+                                    let new_lhs = Inst::fbinary(ctx, op, lhs_lhs, rhs_lhs);
+                                    let new_div = Inst::fbinary(
+                                        ctx,
+                                        FOp::Div,
+                                        new_lhs.result(ctx, 0),
+                                        lhs_rhs,
+                                    );
+                                    inst.insert_after(ctx, new_lhs);
+                                    new_lhs.insert_after(ctx, new_div);
+                                    for user in dst.users(ctx) {
+                                        user.replace(ctx, dst, new_div.result(ctx, 0));
+                                    }
+                                    return true;
+                                }
+                            }
+                        }
+                    }
+                }
             }
+
             false
         },
     }
@@ -1526,6 +2286,23 @@ const fn div_one_elim() -> Rule {
 
                 if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
                     if let Ik::IConst(v) = rhs_inst.kind(ctx) {
+                        if v.is_one() {
+                            for user in dst.users(ctx) {
+                                user.replace(ctx, dst, lhs);
+                            }
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            if let Ik::FBinary(FBinaryOp::Div) = inst.kind(ctx) {
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
+                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                    if let Ik::FConst(v) = rhs_inst.kind(ctx) {
                         if v.is_one() {
                             for user in dst.users(ctx) {
                                 user.replace(ctx, dst, lhs);
@@ -1554,6 +2331,27 @@ const fn div_neg_one_elim() -> Rule {
                         if v.as_signed() == -1 {
                             let zero = Inst::iconst(ctx, 0, dst.ty(ctx));
                             let neg = Inst::ibinary(ctx, IBinaryOp::Sub, zero.result(ctx, 0), lhs);
+                            inst.insert_after(ctx, zero);
+                            zero.insert_after(ctx, neg);
+                            for user in dst.users(ctx) {
+                                user.replace(ctx, dst, neg.result(ctx, 0));
+                            }
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            if let Ik::FBinary(FBinaryOp::Div) = inst.kind(ctx) {
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
+                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                    if let Ik::FConst(v) = rhs_inst.kind(ctx) {
+                        if v.as_f64() == -1.0 {
+                            let zero = Inst::fconst(ctx, FloatConstant::from(0.0), dst.ty(ctx));
+                            let neg = Inst::fbinary(ctx, FBinaryOp::Sub, zero.result(ctx, 0), lhs);
                             inst.insert_after(ctx, zero);
                             zero.insert_after(ctx, neg);
                             for user in dst.users(ctx) {
@@ -1946,6 +2744,34 @@ const fn shr_zero_elim() -> Rule {
                             }
                             return true;
                         }
+                    }
+                }
+            }
+            false
+        },
+    }
+}
+
+// Convert division by a constant to multiplication by its reciprocal
+const fn div_to_mul() -> Rule {
+    Rule {
+        rewriter: |ctx, inst| {
+            if let Ik::FBinary(FBinaryOp::Div) = inst.kind(ctx) {
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
+                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                    if let Ik::FConst(mut v) = rhs_inst.kind(ctx) {
+                        let i_recip = Inst::fconst(ctx, v.inplace_recip(), dst.ty(ctx));
+                        let new_mul =
+                            Inst::fbinary(ctx, FBinaryOp::Mul, lhs, i_recip.result(ctx, 0));
+                        inst.insert_after(ctx, i_recip);
+                        i_recip.insert_after(ctx, new_mul);
+                        for user in dst.users(ctx) {
+                            user.replace(ctx, dst, new_mul.result(ctx, 0));
+                        }
+                        return true;
                     }
                 }
             }

@@ -275,6 +275,41 @@ impl FloatConstant {
             _ => panic!("invalid float constant to compare"),
         }
     }
+
+    pub fn is_zero(&self) -> bool {
+        match self {
+            FloatConstant::Float32(val) => f32::from_bits(*val) == 0.0,
+            FloatConstant::Float64(val) => f64::from_bits(*val) == 0.0,
+        }
+    }
+
+    pub fn is_one(&self) -> bool {
+        match self {
+            FloatConstant::Float32(val) => f32::from_bits(*val) == 1.0,
+            FloatConstant::Float64(val) => f64::from_bits(*val) == 1.0,
+        }
+    }
+
+    pub fn as_f64(&self) -> f64 {
+        match self {
+            FloatConstant::Float32(val) => f32::from_bits(*val) as f64,
+            FloatConstant::Float64(val) => f64::from_bits(*val),
+        }
+    }
+
+    pub fn inplace_recip(&mut self) -> Self {
+        match self {
+            FloatConstant::Float32(val) => {
+                let f = f32::from_bits(*val);
+                *self = FloatConstant::Float32(f.recip().to_bits());
+            }
+            FloatConstant::Float64(val) => {
+                let f = f64::from_bits(*val);
+                *self = FloatConstant::Float64(f.recip().to_bits());
+            }
+        }
+        *self
+    }
 }
 
 impl From<f32> for FloatConstant {
