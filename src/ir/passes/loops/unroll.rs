@@ -13,7 +13,6 @@ use crate::{
             PassResult,
             TransformPass,
         },
-        remove_all_insts,
         Block,
         Context,
         Func,

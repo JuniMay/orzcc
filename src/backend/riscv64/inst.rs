@@ -1520,7 +1520,21 @@ impl MInst for RvInst {
                 rs2,
                 ..
             } if *rs1 == *rs2 => Some((*rd, *rs1)),
-            _ => None,
+            RvInstKind::Li { .. }
+            | RvInstKind::AluRR { .. }
+            | RvInstKind::AluRRI { .. }
+            | RvInstKind::AluRRR { .. }
+            | RvInstKind::FpuRR { .. }
+            | RvInstKind::FpuRRR { .. }
+            | RvInstKind::FpuRRRR { .. }
+            | RvInstKind::Load { .. }
+            | RvInstKind::Store { .. }
+            | RvInstKind::Ret
+            | RvInstKind::Call { .. }
+            | RvInstKind::J { .. }
+            | RvInstKind::Br { .. }
+            | RvInstKind::La { .. }
+            | RvInstKind::LoadAddr { .. } => None,
         }
     }
 }

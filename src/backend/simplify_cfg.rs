@@ -1,12 +1,9 @@
 use rustc_hash::FxHashSet;
 
 use super::{inst::MInst, LowerConfig, MContext};
-use crate::{
-    collections::{
-        linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
-        storage::ArenaAlloc,
-    },
-    utils::cfg::CfgNode,
+use crate::collections::{
+    linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
+    storage::ArenaAlloc,
 };
 
 pub struct SimplifyCfg {}

@@ -555,7 +555,19 @@ pub fn remove_redundant_labels(mctx: &mut MContext<RvInst>) -> bool {
                                 .or_insert_with(FxHashSet::default)
                                 .insert(inst);
                         }
-                        _ => {}
+                        RvInstKind::Li { .. }
+                        | RvInstKind::AluRR { .. }
+                        | RvInstKind::AluRRI { .. }
+                        | RvInstKind::AluRRR { .. }
+                        | RvInstKind::FpuRR { .. }
+                        | RvInstKind::FpuRRR { .. }
+                        | RvInstKind::FpuRRRR { .. }
+                        | RvInstKind::Load { .. }
+                        | RvInstKind::Store { .. }
+                        | RvInstKind::Ret
+                        | RvInstKind::Call { .. }
+                        | RvInstKind::La { .. }
+                        | RvInstKind::LoadAddr { .. } => {}
                     }
                 }
             }
@@ -591,7 +603,19 @@ pub fn remove_redundant_labels(mctx: &mut MContext<RvInst>) -> bool {
                             RvInstKind::Br { .. } => {
                                 inst.redirect_branch(mctx, block.next(mctx).unwrap());
                             }
-                            _ => unreachable!(),
+                            RvInstKind::Li { .. }
+                            | RvInstKind::AluRR { .. }
+                            | RvInstKind::AluRRI { .. }
+                            | RvInstKind::AluRRR { .. }
+                            | RvInstKind::FpuRR { .. }
+                            | RvInstKind::FpuRRR { .. }
+                            | RvInstKind::FpuRRRR { .. }
+                            | RvInstKind::Load { .. }
+                            | RvInstKind::Store { .. }
+                            | RvInstKind::Ret
+                            | RvInstKind::Call { .. }
+                            | RvInstKind::La { .. }
+                            | RvInstKind::LoadAddr { .. } => unreachable!(),
                         }
                     }
                     cursor.next(mctx);
