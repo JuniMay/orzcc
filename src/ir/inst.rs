@@ -472,14 +472,14 @@ pub enum InstKind {
     Store,
     /// High level store element representation.
     ///
-    /// `store_elem [dim1, dim2, ...], %val, %addr, idx0, idx1, idx2, ...`
+    /// `store_elem [_, dim1, dim2, ...], %val, %addr[idx0, idx1, idx2, ...]`
     StoreElem {
         /// The shape of the memory region
         shape: Vec<u32>,
     },
     /// High level load element representation.
     ///
-    /// `load_elem [dim1, dim2, ...], %addr, idx0, idx1, idx2, ... : ty`
+    /// `load_elem [_, dim1, dim2, ...], %addr[idx0, idx1, idx2, ...]: ty`
     LoadElem {
         /// The shape of the memory region
         shape: Vec<u32>,

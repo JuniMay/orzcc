@@ -277,17 +277,18 @@ impl Inst {
                         match op {
                             CastOp::Trunc => {
                                 let target_width = self.result(ctx, 0).ty(ctx).bitwidth(ctx);
-                                Some(FoldedConstant::Integer(mut_int_val.truncate(target_width)))
+                                mut_int_val.truncate(target_width);
+                                Some(FoldedConstant::Integer(mut_int_val))
                             }
                             CastOp::ZExt => {
                                 let target_width = self.result(ctx, 0).ty(ctx).bitwidth(ctx);
                                 mut_int_val.zeroext(target_width);
-                                Some(FoldedConstant::Integer(mut_int_val.clone()))
+                                Some(FoldedConstant::Integer(mut_int_val))
                             }
                             CastOp::SExt => {
                                 let target_width = self.result(ctx, 0).ty(ctx).bitwidth(ctx);
                                 mut_int_val.signext(target_width);
-                                Some(FoldedConstant::Integer(mut_int_val.clone()))
+                                Some(FoldedConstant::Integer(mut_int_val))
                             }
                             CastOp::UiToFp => {
                                 // fixme: 在38_light2d中，存在cast int 100000006 to float

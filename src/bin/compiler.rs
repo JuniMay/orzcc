@@ -145,7 +145,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let iter = passman.run_pipeline(&mut ir, &pipe2, 32, 8);
                 println!("pipeline 2 iterations: {}", iter);
 
-                passman.run_transform(ADCE, &mut ir, 1); // a little expensive, run once per round
+                // a little expensive, run once per round
+                passman.run_transform(ADCE, &mut ir, 1);
                 passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
             }
 
