@@ -1891,7 +1891,7 @@ const fn div_rem_to_mul() -> Rule {
 fn magic(w: u64, d: u64) -> (u64, u64) {
     // w = bitwidth
     // d = divisor
-    let nc = (1 << (w - 1)) - (1 << (w - 1)) % d - 1;
+    let nc = (1 << (w - 1)) - (1 << (w - 1)) % d - 1; // FIXME: 93_nested_call.sy div 0
     let mut p = w;
     while 1 << p <= nc * (d - (1 << p) % d) {
         p += 1;

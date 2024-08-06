@@ -85,40 +85,40 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut ir = sysy::irgen(&ast, 64);
 
         if cmd.opt > 0 {
-            let mut pipe0 = Pipeline::default();
+            let mut pipe_basic = Pipeline::default();
 
-            pipe0.add_pass(GLOBAL2LOCAL);
-            pipe0.add_pass(SIMPLE_DCE);
-            pipe0.add_pass(GLOBAL_DCE);
-            pipe0.add_pass(MEM2REG);
-            pipe0.add_pass(SIMPLE_DCE);
-            pipe0.add_pass(CFG_SIMPLIFY);
-            pipe0.add_pass(CONSTANT_FOLDING);
-            pipe0.add_pass(SIMPLE_DCE);
-            pipe0.add_pass(INSTCOMBINE);
-            pipe0.add_pass(SIMPLE_DCE);
-            pipe0.add_pass(GCM);
-            pipe0.add_pass(GVN);
-            pipe0.add_pass(CFG_SIMPLIFY);
-            pipe0.add_pass(ELIM_CONSTANT_PHI);
-            pipe0.add_pass(SIMPLE_DCE);
-            pipe0.add_pass(CFG_SIMPLIFY);
-            pipe0.add_pass(BRANCH2SELECT);
-            pipe0.add_pass(CFG_SIMPLIFY);
+            pipe_basic.add_pass(GLOBAL2LOCAL);
+            pipe_basic.add_pass(SIMPLE_DCE);
+            pipe_basic.add_pass(GLOBAL_DCE);
+            pipe_basic.add_pass(MEM2REG);
+            pipe_basic.add_pass(SIMPLE_DCE);
+            pipe_basic.add_pass(CFG_SIMPLIFY);
+            pipe_basic.add_pass(CONSTANT_FOLDING);
+            pipe_basic.add_pass(SIMPLE_DCE);
+            pipe_basic.add_pass(INSTCOMBINE);
+            pipe_basic.add_pass(SIMPLE_DCE);
+            pipe_basic.add_pass(GCM);
+            pipe_basic.add_pass(GVN);
+            pipe_basic.add_pass(CFG_SIMPLIFY);
+            pipe_basic.add_pass(ELIM_CONSTANT_PHI);
+            pipe_basic.add_pass(SIMPLE_DCE);
+            pipe_basic.add_pass(CFG_SIMPLIFY);
+            pipe_basic.add_pass(BRANCH2SELECT);
+            pipe_basic.add_pass(CFG_SIMPLIFY);
 
-            let mut pipe1 = Pipeline::default();
+            let mut pipe_inline = Pipeline::default();
 
-            pipe1.add_pass(INLINE);
-            pipe1.add_pass(CFG_SIMPLIFY);
-            pipe1.add_pass(SIMPLE_DCE);
-            pipe1.add_pass(GLOBAL_DCE);
+            pipe_inline.add_pass(INLINE);
+            pipe_inline.add_pass(CFG_SIMPLIFY);
+            pipe_inline.add_pass(SIMPLE_DCE);
+            pipe_inline.add_pass(GLOBAL_DCE);
 
-            let mut pipe2 = Pipeline::default();
+            let mut pipe_unroll = Pipeline::default();
 
-            pipe2.add_pass(LOOP_UNROLL);
-            pipe2.add_pass(CONSTANT_FOLDING);
-            pipe2.add_pass(CFG_SIMPLIFY);
-            pipe2.add_pass(SIMPLE_DCE);
+            pipe_unroll.add_pass(LOOP_UNROLL);
+            pipe_unroll.add_pass(CONSTANT_FOLDING);
+            pipe_unroll.add_pass(CFG_SIMPLIFY);
+            pipe_unroll.add_pass(SIMPLE_DCE);
 
             passman.run_transform(GLOBAL2LOCAL, &mut ir, 32);
             passman.run_transform(SIMPLE_DCE, &mut ir, 32);
@@ -131,19 +131,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             passman.run_transform(INSTCOMBINE, &mut ir, 32);
             passman.run_transform(SIMPLE_DCE, &mut ir, 32);
             passman.run_transform(GCM, &mut ir, 32);
+
+            // // TODO: unroll earlier to combine load/store
+            // passman.run_transform(LOOP_UNROLL, &mut ir, 2);
+            // passman.run_transform(CONSTANT_FOLDING, &mut ir, 32);
+            // passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
+            // passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+
             passman.run_transform(LEGALIZE, &mut ir, 1);
 
             for i in 0..4 {
                 println!("Round {}", i);
 
-                let iter = passman.run_pipeline(&mut ir, &pipe0, 32, 8);
-                println!("pipeline 0 iterations: {}", iter);
+                let iter = passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
+                println!("pipeline basic iterations: {}", iter);
 
-                let iter = passman.run_pipeline(&mut ir, &pipe1, 32, 8);
-                println!("pipeline 1 iterations: {}", iter);
+                let iter = passman.run_pipeline(&mut ir, &pipe_inline, 32, 8);
+                println!("pipeline inline iterations: {}", iter);
 
-                let iter = passman.run_pipeline(&mut ir, &pipe2, 32, 8);
-                println!("pipeline 2 iterations: {}", iter);
+                let iter = passman.run_pipeline(&mut ir, &pipe_unroll, 1, 1);
+                println!("pipeline unroll iterations: {}", iter);
 
                 // a little expensive, run once per round
                 passman.run_transform(ADCE, &mut ir, 1);

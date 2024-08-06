@@ -389,14 +389,12 @@ impl<'a> fmt::Display for DisplaySuccessor<'a> {
 
                 write!(
                     f,
-                    "%{}",
+                    "/* %{} <- */ %{}",
+                    param.name(self.ctx).unwrap(),
                     self.succ
-                        .args
-                        .get(param)
-                        .unwrap()
-                        .inner()
-                        .name(self.ctx)
-                        .unwrap()
+                        .get_arg(*param)
+                        .map(|arg| arg.name(self.ctx).unwrap())
+                        .unwrap_or(&"???".to_string())
                 )?;
             }
 
@@ -1257,12 +1255,16 @@ impl Inst {
         new: Block,
         args: Vec<Value>,
     ) {
-        if !old.params(ctx).is_empty() {
-            panic!("old block must not have parameters");
-        }
-
         if !self.is_terminator(ctx) {
             panic!("instruction is not a terminator");
+        }
+
+        if !old.params(ctx).is_empty() {
+            // remove all the previously passed arguments.
+            let params = old.params(ctx).to_vec();
+            for param in params {
+                self.remove_args_passing_to_param(ctx, param);
+            }
         }
 
         let mut num_blocks_to_replace = 0;
@@ -1483,10 +1485,9 @@ impl Inst {
                 | Ik::IBinary(IBinaryOp::And)
                 | Ik::IBinary(IBinaryOp::Or)
                 | Ik::IBinary(IBinaryOp::Xor)
-                | Ik::IBinary(IBinaryOp::Min)
-                | Ik::IBinary(IBinaryOp::Max)
-                | Ik::FBinary(FBinaryOp::Add)  // aggressive
-                | Ik::FBinary(FBinaryOp::Mul) // aggressive
+                | Ik::IBinary(IBinaryOp::Min) // TODO: aggressive option
+                | Ik::IBinary(IBinaryOp::Max) /* | Ik::FBinary(FBinaryOp::Add)  // aggressive
+                                               * | Ik::FBinary(FBinaryOp::Mul) // aggressive */
         )
     }
 
