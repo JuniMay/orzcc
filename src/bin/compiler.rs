@@ -27,6 +27,7 @@ use orzcc::{
             gvn::{GlobalValueNumbering, GVN},
             inline::{Inline, INLINE},
             instcombine::{InstCombine, INSTCOMBINE},
+            legalize::{Legalize, LEGALIZE},
             loops::{Lcssa, LoopSimplify, LoopUnroll, LOOP_UNROLL},
             mem2reg::{Mem2reg, MEM2REG},
             simple_dce::{SimpleDce, SIMPLE_DCE},
@@ -119,6 +120,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             pipe2.add_pass(CFG_SIMPLIFY);
             pipe2.add_pass(SIMPLE_DCE);
 
+            passman.run_transform(GLOBAL2LOCAL, &mut ir, 32);
+            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+            passman.run_transform(GLOBAL_DCE, &mut ir, 32);
+            passman.run_transform(MEM2REG, &mut ir, 32);
+            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+            passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
+            passman.run_transform(CONSTANT_FOLDING, &mut ir, 32);
+            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+            passman.run_transform(INSTCOMBINE, &mut ir, 32);
+            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+            passman.run_transform(GCM, &mut ir, 32);
+            passman.run_transform(LEGALIZE, &mut ir, 1);
+
             for i in 0..4 {
                 println!("Round {}", i);
 
@@ -136,6 +150,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             passman.run_transform(BLOCK_REORDER, &mut ir, 1);
+        } else {
+            passman.run_transform(LEGALIZE, &mut ir, 1);
         }
 
         ir.alloc_all_names();
@@ -201,6 +217,7 @@ fn register_passes(passman: &mut PassManager) {
     GlobalValueNumbering::register(passman);
     Gcm::register(passman);
 
+    Legalize::register(passman);
     BlockReorder::register(passman);
 }
 

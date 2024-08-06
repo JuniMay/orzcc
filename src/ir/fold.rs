@@ -362,7 +362,9 @@ impl Inst {
             | InstKind::CallIndirect(_)
             | InstKind::Ret
             | InstKind::GetGlobal(_)
-            | InstKind::Offset => None,
+            | InstKind::Offset
+            | InstKind::LoadElem { .. }
+            | InstKind::StoreElem { .. } => None,
         }
     }
 }

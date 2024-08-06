@@ -224,6 +224,9 @@ impl GlobalValueNumbering {
                             | InstKind::Jump
                             | InstKind::Br
                             | InstKind::Ret => {}
+                            InstKind::StoreElem { .. } | InstKind::LoadElem { .. } => {
+                                unreachable!("do legalize first");
+                            }
                         }
                         curr_inst = last_inst;
                     }
@@ -356,6 +359,9 @@ impl GlobalValueNumbering {
                                     | InstKind::Jump
                                     | InstKind::Br
                                     | InstKind::Ret => {}
+                                    InstKind::StoreElem { .. } | InstKind::LoadElem { .. } => {
+                                        unreachable!("do legalize first!");
+                                    }
                                 }
                             }
                             if let Some(def_val) = maybe_def_val {
@@ -396,7 +402,7 @@ impl GlobalValueNumbering {
                         }
                     }
                 }
-                InstKind::Store => {
+                InstKind::Store | InstKind::StoreElem { .. } | InstKind::LoadElem { .. } => {
                     // TODO: Store elimination
                 }
                 InstKind::Call(symbol) => {

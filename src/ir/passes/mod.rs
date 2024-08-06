@@ -13,3 +13,4 @@ pub mod loops;
 pub mod mem2reg;
 pub mod side_effect;
 pub mod simple_dce;
+pub mod legalize;

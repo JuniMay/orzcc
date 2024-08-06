@@ -485,43 +485,25 @@ impl IrGenContext {
                     }
                 } else if indices.len() >= shape.len() {
                     // using `>=` for function parameter, which can be a pointer to an array
-                    let int = ir::Ty::int(&mut self.ctx, 32);
-
                     // all indices provided, get the element
-                    let offset = ir::Inst::iconst(&mut self.ctx, 0, int);
-                    curr_block.push_back(&mut self.ctx, offset);
-                    let mut offset = offset.result(&self.ctx, 0);
+                    let mut ir_indices = Vec::new();
 
-                    let mut bound_ty = &bound_ty;
+                    let shape = if indices.len() == shape.len() {
+                        // we need to discard the first dim
+                        shape.iter().skip(1).map(|dim| *dim as u32).collect()
+                    } else {
+                        assert!(indices.len() == shape.len() + 1);
+                        shape.iter().map(|dim| *dim as u32).collect()
+                    };
 
                     for idx in indices.iter() {
-                        bound_ty = bound_ty.inner_ty().unwrap();
-
                         let idx = self.gen_local_expr(idx).unwrap();
-
-                        let bytewidth = bound_ty.bytewidth();
-                        let iconst = ir::Inst::iconst(&mut self.ctx, bytewidth as i32, int);
-                        curr_block.push_back(&mut self.ctx, iconst);
-                        let bytewidth = iconst.result(&self.ctx, 0);
-
-                        let mul =
-                            ir::Inst::ibinary(&mut self.ctx, ir::IBinaryOp::Mul, idx, bytewidth);
-                        curr_block.push_back(&mut self.ctx, mul);
-                        let mul = mul.result(&self.ctx, 0);
-
-                        let add = ir::Inst::ibinary(&mut self.ctx, ir::IBinaryOp::Add, offset, mul);
-                        curr_block.push_back(&mut self.ctx, add);
-                        offset = add.result(&self.ctx, 0);
+                        ir_indices.push(idx);
                     }
-
-                    let offset = ir::Inst::offset(&mut self.ctx, slot, offset);
-                    curr_block.push_back(&mut self.ctx, offset);
-                    let offset = offset.result(&self.ctx, 0);
-
-                    // load
-                    let load = ir::Inst::load(&mut self.ctx, offset, ir_base_ty);
-                    curr_block.push_back(&mut self.ctx, load);
-                    Some(load.result(&self.ctx, 0))
+                    let load_elem =
+                        ir::Inst::load_elem(&mut self.ctx, shape, slot, ir_indices, ir_base_ty);
+                    curr_block.push_back(&mut self.ctx, load_elem);
+                    Some(load_elem.result(&self.ctx, 0))
                 } else {
                     let int = ir::Ty::int(&mut self.ctx, 32);
 
@@ -1238,47 +1220,35 @@ impl IrGen for Stmt {
                     unreachable!()
                 };
 
-                let store_dst = if indices.is_empty() {
-                    slot
+                if indices.is_empty() {
+                    let store_dst = slot;
+
+                    let val = irgen.gen_local_expr(expr).unwrap();
+                    let store = ir::Inst::store(&mut irgen.ctx, val, store_dst);
+                    curr_block.push_back(&mut irgen.ctx, store);
                 } else {
-                    let int = ir::Ty::int(&mut irgen.ctx, 32);
+                    // discard the first dimension or pointer
+                    let mut bound_ty = bound_ty.inner_ty().unwrap();
+                    let mut shape = Vec::new();
 
-                    // just get the offset
-                    let offset = ir::Inst::iconst(&mut irgen.ctx, 0, int);
-                    curr_block.push_back(&mut irgen.ctx, offset);
-                    let mut offset = offset.result(&irgen.ctx, 0);
-
-                    let mut bound_ty = &bound_ty;
-
-                    for idx in indices.iter() {
-                        bound_ty = bound_ty.inner_ty().unwrap();
-
-                        let idx = irgen.gen_local_expr(idx).unwrap();
-
-                        let bytewidth = bound_ty.bytewidth();
-                        let iconst = ir::Inst::iconst(&mut irgen.ctx, bytewidth as i32, int);
-                        curr_block.push_back(&mut irgen.ctx, iconst);
-                        let bytewidth = iconst.result(&irgen.ctx, 0);
-
-                        let mul =
-                            ir::Inst::ibinary(&mut irgen.ctx, ir::IBinaryOp::Mul, idx, bytewidth);
-                        curr_block.push_back(&mut irgen.ctx, mul);
-                        let mul = mul.result(&irgen.ctx, 0);
-
-                        let add =
-                            ir::Inst::ibinary(&mut irgen.ctx, ir::IBinaryOp::Add, offset, mul);
-                        curr_block.push_back(&mut irgen.ctx, add);
-                        offset = add.result(&irgen.ctx, 0);
+                    while let Some(ty) = bound_ty.inner_ty() {
+                        let dim = bound_ty.bytewidth() / ty.bytewidth();
+                        shape.push(dim as u32);
+                        bound_ty = ty;
                     }
 
-                    let offset = ir::Inst::offset(&mut irgen.ctx, slot, offset);
-                    curr_block.push_back(&mut irgen.ctx, offset);
-                    offset.result(&irgen.ctx, 0)
-                };
+                    let mut ir_indices = Vec::new();
 
-                let val = irgen.gen_local_expr(expr).unwrap();
-                let store = ir::Inst::store(&mut irgen.ctx, val, store_dst);
-                curr_block.push_back(&mut irgen.ctx, store);
+                    for idx in indices.iter() {
+                        let idx = irgen.gen_local_expr(idx).unwrap();
+                        ir_indices.push(idx);
+                    }
+
+                    let val = irgen.gen_local_expr(expr).unwrap();
+                    let store_elem =
+                        ir::Inst::store_elem(&mut irgen.ctx, shape, val, slot, ir_indices);
+                    curr_block.push_back(&mut irgen.ctx, store_elem);
+                };
             }
             Stmt::Expr(ExprStmt { expr }) => {
                 if let Some(ref expr) = expr {

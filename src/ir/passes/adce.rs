@@ -75,6 +75,7 @@ impl LocalPassMut for Adce {
                     | Ik::Cast(_)
                     | Ik::GetGlobal(_)
                     | Ik::Load
+                    | Ik::LoadElem { .. }
                     | Ik::Offset
                     | Ik::StackSlot(_)
                     | Ik::Br
@@ -89,7 +90,7 @@ impl LocalPassMut for Adce {
                             worklist.push_back(LiveEntry::Inst(inst));
                         }
                     }
-                    Ik::CallIndirect(_) | Ik::Store | Ik::Ret => {
+                    Ik::CallIndirect(_) | Ik::Store | Ik::StoreElem { .. } | Ik::Ret => {
                         worklist.push_back(LiveEntry::Inst(inst));
                     }
                 }
