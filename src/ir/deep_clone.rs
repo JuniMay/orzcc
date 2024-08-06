@@ -26,4 +26,6 @@ impl DeepCloneMap {
         self.value_map.clear();
         self.block_map.clear();
     }
+
+    pub fn remove_value(&mut self, old: Value) { self.value_map.remove(&old); }
 }

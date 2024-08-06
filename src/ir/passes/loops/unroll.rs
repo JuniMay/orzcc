@@ -16,9 +16,11 @@ use crate::{
         Block,
         Context,
         Func,
+        IBinaryOp,
         ICmpCond,
         Inst,
         InstKind,
+        Ty,
         Value,
     },
     utils::{
@@ -159,10 +161,257 @@ impl LoopUnroll {
                     bound_const.unwrap(),
                     trip_count_const.unwrap(),
                 );
+            } else {
+                // dynamic unrolling
+                #[allow(clippy::single_match)]
+                match (op, cmp_cond, reversed) {
+                    (InductionOp::Add, ICmpCond::Sle | ICmpCond::Slt, false) => {
+                        changed |=
+                            self.unroll_dynamic(ctx, lp, *repr, *start, *step, *bound, *cmp_cond);
+                    }
+                    _ => {}
+                }
             }
         }
 
         changed
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn unroll_dynamic(
+        &mut self,
+        ctx: &mut Context,
+        lp: Loop<Block>,
+        repr: Value,
+        start: Value,
+        step: Value,
+        bound: Value,
+        cmp_cond: ICmpCond,
+    ) -> bool {
+        let bound_def_block = bound.def_block(ctx);
+        if self.scev.loop_ctx.is_in_loop(bound_def_block, lp) {
+            // not loop invariant, cannot unroll
+            return false;
+        }
+
+        let step_def_block = step.def_block(ctx);
+        if self.scev.loop_ctx.is_in_loop(step_def_block, lp) {
+            // not loop invariant, cannot unroll
+            return false;
+        }
+
+        let header = lp.header(&self.scev.loop_ctx);
+
+        let mut is_pre_exit = false;
+        let exits = lp.get_exit_blocks(ctx, &self.scev.loop_ctx);
+
+        for succ in header.succs(ctx) {
+            if !self.scev.loop_ctx.is_in_loop(succ, lp) {
+                is_pre_exit = true;
+                break;
+            }
+        }
+
+        if exits.len() != 1 || !is_pre_exit {
+            // multiple exits or the header does not control the exit, do not unroll
+            return false;
+        }
+
+        ctx.alloc_all_names();
+        println!("{}", ctx.display(true));
+
+        self.deep_clone_map.clear();
+
+        let unroll_factor = self.unroll_factor as i32;
+
+        // while (i + k * (factor - 1) < n) {
+        //      i += k;
+        //      i += k; .. unroll factor
+        // }
+        // ... same as before
+        // this may cause overflow.
+
+        // alternative:
+        // sle: bound -= 1
+        // slt:
+        //  count = (bound - start) / step + 1
+        //  rem = count % factor
+        //  unrolled = count - rem
+        //  unrolled_bound = start + step * unrolled
+        //  while (i < unrolled_bound) {
+        //      // unroll body * factor
+        //  }
+        //  ... old loop body with new i
+
+        let preheader = lp.get_preheader(ctx, &self.scev.loop_ctx).unwrap();
+        let blocks = lp.get_blocks(ctx, &self.scev.loop_ctx);
+
+        let insn: usize = blocks.iter().map(|bb| bb.insn(ctx)).sum();
+        if insn * self.unroll_factor > 512 {
+            return false;
+        }
+
+        let ty = repr.ty(ctx);
+
+        // calculate the trip count and unroll count
+        let bound = match cmp_cond {
+            ICmpCond::Slt => {
+                let iconst = Inst::iconst(ctx, 1, ty);
+                let sub = Inst::ibinary(ctx, IBinaryOp::Sub, bound, iconst.result(ctx, 0));
+                preheader.push_inst_before_terminator(ctx, iconst);
+                preheader.push_inst_before_terminator(ctx, sub);
+                sub.result(ctx, 0)
+            }
+            ICmpCond::Sle => bound,
+            ICmpCond::Eq | ICmpCond::Ne | ICmpCond::Ult | ICmpCond::Ule => unimplemented!(),
+        };
+        // calculate the trip count
+        let sub = Inst::ibinary(ctx, IBinaryOp::Sub, bound, start);
+        let one = Inst::iconst(ctx, 1, ty);
+        let div = Inst::ibinary(ctx, IBinaryOp::SDiv, sub.result(ctx, 0), step);
+        let add = Inst::ibinary(ctx, IBinaryOp::Add, div.result(ctx, 0), one.result(ctx, 0));
+        let factor = Inst::iconst(ctx, unroll_factor, ty);
+        let rem = Inst::ibinary(
+            ctx,
+            IBinaryOp::SRem,
+            add.result(ctx, 0),
+            factor.result(ctx, 0),
+        );
+        let unrolled = Inst::ibinary(ctx, IBinaryOp::Sub, add.result(ctx, 0), rem.result(ctx, 0));
+
+        let mul = Inst::ibinary(ctx, IBinaryOp::Mul, step, unrolled.result(ctx, 0));
+        let unrolled_bound = Inst::ibinary(ctx, IBinaryOp::Add, start, mul.result(ctx, 0));
+
+        preheader.push_inst_before_terminator(ctx, sub);
+        preheader.push_inst_before_terminator(ctx, one);
+        preheader.push_inst_before_terminator(ctx, div);
+        preheader.push_inst_before_terminator(ctx, add);
+        preheader.push_inst_before_terminator(ctx, factor);
+        preheader.push_inst_before_terminator(ctx, rem);
+        preheader.push_inst_before_terminator(ctx, unrolled);
+        preheader.push_inst_before_terminator(ctx, mul);
+        preheader.push_inst_before_terminator(ctx, unrolled_bound);
+
+        let unrolled_bound = unrolled_bound.result(ctx, 0);
+
+        let mut insertion_point = preheader;
+
+        // copy header
+        let new_header = Block::new(ctx);
+        self.deep_clone_map.insert_block(header, new_header);
+
+        // the condition of jump, we need to modify it.
+        let cond = header.tail(ctx).unwrap().operand(ctx, 0);
+
+        // also, we need to map the exit to be the entry.
+        let exit = header.tail(ctx).unwrap().succ(ctx, 1).block();
+
+        insertion_point.insert_after(ctx, new_header);
+        insertion_point = new_header;
+
+        #[allow(clippy::unnecessary_to_owned)]
+        for param in header.params(ctx).to_vec() {
+            let ty = param.ty(ctx);
+            let new_param = new_header.new_param(ctx, ty);
+            self.deep_clone_map.insert_value(param, new_param);
+        }
+
+        // the new indvar in the parameter list.
+        let new_repr = self.deep_clone_map.get_value(repr).unwrap();
+
+        let i1 = Ty::int(ctx, 1);
+
+        let mut jumps_to_modify: Vec<Inst> = Vec::new();
+
+        // replace the first jump instruction.
+        preheader
+            .tail(ctx)
+            .unwrap()
+            .replace(ctx, header, new_header);
+
+        let mut curr_header = new_header;
+
+        for i in 0..unroll_factor {
+            for block in blocks.iter() {
+                if block == &header && i == 0 {
+                    // the first header is already cloned
+                    continue;
+                }
+
+                let new_block = Block::new(ctx);
+                self.deep_clone_map.insert_block(*block, new_block);
+
+                #[allow(clippy::unnecessary_to_owned)]
+                for param in block.params(ctx).to_vec() {
+                    let ty = param.ty(ctx);
+                    let new_param = new_block.new_param(ctx, ty);
+                    self.deep_clone_map.insert_value(param, new_param);
+                }
+
+                insertion_point.insert_after(ctx, new_block);
+                insertion_point = new_block;
+
+                if block == &header {
+                    for jump in jumps_to_modify.drain(..) {
+                        jump.replace(ctx, curr_header, new_block);
+                    }
+                    curr_header = new_block;
+                }
+            }
+
+            for block in blocks.iter() {
+                let new_block = self.deep_clone_map.get_block(*block).unwrap();
+                let mut cursor = block.cursor();
+                while let Some(inst) = cursor.next(ctx) {
+                    if !inst.results(ctx).is_empty() && inst.result(ctx, 0) == cond {
+                        if i != 0 {
+                            // no need to clone the compare instruction, we just create true.
+                            // use true to replace the old condition, because we know it must jump
+                            // now.
+                            // TODO: is this right?
+                            let true_ = Inst::iconst(ctx, true, i1);
+                            self.deep_clone_map.insert_value(cond, true_.result(ctx, 0));
+                            new_block.push_back(ctx, true_);
+                        } else {
+                            // use the unroll bound as the new condition, also as slt
+                            let new_cond = Inst::ibinary(
+                                ctx,
+                                IBinaryOp::Cmp(ICmpCond::Slt),
+                                new_repr,
+                                unrolled_bound,
+                            );
+                            self.deep_clone_map
+                                .insert_value(cond, new_cond.result(ctx, 0));
+                            new_block.push_back(ctx, new_cond);
+                        }
+                    } else {
+                        let new_inst = inst.deep_clone(ctx, &mut self.deep_clone_map);
+                        new_block.push_back(ctx, new_inst);
+                    }
+                }
+
+                for succ in block.succs(ctx) {
+                    if succ == header {
+                        jumps_to_modify.push(new_block.tail(ctx).unwrap());
+                        break;
+                    }
+                }
+
+                if *block == header {
+                    // we need to replace the exit to be the old header
+                    let tail = new_block.tail(ctx).unwrap();
+                    let params = new_block.params(ctx).to_vec();
+                    tail.replace_succ_with_args(ctx, exit, header, params);
+                }
+            }
+        }
+
+        for jump in jumps_to_modify {
+            // jump to the old header
+            jump.replace(ctx, curr_header, header);
+        }
+
+        true
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -298,7 +547,8 @@ impl LoopUnroll {
 
         // old loop body should be unreachable
         for block in blocks {
-            block.comment(ctx, CommentPos::Before, "should unreachable");
+            // FIXME: 96_matrix_add.sy
+            block.comment(ctx, CommentPos::Before, "should be unreachable");
         }
 
         true
@@ -373,7 +623,7 @@ impl TransformPass for LoopUnroll {
             ],
         );
 
-        passman.add_parameter("unroll-factor", 8);
+        passman.add_parameter("unroll-factor", 4);
         passman.add_parameter("unroll-constant-all", true);
     }
 }

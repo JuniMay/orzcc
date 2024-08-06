@@ -246,6 +246,7 @@ impl ScevAnalysis {
         lp: Loop<Block>,
     ) -> Option<(Value, ICmpCond, Value)> {
         let header = lp.header(&self.loop_ctx);
+        // TODO: is this right?
 
         let tail = header.tail(ctx).unwrap();
         let mut loop_bound = None;
