@@ -922,7 +922,7 @@ impl fmt::Display for FpuOpRR {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub enum FpuOpRRR {
     FaddS,
     FaddD,
@@ -1060,7 +1060,7 @@ impl fmt::Display for StoreOp {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub enum Frm {
     Rne,
     Rtz,

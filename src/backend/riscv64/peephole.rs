@@ -5,8 +5,9 @@ use crate::{
     backend::{
         inst::MInst,
         peephole::{Peephole1, Peephole2, PeepholeRule, PeepholeRunner},
+        regs::Reg,
         riscv64::{
-            inst::{AluOpRRI, AluOpRRR, BrOp, FpuOpRRR, LoadOp, StoreOp},
+            inst::{AluOpRRI, AluOpRRR, BrOp, FpuOpRRR, FpuOpRRRR, LoadOp, StoreOp},
             regs,
         },
         LowerConfig,
@@ -233,6 +234,197 @@ const fn fuse_shl_add() -> Peephole2<RvInst> {
         },
     }
 }
+
+/// fmul $f0, $f1, $f2
+/// fadd $f3, $f0, $f4
+/// =>
+/// fmadd $f3, $f1, $f2, $f4
+///
+/// fmul $f0, $f1, $f2
+/// fadd $f3, $f4, $f0
+/// =>
+/// fmadd $f3, $f1, $f2, $f4
+///
+/// fmul $f0, $f1, $f2
+/// fsub $f3, $f0, $f4
+/// =>
+/// fmsub $f3, $f1, $f2, $f4
+///
+/// fmul $f0, $f1, $f2
+/// fsub $f3, $f4, $f0
+/// =>
+/// fnmsub $f3, $f1, $f2, $f4
+///
+/// AGGRESSIVE: cause precision issue on /hidden_functional/37_dct and
+/// 38_light2d
+const fn fuse_fmul_faddsub() -> Peephole2<RvInst> {
+    PeepholeRule {
+        rewriter: |mctx, def_use, (a, b)| {
+            use RvInstKind as Ik;
+
+            match (a.kind(mctx), b.kind(mctx)) {
+                (
+                    Ik::FpuRRR {
+                        op: FpuOpRRR::FmulS,
+                        rd: fmul_rd,
+                        rs1: fmul_rs1,
+                        rs2: fmul_rs2,
+                        rm: fmul_rm,
+                    },
+                    Ik::FpuRRR {
+                        op: faddsub_op @ (FpuOpRRR::FaddS | FpuOpRRR::FsubS),
+                        rd: faddsub_rd,
+                        rs1: faddsub_rs1,
+                        rs2: faddsub_rs2,
+                        rm: faddsub_rm,
+                    },
+                ) => {
+                    if def_use.num_uses(*fmul_rd) != 1 {
+                        // we can't remove fmul if it has multiple uses
+                        return false;
+                    }
+
+                    let fmul_rd = *fmul_rd;
+                    let fmul_rs1 = *fmul_rs1;
+                    let fmul_rs2 = *fmul_rs2;
+
+                    let faddsub_rd = *faddsub_rd;
+                    let faddsub_rs1 = *faddsub_rs1;
+                    let faddsub_rs2 = *faddsub_rs2;
+
+                    let frm = if *fmul_rm == *faddsub_rm {
+                        *fmul_rm
+                    } else {
+                        // TODO: handle different rounding modes
+                        // seems different rounding modes can't be handled
+                        return false;
+                    };
+
+                    let (op, fmul_rs3) = if *faddsub_op == FpuOpRRR::FaddS {
+                        if fmul_rd == faddsub_rs1 {
+                            // fmul $f0, $f1, $f2
+                            // fadd $f3, $f0, $f4
+                            // =>
+                            // fmadd $f3, $f1, $f2, $f4
+                            (FpuOpRRRR::FmaddS, faddsub_rs2)
+                        } else if fmul_rd == faddsub_rs2 {
+                            // fmul $f0, $f1, $f2
+                            // fadd $f3, $f4, $f0
+                            // =>
+                            // fmadd $f3, $f1, $f2, $f4
+                            (FpuOpRRRR::FmaddS, faddsub_rs1)
+                        } else {
+                            return false;
+                        }
+                    } else if *faddsub_op == FpuOpRRR::FsubS {
+                        if fmul_rd == faddsub_rs1 {
+                            // fmul $f0, $f1, $f2
+                            // fsub $f3, $f0, $f4
+                            // =>
+                            // fmsub $f3, $f1, $f2, $f4 (rd = rs1 * rs2 - rs3)
+                            (FpuOpRRRR::FmsubS, faddsub_rs2)
+                        } else if fmul_rd == faddsub_rs2 {
+                            // fmul $f0, $f1, $f2
+                            // fsub $f3, $f4, $f0
+                            // =>
+                            // fnmsub $f3, $f1, $f2, $f4 (rd = -rs1 * rs2 + rs3)
+                            (FpuOpRRRR::FnmsubS, faddsub_rs1)
+                        } else {
+                            return false;
+                        }
+                    } else {
+                        return false;
+                    };
+
+                    let fmaddsub_inst = RvInst::build_fpu_rrrr(
+                        mctx, op, frm, faddsub_rd, fmul_rs1, fmul_rs2, fmul_rs3,
+                    );
+
+                    b.insert_after(mctx, fmaddsub_inst);
+
+                    // 维护 def-use 链
+                    def_use.remove_def(fmul_rd, a);
+                    def_use.remove_use(fmul_rs1, a);
+                    def_use.remove_use(fmul_rs2, a);
+
+                    def_use.remove_def(faddsub_rd, b);
+                    def_use.remove_use(faddsub_rs1, b);
+                    def_use.remove_use(faddsub_rs2, b);
+
+                    a.remove(mctx);
+                    b.remove(mctx);
+
+                    def_use.add_def(faddsub_rd, fmaddsub_inst);
+                    def_use.add_use(fmul_rs1, fmaddsub_inst);
+                    def_use.add_use(fmul_rs2, fmaddsub_inst);
+                    def_use.add_use(fmul_rs3, fmaddsub_inst);
+
+                    true
+                }
+                _ => false,
+            }
+        },
+    }
+}
+
+// const fn fuse_xori_beq() -> Peephole2<RvInst> {
+//     PeepholeRule {
+//         rewriter: |mctx, def_use, (a, b)| {
+//             use RvInstKind as Ik;
+
+//             match (a.kind(mctx), b.kind(mctx)) {
+//                 (
+//                     Ik::AluRRI {
+//                         op: AluOpRRI::Xori,
+//                         rd: xori_rd,
+//                         rs: xori_rs,
+//                         imm: xori_imm,
+//                     },
+//                     Ik::Br {
+//                         op: br_op @ (BrOp::Beq | BrOp::Bne),
+//                         rs1: beqne_rs1,
+//                         rs2: beqne_rs2,
+//                         block,
+//                     },
+//                 ) if xori_imm.as_i16() == 1
+//                     && *beqne_rs2 == Reg::from(regs::zero())
+//                     && *xori_rd == *beqne_rs1 =>
+//                 {
+//                     if let Reg::P(preg) = *beqne_rs1 {}
+//                     // xori t1, t2, 1
+//                     // beq t1, zero, .bb2
+//                     // =>
+//                     // bnez t2, .bb2
+
+//                     let xori_rs = *xori_rs;
+//                     let block = *block;
+
+//                     let new_bnez =
+//                         RvInst::br(mctx, BrOp::Bnez, xori_rs,
+// regs::zero().into(), block);
+
+//                     b.insert_after(mctx, new_bnez);
+
+//                     // 维护 def-use 链
+//                     def_use.remove_def(*xori_rd, a);
+//                     def_use.remove_use(xori_rs, a);
+
+//                     def_use.remove_use(*beqne_rs1, b);
+//                     def_use.remove_use(*beqne_rs2, b);
+
+//                     a.remove(mctx);
+//                     b.remove(mctx);
+
+//                     def_use.add_use(xori_rs, new_bnez);
+//                     def_use.add_use(regs::zero().into(), new_bnez);
+
+//                     true
+//                 }
+//                 _ => false,
+//             }
+//         },
+//     }
+// }
 
 // TODO: floating-point move (fsgnj) is not handled yet
 
@@ -644,6 +836,7 @@ pub fn run_peephole(mctx: &mut MContext<RvInst>, config: &LowerConfig) -> bool {
     runner1.add_rule(remove_redundant_move());
 
     runner2.add_rule(fuse_cmp_br());
+    runner2.add_rule(fuse_fmul_faddsub()); // aggressive
 
     if mctx.arch().contains("zba") {
         runner2.add_rule(fuse_shl_add());
