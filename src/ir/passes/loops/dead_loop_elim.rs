@@ -29,8 +29,6 @@ impl DeadLoopElim {
     fn process_loop(&mut self, ctx: &mut Context, lp: Loop<Block>, scevs: &LoopScevRecord) -> bool {
         let mut changed = false;
 
-        println!("{}", scevs.display(ctx));
-
         let (lhs, cmp_cond, rhs) = if let Some(bound) = scevs.loop_bounds.get(&lp).unwrap() {
             bound
         } else {
