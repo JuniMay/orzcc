@@ -641,7 +641,7 @@ impl<'a> fmt::Display for DisplayRvInst<'a> {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub enum BrOp {
     Beq,
     Bne,

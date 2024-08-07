@@ -4,8 +4,7 @@ use super::inst::{RvInst, RvInstKind};
 use crate::{
     backend::{
         inst::MInst,
-        peephole::{Peephole1, Peephole2, PeepholeRule, PeepholeRunner},
-        regs::Reg,
+        peephole::{Peephole1, Peephole2, Peephole3, PeepholeRule, PeepholeRunner},
         riscv64::{
             inst::{AluOpRRI, AluOpRRR, BrOp, FpuOpRRR, FpuOpRRRR, LoadOp, StoreOp},
             regs,
@@ -30,7 +29,7 @@ const fn fuse_cmp_br() -> Peephole2<RvInst> {
                         rs2: cmp_rhs,
                     },
                     Ik::Br {
-                        op: BrOp::Bne,
+                        op: br_op @ (BrOp::Beq | BrOp::Bne),
                         rs1: br_lhs,
                         rs2: br_rhs,
                         block,
@@ -45,9 +44,11 @@ const fn fuse_cmp_br() -> Peephole2<RvInst> {
                     let block = *block;
 
                     #[allow(clippy::wildcard_enum_match_arm)]
-                    let br_op = match cmp_op {
-                        AluOpRRR::Slt => BrOp::Blt,
-                        AluOpRRR::Sltu => BrOp::Bltu,
+                    let br_op = match (br_op, cmp_op) {
+                        (BrOp::Bne, AluOpRRR::Slt) => BrOp::Blt,
+                        (BrOp::Bne, AluOpRRR::Sltu) => BrOp::Bltu,
+                        (BrOp::Beq, AluOpRRR::Slt) => BrOp::Bge,
+                        (BrOp::Beq, AluOpRRR::Sltu) => BrOp::Bgeu,
                         _ => unreachable!(),
                     };
 
@@ -59,7 +60,8 @@ const fn fuse_cmp_br() -> Peephole2<RvInst> {
                     let new_br = if (rd == br_lhs && br_rhs == regs::zero().into())
                         || (rd == br_rhs && br_lhs == regs::zero().into())
                     {
-                        // slt + bne => blt
+                        // slt(u) + bne => blt(u)
+                        // slt(u) + beq => bge(u)
                         RvInst::br(mctx, br_op, cmp_lhs, cmp_rhs, block)
                     } else {
                         return false;
@@ -133,6 +135,98 @@ const fn fuse_cmp_br() -> Peephole2<RvInst> {
 
                     def_use.add_use(cmp_lhs, new_br);
                     def_use.add_use(regs::zero().into(), new_br);
+
+                    true
+                }
+                _ => false,
+            }
+        },
+    }
+}
+
+const fn fuse_xori_cmp_br() -> Peephole3<RvInst> {
+    PeepholeRule {
+        rewriter: |mctx, def_use, (a, b, c)| {
+            use RvInstKind as Ik;
+
+            match (a.kind(mctx), b.kind(mctx), c.kind(mctx)) {
+                (
+                    Ik::AluRRR {
+                        op: cmp_op @ (AluOpRRR::Slt | AluOpRRR::Sltu),
+                        rd: cmp_rd,
+                        rs1: cmp_lhs,
+                        rs2: cmp_rhs,
+                    },
+                    Ik::AluRRI {
+                        op: AluOpRRI::Xori,
+                        rd: xori_rd,
+                        rs: xori_rs,
+                        imm: xori_imm,
+                    },
+                    Ik::Br {
+                        op: br_op @ (BrOp::Beq | BrOp::Bne),
+                        rs1: br_lhs,
+                        rs2: br_rhs,
+                        block,
+                    },
+                ) if def_use.num_uses(*xori_rd) == 1
+                    && def_use.num_uses(*cmp_rd) == 1
+                    && cmp_rd == xori_rs
+                    // && xori_rd == br_rs, this will be checked later because we don't know which is br_rs
+                    && xori_imm.as_i16() == 1 =>
+                {
+                    let cmp_rd = *cmp_rd;
+                    let cmp_lhs = *cmp_lhs;
+                    let cmp_rhs = *cmp_rhs;
+
+                    let xori_rd = *xori_rd;
+                    let xori_rs = *xori_rs;
+                    // `let xori_imm = *xori_imm;`,
+                    // this is useless because we've checked it's 1.
+
+                    let br_op = *br_op;
+                    let br_lhs = *br_lhs;
+                    let br_rhs = *br_rhs;
+
+                    let block = *block;
+
+                    let br_op = match (br_op, cmp_op) {
+                        (BrOp::Bne, AluOpRRR::Slt) => BrOp::Bge,
+                        (BrOp::Bne, AluOpRRR::Sltu) => BrOp::Bgeu,
+                        (BrOp::Beq, AluOpRRR::Slt) => BrOp::Blt,
+                        (BrOp::Beq, AluOpRRR::Sltu) => BrOp::Bltu,
+                        _ => unreachable!(),
+                    };
+
+                    let new_br = if (xori_rd == br_lhs && br_rhs == regs::zero().into())
+                        || (xori_rd == br_rhs && br_lhs == regs::zero().into())
+                    {
+                        // slt(u) + xori + bne => bge(u)
+                        // slt(u) + xori + beq => blt(u)
+                        RvInst::br(mctx, br_op, cmp_lhs, cmp_rhs, block)
+                    } else {
+                        return false;
+                    };
+
+                    c.insert_after(mctx, new_br);
+
+                    // maintain def-use
+                    def_use.remove_def(cmp_rd, a);
+                    def_use.remove_use(cmp_lhs, a);
+                    def_use.remove_use(cmp_rhs, a);
+
+                    def_use.remove_def(xori_rd, b);
+                    def_use.remove_use(xori_rs, b);
+
+                    def_use.remove_use(br_lhs, b);
+                    def_use.remove_use(br_rhs, b);
+
+                    a.remove(mctx);
+                    b.remove(mctx);
+                    c.remove(mctx);
+
+                    def_use.add_use(cmp_lhs, new_br);
+                    def_use.add_use(cmp_rhs, new_br);
 
                     true
                 }
@@ -257,7 +351,7 @@ const fn fuse_shl_add() -> Peephole2<RvInst> {
 ///
 /// AGGRESSIVE: cause precision issue on /hidden_functional/37_dct and
 /// 38_light2d
-const fn fuse_fmul_faddsub() -> Peephole2<RvInst> {
+const fn fuse_fmul_faddfsub() -> Peephole2<RvInst> {
     PeepholeRule {
         rewriter: |mctx, def_use, (a, b)| {
             use RvInstKind as Ik;
@@ -278,12 +372,7 @@ const fn fuse_fmul_faddsub() -> Peephole2<RvInst> {
                         rs2: faddsub_rs2,
                         rm: faddsub_rm,
                     },
-                ) => {
-                    if def_use.num_uses(*fmul_rd) != 1 {
-                        // we can't remove fmul if it has multiple uses
-                        return false;
-                    }
-
+                ) if def_use.num_uses(*fmul_rd) == 1 => {
                     let fmul_rd = *fmul_rd;
                     let fmul_rs1 = *fmul_rs1;
                     let fmul_rs2 = *fmul_rs2;
@@ -295,8 +384,6 @@ const fn fuse_fmul_faddsub() -> Peephole2<RvInst> {
                     let frm = if *fmul_rm == *faddsub_rm {
                         *fmul_rm
                     } else {
-                        // TODO: handle different rounding modes
-                        // seems different rounding modes can't be handled
                         return false;
                     };
 
@@ -366,65 +453,6 @@ const fn fuse_fmul_faddsub() -> Peephole2<RvInst> {
         },
     }
 }
-
-// const fn fuse_xori_beq() -> Peephole2<RvInst> {
-//     PeepholeRule {
-//         rewriter: |mctx, def_use, (a, b)| {
-//             use RvInstKind as Ik;
-
-//             match (a.kind(mctx), b.kind(mctx)) {
-//                 (
-//                     Ik::AluRRI {
-//                         op: AluOpRRI::Xori,
-//                         rd: xori_rd,
-//                         rs: xori_rs,
-//                         imm: xori_imm,
-//                     },
-//                     Ik::Br {
-//                         op: br_op @ (BrOp::Beq | BrOp::Bne),
-//                         rs1: beqne_rs1,
-//                         rs2: beqne_rs2,
-//                         block,
-//                     },
-//                 ) if xori_imm.as_i16() == 1
-//                     && *beqne_rs2 == Reg::from(regs::zero())
-//                     && *xori_rd == *beqne_rs1 =>
-//                 {
-//                     if let Reg::P(preg) = *beqne_rs1 {}
-//                     // xori t1, t2, 1
-//                     // beq t1, zero, .bb2
-//                     // =>
-//                     // bnez t2, .bb2
-
-//                     let xori_rs = *xori_rs;
-//                     let block = *block;
-
-//                     let new_bnez =
-//                         RvInst::br(mctx, BrOp::Bnez, xori_rs,
-// regs::zero().into(), block);
-
-//                     b.insert_after(mctx, new_bnez);
-
-//                     // 维护 def-use 链
-//                     def_use.remove_def(*xori_rd, a);
-//                     def_use.remove_use(xori_rs, a);
-
-//                     def_use.remove_use(*beqne_rs1, b);
-//                     def_use.remove_use(*beqne_rs2, b);
-
-//                     a.remove(mctx);
-//                     b.remove(mctx);
-
-//                     def_use.add_use(xori_rs, new_bnez);
-//                     def_use.add_use(regs::zero().into(), new_bnez);
-
-//                     true
-//                 }
-//                 _ => false,
-//             }
-//         },
-//     }
-// }
 
 // TODO: floating-point move (fsgnj) is not handled yet
 
@@ -830,13 +858,16 @@ pub fn remove_redundant_labels(mctx: &mut MContext<RvInst>) -> bool {
 pub fn run_peephole(mctx: &mut MContext<RvInst>, config: &LowerConfig) -> bool {
     let mut runner1 = PeepholeRunner::new();
     let mut runner2 = PeepholeRunner::new();
+    let mut runner3 = PeepholeRunner::new();
 
     runner1.add_rule(li_dce());
     runner1.add_rule(remove_identity_move());
     runner1.add_rule(remove_redundant_move());
 
     runner2.add_rule(fuse_cmp_br());
-    runner2.add_rule(fuse_fmul_faddsub()); // aggressive
+    runner2.add_rule(fuse_fmul_faddfsub()); // aggressive
+
+    runner3.add_rule(fuse_xori_cmp_br());
 
     if mctx.arch().contains("zba") {
         runner2.add_rule(fuse_shl_add());
@@ -846,6 +877,7 @@ pub fn run_peephole(mctx: &mut MContext<RvInst>, config: &LowerConfig) -> bool {
 
     changed |= runner1.run(mctx, config);
     changed |= runner2.run(mctx, config);
+    changed |= runner3.run(mctx, config);
 
     changed
 }

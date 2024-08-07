@@ -14,6 +14,8 @@ pub type Peephole1<I> = PeepholeRule<I, I>;
 
 pub type Peephole2<I> = PeepholeRule<I, (I, I)>;
 
+pub type Peephole3<I> = PeepholeRule<I, (I, I, I)>;
+
 pub struct PeepholeRunner<I, IT>
 where
     I: MInst + Hash,
@@ -112,6 +114,62 @@ where
                         // inst_a/inst_b might be removed, so we move forward again.
                         curr_a = curr_b;
                         curr_b = curr_b.and_then(|inst| inst.next(mctx));
+                    }
+
+                    changed |= local_changed;
+                }
+            }
+        }
+
+        changed
+    }
+}
+
+impl<I> PeepholeRunner<I, (I, I, I)>
+where
+    I: MInst + Hash,
+{
+    pub fn run(&self, mctx: &mut MContext<I>, config: &LowerConfig) -> bool {
+        let mut reg_def_use = RegDefUse::compute(mctx, config);
+
+        let mut changed = false;
+
+        let funcs = mctx
+            .funcs
+            .iter_mut()
+            .map(|(_, func_data)| func_data.self_ptr())
+            .collect::<Vec<_>>();
+
+        for func in funcs {
+            if func.is_external(mctx) {
+                continue;
+            }
+
+            let mut cursor = func.cursor();
+            while let Some(block) = cursor.next(mctx) {
+                let mut curr_a = block.head(mctx);
+                let mut curr_b = curr_a.and_then(|inst| inst.next(mctx));
+                let mut curr_c = curr_b.and_then(|inst| inst.next(mctx));
+
+                while let (Some(inst_a), Some(inst_b), Some(inst_c)) = (curr_a, curr_b, curr_c) {
+                    curr_a = curr_b;
+                    curr_b = curr_c;
+                    curr_c = curr_c.and_then(|inst| inst.next(mctx));
+
+                    let mut local_changed = false;
+
+                    for rule in &self.rules {
+                        if (rule.rewriter)(mctx, &mut reg_def_use, (inst_a, inst_b, inst_c)) {
+                            local_changed = true;
+                            break;
+                        }
+                    }
+
+                    if local_changed {
+                        // inst_a/inst_b/inst_c might be removed, so we move forward again.
+                        curr_a = curr_b;
+                        curr_b = curr_c;
+                        curr_c = curr_c.and_then(|inst| inst.next(mctx));
                     }
 
                     changed |= local_changed;
