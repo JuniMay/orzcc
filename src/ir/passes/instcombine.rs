@@ -69,8 +69,6 @@
 //
 // TODO: Find a way to test these rules one by one.
 
-use core::panic;
-
 use crate::{
     collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
     ir::{
@@ -107,28 +105,28 @@ impl Default for InstCombine {
     fn default() -> Self {
         Self {
             rules: vec![
-                // mv_same_together(),     // aggressive
-                // sub_identity_to_zero(), // aggressive
-                // mul_zero_elim(),
-                // mul_one_elim(),
-                // mv_const_rhs(),
-                // add_zero_elim(),
-                // assoc_sub_zero(),
-                // sub_zero_elim(),
-                // offset_zero_elim(),
-                // add_to_mul(),
-                // mul_to_shl(),
-                // assoc_const(),      // aggressive
-                // distributive_one(), // aggressive
-                // distributive(),     // aggressive
-                // div_one_elim(),
-                // div_neg_one_elim(),
-                // div_to_shl(),
-                // rem_one_elim(),
-                // rem_to_shl(),
+                mv_same_together(),     // aggressive
+                sub_identity_to_zero(), // aggressive
+                mul_zero_elim(),
+                mul_one_elim(),
+                mv_const_rhs(),
+                add_zero_elim(),
+                assoc_sub_zero(),
+                sub_zero_elim(),
+                offset_zero_elim(),
+                add_to_mul(),
+                mul_to_shl(),
+                assoc_const(),      // aggressive
+                distributive_one(), // aggressive
+                distributive(),     // aggressive
+                div_one_elim(),
+                div_neg_one_elim(),
+                div_to_shl(),
+                rem_one_elim(),
+                rem_to_shl(),
                 div_rem_to_mul(),
-                // shl_zero_elim(), // not tested
-                // shr_zero_elim(), // not tested
+                shl_zero_elim(), // not tested
+                shr_zero_elim(), // not tested
             ],
         }
     }
@@ -1768,13 +1766,7 @@ const fn div_rem_to_mul() -> Rule {
 
                 if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
                     if let Ik::IConst(mut v) = rhs_inst.kind(ctx) {
-                        let is_v_neg = if v.is_zero() {
-                            ctx.alloc_all_names();
-                            println!("divided by zero at {}", inst.display(ctx, true));
-                            println!("{}", ctx.display(true));
-                            panic!("division by zero");
-                            return false;
-                        } else if v.as_signed() < 0 {
+                        let is_v_neg = if v.as_signed() < 0 {
                             v = IntConstant::from(-v.as_signed());
                             true
                         } else {
@@ -1896,12 +1888,9 @@ const fn div_rem_to_mul() -> Rule {
 }
 
 // 仅用于div_rem_to_mul。
-fn magic(w: u64, mut d: u64) -> (u64, u64) {
+fn magic(w: u64, d: u64) -> (u64, u64) {
     // w = bitwidth
     // d = divisor
-    if d == 0 {
-        d = 1;
-    }
     let nc = (1 << (w - 1)) - (1 << (w - 1)) % d - 1; // FIXME: 93_nested_call.sy div 0
     let mut p = w;
     while 1 << p <= nc * (d - (1 << p) % d) {

@@ -87,50 +87,50 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if cmd.opt > 0 {
             let mut pipe_basic = Pipeline::default();
 
-            // pipe_basic.add_pass(GLOBAL2LOCAL);
-            // pipe_basic.add_pass(SIMPLE_DCE);
-            // pipe_basic.add_pass(GLOBAL_DCE);
+            pipe_basic.add_pass(GLOBAL2LOCAL);
+            pipe_basic.add_pass(SIMPLE_DCE);
+            pipe_basic.add_pass(GLOBAL_DCE);
             pipe_basic.add_pass(MEM2REG);
-            // pipe_basic.add_pass(SIMPLE_DCE);
-            // pipe_basic.add_pass(CFG_SIMPLIFY);
-            // pipe_basic.add_pass(CONSTANT_FOLDING);
-            // pipe_basic.add_pass(SIMPLE_DCE);
+            pipe_basic.add_pass(SIMPLE_DCE);
+            pipe_basic.add_pass(CFG_SIMPLIFY);
+            pipe_basic.add_pass(CONSTANT_FOLDING);
+            pipe_basic.add_pass(SIMPLE_DCE);
             pipe_basic.add_pass(INSTCOMBINE);
-            // pipe_basic.add_pass(SIMPLE_DCE);
-            // pipe_basic.add_pass(GCM);
-            // pipe_basic.add_pass(GVN);
-            // pipe_basic.add_pass(CFG_SIMPLIFY);
-            // pipe_basic.add_pass(ELIM_CONSTANT_PHI);
-            // pipe_basic.add_pass(SIMPLE_DCE);
-            // pipe_basic.add_pass(CFG_SIMPLIFY);
-            // pipe_basic.add_pass(BRANCH2SELECT);
-            // pipe_basic.add_pass(CFG_SIMPLIFY);
+            pipe_basic.add_pass(SIMPLE_DCE);
+            pipe_basic.add_pass(GCM);
+            pipe_basic.add_pass(GVN);
+            pipe_basic.add_pass(CFG_SIMPLIFY);
+            pipe_basic.add_pass(ELIM_CONSTANT_PHI);
+            pipe_basic.add_pass(SIMPLE_DCE);
+            pipe_basic.add_pass(CFG_SIMPLIFY);
+            pipe_basic.add_pass(BRANCH2SELECT);
+            pipe_basic.add_pass(CFG_SIMPLIFY);
 
             let mut pipe_inline = Pipeline::default();
 
             pipe_inline.add_pass(INLINE);
-            // pipe_inline.add_pass(CFG_SIMPLIFY);
-            // pipe_inline.add_pass(SIMPLE_DCE);
-            // pipe_inline.add_pass(GLOBAL_DCE);
+            pipe_inline.add_pass(CFG_SIMPLIFY);
+            pipe_inline.add_pass(SIMPLE_DCE);
+            pipe_inline.add_pass(GLOBAL_DCE);
 
             let mut pipe_unroll = Pipeline::default();
 
-            // pipe_unroll.add_pass(LOOP_UNROLL);
-            // pipe_unroll.add_pass(CONSTANT_FOLDING);
-            // pipe_unroll.add_pass(CFG_SIMPLIFY);
-            // pipe_unroll.add_pass(SIMPLE_DCE);
+            pipe_unroll.add_pass(LOOP_UNROLL);
+            pipe_unroll.add_pass(CONSTANT_FOLDING);
+            pipe_unroll.add_pass(CFG_SIMPLIFY);
+            pipe_unroll.add_pass(SIMPLE_DCE);
 
-            // passman.run_transform(GLOBAL2LOCAL, &mut ir, 32);
-            // passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-            // passman.run_transform(GLOBAL_DCE, &mut ir, 32);
-            // passman.run_transform(MEM2REG, &mut ir, 32);
-            // passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-            // passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
-            // passman.run_transform(CONSTANT_FOLDING, &mut ir, 32);
-            // passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-            // passman.run_transform(INSTCOMBINE, &mut ir, 32);
-            // passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-            // passman.run_transform(GCM, &mut ir, 32);
+            passman.run_transform(GLOBAL2LOCAL, &mut ir, 32);
+            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+            passman.run_transform(GLOBAL_DCE, &mut ir, 32);
+            passman.run_transform(MEM2REG, &mut ir, 32);
+            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+            passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
+            passman.run_transform(CONSTANT_FOLDING, &mut ir, 32);
+            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+            passman.run_transform(INSTCOMBINE, &mut ir, 32);
+            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+            passman.run_transform(GCM, &mut ir, 32);
 
             // // TODO: unroll earlier to combine load/store
             // passman.run_transform(LOOP_UNROLL, &mut ir, 2);
@@ -138,7 +138,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
             // passman.run_transform(SIMPLE_DCE, &mut ir, 32);
 
-            // passman.run_transform(LEGALIZE, &mut ir, 1);
+            passman.run_transform(LEGALIZE, &mut ir, 1);
 
             for i in 0..4 {
                 println!("Round {}", i);
