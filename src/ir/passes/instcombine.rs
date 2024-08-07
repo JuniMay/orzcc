@@ -1766,6 +1766,9 @@ const fn div_rem_to_mul() -> Rule {
 
                 if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
                     if let Ik::IConst(mut v) = rhs_inst.kind(ctx) {
+                        if v.is_zero() {
+                            return false;
+                        }
                         let is_v_neg = if v.as_signed() < 0 {
                             v = IntConstant::from(-v.as_signed());
                             true
