@@ -41,7 +41,7 @@ impl LocalPassMut for ElimConstantPhi {
 
         for (param, incomings) in incomings {
             if incomings.len() == 1 {
-                // println!("[ constant phi ] detected");
+                println!("[ constant phi ] detected");
                 let value = *incomings.iter().next().unwrap();
                 for user in param.users(ctx) {
                     user.replace(ctx, param, value);

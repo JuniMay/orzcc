@@ -2,29 +2,30 @@ use super::{scalar_evolution::LoopScevRecord, Lcssa, LoopSimplify, Scev, ScevAna
 use crate::{
     collections::linked_list::LinkedListContainerPtr,
     ir::{
-        passes::{control_flow::CfgCanonicalize, loops::InductionOp},
+        passes::control_flow::CfgCanonicalize,
         passman::{GlobalPassMut, LocalPass, LocalPassMut, PassResult, TransformPass},
         Block,
         Context,
         Func,
         ICmpCond,
-        InstKind,
+        Inst,
+        Ty,
     },
     utils::{
-        def_use::User,
+        def_use::{Usable, User},
         loop_info::{Loop, LoopWithDepth},
     },
 };
 
-pub const INDVAR_SIMPLIFY: &str = "indvar-simplify";
+pub const DEAD_LOOP_ELIM: &str = "dead-loop-elim";
 
 #[derive(Default)]
-pub struct IndvarSimplify {
+pub struct DeadLoopElim {
     /// Scalar evolution analysis.
     scev: ScevAnalysis,
 }
 
-impl IndvarSimplify {
+impl DeadLoopElim {
     fn process_loop(&mut self, ctx: &mut Context, lp: Loop<Block>, scevs: &LoopScevRecord) -> bool {
         let mut changed = false;
 
@@ -43,7 +44,7 @@ impl IndvarSimplify {
             ICmpCond::Sle | ICmpCond::Slt => {}
         }
 
-        if let Some(Scev { repr, step, op, .. }) = scevs
+        if let Some(Scev { repr, .. }) = scevs
             .scevs
             .get(&lp)
             .unwrap()
@@ -58,36 +59,34 @@ impl IndvarSimplify {
                 unreachable!()
             };
 
-            let mut step_const = None;
-            if let Some(inst) = step.def_inst(ctx) {
-                if let InstKind::IConst(step) = inst.kind(ctx) {
-                    step_const = Some(step.as_signed());
-                }
+            let preheader = lp.get_preheader(ctx, &self.scev.loop_ctx).unwrap();
+            let header = lp.header(&self.scev.loop_ctx);
+            let jump = preheader.tail(ctx).unwrap();
+
+            let br = header.tail(ctx).unwrap();
+
+            assert!(jump.is_jump(ctx));
+
+            if !br.is_br(ctx) {
+                return false;
             }
 
-            if let (InductionOp::Add, ICmpCond::Slt, false) = (op, cmp_cond, reversed) {
-                if step_const == Some(1) {
-                    // replace the use of the induction variable with the bound
-                    // we can only replace the use in the header, and only the
-                    // successor jump to exit blocks.
-                    let header = lp.header(&self.scev.loop_ctx);
-                    let tail = header.tail(ctx).unwrap();
+            let initial_arg = jump.succ(ctx, 0).get_arg(*repr).unwrap();
 
-                    if !tail.is_br(ctx) {
-                        return false;
-                    }
+            if initial_arg == *bound && *cmp_cond == ICmpCond::Slt && !reversed {
+                // this is a dead loop, replace the compare result to be always
+                // false.
+                let i1 = Ty::int(ctx, 1);
+                let iconst = Inst::iconst(ctx, false, i1);
+                header.push_front(ctx, iconst);
 
-                    let blocks = lp.get_blocks(ctx, &self.scev.loop_ctx);
+                let cond = br.operand(ctx, 0);
 
-                    if blocks.len() != 2 {
-                        // only process the loop with 2 blocks, header and body (also the backedge).
-                        return false;
-                    }
-
-                    tail.replace(ctx, *repr, *bound);
-
-                    changed = true;
+                for user in cond.users(ctx) {
+                    user.replace(ctx, cond, iconst.result(ctx, 0));
                 }
+
+                changed = true;
             }
         }
 
@@ -95,7 +94,7 @@ impl IndvarSimplify {
     }
 }
 
-impl LocalPassMut for IndvarSimplify {
+impl LocalPassMut for DeadLoopElim {
     type Output = ();
 
     fn run(&mut self, ctx: &mut Context, func: Func) -> PassResult<(Self::Output, bool)> {
@@ -120,10 +119,13 @@ impl LocalPassMut for IndvarSimplify {
     }
 }
 
-impl GlobalPassMut for IndvarSimplify {
+impl GlobalPassMut for DeadLoopElim {
     type Output = ();
 
     fn run(&mut self, ctx: &mut Context) -> PassResult<(Self::Output, bool)> {
+        ctx.alloc_all_names();
+        println!("{}", ctx.display(true));
+
         let mut changed = false;
         for func in ctx.funcs() {
             let (_, local_changed) = LocalPassMut::run(self, ctx, func).unwrap();
@@ -133,7 +135,7 @@ impl GlobalPassMut for IndvarSimplify {
     }
 }
 
-impl TransformPass for IndvarSimplify {
+impl TransformPass for DeadLoopElim {
     fn register(passman: &mut crate::ir::passman::PassManager)
     where
         Self: Sized,
@@ -141,7 +143,7 @@ impl TransformPass for IndvarSimplify {
         let pass = Self::default();
 
         passman.register_transform(
-            INDVAR_SIMPLIFY,
+            DEAD_LOOP_ELIM,
             pass,
             vec![
                 Box::new(CfgCanonicalize),

@@ -29,7 +29,18 @@ use orzcc::{
             inline::{Inline, INLINE},
             instcombine::{InstCombine, INSTCOMBINE},
             legalize::{Legalize, LEGALIZE},
-            loops::{Lcssa, LoopSimplify, LoopUnroll, LOOP_UNROLL},
+            loops::{
+                DeadLoopElim,
+                IndvarSimplify,
+                Lcssa,
+                LoopPeel,
+                LoopSimplify,
+                LoopUnroll,
+                DEAD_LOOP_ELIM,
+                INDVAR_SIMPLIFY,
+                LOOP_PEEL,
+                LOOP_UNROLL,
+            },
             mem2reg::{Mem2reg, MEM2REG},
             simple_dce::{SimpleDce, SIMPLE_DCE},
         },
@@ -132,10 +143,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             passman.run_transform(INSTCOMBINE, &mut ir, 32);
             passman.run_transform(SIMPLE_DCE, &mut ir, 32);
 
+            passman.run_transform(LOOP_PEEL, &mut ir, 1);
+            passman.run_transform(ELIM_CONSTANT_PHI, &mut ir, 32);
+            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+            passman.run_transform(GCM, &mut ir, 32);
+            passman.run_transform(INDVAR_SIMPLIFY, &mut ir, 1);
+            passman.run_transform(CONSTANT_FOLDING, &mut ir, 32);
+            passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
+            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+            passman.run_transform(ELIM_CONSTANT_PHI, &mut ir, 32);
+            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+            passman.run_transform(DEAD_LOOP_ELIM, &mut ir, 1);
+            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+            passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
+            passman.run_transform(CONSTANT_FOLDING, &mut ir, 32);
+            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+            passman.run_transform(ELIM_CONSTANT_PHI, &mut ir, 32);
+            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+
             passman.run_transform(INLINE, &mut ir, 1);
             passman.run_transform(CONSTANT_FOLDING, &mut ir, 32);
             passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
             passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+            passman.run_transform(GLOBAL_DCE, &mut ir, 32);
 
             // TODO: unroll earlier to combine load/store
             passman.run_transform(LOOP_UNROLL, &mut ir, 2);
@@ -238,6 +268,9 @@ fn register_passes(passman: &mut PassManager) {
     LoopUnroll::register(passman);
     LoopSimplify::register(passman);
     Lcssa::register(passman);
+    LoopPeel::register(passman);
+    IndvarSimplify::register(passman);
+    DeadLoopElim::register(passman);
 
     GlobalValueNumbering::register(passman);
     Gcm::register(passman);
