@@ -514,6 +514,27 @@ impl InstData {
     pub fn self_ptr(&self) -> Inst { self.self_ptr }
 }
 
+impl PartialEq for InstData {
+    fn eq(&self, other: &Self) -> bool {
+        self.results.is_empty()
+            && other.results.is_empty()
+            && self.kind == other.kind
+            && self
+                .operands
+                .iter()
+                .map(|op| op.inner())
+                .eq(other.operands.iter().map(|op| op.inner()))
+            && self
+                .successors
+                .iter()
+                .map(|succ| succ.block())
+                .eq(other.successors.iter().map(|succ| succ.block()))
+            // TODO: this is conservative.
+            && self.successors.iter().all(|succ| succ.args().is_empty())
+            && other.successors.iter().all(|succ| succ.args().is_empty())
+    }
+}
+
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
 pub struct Inst(BaseArenaPtr<InstData>);
 

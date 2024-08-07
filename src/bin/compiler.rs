@@ -11,6 +11,7 @@ use orzcc::{
     ir::{
         passes::{
             adce::{Adce, ADCE},
+            bool2cond::{Bool2Cond, BOOL2COND},
             branch2select::{Branch2Select, BRANCH2SELECT},
             constant_phi::{ElimConstantPhi, ELIM_CONSTANT_PHI},
             control_flow::{
@@ -130,13 +131,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             passman.run_transform(SIMPLE_DCE, &mut ir, 32);
             passman.run_transform(INSTCOMBINE, &mut ir, 32);
             passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-            passman.run_transform(GCM, &mut ir, 32);
 
-            // // TODO: unroll earlier to combine load/store
-            // passman.run_transform(LOOP_UNROLL, &mut ir, 2);
-            // passman.run_transform(CONSTANT_FOLDING, &mut ir, 32);
-            // passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
-            // passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+            passman.run_transform(INLINE, &mut ir, 1);
+            passman.run_transform(CONSTANT_FOLDING, &mut ir, 32);
+            passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
+            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+
+            // TODO: unroll earlier to combine load/store
+            passman.run_transform(LOOP_UNROLL, &mut ir, 2);
+            passman.run_transform(GCM, &mut ir, 32);
+            passman.run_transform(CONSTANT_FOLDING, &mut ir, 32);
+            passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
+            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
 
             passman.run_transform(LEGALIZE, &mut ir, 1);
 
@@ -158,6 +164,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             passman.run_transform(BLOCK_REORDER, &mut ir, 1);
+
+            passman.run_transform(BOOL2COND, &mut ir, 32);
+            passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
+            for i in 0..4 {
+                println!("Second Round {}", i);
+                let iter = passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
+                println!("pipeline basic iterations: {}", iter);
+                passman.run_transform(ADCE, &mut ir, 1);
+                passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
+            }
         } else {
             passman.run_transform(LEGALIZE, &mut ir, 1);
         }
@@ -212,6 +228,7 @@ fn register_passes(passman: &mut PassManager) {
     InstCombine::register(passman);
     ElimConstantPhi::register(passman);
     Branch2Select::register(passman);
+    Bool2Cond::register(passman);
 
     Inline::register(passman);
 

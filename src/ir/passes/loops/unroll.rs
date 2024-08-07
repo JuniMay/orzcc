@@ -217,9 +217,6 @@ impl LoopUnroll {
             return false;
         }
 
-        ctx.alloc_all_names();
-        println!("{}", ctx.display(true));
-
         self.deep_clone_map.clear();
 
         let unroll_factor = self.unroll_factor as i32;

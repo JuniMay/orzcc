@@ -22,7 +22,10 @@ use rustc_hash::FxHashMap;
 
 use super::CfgCanonicalize;
 use crate::{
-    collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
+    collections::{
+        linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
+        storage::ArenaPtr,
+    },
     ir::{
         passman::{GlobalPassMut, LocalPassMut, PassManager, PassResult, TransformPass},
         remove_all_insts,
@@ -306,6 +309,68 @@ impl CfgSimplify {
 
         changed
     }
+
+    fn merge_identical_blocks(&self, ctx: &mut Context, func: Func) -> bool {
+        // two blocks are identical iff:
+        // 1. no block params
+        // 2. all insts are the same (in content)
+        //
+        // two identical blocks can be merge iff:
+        // 1. they share the same one and only one predecessor.
+
+        let mut changed = false;
+
+        let mut cursor = func.cursor();
+
+        while let Some(block) = cursor.next(ctx) {
+            let tail = block.tail(ctx).unwrap();
+
+            if !tail.is_br(ctx) {
+                continue;
+            }
+
+            let succ_then = tail.succ(ctx, 0).block();
+            let succ_else = tail.succ(ctx, 1).block();
+
+            if succ_then.preds(ctx).len() != 1 || succ_else.preds(ctx).len() != 1 {
+                continue;
+            }
+
+            if !succ_then.params(ctx).is_empty() || !succ_else.params(ctx).is_empty() {
+                continue;
+            }
+
+            let insts_then = succ_then.iter(ctx).collect::<Vec<_>>();
+            let insts_else = succ_else.iter(ctx).collect::<Vec<_>>();
+
+            if insts_then.len() != insts_else.len() {
+                continue;
+            }
+
+            let mut same = true;
+
+            let mut insts_to_remove = Vec::new();
+
+            for (inst_then, inst_else) in insts_then.iter().zip(insts_else.iter()) {
+                if inst_then.deref(ctx) != inst_else.deref(ctx) {
+                    same = false;
+                    break;
+                }
+                insts_to_remove.push(*inst_else);
+            }
+
+            if same {
+                let jump = Inst::jump(ctx, succ_then, vec![]);
+                tail.insert_before(ctx, jump);
+                tail.remove(ctx);
+                remove_all_insts(ctx, insts_to_remove, false);
+                succ_else.remove(ctx);
+                changed = true;
+            }
+        }
+
+        changed
+    }
 }
 
 impl LocalPassMut for CfgSimplify {
@@ -319,6 +384,7 @@ impl LocalPassMut for CfgSimplify {
         changed |= self.remove_single_pred_params(ctx, func);
         changed |= self.reduce_always_jump(ctx, func);
         changed |= self.reduce_branch_to_jump(ctx, func);
+        changed |= self.merge_identical_blocks(ctx, func);
 
         Ok(((), changed))
     }

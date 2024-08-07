@@ -1,4 +1,5 @@
 pub mod adce;
+pub mod bool2cond;
 pub mod branch2select;
 pub mod constant_phi;
 pub mod control_flow;
@@ -9,8 +10,8 @@ pub mod global_dce;
 pub mod gvn;
 pub mod inline;
 pub mod instcombine;
+pub mod legalize;
 pub mod loops;
 pub mod mem2reg;
 pub mod side_effect;
 pub mod simple_dce;
-pub mod legalize;

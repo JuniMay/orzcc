@@ -121,9 +121,9 @@ impl Default for InstCombine {
                 distributive(),     // aggressive
                 div_one_elim(),
                 div_neg_one_elim(),
-                div_to_shl(),
+                div_to_shift(),
                 rem_one_elim(),
-                rem_to_shl(),
+                rem_to_shift(),
                 div_rem_to_mul(),
                 shl_zero_elim(), // not tested
                 shr_zero_elim(), // not tested
@@ -1570,7 +1570,7 @@ const fn div_neg_one_elim() -> Rule {
 }
 
 /// Replace division with shift (and add).
-const fn div_to_shl() -> Rule {
+const fn div_to_shift() -> Rule {
     Rule {
         rewriter: |ctx, inst| {
             if let Ik::IBinary(IBinaryOp::SDiv) = inst.kind(ctx) {
@@ -1618,7 +1618,9 @@ const fn div_to_shl() -> Rule {
 
                             inst.insert_after(ctx, temp0);
                             temp0.insert_after(ctx, temp1);
-                            temp1.insert_after(ctx, temp4);
+                            temp1.insert_after(ctx, temp2);
+                            temp2.insert_after(ctx, temp3);
+                            temp3.insert_after(ctx, temp4);
                             temp4.insert_after(ctx, temp5);
                             temp5.insert_after(ctx, final_inst);
                             let dst_new = if is_v_neg {
@@ -1680,7 +1682,7 @@ const fn rem_one_elim() -> Rule {
 }
 
 /// Replace modulo with shift (and sub).
-const fn rem_to_shl() -> Rule {
+const fn rem_to_shift() -> Rule {
     Rule {
         rewriter: |ctx, inst| {
             if let Ik::IBinary(IBinaryOp::SRem) = inst.kind(ctx) {
