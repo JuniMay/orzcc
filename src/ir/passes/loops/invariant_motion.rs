@@ -96,7 +96,12 @@ impl LoopInvariantMotion {
                         // address, so we can't move the load
                         movable = false;
                     }
-                    Ik::Store | Ik::Br | Ik::Jump | Ik::Ret => {
+                    Ik::Store
+                    | Ik::Br
+                    | Ik::Jump
+                    | Ik::Ret
+                    | Ik::LoadElem { .. }
+                    | Ik::StoreElem { .. } => {
                         // these instructions are not movable
                         movable = false;
                     }

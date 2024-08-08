@@ -84,10 +84,7 @@ impl From<u32> for IntConstant {
 }
 
 impl From<u64> for IntConstant {
-    fn from(value: u64) -> Self {
-        dbg!(value);
-        Self(value, 64)
-    }
+    fn from(value: u64) -> Self { Self(value, 64) }
 }
 
 impl From<i8> for IntConstant {
@@ -104,6 +101,13 @@ impl From<i32> for IntConstant {
 
 impl From<i64> for IntConstant {
     fn from(value: i64) -> Self { Self(value as u64, 64) }
+}
+
+impl From<usize> for IntConstant {
+    fn from(value: usize) -> Self {
+        let width = usize::BITS as u8;
+        Self(value as u64, width)
+    }
 }
 
 impl TryFrom<ApInt> for IntConstant {

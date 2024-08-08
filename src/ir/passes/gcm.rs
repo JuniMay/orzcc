@@ -133,7 +133,7 @@ impl Gcm {
             Ik::Br | Ik::Ret | Ik::Jump => true,
             // not sure about side effects
             Ik::Call(_) | Ik::CallIndirect(_) => true,
-            Ik::Load | Ik::Store => true,
+            Ik::Load | Ik::Store | Ik::LoadElem { .. } | Ik::StoreElem { .. } => true,
             // should not move stack slot instruction.
             Ik::StackSlot(_) => true,
             Ik::Undef
@@ -216,7 +216,9 @@ impl Gcm {
                 | InstKind::CallIndirect(_)
                 | InstKind::Ret
                 | InstKind::Load
-                | InstKind::Store => {}
+                | InstKind::Store
+                | InstKind::LoadElem { .. }
+                | InstKind::StoreElem { .. } => {}
             }
         }
 

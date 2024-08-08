@@ -822,6 +822,9 @@ where
                 }
                 // `ret` should be generated in the epilogue
             }
+            Ik::StoreElem { .. } | Ik::LoadElem { .. } => {
+                unreachable!("do legalize first");
+            }
         }
     }
 

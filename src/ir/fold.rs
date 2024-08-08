@@ -85,6 +85,17 @@ impl Inst {
                 let mut lhs = fold_ctx.lookup(lhs)?.unwrap_integer().clone();
                 let rhs = fold_ctx.lookup(rhs)?.unwrap_integer();
 
+                // 在下述情况中，可被折叠的value和其被记录在fold_ctx中的被折叠成的constant的宽度不一致：
+                // 由于fold_ctx仅被set函数改变（clear不算），而set仅在下面被调用：
+                // if let Some(constant) = inst.fold(ctx, &mut self.fold_ctx) {
+                //     let value = inst.result(ctx, 0);
+                //     self.fold_ctx.set(value, constant);
+                //     folded_insts.push(inst);
+                // }
+                // 导致 value 与 constant 总是被同时加入。
+                // 所以只可能是inst.fold(ctx, &mut self.fold_ctx)返回的constant与value =
+                // inst.result(ctx, 0);返回的value的宽度不一致。
+                // 只需检查fold函数中每个match的case的返回constant的宽度是否与value的宽度一致即可。
                 assert_eq!(lhs.width(), lhs_width);
                 assert_eq!(rhs.width(), rhs_width);
 
@@ -252,7 +263,7 @@ impl Inst {
                 let width = val.ty(ctx).bitwidth(ctx);
 
                 match op {
-                    // fixme: 这几个CastOp并不会被折叠，如果折叠了则会报错，
+                    // FIXME: 这几个CastOp并不会被折叠，如果折叠了则会报错，
                     // 届时请把仇科文找来让他自裁（）
                     CastOp::IntToPtr | CastOp::PtrToInt | CastOp::Bitcast => {
                         panic!("FOLD: CastInst can be folded but not written yet. Please check here and contact Kevin Chou to do it.")
@@ -277,20 +288,21 @@ impl Inst {
                         match op {
                             CastOp::Trunc => {
                                 let target_width = self.result(ctx, 0).ty(ctx).bitwidth(ctx);
-                                Some(FoldedConstant::Integer(mut_int_val.truncate(target_width)))
+                                mut_int_val.truncate(target_width);
+                                Some(FoldedConstant::Integer(mut_int_val))
                             }
                             CastOp::ZExt => {
                                 let target_width = self.result(ctx, 0).ty(ctx).bitwidth(ctx);
                                 mut_int_val.zeroext(target_width);
-                                Some(FoldedConstant::Integer(mut_int_val.clone()))
+                                Some(FoldedConstant::Integer(mut_int_val))
                             }
                             CastOp::SExt => {
                                 let target_width = self.result(ctx, 0).ty(ctx).bitwidth(ctx);
                                 mut_int_val.signext(target_width);
-                                Some(FoldedConstant::Integer(mut_int_val.clone()))
+                                Some(FoldedConstant::Integer(mut_int_val))
                             }
                             CastOp::UiToFp => {
-                                // fixme: 在38_light2d中，存在cast int 100000006 to float
+                                // FIXME: 在38_light2d中，存在cast int 100000006 to float
                                 // 100000010的情况。
                                 let target_ty = self.result(ctx, 0).ty(ctx);
                                 let u64_val: u64 = mut_int_val.into();
@@ -333,12 +345,16 @@ impl Inst {
                             CastOp::FpTrunc => Some(FoldedConstant::Float(float_val.truncate())),
                             CastOp::FpExt => Some(FoldedConstant::Float(float_val.promote())),
                             CastOp::FpToUi | CastOp::FpToSi => {
-                                let u64_val: u64 = match float_val {
-                                    FloatConstant::Float32(val) => (*val).into(),
-                                    FloatConstant::Float64(val) => *val,
+                                let apint: ApInt = match float_val {
+                                    FloatConstant::Float32(val) => {
+                                        (f32::from_bits(*val) as i32).into() // FIXME: 这里“as i32” Rust默认采用Round to Zero (RTZ)的舍入方式，与后端相同。
+                                    }
+                                    FloatConstant::Float64(val) => {
+                                        // FIXME: 如果后端默认的FRM不是RTZ的话，记得把这里换一下。
+                                        (f64::from_bits(*val) as i64).into()
+                                    }
                                 };
-                                let int_val = ApInt::from(u64_val);
-                                Some(FoldedConstant::Integer(int_val))
+                                Some(FoldedConstant::Integer(apint))
                             }
                             CastOp::Trunc
                             | CastOp::ZExt
@@ -362,7 +378,9 @@ impl Inst {
             | InstKind::CallIndirect(_)
             | InstKind::Ret
             | InstKind::GetGlobal(_)
-            | InstKind::Offset => None,
+            | InstKind::Offset
+            | InstKind::LoadElem { .. }
+            | InstKind::StoreElem { .. } => None,
         }
     }
 }

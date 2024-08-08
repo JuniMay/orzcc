@@ -258,7 +258,9 @@ impl AliasAnalysis {
                 | InstKind::Ret
                 | InstKind::GetGlobal(_)
                 | InstKind::Load
-                | InstKind::Store => break,
+                | InstKind::Store
+                | InstKind::StoreElem { .. }
+                | InstKind::LoadElem { .. } => break,
             }
         }
 
