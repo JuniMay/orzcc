@@ -43,6 +43,7 @@ use orzcc::{
             },
             mem2reg::{Mem2reg, MEM2REG},
             simple_dce::{SimpleDce, SIMPLE_DCE},
+            tco::{Tco, TCO},
         },
         passman::{PassManager, Pipeline, TransformPass},
     },
@@ -142,6 +143,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             passman.run_transform(SIMPLE_DCE, &mut ir, 32);
             passman.run_transform(INSTCOMBINE, &mut ir, 32);
             passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+
+            passman.run_transform(TCO, &mut ir, 1);
+            passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
 
             passman.run_transform(LOOP_PEEL, &mut ir, 1);
             passman.run_transform(ELIM_CONSTANT_PHI, &mut ir, 32);
@@ -261,6 +265,7 @@ fn register_passes(passman: &mut PassManager) {
     Bool2Cond::register(passman);
 
     Inline::register(passman);
+    Tco::register(passman);
 
     Global2Local::register(passman);
     GlobalDce::register(passman);
