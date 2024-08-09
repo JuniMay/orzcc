@@ -1,91 +1,45 @@
 # Passes
 
-## CFG Canonicalization
+IR 中通过一个简单的 PassManager 以及 Pass 的 Pipeline 对不同的优化进行组合，并且提供了统一的执行接口。目前实现的重要优化主要如下：
 
-CFG Canonicalization 的 Pass 位于 `src/ir/passes` 下。主要的目的是在没有跳转指令的基本块中插入跳转指令，以便于后续的 SSA 化。
+## 控制流化简
+
+控制流化简主要完成了代码伸直化、删除只有 jump 的块、合并连续的块等操作，主要目的在于方便后续的优化。
 
 ## mem2reg
 
-mem2reg 的 Pass 位于 `src/ir/passes` 下。
+将 `stack_slot` 提升为寄存器，同时便于后续优化开展。
 
-## Todo List
+## 死代码消除
 
-### IR
+实现了普通的死代码消除和激进死代码消除。普通死代码消除位于 `ir/passes/simple_dce.rs`，只检测副作用和 use 的数量进行删除。激进死代码消除基于控制依赖图标记活跃的值，从而进一步删除冗余的 Block Parameter。
 
-- [x] CFG Canonicalization
-- [x] mem2reg
-  - [x] Block Argument Reduction `sysy/hidden_functional/29_long_line`
-    - [x] Dead Argument Elimination
-    - [x] Other Reduction
-- [x] Dead Code Elimination (maybe aggressive DCE)
-  - [x] Simple DCE
-  - [x] Aggressive DCE
-- [ ] Constant Folding & Propagation
-  - [x] Integer
-  - [ ] Floating Point
-- [ ] CFG Simplification
-  - [ ] Branch Condition Expr Simplification
-  - [ ] Branch Merge
-- [x] Function Inlining
-  - [x] Simple Inlining
-  - [x] Recursive Inlining
-  - [x] ~~Mutually Recursive Inlining~~
-- [x] Global Value Numbering
-  - [x] Simple GVN
-  - [x] Load Elimination
-    - [x] Simple Load Elimination
-    - [ ] Load Elimination with Function Call
-  - [ ] Store Elimination
-  - [x] GVN with PRE (Done by GCM)
-  - [ ] Load PRE Elimination
-  - [x] Pure Func Call Elimination
-- [x] Global Code Motion
-  - [x] Loop Invariant Code Motion
-  - [ ] Sink
-- [x] Global2local
-- [ ] Strength Reduction
-  - [x] Math Optimization (instcombine)
-  - [x] Multiplication Optimization
-  - [x] Division Optimization
-  - [ ] DivMod To MulShift
-- [ ] Loop Unrolling
-  - [x] Constant Unrolling
-  - [ ] Dynamic Unrolling
-- [x] Scalar Evolution Analysis
-- [ ] Tail Call Optimization
-- [x] Alias Analysis (basicaa)
-- [ ] Function Analysis
-  - [x] Pure Function
-  - [ ] Function Clobber
-  - [ ] Function Use
-- [ ] Reassociation `gameoflife`
-- [ ] Tree Height Reduction `gameoflife`
-- [ ] Manual Memset
-- [ ] Memset Elimination
-- [ ] Memset Combination
-- [ ] Instruction Scheduler
-- [ ] Load/Store combine (i32 + i32 -> i64)
-- [ ] Store + Loop -> Memset
-- [ ] Hand-crafted Operators
-- [ ] Integer Range Analysis
+## 内联
 
-可能还需要一个更有效的测试方式。
+实现了函数内联，对于非递归函数全部内联，对于递归函数会在调用位置展开一定层数，原本的递归函数保持不变。
 
-### Backend
+## 全局变量局部化
 
-- [ ] Register Allocation
-  - [x] Better Block Argument Passing
-  - [x] Tune the spill weight
-  - [ ] RISC-V `ra` register for allocation.
-  - [ ] Constraint & Hint
-  - [x] Coalescing
-    - [ ] Further Coalescing
-  - [ ] Splitting
-- [ ] Scheduling
-  - [ ] For dual-issue
-  - [ ] For register pressure
-- [ ] Peephole Optimization
-  - [x] `shNadd`
-  - [ ] `Rol`
-  - [ ] `Mulh`
-  - [x] remove redundant direct jump
+对于 size 较小且不作为指针被使用的全局变量进行局部化，配合 mem2reg 减少内存访问。
+
+## 强度削弱
+
+对符合条件的乘法、除法进行转换，使用多条移位指令替代。此外，还利用数学性质对一部分运算顺序进行了优化，代码位于 `ir/passes/instcombine.rs`。此外，由于使用了 Block Parameter 作为中间表示的 SSA 实现，所以可以非常简单地检测出 `min` `max` 类型的使用并且进行替换，具体的代码实现可以见 `branch2select`。
+
+## GVN & GCM
+
+实现了 GVN 和 GCM 相结合进行冗余消除的算法。算法的描述参考了[这篇论文](https://dl.acm.org/doi/10.1145/207110.207154)
+
+## 循环优化
+
+大部分循环优化都依赖于 `lcssa` 和 `loop-simplify` 这两个 Pass。`lcssa` 主要保证了循环内定义的变量不会在循环外被使用，`loop-simplify` 则是将循环的结构进行简化，保证了 Preheader、单回边以及 Dedicated Exit 等基本块的存在，便于后续优化的开展。
+
+此外，目前实现了基本归纳变量的判断，并且基于循环控制变量的识别实现了常数次循环的全部展开和非常数次循环按照系数进行动态展开。另外，还实现了 Loop Peel 以消除更多循环中冗余的计算。代码均位于 `ir/passes/loops` 文件夹下。
+
+## 尾递归优化
+
+对于尾递归函数进行优化，将其转换为迭代形式，在调用点跳转到入口执行，从而减少调用时产生的开销。
+
+## 后端优化
+
+后端优化主要是指令的合并，在代码生成之后通过窥孔优化弥补简单 Macro Expansion 无法处理的情况，另外基于简单的启发式方法对后端生成的代码的分支、基本快顺序进行了重排，以利用微架构的特性。
