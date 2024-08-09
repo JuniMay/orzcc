@@ -5,6 +5,7 @@ use crate::{
     backend::{
         inst::MInst,
         peephole::{Peephole1, Peephole2, Peephole3, PeepholeRule, PeepholeRunner},
+        regs::Reg,
         riscv64::{
             inst::{AluOpRRI, AluOpRRR, BrOp, FpuOpRRR, FpuOpRRRR, LoadOp, StoreOp},
             regs,
@@ -350,7 +351,7 @@ const fn fuse_shl_add() -> Peephole2<RvInst> {
 /// fnmsub $f3, $f1, $f2, $f4
 ///
 /// AGGRESSIVE: cause precision issue on /hidden_functional/37_dct and
-/// 38_light2d
+/// 38_light2d, on /2022/final_performance/laternorm1(2,3)
 const fn fuse_fmul_faddfsub() -> Peephole2<RvInst> {
     PeepholeRule {
         rewriter: |mctx, def_use, (a, b)| {
@@ -454,47 +455,226 @@ const fn fuse_fmul_faddfsub() -> Peephole2<RvInst> {
     }
 }
 
+const fn fuse_sub_br() -> Peephole2<RvInst> {
+    PeepholeRule {
+        rewriter: |mctx, def_use, (a, b)| {
+            use RvInstKind as Ik;
+
+            match (a.kind(mctx), b.kind(mctx)) {
+                (
+                    Ik::AluRRR {
+                        op: AluOpRRR::Sub | AluOpRRR::Subw,
+                        rd: sub_rd,
+                        rs1: sub_lhs,
+                        rs2: sub_rhs,
+                    },
+                    Ik::Br {
+                        op: br_op,
+                        rs1: br_lhs,
+                        rs2: br_rhs,
+                        block,
+                    },
+                ) if def_use.num_uses(*sub_rd) == 1 => {
+                    let sub_rd = *sub_rd;
+                    let sub_lhs = *sub_lhs;
+                    let sub_rhs = *sub_rhs;
+
+                    let br_op = *br_op;
+                    let br_lhs = *br_lhs;
+                    let br_rhs = *br_rhs;
+
+                    let block = *block;
+
+                    let is_zero_lhs = if sub_rd == br_lhs && br_rhs == regs::zero().into() {
+                        false
+                    } else if sub_rd == br_rhs && br_lhs == regs::zero().into() {
+                        true
+                    } else {
+                        return false;
+                    };
+
+                    // sub(w) + bnez => bne
+                    // sub(w) + beqz => beq
+                    //
+                    // NOTE:
+                    // 0 >= unsigned(f0) <==> 0 == f0
+                    // 0 <  unsigned(f0) <==> 0 != f0
+                    // unsigned(f0) >= 0 <==> true
+                    // unsigned(f0) <  0 <==> false
+                    //
+                    let new_br = match br_op {
+                        BrOp::Beq | BrOp::Bne | BrOp::Bge | BrOp::Blt => {
+                            RvInst::br(mctx, br_op, sub_lhs, sub_rhs, block)
+                        }
+                        BrOp::Bgeu if is_zero_lhs => {
+                            RvInst::br(mctx, BrOp::Beq, sub_lhs, sub_rhs, block)
+                        }
+                        BrOp::Bgeu => RvInst::j(mctx, block),
+                        BrOp::Bltu if is_zero_lhs => {
+                            RvInst::br(mctx, BrOp::Bne, sub_lhs, sub_rhs, block)
+                        }
+                        // this will be eliminated by li_dce:
+                        BrOp::Bltu => RvInst::li(mctx, 0_u64).0,
+                    };
+
+                    b.insert_after(mctx, new_br);
+
+                    // 维护 def-use 链
+                    def_use.remove_def(sub_rd, a);
+                    def_use.remove_use(sub_lhs, a);
+                    def_use.remove_use(sub_rhs, a);
+
+                    def_use.remove_use(br_lhs, b);
+                    def_use.remove_use(br_rhs, b);
+
+                    a.remove(mctx);
+                    b.remove(mctx);
+
+                    def_use.add_use(sub_lhs, new_br);
+                    def_use.add_use(sub_rhs, new_br);
+
+                    true
+                }
+                _ => false,
+            }
+        },
+    }
+}
+
 // TODO: floating-point move (fsgnj) is not handled yet
 
+// MAINLY FOR ADDI.
 const fn remove_redundant_move() -> Peephole1<RvInst> {
     PeepholeRule {
         rewriter: |mctx, def_use, a| {
             use RvInstKind as Ik;
 
             #[allow(clippy::wildcard_enum_match_arm)]
-            match a.kind(mctx) {
+            match match a.kind(mctx) {
                 Ik::AluRRI {
-                    op: AluOpRRI::Addi,
+                    op:
+                        AluOpRRI::Addi // MAINLY THIS ONE
+                        | AluOpRRI::Slli
+                        | AluOpRRI::Srli
+                        | AluOpRRI::Srai
+                        | AluOpRRI::Xori
+                        | AluOpRRI::Ori
+                        | AluOpRRI::Rori,
                     rd,
                     rs,
                     imm,
-                } => {
-                    if imm.as_i16() != 0 {
-                        return false;
-                    }
-
-                    let rd = *rd;
-                    let rs = *rs;
-
+                } if imm.as_i16() == 0 => Some((*rd, *rs, None)),
+                Ik::AluRRR {
+                    op: AluOpRRR::Add,
+                    rd,
+                    rs1: rs_lhs,
+                    rs2: rs_rhs,
+                } if *rs_lhs == Reg::from(regs::zero()) => Some((*rd, *rs_rhs, Some(*rs_lhs))),
+                Ik::AluRRR {
+                    op:
+                        AluOpRRR::Add
+                        | AluOpRRR::Sub
+                        | AluOpRRR::Sll
+                        | AluOpRRR::Srl
+                        | AluOpRRR::Sra
+                        | AluOpRRR::Xor
+                        | AluOpRRR::Or
+                        | AluOpRRR::Rol
+                        | AluOpRRR::Ror,
+                    rd,
+                    rs1: rs_lhs,
+                    rs2: rs_rhs,
+                } if *rs_rhs == Reg::from(regs::zero()) => Some((*rd, *rs_lhs, Some(*rs_rhs))),
+                _ => None,
+            } {
+                Some((rd, rs, maybe_rs_zero))
                     if def_use.num_defs(rd) == 1
                         && def_use.num_defs(rs) == 1
                         && rd.is_vreg()
-                        && rs.is_vreg()
-                    {
-                        // TODO: can we replace rs that are callee-saved regs?
+                        && rs.is_vreg() =>
+                {
+                    // TODO: can we replace rs that are callee-saved regs?
 
-                        // replace all uses of rd with rs, and remove this instruction
-                        def_use.replace_all_uses(mctx, rd, rs);
+                    // replace all uses of rd with rs, and remove this instruction
+                    def_use.replace_all_uses(mctx, rd, rs);
 
-                        def_use.remove_def(rd, a);
-                        def_use.remove_use(rs, a);
-
-                        a.remove(mctx);
-
-                        true
-                    } else {
-                        false
+                    def_use.remove_def(rd, a);
+                    def_use.remove_use(rs, a);
+                    if let Some(rs_zero) = maybe_rs_zero {
+                        def_use.remove_use(rs_zero, a);
                     }
+
+                    a.remove(mctx);
+
+                    true
+                }
+                _ => false,
+            }
+        },
+    }
+}
+
+// MAINLY FOR SUBW.
+// AGGRESSIVE: word may cause loss of high 32-bit data
+const fn remove_redundant_move_word() -> Peephole1<RvInst> {
+    PeepholeRule {
+        rewriter: |mctx, def_use, a| {
+            use RvInstKind as Ik;
+
+            #[allow(clippy::wildcard_enum_match_arm)]
+            match match a.kind(mctx) {
+                Ik::AluRRI {
+                    op:
+                        AluOpRRI::Addiw
+                        | AluOpRRI::Slliw
+                        | AluOpRRI::Srliw
+                        | AluOpRRI::Sraiw
+                        | AluOpRRI::Roriw,
+                    rd,
+                    rs,
+                    imm,
+                } if imm.as_i16() == 0 => Some((*rd, *rs, None)),
+                Ik::AluRRR {
+                    op: AluOpRRR::Addw,
+                    rd,
+                    rs1: rs_lhs,
+                    rs2: rs_rhs,
+                } if *rs_lhs == Reg::from(regs::zero()) => Some((*rd, *rs_rhs, Some(*rs_lhs))),
+                Ik::AluRRR {
+                    op:
+                        AluOpRRR::Addw
+                        | AluOpRRR::Subw // MAINLY THIS ONE
+                        | AluOpRRR::Sllw
+                        | AluOpRRR::Srlw
+                        | AluOpRRR::Sraw
+                        | AluOpRRR::Rolw
+                        | AluOpRRR::Rorw,
+                    rd,
+                    rs1: rs_lhs,
+                    rs2: rs_rhs,
+                } if *rs_rhs == Reg::from(regs::zero()) => Some((*rd, *rs_lhs, Some(*rs_rhs))),
+                _ => None,
+            } {
+                Some((rd, rs, maybe_rs_zero))
+                    if def_use.num_defs(rd) == 1
+                        && def_use.num_defs(rs) == 1
+                        && rd.is_vreg()
+                        && rs.is_vreg() =>
+                {
+                    // TODO: can we replace rs that are callee-saved regs?
+
+                    // replace all uses of rd with rs, and remove this instruction
+                    def_use.replace_all_uses(mctx, rd, rs);
+
+                    def_use.remove_def(rd, a);
+                    def_use.remove_use(rs, a);
+                    if let Some(rs_zero) = maybe_rs_zero {
+                        def_use.remove_use(rs_zero, a);
+                    }
+
+                    a.remove(mctx);
+
+                    true
                 }
                 _ => false,
             }
@@ -863,9 +1043,11 @@ pub fn run_peephole(mctx: &mut MContext<RvInst>, config: &LowerConfig) -> bool {
     runner1.add_rule(li_dce());
     runner1.add_rule(remove_identity_move());
     runner1.add_rule(remove_redundant_move());
+    runner1.add_rule(remove_redundant_move_word()); // aggressive
 
     runner2.add_rule(fuse_cmp_br());
     runner2.add_rule(fuse_fmul_faddfsub()); // aggressive
+    runner2.add_rule(fuse_sub_br());
 
     runner3.add_rule(fuse_xori_cmp_br());
 
@@ -889,6 +1071,7 @@ pub fn run_peephole_after_regalloc(mctx: &mut MContext<RvInst>, config: &LowerCo
     runner1.add_rule(remove_identity_move());
 
     runner2.add_rule(remove_load_after_store());
+    runner2.add_rule(fuse_sub_br());
 
     let mut changed = false;
 
