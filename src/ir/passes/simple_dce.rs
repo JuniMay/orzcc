@@ -63,7 +63,12 @@ impl LocalPassMut for SimpleDce {
                     Ik::CallIndirect(_) => {
                         // cannot remove
                     }
-                    Ik::Store | Ik::Br | Ik::Jump | Ik::Ret => {
+                    Ik::Store
+                    | Ik::Br
+                    | Ik::Jump
+                    | Ik::Ret
+                    | Ik::LoadElem { .. }
+                    | Ik::StoreElem { .. } => {
                         // cannot remove
                     }
                 }

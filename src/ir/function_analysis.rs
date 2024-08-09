@@ -89,13 +89,13 @@ impl FunctionAnalysis {
                             result.is_pure = false;
                         }
                     }
-                    InstKind::Store => {
+                    InstKind::Store | InstKind::StoreElem { .. } => {
                         // If there is a store instruction, then this function is not pure.
                         // TODO: Check if the store instruction is to a global variable.
                         result.is_pure = false;
                         break 'outer;
                     }
-                    InstKind::Load => {
+                    InstKind::Load | InstKind::LoadElem { .. } => {
                         // If there is a load instruction, then this function is not pure.
                         // TODO: Check if the load instruction is from a global variable.
                         result.is_pure = false;

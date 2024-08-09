@@ -389,14 +389,12 @@ impl<'a> fmt::Display for DisplaySuccessor<'a> {
 
                 write!(
                     f,
-                    "%{}",
+                    "/* %{} <- */ %{}",
+                    param.name(self.ctx).unwrap(),
                     self.succ
-                        .args
-                        .get(param)
-                        .unwrap()
-                        .inner()
-                        .name(self.ctx)
-                        .unwrap()
+                        .get_arg(*param)
+                        .map(|arg| arg.name(self.ctx).unwrap())
+                        .unwrap_or(&"???".to_string())
                 )?;
             }
 
@@ -442,7 +440,7 @@ pub enum InstKind {
     ///
     /// `offset` is equivalent to `getelementptr inbounds i8, %base, %offset` in
     /// LLVM IR. The only difference is that `offset` makes the calculation of
-    /// the offset independent from the base pointer.
+    /// the offset independent of the base pointer.
     Offset,
     /// Jump instruction.
     Jump,
@@ -456,7 +454,7 @@ pub enum InstKind {
     CallIndirect(Signature),
     /// Return instruction.
     Ret,
-    /// Get global symbol as local pointer.
+    /// Get a global symbol as a pointer.
     ///
     /// This applies to function and global slot. The corresponding instruction
     /// in RISC-V is `LA`, i.e., load address (`LA` a pseudo instruction)
@@ -470,6 +468,20 @@ pub enum InstKind {
     /// The first operand is the value to store, the second operand is the
     /// address to store. This can be interpreted as `store value (to) address`.
     Store,
+    /// High level store element representation.
+    ///
+    /// `store_elem [_, dim1, dim2, ...], %val, %addr[idx0, idx1, idx2, ...]`
+    StoreElem {
+        /// The shape of the memory region
+        shape: Vec<u32>,
+    },
+    /// High level load element representation.
+    ///
+    /// `load_elem [_, dim1, dim2, ...], %addr[idx0, idx1, idx2, ...]: ty`
+    LoadElem {
+        /// The shape of the memory region
+        shape: Vec<u32>,
+    },
 }
 
 pub struct InstData {
@@ -500,6 +512,27 @@ pub struct InstData {
 
 impl InstData {
     pub fn self_ptr(&self) -> Inst { self.self_ptr }
+}
+
+impl PartialEq for InstData {
+    fn eq(&self, other: &Self) -> bool {
+        self.results.is_empty()
+            && other.results.is_empty()
+            && self.kind == other.kind
+            && self
+                .operands
+                .iter()
+                .map(|op| op.inner())
+                .eq(other.operands.iter().map(|op| op.inner()))
+            && self
+                .successors
+                .iter()
+                .map(|succ| succ.block())
+                .eq(other.successors.iter().map(|succ| succ.block()))
+            // TODO: this is conservative.
+            && self.successors.iter().all(|succ| succ.args().is_empty())
+            && other.successors.iter().all(|succ| succ.args().is_empty())
+    }
 }
 
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
@@ -963,6 +996,44 @@ impl Inst {
         Self::new(ctx, InstKind::Store, vec![], vec![val, ptr])
     }
 
+    pub fn load_elem(
+        ctx: &mut Context,
+        shape: Vec<u32>,
+        addr: Value,
+        indices: Vec<Value>,
+        ty: Ty,
+    ) -> Inst {
+        if !addr.ty(ctx).is_ptr(ctx) {
+            panic!("addr must be a pointer type");
+        }
+
+        assert_eq!(shape.len() + 1, indices.len());
+
+        let mut operands = vec![addr];
+        operands.extend(indices);
+
+        Self::new(ctx, InstKind::LoadElem { shape }, vec![ty], operands)
+    }
+
+    pub fn store_elem(
+        ctx: &mut Context,
+        shape: Vec<u32>,
+        val: Value,
+        addr: Value,
+        indices: Vec<Value>,
+    ) -> Inst {
+        if !addr.ty(ctx).is_ptr(ctx) {
+            panic!("addr must be a pointer type");
+        }
+
+        assert_eq!(shape.len() + 1, indices.len());
+
+        let mut operands = vec![val, addr];
+        operands.extend(indices);
+
+        Self::new(ctx, InstKind::StoreElem { shape }, vec![], operands)
+    }
+
     pub fn get_global(ctx: &mut Context, symbol: impl Into<Symbol>) -> Inst {
         let ptr = Ty::ptr(ctx);
         Self::new(ctx, InstKind::GetGlobal(symbol.into()), vec![ptr], vec![])
@@ -1205,12 +1276,16 @@ impl Inst {
         new: Block,
         args: Vec<Value>,
     ) {
-        if !old.params(ctx).is_empty() {
-            panic!("old block must not have parameters");
-        }
-
         if !self.is_terminator(ctx) {
             panic!("instruction is not a terminator");
+        }
+
+        if !old.params(ctx).is_empty() {
+            // remove all the previously passed arguments.
+            let params = old.params(ctx).to_vec();
+            for param in params {
+                self.remove_args_passing_to_param(ctx, param);
+            }
         }
 
         let mut num_blocks_to_replace = 0;
@@ -1431,10 +1506,9 @@ impl Inst {
                 | Ik::IBinary(IBinaryOp::And)
                 | Ik::IBinary(IBinaryOp::Or)
                 | Ik::IBinary(IBinaryOp::Xor)
-                | Ik::IBinary(IBinaryOp::Min)
-                | Ik::IBinary(IBinaryOp::Max)
-                | Ik::FBinary(FBinaryOp::Add)  // aggressive
-                | Ik::FBinary(FBinaryOp::Mul) // aggressive
+                | Ik::IBinary(IBinaryOp::Min) // TODO: aggressive option
+                | Ik::IBinary(IBinaryOp::Max) /* | Ik::FBinary(FBinaryOp::Add)  // aggressive
+                                               * | Ik::FBinary(FBinaryOp::Mul) // aggressive */
         )
     }
 
@@ -1845,6 +1919,55 @@ impl<'a> fmt::Display for DisplayInst<'a> {
                     self.data.operands[0].inner().name(self.ctx).unwrap(),
                     self.data.operands[1].inner().name(self.ctx).unwrap()
                 )?;
+            }
+            Ik::StoreElem { shape } => {
+                write!(f, "store_elem [_")?;
+                for dim in shape.iter() {
+                    write!(f, ", {}", dim)?;
+                }
+                write!(f, "]")?;
+
+                write!(
+                    f,
+                    ", %{}",
+                    self.data.operands[0].inner().name(self.ctx).unwrap()
+                )?; // val
+                write!(
+                    f,
+                    ", %{}[",
+                    self.data.operands[1].inner().name(self.ctx).unwrap()
+                )?; // ptr
+
+                for (i, idx) in self.data.operands.iter().skip(2).enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "%{}", idx.inner().name(self.ctx).unwrap())?;
+                }
+
+                write!(f, "]")?;
+            }
+            Ik::LoadElem { shape } => {
+                write!(f, "load_elem [_")?;
+                for dim in shape.iter() {
+                    write!(f, ", {}", dim)?;
+                }
+                write!(f, "]")?;
+
+                write!(
+                    f,
+                    ", %{}[",
+                    self.data.operands[0].inner().name(self.ctx).unwrap()
+                )?; // ptr
+
+                for (i, idx) in self.data.operands.iter().skip(1).enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
+                    write!(f, "%{}", idx.inner().name(self.ctx).unwrap())?;
+                }
+
+                write!(f, "]")?;
             }
         }
 
