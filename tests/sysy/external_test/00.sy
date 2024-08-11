@@ -1,0 +1,20 @@
+int main(){
+    int n = 5;
+    int loop = 1;
+    int x[5] = {};
+    int y[5]  = {1, 2, 3, 4, 5};
+    int z[10]  = {10, 9, 8, 7, 6, 5, 4, 3, 2, 1};
+    int q = 1, r = 2, t = 3;
+
+    int l = 1;
+    while (l <= loop) {
+        int k = 0;
+        while (k < n) {
+            x[k] = q + y[k] * (r * z[k + 1] + t * z[k + 2]);
+            k = k+1;
+        }
+        l = l+1;
+    }
+
+    return x[0];
+}
