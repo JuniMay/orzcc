@@ -7,8 +7,10 @@
 
 /tests/sysy/*
 !/tests/sysy/sysy-runtime-lib
+!/tests/sysy/sysy-runtime-lib-fix
 !/tests/sysy/functional
 !/tests/sysy/hidden-functional
+!/tests/sysy/external_test
 
 /output*/
 
