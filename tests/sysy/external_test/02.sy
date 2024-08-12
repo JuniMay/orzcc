@@ -55,5 +55,5 @@ int main() {
 
     kernel_advection();
 
-    return 0;
+    return u1[0][0][1] + u2[0][0][1] + u3[0][0][1];
 }

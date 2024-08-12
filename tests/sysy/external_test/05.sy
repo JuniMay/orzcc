@@ -54,8 +54,8 @@ float kernel() {
 
 int main() {
     init();  
-    putint(1);
+    putint(0);
     putch(10);
-    putfloat(kernel());    
+    putfloat(kernel());
     return 0;
 }

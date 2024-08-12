@@ -328,7 +328,7 @@ def test(
         log_file = open(log_path, "w")
 
         command = (
-            f"clang --target=riscv64 -march=rv64imafdc_zba_zbb -w -xc -O3 -S {testcase}.sy"
+            f"clang --target=riscv64 -march=rv64imafdc_zba_zbb -Wno-implicit-function-declaration -w -xc -O3 -S {testcase}.sy"
             f" -o {clang_asm_path}"
         )
 

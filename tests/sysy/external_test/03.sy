@@ -115,5 +115,5 @@ int main() {
 
     kernel();
 
-    return 0;
+    return vy[0][0] + vh[0][0] + vf[0][0] + vg[0][0] + vs[0][0];
 }
