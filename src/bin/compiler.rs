@@ -13,6 +13,7 @@ use orzcc::{
             adce::{Adce, ADCE},
             bool2cond::{Bool2Cond, BOOL2COND},
             branch2select::{Branch2Select, BRANCH2SELECT},
+            branch_condition_sink::{BranchConditionSink, BRANCH_CONDITION_SINK},
             constant_phi::{ElimConstantPhi, ELIM_CONSTANT_PHI},
             control_flow::{
                 BlockReorder,
@@ -111,6 +112,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             pipe_basic.add_pass(INSTCOMBINE);
             pipe_basic.add_pass(SIMPLE_DCE);
             pipe_basic.add_pass(GCM);
+            pipe_basic.add_pass(BRANCH_CONDITION_SINK);
             pipe_basic.add_pass(GVN);
             pipe_basic.add_pass(CFG_SIMPLIFY);
             pipe_basic.add_pass(ELIM_CONSTANT_PHI);
@@ -151,6 +153,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             passman.run_transform(ELIM_CONSTANT_PHI, &mut ir, 32);
             passman.run_transform(SIMPLE_DCE, &mut ir, 32);
             passman.run_transform(GCM, &mut ir, 32);
+            passman.run_transform(BRANCH_CONDITION_SINK, &mut ir, 1);
             passman.run_transform(INDVAR_SIMPLIFY, &mut ir, 1);
             passman.run_transform(CONSTANT_FOLDING, &mut ir, 32);
             passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
@@ -174,6 +177,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // TODO: unroll earlier to combine load/store
             passman.run_transform(LOOP_UNROLL, &mut ir, 2);
             passman.run_transform(GCM, &mut ir, 32);
+            passman.run_transform(BRANCH_CONDITION_SINK, &mut ir, 1);
             passman.run_transform(CONSTANT_FOLDING, &mut ir, 32);
             passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
             passman.run_transform(SIMPLE_DCE, &mut ir, 32);
@@ -228,11 +232,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if cmd.opt > 0 {
             riscv64::run_peephole(lower_ctx.mctx_mut(), &cmd.lower_cfg);
             SimplifyCfg::run(lower_ctx.mctx_mut(), &cmd.lower_cfg);
-            RegisterCoalescing::run::<RvLowerSpec>(&mut lower_ctx, &cmd.lower_cfg);
         }
 
         if let Some(emit_vcode) = &cmd.emit_vcode {
             std::fs::write(emit_vcode, format!("{}", lower_ctx.mctx().display()))?;
+        }
+
+        if cmd.opt > 0 {
+            RegisterCoalescing::run::<RvLowerSpec>(&mut lower_ctx, &cmd.lower_cfg);
         }
 
         lower_ctx.reg_alloc();
@@ -279,6 +286,7 @@ fn register_passes(passman: &mut PassManager) {
 
     GlobalValueNumbering::register(passman);
     Gcm::register(passman);
+    BranchConditionSink::register(passman);
 
     Legalize::register(passman);
     BlockReorder::register(passman);

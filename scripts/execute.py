@@ -319,12 +319,26 @@ def test(
         ast_path = os.path.join(output_dir, f"{basename}.ast")
         ir_path = os.path.join(output_dir, f"{basename}.orzir")
         asm_path = os.path.join(output_dir, f"{basename}.s")
+        clang_asm_path = os.path.join(output_dir, f"{basename}.clang.s")
         out_path = os.path.join(output_dir, f"{basename}.out")
         exec_path = os.path.join(output_dir, f"{basename}")
         diff_path = os.path.join(output_dir, f"{basename}.diff")
 
         log_path = os.path.join(output_dir, f"{basename}.log")
         log_file = open(log_path, "w")
+
+        command = (
+            f"clang --target=riscv64 -march=rv64imafdc_zba_zbb -w -xc -O3 -S {testcase}.sy"
+            f" -o {clang_asm_path}"
+        )
+
+        exec_result = execute(command, exec_timeout)
+        log(log_file, command, exec_result)
+
+        if exec_result["returncode"] is None or exec_result["stderr"] != "":
+            result_md_table += f"| `{testcase}` | 😢 CE |\n"
+            print(f"\033[33m[  ERROR  ] (clang CE)\033[0m {testcase}, see: ", log_path)
+            continue
 
         command = (
             f"{executable_path} -S "

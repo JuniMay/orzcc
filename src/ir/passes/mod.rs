@@ -1,6 +1,7 @@
 pub mod adce;
 pub mod bool2cond;
 pub mod branch2select;
+pub mod branch_condition_sink;
 pub mod constant_phi;
 pub mod control_flow;
 pub mod fold;
