@@ -160,7 +160,7 @@ impl Global2Local {
                 ConstantKind::Undef => {}
                 ConstantKind::Zeroinit => {
                     if ty.is_float(ctx) {
-                        let zero = Inst::fconst(ctx, 0.0, ty);
+                        let zero = Inst::fconst(ctx, 0.0f32, ty);
                         let store = Inst::store(ctx, zero.result(ctx, 0), stack_slot);
                         insert_point.insert_before(ctx, zero);
                         insert_point.insert_before(ctx, store);
