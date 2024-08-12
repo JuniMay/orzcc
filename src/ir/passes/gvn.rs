@@ -372,6 +372,10 @@ impl GlobalValueNumbering {
                                 // we meet the start of the block, we will trace back to the
                                 // predecessor
                                 visited_blocks.insert(work_block);
+                                if work_block.preds(ctx).is_empty() {
+                                    // if we meet the entry block, we should treat it as clobber
+                                    maybe_def_val_list.push(None);
+                                }
                                 for pred in work_block.preds(ctx) {
                                     if !visited_blocks.contains(&pred) {
                                         worklist_blocks.push(pred);
