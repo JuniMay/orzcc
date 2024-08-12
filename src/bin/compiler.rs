@@ -4,7 +4,7 @@ use clap::{Arg, Command};
 use orzcc::{
     backend::{
         reg_alloc::reg_coalescing::RegisterCoalescing,
-        riscv64,
+        riscv64::{self, schedule},
         simplify_cfg::SimplifyCfg,
         LowerConfig,
     },
@@ -229,6 +229,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             riscv64::run_peephole(lower_ctx.mctx_mut(), &cmd.lower_cfg);
             SimplifyCfg::run(lower_ctx.mctx_mut(), &cmd.lower_cfg);
             RegisterCoalescing::run::<RvLowerSpec>(&mut lower_ctx, &cmd.lower_cfg);
+            schedule(lower_ctx.mctx_mut(), &cmd.lower_cfg);
         }
 
         if let Some(emit_vcode) = &cmd.emit_vcode {
