@@ -12,6 +12,8 @@
 !/tests/sysy/hidden-functional
 !/tests/sysy/external_test
 
+/tests/testcases/*
+
 /output*/
 
 .DS_Store
