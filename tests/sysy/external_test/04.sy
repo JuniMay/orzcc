@@ -1,0 +1,115 @@
+int n;
+int loop;
+int zone[300];
+int plan[300];
+float d[300];
+float t, s, r;
+
+void init() {
+    n = 10;        
+    loop = 5;      
+    t = 0.1;
+    s = 0.2;
+    r = 0.3;
+
+    // init zone array
+    int i = 0;
+    while (i < 300) {
+        zone[i] = i % n;
+        i = i + 1;
+    }
+
+    // init plan and d array
+    i = 0;
+    while (i < 300) {
+        plan[i] = i;
+        d[i] = i / 10.0;
+        i = i + 1;
+    }
+}
+
+int kernel() {
+    int ii, lb, k2, k3, l, i1, m, j2, k, j4, j5;
+    float tmp;
+
+    ii = n / 3;
+    lb = ii + ii;
+    k3 = 0;
+    k2 = 0;
+
+    l = 1;
+    while (l <= loop) {
+        i1 = 1;
+        m = 1;
+
+        while (1) {
+            j2 = (n + n) * (m - 1) + 1;
+            k = 1;
+            while (k <= n) {
+                k2 = k2 + 1;
+                j4 = j2 + k + k;
+                j5 = zone[j4 - 1];
+
+                if (j5 < n) {
+                    if (j5 + lb < n) {
+                        tmp = plan[j5 - 1] - t;
+                    } else {
+                        if (j5 + ii < n) {
+                            tmp = plan[j5 - 1] - s;
+                        } else {
+                            tmp = plan[j5 - 1] - r;
+                        }
+                    }
+                } else if (j5 == n) {
+                    break;
+                } else {
+                    k3 = k3 + 1;
+                    tmp = (d[j5 - 1] - (d[j5 - 2] * (t - d[j5 - 3]) * (t - d[j5 - 3]) + 
+                                        (s - d[j5 - 4]) * (s - d[j5 - 4]) + 
+                                        (r - d[j5 - 5]) * (r - d[j5 - 5])));
+                }
+
+                if (tmp < 0.0) {
+                    if (zone[j4 - 2] < 0) {
+                        k = k + 1;
+                        continue;
+                    } else if (zone[j4 - 2] == 0) {
+                        break;
+                    }
+                } else if (tmp > 0.0) {
+                    if (zone[j4 - 2] > 0) {
+                        k = k + 1;
+                        continue;
+                    } else if (zone[j4 - 2] == 0) {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+
+                m = m + 1;
+                if (m > zone[0]) {
+                    m = 1;
+                }
+
+                if (i1 - m != 0) {
+                    k = k + 1;
+                    continue; // label410
+                } else {
+                    break;
+                }
+            }
+            if (k > n) {
+                break; // end while
+            }
+        }
+        l = l + 1;
+    }
+
+    return k2 + k3;  
+}
+
+int main() {
+    init();
+    return kernel();
+}

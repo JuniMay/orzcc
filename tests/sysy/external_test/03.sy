@@ -1,3 +1,4 @@
+// a complex loop and condition case
 const int n = 10;  
 const int loop = 5; 
 const int ng = 7;
