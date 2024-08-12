@@ -26,7 +26,7 @@ use crate::{
     utils::def_use::Usable,
 };
 
-pub const BRANCH_CONDITION_SINK: &str = "branch_condition_sink";
+pub const BRANCH_CONDITION_SINK: &str = "branch-cond-sink";
 
 pub struct BranchConditionSink;
 
@@ -34,8 +34,6 @@ impl LocalPassMut for BranchConditionSink {
     type Output = ();
 
     fn run(&mut self, ctx: &mut Context, func: Func) -> PassResult<(Self::Output, bool)> {
-        let mut changed = false;
-
         let mut cursor = func.cursor();
 
         while let Some(block) = cursor.next(ctx) {
@@ -55,12 +53,10 @@ impl LocalPassMut for BranchConditionSink {
                 // move the condition prior to the branch instruction
                 cond_def.unlink(ctx);
                 block.push_inst_before_terminator(ctx, cond_def);
-
-                changed = true;
             }
         }
 
-        Ok(((), changed))
+        Ok(((), false))
     }
 }
 
