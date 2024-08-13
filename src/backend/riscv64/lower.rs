@@ -6,6 +6,7 @@ use super::{
 use crate::{
     backend::{
         func::MLabel,
+        inst::MInst,
         lower::{LowerContext, LowerSpec, MValue, MValueKind, MemLoc},
         regs::Reg,
         riscv64::inst::FpuOpRR,
@@ -1576,7 +1577,22 @@ impl LowerSpec for RvLowerSpec {
     }
 
     fn gen_func_prologue(lower: &mut LowerContext<Self>, func: MFunc<Self::I>) {
-        func.add_saved_reg(&mut lower.mctx, regs::ra());
+        let mut clobber_ra = false;
+
+        for block in func.iter(lower.mctx()) {
+            for inst in block.iter(lower.mctx()) {
+                if inst
+                    .clobbers(lower.mctx(), &lower.config)
+                    .contains(&Reg::from(regs::ra()))
+                {
+                    clobber_ra = true;
+                }
+            }
+        }
+
+        if clobber_ra {
+            func.add_saved_reg(&mut lower.mctx, regs::ra());
+        }
 
         // addi sp, sp, -frame_size or sub
         //

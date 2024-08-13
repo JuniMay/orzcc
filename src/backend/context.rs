@@ -85,7 +85,7 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         writeln!(f, "\t.attribute arch, \"{}\"", self.mctx.arch())?;
-        writeln!(f, "\t.option pic")?;
+        // writeln!(f, "\t.option pic")?;
         writeln!(f, "\t.text")?;
         for (_, func_data) in self.mctx.funcs.iter() {
             let func = func_data.self_ptr();
