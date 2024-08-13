@@ -6,7 +6,13 @@ use std::{
 
 use super::inst::{AluOpRRR, FpuOpRR, FpuOpRRR, FpuOpRRRR, RvInst, RvInstKind};
 use crate::{
-    backend::{inst::MInst, LowerConfig, MBlock, MContext, MFunc},
+    backend::{
+        inst::{DisplayMInst, MInst},
+        LowerConfig,
+        MBlock,
+        MContext,
+        MFunc,
+    },
     collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
 };
 
@@ -611,12 +617,20 @@ fn compute_rt(mctx: &mut MContext<RvInst>, inst: RvInst) -> Vec<ReservationTable
                 }
             }
         }
+        // not accurate
         RvInstKind::Load { .. } | RvInstKind::Store { .. } => vec![
+            ReservationTable {
+                alu: 1,
+                ..ReservationTable::zero()
+            },
             ReservationTable {
                 mem: 1,
                 ..ReservationTable::zero()
-            };
-            3
+            },
+            ReservationTable {
+                mem: 1,
+                ..ReservationTable::zero()
+            },
         ],
         RvInstKind::AluRR { .. }
         | RvInstKind::AluRRI { .. }
@@ -755,20 +769,30 @@ fn shedule_chunk(mctx: &mut MContext<RvInst>, start: RvInst, end: RvInst, config
 
     struct InstBundle {
         inst: RvInst,
-        /// Just the original index in the block
-        priority: usize,
+        /// The original index in the block
+        index: usize,
+        /// The minimum use count of all used register in this instruction.
+        ///
+        /// Simple heuristic: the less a used register of a instruction is used,
+        /// the more likely it should be scheduled earlier.
+        ///
+        /// If this count is zero, all registers are not defined here.
+        min_use_count: usize, // TODO: is this really useful?
     }
 
     impl PartialEq for InstBundle {
-        fn eq(&self, other: &Self) -> bool { self.priority == other.priority }
+        fn eq(&self, other: &Self) -> bool { self.index == other.index }
     }
 
     impl Eq for InstBundle {}
 
     impl Ord for InstBundle {
         fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-            // We need to reverse the ordering, because the binary heap is a max heap
-            Reverse(self.priority).cmp(&Reverse(other.priority))
+            // less use count, higher priority (reverse)
+            // same count, less index, higher priority (reverse)
+            Reverse(self.min_use_count)
+                .cmp(&Reverse(other.min_use_count))
+                .then(Reverse(self.index).cmp(&Reverse(other.index)))
         }
     }
 
@@ -776,6 +800,39 @@ fn shedule_chunk(mctx: &mut MContext<RvInst>, start: RvInst, end: RvInst, config
         fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> { Some(self.cmp(other)) }
     }
 
+    // let's compute the original cycle counts.
+    let mut s = 0;
+    // TODO: maybe not useful :(
+    let mut cycles = HashMap::new();
+
+    // record how many times a register defined in this block is used
+    let mut reg_use_count = HashMap::new();
+
+    let mut inst = start;
+    loop {
+        for def in inst.defs(mctx, config) {
+            reg_use_count.insert(def, 0usize);
+        }
+
+        for use_ in inst.uses(mctx, config) {
+            if let Some(count) = reg_use_count.get_mut(&use_) {
+                *count += 1;
+            }
+        }
+
+        cycles.insert(inst, s);
+        match inst.next(mctx) {
+            Some(next_inst) => {
+                s += compute_stall(mctx, inst, next_inst, config);
+                inst = next_inst;
+            }
+            None => {
+                break;
+            }
+        }
+    }
+
+    // build the dependence graph
     let mut indices = HashMap::new();
 
     let mut counter = 0usize;
@@ -815,9 +872,17 @@ fn shedule_chunk(mctx: &mut MContext<RvInst>, start: RvInst, end: RvInst, config
 
     for (inst, degree) in degrees.iter() {
         if *degree == 0 {
+            let min_use_count = inst
+                .defs(mctx, config)
+                .iter()
+                .map(|def| reg_use_count.get(def).copied().unwrap_or(0))
+                .min()
+                .unwrap_or(0);
+
             queue.push(InstBundle {
                 inst: *inst,
-                priority: *indices.get(inst).unwrap(),
+                index: *indices.get(inst).unwrap(),
+                min_use_count,
             });
         }
     }
@@ -825,13 +890,21 @@ fn shedule_chunk(mctx: &mut MContext<RvInst>, start: RvInst, end: RvInst, config
     while let Some(InstBundle { inst, .. }) = queue.pop() {
         topsort.push(inst);
 
-        for succ in dep_graph.succs(inst).iter() {
-            let degree = degrees.get_mut(succ).unwrap();
+        for &succ in dep_graph.succs(inst).iter() {
+            let degree = degrees.get_mut(&succ).unwrap();
             *degree -= 1;
             if *degree == 0 {
+                let min_use_count = succ
+                    .defs(mctx, config)
+                    .iter()
+                    .map(|def| reg_use_count.get(def).copied().unwrap_or(0))
+                    .min()
+                    .unwrap_or(0);
+
                 queue.push(InstBundle {
-                    inst: *succ,
-                    priority: *indices.get(succ).unwrap(),
+                    inst: succ,
+                    index: *indices.get(&succ).unwrap(),
+                    min_use_count,
                 });
             }
         }
@@ -851,7 +924,7 @@ fn shedule_chunk(mctx: &mut MContext<RvInst>, start: RvInst, end: RvInst, config
         let rts = compute_rt(mctx, n);
 
         loop {
-            all_rts.resize(s + rts.len(), ReservationTable::zero());
+            all_rts.resize(all_rts.len().max(s + rts.len()), ReservationTable::zero());
 
             let mut exceed = false;
             for (i, &rt) in rts.iter().enumerate() {
@@ -867,6 +940,8 @@ fn shedule_chunk(mctx: &mut MContext<RvInst>, start: RvInst, end: RvInst, config
 
             s += 1;
         }
+
+        println!("scheduling: {}, s: {}", n.display(mctx), s);
 
         scheduled.insert(n, s);
 
