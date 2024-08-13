@@ -771,13 +771,6 @@ fn shedule_chunk(mctx: &mut MContext<RvInst>, start: RvInst, end: RvInst, config
         inst: RvInst,
         /// The original index in the block
         index: usize,
-        /// The minimum use count of all used register in this instruction.
-        ///
-        /// Simple heuristic: the less a used register of a instruction is used,
-        /// the more likely it should be scheduled earlier.
-        ///
-        /// If this count is zero, all registers are not defined here.
-        min_use_count: usize, // TODO: is this really useful?
     }
 
     impl PartialEq for InstBundle {
@@ -788,48 +781,12 @@ fn shedule_chunk(mctx: &mut MContext<RvInst>, start: RvInst, end: RvInst, config
 
     impl Ord for InstBundle {
         fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-            // less use count, higher priority (reverse)
-            // same count, less index, higher priority (reverse)
-            Reverse(self.min_use_count)
-                .cmp(&Reverse(other.min_use_count))
-                .then(Reverse(self.index).cmp(&Reverse(other.index)))
+            Reverse(self.index).cmp(&Reverse(other.index))
         }
     }
 
     impl PartialOrd for InstBundle {
         fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> { Some(self.cmp(other)) }
-    }
-
-    // let's compute the original cycle counts.
-    let mut s = 0;
-    // TODO: maybe not useful :(
-    let mut cycles = HashMap::new();
-
-    // record how many times a register defined in this block is used
-    let mut reg_use_count = HashMap::new();
-
-    let mut inst = start;
-    loop {
-        for def in inst.defs(mctx, config) {
-            reg_use_count.insert(def, 0usize);
-        }
-
-        for use_ in inst.uses(mctx, config) {
-            if let Some(count) = reg_use_count.get_mut(&use_) {
-                *count += 1;
-            }
-        }
-
-        cycles.insert(inst, s);
-        match inst.next(mctx) {
-            Some(next_inst) => {
-                s += compute_stall(mctx, inst, next_inst, config);
-                inst = next_inst;
-            }
-            None => {
-                break;
-            }
-        }
     }
 
     // build the dependence graph
@@ -872,17 +829,9 @@ fn shedule_chunk(mctx: &mut MContext<RvInst>, start: RvInst, end: RvInst, config
 
     for (inst, degree) in degrees.iter() {
         if *degree == 0 {
-            let min_use_count = inst
-                .defs(mctx, config)
-                .iter()
-                .map(|def| reg_use_count.get(def).copied().unwrap_or(0))
-                .min()
-                .unwrap_or(0);
-
             queue.push(InstBundle {
                 inst: *inst,
                 index: *indices.get(inst).unwrap(),
-                min_use_count,
             });
         }
     }
@@ -894,17 +843,9 @@ fn shedule_chunk(mctx: &mut MContext<RvInst>, start: RvInst, end: RvInst, config
             let degree = degrees.get_mut(&succ).unwrap();
             *degree -= 1;
             if *degree == 0 {
-                let min_use_count = succ
-                    .defs(mctx, config)
-                    .iter()
-                    .map(|def| reg_use_count.get(def).copied().unwrap_or(0))
-                    .min()
-                    .unwrap_or(0);
-
                 queue.push(InstBundle {
                     inst: succ,
                     index: *indices.get(&succ).unwrap(),
-                    min_use_count,
                 });
             }
         }
