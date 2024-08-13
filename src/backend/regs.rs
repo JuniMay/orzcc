@@ -128,6 +128,8 @@ impl<I: MInst + Hash> RegDefUse<I> {
         reg_def_use
     }
 
+    pub fn def_insts(&self, reg: Reg) -> Option<&FxHashSet<I>> { self.defs.get(&reg) }
+
     pub fn compute_on_function(mctx: &MContext<I>, func: &MFunc<I>, config: &LowerConfig) -> Self {
         let mut reg_def_use = RegDefUse {
             defs: FxHashMap::default(),
