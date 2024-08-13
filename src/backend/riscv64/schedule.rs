@@ -1,5 +1,6 @@
 use std::{
-    collections::{HashMap, HashSet},
+    cmp::Reverse,
+    collections::{BinaryHeap, HashMap, HashSet},
     ops::Add,
 };
 
@@ -748,13 +749,45 @@ impl DepGraph {
     }
 }
 
-fn schedule_mblock(mctx: &mut MContext<RvInst>, mblock: MBlock<RvInst>, config: &LowerConfig) {
+fn shedule_chunk(mctx: &mut MContext<RvInst>, start: RvInst, end: RvInst, config: &LowerConfig) {
     let mut dep_graph = DepGraph::default();
     let mut degrees: HashMap<RvInst, usize> = HashMap::new();
 
-    // compute the data dependence graph
-    for inst in mblock.iter(mctx) {
+    struct InstBundle {
+        inst: RvInst,
+        /// Just the original index in the block
+        priority: usize,
+    }
+
+    impl PartialEq for InstBundle {
+        fn eq(&self, other: &Self) -> bool { self.priority == other.priority }
+    }
+
+    impl Eq for InstBundle {}
+
+    impl Ord for InstBundle {
+        fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+            // We need to reverse the ordering, because the binary heap is a max heap
+            Reverse(self.priority).cmp(&Reverse(other.priority))
+        }
+    }
+
+    impl PartialOrd for InstBundle {
+        fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> { Some(self.cmp(other)) }
+    }
+
+    let mut indices = HashMap::new();
+
+    let mut counter = 0usize;
+    let mut curr_inst = Some(start);
+
+    while let Some(inst) = curr_inst {
         degrees.entry(inst).or_insert(0);
+        indices.insert(inst, counter);
+
+        if inst == end {
+            break;
+        }
 
         let mut next = inst.next(mctx);
         while let Some(next_inst) = next {
@@ -764,33 +797,45 @@ fn schedule_mblock(mctx: &mut MContext<RvInst>, mblock: MBlock<RvInst>, config: 
                 let degree = degrees.entry(next_inst).or_insert(0);
                 *degree += 1;
             }
+
+            if next_inst == end {
+                break;
+            }
+
             next = next_inst.next(mctx);
         }
+
+        counter += 1;
+        curr_inst = inst.next(mctx);
     }
 
     // compute topological order
     let mut topsort = Vec::new();
-    let mut queue = Vec::new();
+    let mut queue = BinaryHeap::new();
 
     for (inst, degree) in degrees.iter() {
         if *degree == 0 {
-            queue.push(*inst);
+            queue.push(InstBundle {
+                inst: *inst,
+                priority: *indices.get(inst).unwrap(),
+            });
         }
     }
 
-    while let Some(inst) = queue.pop() {
+    while let Some(InstBundle { inst, .. }) = queue.pop() {
         topsort.push(inst);
 
         for succ in dep_graph.succs(inst).iter() {
             let degree = degrees.get_mut(succ).unwrap();
             *degree -= 1;
             if *degree == 0 {
-                queue.push(*succ);
+                queue.push(InstBundle {
+                    inst: *succ,
+                    priority: *indices.get(succ).unwrap(),
+                });
             }
         }
     }
-
-    dbg!(topsort.len());
 
     let mut scheduled: HashMap<RvInst, usize> = HashMap::new();
     let mut all_rts: Vec<ReservationTable> = Vec::new();
@@ -831,24 +876,100 @@ fn schedule_mblock(mctx: &mut MContext<RvInst>, mblock: MBlock<RvInst>, config: 
     }
 
     // now, sort the instructions based on the scheduled order
-    let mut insts = mblock.iter(mctx).collect::<Vec<_>>();
+    let mut insts = Vec::new();
+    let mut curr_inst = Some(start);
+
+    while let Some(inst) = curr_inst {
+        insts.push(inst);
+
+        if inst == end {
+            break;
+        }
+
+        curr_inst = inst.next(mctx);
+    }
     insts.sort_by_key(|inst| scheduled[inst]);
 
-    // unlink all, and push back
-    for inst in insts {
-        inst.unlink(mctx);
-        mblock.push_back(mctx, inst);
+    // unlink all and insert
+    if let Some(insertion_point) = end.next(mctx) {
+        for insts in insts {
+            insts.unlink(mctx);
+            insertion_point.insert_before(mctx, insts);
+        }
+    } else {
+        let mblock = start.container(mctx).unwrap();
+        for insts in insts {
+            insts.unlink(mctx);
+            mblock.push_back(mctx, insts);
+        }
     }
 }
 
-fn schedule_mfunc(mctx: &mut MContext<RvInst>, mfunc: MFunc<RvInst>, config: &LowerConfig) {
+fn schedule_mblock(
+    mctx: &mut MContext<RvInst>,
+    mblock: MBlock<RvInst>,
+    config: &LowerConfig,
+    chunksize: Option<usize>,
+) {
+    // schedule the block in chunks. this is just a simple heuristic to avoid
+    // extreme register pressure.
+    let mut curr_inst = mblock.head(mctx);
+
+    if curr_inst.is_none() {
+        return;
+    }
+
+    let mut start = curr_inst.unwrap();
+
+    if chunksize.is_none() {
+        let end = mblock.tail(mctx).unwrap();
+        shedule_chunk(mctx, start, end, config);
+        return;
+    }
+
+    let mut end = curr_inst.unwrap();
+
+    let mut counter = 1;
+
+    let chunksize = chunksize.unwrap();
+
+    while let Some(inst) = curr_inst {
+        curr_inst = inst.next(mctx);
+
+        end = inst;
+        counter += 1;
+
+        if counter >= chunksize {
+            shedule_chunk(mctx, start, end, config);
+            if let Some(next_inst) = curr_inst {
+                start = next_inst;
+                end = next_inst;
+                counter = 1;
+            } else {
+                counter = 0;
+                break;
+            }
+        }
+    }
+
+    if counter > 0 {
+        shedule_chunk(mctx, start, end, config);
+    }
+}
+
+fn schedule_mfunc(
+    mctx: &mut MContext<RvInst>,
+    mfunc: MFunc<RvInst>,
+    config: &LowerConfig,
+    chunksize: Option<usize>,
+) {
     let mut cursor = mfunc.cursor();
     while let Some(block) = cursor.next(mctx) {
-        schedule_mblock(mctx, block, config);
+        schedule_mblock(mctx, block, config, chunksize);
     }
 }
 
-pub fn schedule(mctx: &mut MContext<RvInst>, config: &LowerConfig) {
+pub fn schedule(mctx: &mut MContext<RvInst>, config: &LowerConfig, chunksize: Option<usize>) {
     let funcs = mctx
         .funcs
         .iter_mut()
@@ -859,6 +980,6 @@ pub fn schedule(mctx: &mut MContext<RvInst>, config: &LowerConfig) {
         if func.is_external(mctx) {
             continue;
         }
-        schedule_mfunc(mctx, func, config);
+        schedule_mfunc(mctx, func, config, chunksize);
     }
 }

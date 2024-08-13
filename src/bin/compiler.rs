@@ -229,7 +229,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             riscv64::run_peephole(lower_ctx.mctx_mut(), &cmd.lower_cfg);
             SimplifyCfg::run(lower_ctx.mctx_mut(), &cmd.lower_cfg);
             RegisterCoalescing::run::<RvLowerSpec>(&mut lower_ctx, &cmd.lower_cfg);
-            schedule(lower_ctx.mctx_mut(), &cmd.lower_cfg);
+            schedule(lower_ctx.mctx_mut(), &cmd.lower_cfg, Some(128));
         }
 
         if let Some(emit_vcode) = &cmd.emit_vcode {
@@ -243,7 +243,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // SimplifyCfg::tail_duplication(lower_ctx.mctx_mut(), &cmd.lower_cfg);
             riscv64::run_peephole_after_regalloc(lower_ctx.mctx_mut(), &cmd.lower_cfg);
             SimplifyCfg::ret_duplication(lower_ctx.mctx_mut(), &cmd.lower_cfg);
-            schedule(lower_ctx.mctx_mut(), &cmd.lower_cfg);
+            schedule(lower_ctx.mctx_mut(), &cmd.lower_cfg, None);
         }
 
         let mctx = lower_ctx.finish();
