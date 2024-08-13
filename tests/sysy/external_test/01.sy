@@ -41,6 +41,6 @@ int main() {
     //putint(v[0]);
 
     kernel2();
-
-    return x[n]; // this should be equal to const n
+    putint(x[0]);
+    return 0; // this should be equal to const n
 }

@@ -6,6 +6,12 @@
 python3 ./scripts/test_oracle.py ./tests/sysy/external_test/00.sy --timeout 600 --opt-level 1 --output-dir ./output --executable-path ./target/release/compiler --no-compile
 ```
 
+Run all external tests:
+
+```shell
+./test_oracle_script.sh 
+```
+
 ## execute.py
 
 ```shell

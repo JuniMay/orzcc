@@ -1,3 +1,4 @@
+// calculate pulangke kernel (普朗克常量相关计算) 
 int n;
 int loop;
 float expmax;

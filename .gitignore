@@ -23,3 +23,5 @@
 /scripts/__pycache__/*
 
 lcov.info
+
+polybench-c-4.2/*

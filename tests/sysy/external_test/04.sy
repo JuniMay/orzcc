@@ -1,3 +1,4 @@
+// Monte Carlo search for a path in a 2D grid
 int n;
 int loop;
 int zone[300];
@@ -111,5 +112,6 @@ int kernel() {
 
 int main() {
     init();
-    return kernel();
+    putint(kernel());   
+    return 0;
 }

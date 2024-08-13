@@ -54,6 +54,6 @@ int main() {
     sig = 0.1;
 
     kernel_advection();
-
-    return u1[0][0][1] + u2[0][0][1] + u3[0][0][1];
+    putfloat(u1[0][0][1] + u2[0][0][1] + u3[0][0][1]);
+    return 0;
 }

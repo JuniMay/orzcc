@@ -1,0 +1,89 @@
+// polybench-c-4.2 linear-algebra/blas/gemver
+const int N = 2000;
+
+float A[2000][2000] = {};
+float u1[2000] = {};
+float v1[2000] = {};
+float u2[2000] = {};
+float v2[2000] = {};
+float w[2000] = {};
+float x[2000] = {};
+float y[2000] = {};
+float z[2000] = {};
+float alpha;
+float beta;
+
+void init() {
+    int n = N;
+    alpha = 1.5;
+    beta = 1.2;
+    float fn = n;
+
+    int i = 0;
+    int j = 0;
+    while (i < n) {
+        u1[i] = i;
+        u2[i] = ((i + 1) / fn) / 2.0;
+        v1[i] = ((i + 1) / fn) / 4.0;
+        v2[i] = ((i + 1) / fn) / 6.0;
+        y[i] = ((i + 1) / fn) / 8.0;
+        z[i] = ((i + 1) / fn) / 9.0;
+        x[i] = 0.0;
+        w[i] = 0.0;
+        j = 0;
+        while (j < n) {
+            A[i][j] = (i * j % n) / fn;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+}
+
+void kernel_gemver() {
+    int i = 0;
+    int j = 0;
+    int n = N;
+
+    i = 0;
+    while (i < n) {
+        j = 0;
+        while (j < n) {
+            A[i][j] = A[i][j] + u1[i] * v1[j] + u2[i] * v2[j];
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+
+    i = 0;
+    while (i < n) {
+        j = 0;
+        while (j < n) {
+            x[i] = x[i] + beta * A[j][i] * y[j];
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+
+    i = 0;
+    while (i < n) {
+        x[i] = x[i] + z[i];
+        i = i + 1;
+    }
+
+    i = 0;
+    while (i < n) {
+        j = 0;
+        while (j < n) {
+            w[i] = w[i] + alpha * A[i][j] * x[j];
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+}
+
+int main() {
+    init();
+    kernel_gemver();
+    putfloat(w[0]);
+    return 0;
+}

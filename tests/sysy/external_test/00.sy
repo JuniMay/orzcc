@@ -36,5 +36,6 @@ int main(){
         l = l+1;
     }
 
-    return x[0];
+    putint(x[0]);
+    return 0;
 }
