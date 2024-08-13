@@ -3,7 +3,7 @@ use std::{
     ops::Add,
 };
 
-use super::inst::{AluOpRRR, RvInst, RvInstKind};
+use super::inst::{AluOpRRR, FpuOpRR, FpuOpRRR, FpuOpRRRR, RvInst, RvInstKind};
 use crate::{
     backend::{inst::MInst, LowerConfig, MBlock, MContext, MFunc},
     collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
@@ -41,7 +41,11 @@ fn can_dual_issue(
                 | AluOpRRR::Div
                 | AluOpRRR::Divu
                 | AluOpRRR::Divuw
-                | AluOpRRR::Divw,
+                | AluOpRRR::Divw
+                | AluOpRRR::Rem
+                | AluOpRRR::Remu
+                | AluOpRRR::Remuw
+                | AluOpRRR::Remw,
             ..
         } => {
             count_muldiv += 1;
@@ -58,7 +62,12 @@ fn can_dual_issue(
         | RvInstKind::Ret => {
             count_branch += 1;
         }
-        _ => {}
+        RvInstKind::Li { .. }
+        | RvInstKind::AluRR { .. }
+        | RvInstKind::AluRRI { .. }
+        | RvInstKind::AluRRR { .. }
+        | RvInstKind::La { .. }
+        | RvInstKind::LoadAddr { .. } => {}
     }
 
     match inst2.kind(mctx) {
@@ -71,7 +80,11 @@ fn can_dual_issue(
                 | AluOpRRR::Div
                 | AluOpRRR::Divu
                 | AluOpRRR::Divuw
-                | AluOpRRR::Divw,
+                | AluOpRRR::Divw
+                | AluOpRRR::Rem
+                | AluOpRRR::Remu
+                | AluOpRRR::Remuw
+                | AluOpRRR::Remw,
             ..
         } => {
             count_muldiv += 1;
@@ -88,7 +101,12 @@ fn can_dual_issue(
         | RvInstKind::Ret => {
             count_branch += 1;
         }
-        _ => {}
+        RvInstKind::Li { .. }
+        | RvInstKind::AluRR { .. }
+        | RvInstKind::AluRRI { .. }
+        | RvInstKind::AluRRR { .. }
+        | RvInstKind::La { .. }
+        | RvInstKind::LoadAddr { .. } => {}
     }
 
     if count_mem > 1 || count_branch > 1 || count_fp > 1 || count_muldiv > 1 {
@@ -107,31 +125,32 @@ enum Dependence {
     Control,
 }
 
+#[allow(clippy::wildcard_enum_match_arm)]
 fn dependence(
     mctx: &MContext<RvInst>,
     inst1: RvInst,
     inst2: RvInst,
     config: &LowerConfig,
 ) -> HashSet<Dependence> {
-    let defs1 = inst1.defs(mctx, config);
+    let clobbers1 = inst1.clobbers(mctx, config);
     let uses1 = inst1.uses(mctx, config);
 
-    let defs2 = inst2.defs(mctx, config);
+    let clobbers2 = inst2.clobbers(mctx, config);
     let uses2 = inst2.uses(mctx, config);
 
     let mut deps = HashSet::new();
 
     // RAW & WAW
-    for def1 in defs1 {
+    for clobber1 in clobbers1 {
         for &use2 in uses2.iter() {
-            if def1 == use2 {
+            if clobber1 == use2 {
                 deps.insert(Dependence::Raw);
                 break;
             }
         }
 
-        for &def2 in defs2.iter() {
-            if def1 == def2 {
+        for &clobber2 in clobbers2.iter() {
+            if clobber1 == clobber2 {
                 deps.insert(Dependence::Waw);
                 break;
             }
@@ -140,8 +159,8 @@ fn dependence(
 
     // WAR
     for use1 in uses1 {
-        for &def2 in defs2.iter() {
-            if use1 == def2 {
+        for &clobber2 in clobbers2.iter() {
+            if use1 == clobber2 {
                 deps.insert(Dependence::War);
                 break;
             }
@@ -189,50 +208,65 @@ fn compute_stall(
     }
 
     match inst1.kind(mctx) {
+        #[allow(clippy::wildcard_enum_match_arm)]
         RvInstKind::AluRRR { op, .. } => match op {
-            AluOpRRR::Mul | AluOpRRR::Mulh | AluOpRRR::Mulhsu | AluOpRRR::Mulhu => {
-                match inst2.kind(mctx) {
-                    RvInstKind::AluRRR {
-                        op: AluOpRRR::Mul | AluOpRRR::Mulh | AluOpRRR::Mulhsu | AluOpRRR::Mulhu,
-                        ..
-                    } => 1,
-                    _ => 3,
-                }
-            }
-            AluOpRRR::Div | AluOpRRR::Divu | AluOpRRR::Divuw | AluOpRRR::Divw => 10,
+            AluOpRRR::Mul | AluOpRRR::Mulh | AluOpRRR::Mulhsu | AluOpRRR::Mulhu => 1,
+            AluOpRRR::Div
+            | AluOpRRR::Divu
+            | AluOpRRR::Divuw
+            | AluOpRRR::Divw
+            | AluOpRRR::Rem
+            | AluOpRRR::Remu
+            | AluOpRRR::Remuw
+            | AluOpRRR::Remw => 10,
             _ => 1,
         },
+        RvInstKind::FpuRR {
+            op: FpuOpRR::FsqrtS,
+            ..
+        }
+        | RvInstKind::FpuRRR {
+            op: FpuOpRRR::FdivS,
+            ..
+        } => 19,
+        RvInstKind::FpuRR {
+            op: FpuOpRR::FsqrtD,
+            ..
+        }
+        | RvInstKind::FpuRRR {
+            op: FpuOpRRR::FdivD,
+            ..
+        } => 29,
         RvInstKind::FpuRR { .. } | RvInstKind::FpuRRR { .. } | RvInstKind::FpuRRRR { .. } => 4,
         RvInstKind::Load { .. } | RvInstKind::Store { .. } => 3,
-        _ => 1,
+        RvInstKind::Li { .. }
+        | RvInstKind::AluRR { .. }
+        | RvInstKind::AluRRI { .. }
+        | RvInstKind::Ret
+        | RvInstKind::Call { .. }
+        | RvInstKind::J { .. }
+        | RvInstKind::Br { .. }
+        | RvInstKind::La { .. }
+        | RvInstKind::LoadAddr { .. } => 1,
     }
 }
 
-fn compute_rt(
-    mctx: &mut MContext<RvInst>,
-    inst: RvInst,
-    config: &LowerConfig,
-) -> Vec<ReservationTable> {
+#[allow(clippy::wildcard_enum_match_arm)]
+fn compute_rt(mctx: &mut MContext<RvInst>, inst: RvInst) -> Vec<ReservationTable> {
     match inst.kind(mctx) {
         RvInstKind::AluRRR { op, .. } => match op {
             AluOpRRR::Mul | AluOpRRR::Mulh | AluOpRRR::Mulhsu | AluOpRRR::Mulhu => {
                 vec![
                     ReservationTable {
-                        mul_stage0: 1,
-                        mul_stage1: 0,
-                        mul_stage2: 0,
+                        mul_ag: 1,
                         ..ReservationTable::zero()
                     },
                     ReservationTable {
-                        mul_stage0: 0,
-                        mul_stage1: 1,
-                        mul_stage2: 0,
+                        mul_m1: 1,
                         ..ReservationTable::zero()
                     },
                     ReservationTable {
-                        mul_stage0: 0,
-                        mul_stage1: 0,
-                        mul_stage2: 1,
+                        mul_m2: 1,
                         ..ReservationTable::zero()
                     },
                 ]
@@ -243,7 +277,8 @@ fn compute_rt(
                         div: 1,
                         ..ReservationTable::zero()
                     };
-                    10
+                    // Latency = 2 cycles + log2(dividend) - log2(divisor) + 1 cycle
+                    20 // FIXME: not accurate
                 ]
             }
             _ => vec![ReservationTable {
@@ -251,14 +286,329 @@ fn compute_rt(
                 ..ReservationTable::zero()
             }],
         },
-        RvInstKind::FpuRR { .. } | RvInstKind::FpuRRR { .. } | RvInstKind::FpuRRRR { .. } => {
-            vec![
-                ReservationTable {
-                    fpu: 1,
-                    ..ReservationTable::zero()
-                };
-                4
-            ]
+        RvInstKind::FpuRR { op, .. } => {
+            match op {
+                FpuOpRR::FsqrtS => {
+                    // fsqrt is iterative, assume all units are occupied.
+                    vec![
+                        ReservationTable {
+                            fpu_0: 1,
+                            fpu_1: 1,
+                            fpu_2: 1,
+                            fpu_3: 1,
+                            fpu_4: 1,
+                            fpu_5: 1,
+                            fpu_6: 1,
+                            ..ReservationTable::zero()
+                        };
+                        20
+                    ]
+                }
+                FpuOpRR::FsqrtD => {
+                    // fsqrt is iterative, assume all units are occupied.
+                    vec![
+                        ReservationTable {
+                            fpu_0: 1,
+                            fpu_1: 1,
+                            fpu_2: 1,
+                            fpu_3: 1,
+                            fpu_4: 1,
+                            fpu_5: 1,
+                            fpu_6: 1,
+                            ..ReservationTable::zero()
+                        };
+                        30
+                    ]
+                }
+                FpuOpRR::FcvtWS
+                | FpuOpRR::FcvtLS
+                | FpuOpRR::FcvtSL
+                | FpuOpRR::FcvtWuS
+                | FpuOpRR::FcvtLuS
+                | FpuOpRR::FcvtSLu
+                | FpuOpRR::FcvtWD
+                | FpuOpRR::FcvtLD
+                | FpuOpRR::FcvtWuD
+                | FpuOpRR::FcvtLuD
+                | FpuOpRR::FclassS
+                | FpuOpRR::FclassD => {
+                    vec![
+                        ReservationTable {
+                            fpu_0: 1,
+                            ..ReservationTable::zero()
+                        },
+                        ReservationTable {
+                            fpu_1: 1,
+                            ..ReservationTable::zero()
+                        },
+                        ReservationTable {
+                            fpu_2: 1,
+                            ..ReservationTable::zero()
+                        },
+                        ReservationTable {
+                            fpu_3: 1,
+                            ..ReservationTable::zero()
+                        },
+                    ]
+                }
+                FpuOpRR::FcvtSW
+                | FpuOpRR::FcvtSWu
+                | FpuOpRR::FcvtDW
+                | FpuOpRR::FcvtDWu
+                | FpuOpRR::FcvtSD
+                | FpuOpRR::FcvtDS
+                | FpuOpRR::FmvWX => {
+                    vec![
+                        ReservationTable {
+                            fpu_0: 1,
+                            ..ReservationTable::zero()
+                        },
+                        ReservationTable {
+                            fpu_1: 1,
+                            ..ReservationTable::zero()
+                        },
+                    ]
+                }
+                FpuOpRR::FcvtDL | FpuOpRR::FcvtDLu | FpuOpRR::FmvDX => {
+                    // 6 cycles latency
+                    vec![
+                        ReservationTable {
+                            fpu_0: 1,
+                            ..ReservationTable::zero()
+                        },
+                        ReservationTable {
+                            fpu_1: 1,
+                            ..ReservationTable::zero()
+                        },
+                        ReservationTable {
+                            fpu_2: 1,
+                            ..ReservationTable::zero()
+                        },
+                        ReservationTable {
+                            fpu_3: 1,
+                            ..ReservationTable::zero()
+                        },
+                        ReservationTable {
+                            fpu_4: 1,
+                            ..ReservationTable::zero()
+                        },
+                        ReservationTable {
+                            fpu_5: 1,
+                            ..ReservationTable::zero()
+                        },
+                    ]
+                }
+                FpuOpRR::FmvXD | FpuOpRR::FmvXW => {
+                    // 1 cycle latency
+                    vec![ReservationTable {
+                        fpu_0: 1,
+                        ..ReservationTable::zero()
+                    }]
+                }
+            }
+        }
+
+        RvInstKind::FpuRRR { op, .. } => {
+            match op {
+                FpuOpRRR::FaddS | FpuOpRRR::FsubS | FpuOpRRR::FmulS => {
+                    // 5 cycles
+                    vec![
+                        ReservationTable {
+                            fpu_0: 1,
+                            ..ReservationTable::zero()
+                        },
+                        ReservationTable {
+                            fpu_1: 1,
+                            ..ReservationTable::zero()
+                        },
+                        ReservationTable {
+                            fpu_2: 1,
+                            ..ReservationTable::zero()
+                        },
+                        ReservationTable {
+                            fpu_3: 1,
+                            ..ReservationTable::zero()
+                        },
+                        ReservationTable {
+                            fpu_4: 1,
+                            ..ReservationTable::zero()
+                        },
+                    ]
+                }
+                FpuOpRRR::FaddD | FpuOpRRR::FsubD | FpuOpRRR::FmulD => {
+                    // 7 cycles
+                    vec![
+                        ReservationTable {
+                            fpu_0: 1,
+                            ..ReservationTable::zero()
+                        },
+                        ReservationTable {
+                            fpu_1: 1,
+                            ..ReservationTable::zero()
+                        },
+                        ReservationTable {
+                            fpu_2: 1,
+                            ..ReservationTable::zero()
+                        },
+                        ReservationTable {
+                            fpu_3: 1,
+                            ..ReservationTable::zero()
+                        },
+                        ReservationTable {
+                            fpu_4: 1,
+                            ..ReservationTable::zero()
+                        },
+                        ReservationTable {
+                            fpu_5: 1,
+                            ..ReservationTable::zero()
+                        },
+                        ReservationTable {
+                            fpu_6: 1,
+                            ..ReservationTable::zero()
+                        },
+                    ]
+                }
+                FpuOpRRR::FeqS
+                | FpuOpRRR::FeqD
+                | FpuOpRRR::FleS
+                | FpuOpRRR::FltS
+                | FpuOpRRR::FleD
+                | FpuOpRRR::FltD => {
+                    // 4 cycles
+                    vec![
+                        ReservationTable {
+                            fpu_0: 1,
+                            ..ReservationTable::zero()
+                        },
+                        ReservationTable {
+                            fpu_1: 1,
+                            ..ReservationTable::zero()
+                        },
+                        ReservationTable {
+                            fpu_2: 1,
+                            ..ReservationTable::zero()
+                        },
+                        ReservationTable {
+                            fpu_3: 1,
+                            ..ReservationTable::zero()
+                        },
+                    ]
+                }
+                FpuOpRRR::FmaxS
+                | FpuOpRRR::FmaxD
+                | FpuOpRRR::FminS
+                | FpuOpRRR::FminD
+                | FpuOpRRR::FsgnjS
+                | FpuOpRRR::FsgnjnS
+                | FpuOpRRR::FsgnjxS
+                | FpuOpRRR::FsgnjD
+                | FpuOpRRR::FsgnjnD
+                | FpuOpRRR::FsgnjxD => {
+                    // 2 cycles
+                    vec![
+                        ReservationTable {
+                            fpu_0: 1,
+                            ..ReservationTable::zero()
+                        },
+                        ReservationTable {
+                            fpu_1: 1,
+                            ..ReservationTable::zero()
+                        },
+                    ]
+                }
+                FpuOpRRR::FdivS => {
+                    vec![
+                        ReservationTable {
+                            fpu_0: 1,
+                            fpu_1: 1,
+                            fpu_2: 1,
+                            fpu_3: 1,
+                            fpu_4: 1,
+                            fpu_5: 1,
+                            fpu_6: 1,
+                            ..ReservationTable::zero()
+                        };
+                        20
+                    ]
+                }
+                FpuOpRRR::FdivD => {
+                    vec![
+                        ReservationTable {
+                            fpu_0: 1,
+                            fpu_1: 1,
+                            fpu_2: 1,
+                            fpu_3: 1,
+                            fpu_4: 1,
+                            fpu_5: 1,
+                            fpu_6: 1,
+                            ..ReservationTable::zero()
+                        };
+                        30
+                    ]
+                }
+            }
+        }
+        RvInstKind::FpuRRRR { op, .. } => {
+            match op {
+                FpuOpRRRR::FmaddS | FpuOpRRRR::FnmaddS | FpuOpRRRR::FmsubS | FpuOpRRRR::FnmsubS => {
+                    // 5 cycles
+                    vec![
+                        ReservationTable {
+                            fpu_0: 1,
+                            ..ReservationTable::zero()
+                        },
+                        ReservationTable {
+                            fpu_1: 1,
+                            ..ReservationTable::zero()
+                        },
+                        ReservationTable {
+                            fpu_2: 1,
+                            ..ReservationTable::zero()
+                        },
+                        ReservationTable {
+                            fpu_3: 1,
+                            ..ReservationTable::zero()
+                        },
+                        ReservationTable {
+                            fpu_4: 1,
+                            ..ReservationTable::zero()
+                        },
+                    ]
+                }
+                FpuOpRRRR::FmaddD | FpuOpRRRR::FnmaddD | FpuOpRRRR::FmsubD | FpuOpRRRR::FnmsubD => {
+                    // 7 cycles
+                    vec![
+                        ReservationTable {
+                            fpu_0: 1,
+                            ..ReservationTable::zero()
+                        },
+                        ReservationTable {
+                            fpu_1: 1,
+                            ..ReservationTable::zero()
+                        },
+                        ReservationTable {
+                            fpu_2: 1,
+                            ..ReservationTable::zero()
+                        },
+                        ReservationTable {
+                            fpu_3: 1,
+                            ..ReservationTable::zero()
+                        },
+                        ReservationTable {
+                            fpu_4: 1,
+                            ..ReservationTable::zero()
+                        },
+                        ReservationTable {
+                            fpu_5: 1,
+                            ..ReservationTable::zero()
+                        },
+                        ReservationTable {
+                            fpu_6: 1,
+                            ..ReservationTable::zero()
+                        },
+                    ]
+                }
+            }
         }
         RvInstKind::Load { .. } | RvInstKind::Store { .. } => vec![
             ReservationTable {
@@ -274,7 +624,11 @@ fn compute_rt(
             alu: 1,
             ..ReservationTable::zero()
         }],
-        _ => vec![ReservationTable::zero()],
+        RvInstKind::Ret
+        | RvInstKind::Call { .. }
+        | RvInstKind::J { .. }
+        | RvInstKind::Br { .. }
+        | RvInstKind::LoadAddr { .. } => vec![ReservationTable::zero()],
     }
 }
 
@@ -282,11 +636,18 @@ fn compute_rt(
 struct ReservationTable {
     alu: u8,
     mem: u8,
-    fpu: u8,
     div: u8,
-    mul_stage0: u8,
-    mul_stage1: u8,
-    mul_stage2: u8,
+    mul_ag: u8,
+    mul_m1: u8,
+    mul_m2: u8,
+    // at most 7, just represents the pipeline of fma unit
+    fpu_0: u8,
+    fpu_1: u8,
+    fpu_2: u8,
+    fpu_3: u8,
+    fpu_4: u8,
+    fpu_5: u8,
+    fpu_6: u8,
 }
 
 impl ReservationTable {
@@ -294,11 +655,17 @@ impl ReservationTable {
         Self {
             alu: 2,
             mem: 1,
-            fpu: 1,
             div: 1,
-            mul_stage0: 1,
-            mul_stage1: 1,
-            mul_stage2: 1,
+            mul_ag: 1,
+            mul_m1: 1,
+            mul_m2: 1,
+            fpu_0: 1,
+            fpu_1: 1,
+            fpu_2: 1,
+            fpu_3: 1,
+            fpu_4: 1,
+            fpu_5: 1,
+            fpu_6: 1,
         }
     }
 
@@ -306,11 +673,17 @@ impl ReservationTable {
         Self {
             alu: 0,
             mem: 0,
-            fpu: 0,
             div: 0,
-            mul_stage0: 0,
-            mul_stage1: 0,
-            mul_stage2: 0,
+            mul_ag: 0,
+            mul_m1: 0,
+            mul_m2: 0,
+            fpu_0: 0,
+            fpu_1: 0,
+            fpu_2: 0,
+            fpu_3: 0,
+            fpu_4: 0,
+            fpu_5: 0,
+            fpu_6: 0,
         }
     }
 
@@ -318,11 +691,17 @@ impl ReservationTable {
     fn exceeds(&self, other: ReservationTable) -> bool {
         self.alu > other.alu
             || self.mem > other.mem
-            || self.fpu > other.fpu
             || self.div > other.div
-            || self.mul_stage0 > other.mul_stage0
-            || self.mul_stage1 > other.mul_stage1
-            || self.mul_stage2 > other.mul_stage2
+            || self.mul_ag > other.mul_ag
+            || self.mul_m1 > other.mul_m1
+            || self.mul_m2 > other.mul_m2
+            || self.fpu_0 > other.fpu_0
+            || self.fpu_1 > other.fpu_1
+            || self.fpu_2 > other.fpu_2
+            || self.fpu_3 > other.fpu_3
+            || self.fpu_4 > other.fpu_4
+            || self.fpu_5 > other.fpu_5
+            || self.fpu_6 > other.fpu_6
     }
 }
 
@@ -333,11 +712,17 @@ impl Add for ReservationTable {
         Self {
             alu: self.alu + other.alu,
             mem: self.mem + other.mem,
-            fpu: self.fpu + other.fpu,
             div: self.div + other.div,
-            mul_stage0: self.mul_stage0 + other.mul_stage0,
-            mul_stage1: self.mul_stage1 + other.mul_stage1,
-            mul_stage2: self.mul_stage2 + other.mul_stage2,
+            mul_ag: self.mul_ag + other.mul_ag,
+            mul_m1: self.mul_m1 + other.mul_m1,
+            mul_m2: self.mul_m2 + other.mul_m2,
+            fpu_0: self.fpu_0 + other.fpu_0,
+            fpu_1: self.fpu_1 + other.fpu_1,
+            fpu_2: self.fpu_2 + other.fpu_2,
+            fpu_3: self.fpu_3 + other.fpu_3,
+            fpu_4: self.fpu_4 + other.fpu_4,
+            fpu_5: self.fpu_5 + other.fpu_5,
+            fpu_6: self.fpu_6 + other.fpu_6,
         }
     }
 }
@@ -418,7 +803,7 @@ fn schedule_mblock(mctx: &mut MContext<RvInst>, mblock: MBlock<RvInst>, config: 
             s = s.max(scheduled[&pred] + compute_stall(mctx, pred, n, config));
         }
 
-        let rts = compute_rt(mctx, n, config);
+        let rts = compute_rt(mctx, n);
 
         loop {
             all_rts.resize(s + rts.len(), ReservationTable::zero());
