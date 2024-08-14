@@ -49,7 +49,7 @@ impl StaticBranchPrediction {
                         let lhs = cond_def.operand(ctx, 0);
                         let rhs = cond_def.operand(ctx, 1);
 
-                        let new_cond = Inst::ibinary(ctx, IBinaryOp::Cmp(ICmpCond::Eq), lhs, rhs);
+                        let new_cond = Inst::ibinary(ctx, IBinaryOp::Cmp(ICmpCond::Ne), lhs, rhs);
                         cond_def.insert_after(ctx, new_cond);
 
                         tail.inverse_br(ctx);

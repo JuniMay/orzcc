@@ -216,6 +216,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // reorder
             passman.run_transform(STATIC_BRANCH_PREDICTION, &mut ir, 1);
+            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
             passman.run_transform(BRANCH_CONDITION_SINK, &mut ir, 1);
             passman.run_transform(BLOCK_REORDER, &mut ir, 1);
         } else {
