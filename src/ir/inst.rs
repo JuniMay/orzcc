@@ -1543,6 +1543,14 @@ impl Inst {
             None
         }
     }
+
+    pub fn inverse_br(self, ctx: &mut Context) {
+        if !self.is_br(ctx) {
+            panic!("instruction is not a branch instruction");
+        }
+
+        self.deref_mut(ctx).successors.swap(0, 1);
+    }
 }
 
 impl LinkedListNodePtr for Inst {

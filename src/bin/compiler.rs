@@ -44,6 +44,7 @@ use orzcc::{
             },
             mem2reg::{Mem2reg, MEM2REG},
             simple_dce::{SimpleDce, SIMPLE_DCE},
+            static_branch_prediction::{StaticBranchPrediction, STATIC_BRANCH_PREDICTION},
             tco::{Tco, TCO},
         },
         passman::{PassManager, Pipeline, TransformPass},
@@ -212,6 +213,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 passman.run_transform(ADCE, &mut ir, 1);
                 passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
             }
+
+            // reorder
+            passman.run_transform(STATIC_BRANCH_PREDICTION, &mut ir, 1);
+            passman.run_transform(BRANCH_CONDITION_SINK, &mut ir, 1);
+            passman.run_transform(BLOCK_REORDER, &mut ir, 1);
         } else {
             passman.run_transform(LEGALIZE, &mut ir, 1);
         }
@@ -290,6 +296,7 @@ fn register_passes(passman: &mut PassManager) {
     GlobalValueNumbering::register(passman);
     Gcm::register(passman);
     BranchConditionSink::register(passman);
+    StaticBranchPrediction::register(passman);
 
     Legalize::register(passman);
     BlockReorder::register(passman);
