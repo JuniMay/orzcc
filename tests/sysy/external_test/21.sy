@@ -1,0 +1,60 @@
+// polybench-c-4.2 linear-algebra/kernels/bicg
+const int M = 1900;
+const int N = 2100;
+
+float A[2100][1900] = {};
+float s[1900] = {};
+float q[2100] = {};
+float p[1900] = {};
+float r[2100] = {};
+
+void init() {
+    int i = 0;
+    int j = 0;
+
+    while (i < M) {
+        p[i] = (i % M) / M;
+        i = i + 1;
+    }
+
+    i = 0;
+    while (i < N) {
+        r[i] = (i % N) / N;
+        j = 0;
+        while (j < M) {
+            A[i][j] = (i * (j + 1) % N) / N;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+}
+
+void kernel_bicg() {
+    int i = 0;
+    int j = 0;
+
+    i = 0;
+    while (i < M) {
+        s[i] = 0.0;
+        i = i + 1;
+    }
+
+    i = 0;
+    while (i < N) {
+        q[i] = 0.0;
+        j = 0;
+        while (j < M) {
+            s[j] = s[j] + r[i] * A[i][j];
+            q[i] = q[i] + A[i][j] * p[j];
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+}
+
+int main() {
+    init();
+    kernel_bicg();
+    putfloat(q[0]+s[0]+s[512]);
+    return 0;
+}

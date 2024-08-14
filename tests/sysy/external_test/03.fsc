@@ -1,4 +1,5 @@
 // a complex loop and condition case
+#include <stdio.h>
 const int n = 10;  
 const int loop = 5; 
 const int ng = 7;
@@ -114,6 +115,6 @@ int main() {
     }
 
     kernel();
-    putfloat(vy[0][0] + vh[0][0] + vf[0][0] + vg[0][0] + vs[0][0]);
+    printf("%a", vy[0][0] + vh[0][0] + vf[0][0] + vg[0][0] + vs[0][0]);
     return 0;
 }

@@ -1,4 +1,5 @@
 // polybench-c-4.2: datamining.correlation
+#include <stdio.h>
 const int N = 10;
 const int M = 10;
 
@@ -108,6 +109,6 @@ void kernel_correlation() {
 int main() {
     init();
     kernel_correlation();
-    putfloat(corr[0][0] + corr[0][1] + corr[0][2] + corr[0][3] + corr[0][4]);
+    printf("%a", corr[0][0] + corr[0][1] + corr[0][2] + corr[0][3] + corr[0][4]);
     return 0; 
 }

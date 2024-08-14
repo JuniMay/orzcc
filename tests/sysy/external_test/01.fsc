@@ -1,4 +1,5 @@
 // ICCG
+#include <stdio.h>
 const int n = 888; 
 int loop = 2; 
 // the length of x and v should be bigger than n + [n/2]
@@ -38,6 +39,6 @@ int main() {
     }
 
     kernel2();
-    putint(x[0]);
+    printf("%d", x[0]);
     return 0; // this should be equal to const n
 }

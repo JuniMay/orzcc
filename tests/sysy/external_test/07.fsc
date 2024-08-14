@@ -1,4 +1,5 @@
 // polybench-c-4.2: datamining.covariance
+#include <stdio.h>
 const int N = 10;
 const int M = 10;
 
@@ -70,6 +71,6 @@ void kernel_covariance() {
 int main() {
     init();
     kernel_covariance();
-    putfloat(cov[0][0] + cov[1][1] + cov[2][2] + cov[3][3] + cov[4][4] + cov[5][5] + cov[6][6] + cov[7][7] + cov[8][8] + cov[9][9]);
+    printf("%a",cov[0][0] + cov[1][1] + cov[2][2] + cov[3][3] + cov[4][4] + cov[5][5] + cov[6][6] + cov[7][7] + cov[8][8] + cov[9][9]);
     return 0; 
 }

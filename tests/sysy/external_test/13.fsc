@@ -1,4 +1,5 @@
 // polybench-c-4.2 linear-algebra/blas/gesummv
+#include <stdio.h>
 const int N = 1300;
 
 float A[1300][1300] = {};
@@ -51,6 +52,6 @@ void kernel_gesummv() {
 int main() {
     init();
     kernel_gesummv();
-    putfloat(y[0]+y[1]+y[2]+y[3]+y[4]+A[0][0]+B[0][0]+x[0]);
+    printf("%a",y[0]+y[1]+y[2]+y[3]+y[4]+A[0][0]+B[0][0]+x[0]);
     return 0;
 }

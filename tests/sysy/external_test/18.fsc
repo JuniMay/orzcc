@@ -1,0 +1,103 @@
+// polybench-c-4.2 linear-algebra/kernels/2mm
+#include <stdio.h>
+const int NI = 800;
+const int NJ = 900;
+const int NK = 1100;
+const int NL = 1200;
+
+float A[800][1100] = {}; 
+float B[1100][900] = {}; 
+float C[900][1200] = {}; 
+float D[800][1200] = {}; 
+float tmp[800][900] = {}; 
+float alpha;
+float beta;
+
+void init() {
+    alpha = 1.5;
+    beta = 1.2;
+
+    int i = 0;
+    int j = 0;
+
+    while (i < NI) {
+        j = 0;
+        while (j < NK) {
+            A[i][j] = (i * j + 1) % NI / NI;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+
+    i = 0;
+    while (i < NK) {
+        j = 0;
+        while (j < NJ) {
+            B[i][j] = i * (j + 1) % NJ / NJ;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+
+    i = 0;
+    while (i < NJ) {
+        j = 0;
+        while (j < NL) {
+            C[i][j] = (i * (j + 3) + 1) % NL / NL;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+
+    i = 0;
+    while (i < NI) {
+        j = 0;
+        while (j < NL) {
+            D[i][j] = i * (j + 2) % NK / NK;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+}
+
+void kernel_2mm() {
+    int i = 0;
+    int j = 0;
+    int k = 0;
+
+    while (i < NI) {
+        j = 0;
+        while (j < NJ) {
+            tmp[i][j] = 0.0;
+            k = 0;
+            while (k < NK) {
+                tmp[i][j] = tmp[i][j] + alpha * A[i][k] * B[k][j];
+                k = k + 1;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+
+    i = 0;
+    while (i < NI) {
+        j = 0;
+        while (j < NL) {
+            D[i][j] = beta * D[i][j];
+            k = 0;
+            while (k < NJ) {
+                D[i][j] = D[i][j] + tmp[i][k] * C[k][j];
+                k = k + 1;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+}
+
+int main() {
+    init();      
+    kernel_2mm();  
+    printf("%a",D[0][0]+D[0][1]+D[1][0]+2024);
+    return 0;
+}

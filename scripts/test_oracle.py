@@ -46,8 +46,10 @@ def test_one(test_case, timeout, opt_level, output_dir, executable_path, runtime
     log_path = os.path.join(output_dir, f"{basename}.log")
     log_file = open(log_path, "w")
     
+    test_case_clang = test_case.replace(".sy", ".fsc")
+
     command = (
-        f"clang -w -xc -Wno-implicit-function-declaration {test_case} "
+        f"clang -w -xc -Wno-implicit-function-declaration {test_case_clang} "
         f"./tests/sysy/sysy-runtime-lib-fix/sylib.c "
         f"-o {std_exec_path}"
     )

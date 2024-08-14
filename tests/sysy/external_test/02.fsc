@@ -1,0 +1,60 @@
+// a sample calculation of two dimensional explicit finite difference in fluid dynamics
+#include <stdio.h>
+const int n = 10;
+const int loop = 5;
+int nl1, nl2;
+int kx, ky;
+float u1[2][n+1][3], u2[2][n+1][3], u3[2][n+1][3];
+float du1[n+1], du2[n+1], du3[n+1];
+float a11, a12, a13, a21, a22, a23, a31, a32, a33, sig;
+
+void kernel_advection() {
+    int l = 1;
+    while (l <= loop) {
+        nl1 = 0;
+        nl2 = 1;
+        kx = 1;
+        while (kx < 3) {
+            ky = 1;
+            while (ky < n) {
+                du1[ky] = u1[nl1][ky+1][kx] - u1[nl1][ky-1][kx];
+                du2[ky] = u2[nl1][ky+1][kx] - u2[nl1][ky-1][kx];
+                du3[ky] = u3[nl1][ky+1][kx] - u3[nl1][ky-1][kx];
+
+                u1[nl2][ky][kx] =
+                    u1[nl1][ky][kx] + a11 * du1[ky] + a12 * du2[ky] + a13 * du3[ky] + sig *
+                    (u1[nl1][ky][kx+1] - 2 * u1[nl1][ky][kx] + u1[nl1][ky][kx-1]);
+
+                u2[nl2][ky][kx] =
+                    u2[nl1][ky][kx] + a21 * du1[ky] + a22 * du2[ky] + a23 * du3[ky] + sig *
+                    (u2[nl1][ky][kx+1] - 2 * u2[nl1][ky][kx] + u2[nl1][ky][kx-1]);
+
+                u3[nl2][ky][kx] =
+                    u3[nl1][ky][kx] + a31 * du1[ky] + a32 * du2[ky] + a33 * du3[ky] + sig *
+                    (u3[nl1][ky][kx+1] - 2 * u3[nl1][ky][kx] + u3[nl1][ky][kx-1]);
+
+                ky = ky + 1;
+            }
+            kx = kx + 1;
+        }
+        l = l + 1;
+    }
+}
+
+int main() {
+
+    a11 = 1.0;
+    a12 = 2.0;
+    a13 = 3.0;
+    a21 = 4.0;
+    a22 = 5.0;
+    a23 = 6.0;
+    a31 = 7.0;
+    a32 = 8.0;
+    a33 = 9.0;
+    sig = 0.1;
+
+    kernel_advection();
+    printf("%a", u1[1][1][1] + u2[1][1][1] + u3[1][1][1]);
+    return 0;
+}

@@ -1,0 +1,91 @@
+// polybench-c-4.2 linear-algebra/solvers/lu
+const int N = 1000;
+float A[1000][1000];
+float B[1000][1000];
+
+void kernel_lu(int n, float A[][1000]) {
+    int i = 0, j = 0, k = 0;
+
+    while (i < n) {
+        j = 0;
+        while (j < i) {
+            k = 0;
+            while (k < j) {
+                A[i][j] = A[i][j] - A[i][k] * A[k][j];
+                k = k + 1;
+            }
+            A[i][j] = A[i][j] / A[j][j];
+            j = j + 1;
+        }
+        j = i;
+        while (j < n) {
+            k = 0;
+            while (k < i) {
+                A[i][j] = A[i][j] - A[i][k] * A[k][j];
+                k = k + 1;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+}
+
+void init_array(int n, float A[][1000]) {
+    int i = 0, j = 0;
+
+    while (i < n) {
+        j = 0;
+        while (j <= i) {
+            A[i][j] = (-j % n) / n + 1;
+            j = j + 1;
+        }
+        while (j < n) {
+            A[i][j] = 0;
+            j = j + 1;
+        }
+        A[i][i] = 1;
+        i = i + 1;
+    }
+
+    i = 0;
+    while (i < n) {
+        j = 0;
+        while (j < n) {
+            B[i][j] = 0;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+
+    int r = 0, s = 0, t = 0;
+    while (t < n) {
+        r = 0;
+        while (r < n) {
+            s = 0;
+            while (s < n) {
+                B[r][s] = B[r][s] + A[r][t] * A[s][t];
+                s = s + 1;
+            }
+            r = r + 1;
+        }
+        t = t + 1;
+    }
+
+    r = 0;
+    while (r < n) {
+        s = 0;
+        while (s < n) {
+            A[r][s] = B[r][s];
+            s = s + 1;
+        }
+        r = r + 1;
+    }
+}
+
+int main() {
+
+    init_array(N, A);
+    kernel_lu(N, A);
+    putfloat(A[0][0]+A[1][1]+A[2][2]+A[3][3]+A[4][4]+1);
+    return 0;
+}
