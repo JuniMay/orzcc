@@ -65,7 +65,8 @@ struct CliCommand {
     emit_vcode: Option<String>,
     /// Optimization level
     opt: u8,
-
+    /// If aggressive optimizations are enabled
+    aggressive: bool,
     /// Lower config
     lower_cfg: LowerConfig,
 }
@@ -230,7 +231,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         lower_ctx.lower();
 
         if cmd.opt > 0 {
-            riscv64::run_peephole(lower_ctx.mctx_mut(), &cmd.lower_cfg);
+            riscv64::run_peephole(lower_ctx.mctx_mut(), &cmd.lower_cfg, cmd.aggressive);
             SimplifyCfg::run(lower_ctx.mctx_mut(), &cmd.lower_cfg);
             RegisterCoalescing::run::<RvLowerSpec>(&mut lower_ctx, &cmd.lower_cfg);
             schedule(lower_ctx.mctx_mut(), &cmd.lower_cfg, Some(128));
@@ -346,6 +347,11 @@ fn cli(passman: &mut PassManager) -> Command {
                 .long("no-omit-frame-pointer")
                 .action(clap::ArgAction::Count),
         )
+        .arg(
+            Arg::new("aggressive")
+                .long("aggressive")
+                .action(clap::ArgAction::Count),
+        )
         .args(passman.get_cli_args())
 }
 
@@ -391,6 +397,8 @@ fn parse_args(passman: &mut PassManager) -> CliCommand {
         combine_stack_adjustments,
     };
 
+    let aggressive = matches.get_count("aggressive") > 0;
+
     CliCommand {
         output,
         source,
@@ -399,6 +407,7 @@ fn parse_args(passman: &mut PassManager) -> CliCommand {
         emit_ir,
         emit_vcode,
         opt,
+        aggressive,
         lower_cfg,
     }
 }
