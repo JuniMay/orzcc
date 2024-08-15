@@ -70,7 +70,9 @@ use crate::{
 
 pub const INSTCOMBINE: &str = "instcombine";
 
-pub const AINSTCOMBINE: &str = "aggressive-instcombine";
+pub const AGGRESSIVE_INSTCOMBINE: &str = "aggressive-instcombine";
+
+pub const ADVANCED_INSTCOMBINE: &str = "advanced-instcombine";
 
 /// A rule for instcombine.
 struct Rule {
@@ -81,15 +83,19 @@ struct Rule {
     rewriter: fn(&mut Context, Inst) -> bool,
 }
 
-pub struct InstCombine {
+pub struct Instcombine {
     rules: Vec<Rule>,
 }
 
-pub struct AInstCombine {
+pub struct AggressiveInstcombine {
     rules: Vec<Rule>,
 }
 
-impl Default for InstCombine {
+pub struct AdvancedInstcombine {
+    rules: Vec<Rule>,
+}
+
+impl Default for Instcombine {
     fn default() -> Self {
         Self {
             rules: vec![
@@ -104,10 +110,7 @@ impl Default for InstCombine {
                 mul_to_shl(),
                 div_one_elim(),
                 div_neg_one_elim(),
-                div_to_shift(),
                 rem_one_elim(),
-                rem_to_shift(),
-                div_rem_to_mul(),
                 shl_zero_elim(), // not tested
                 shr_zero_elim(), // not tested
             ],
@@ -115,7 +118,7 @@ impl Default for InstCombine {
     }
 }
 
-impl LocalPassMut for InstCombine {
+impl LocalPassMut for Instcombine {
     type Output = ();
 
     fn run(&mut self, ctx: &mut Context, func: Func) -> PassResult<(Self::Output, bool)> {
@@ -147,7 +150,7 @@ impl LocalPassMut for InstCombine {
     }
 }
 
-impl GlobalPassMut for InstCombine {
+impl GlobalPassMut for Instcombine {
     type Output = ();
 
     fn run(&mut self, ctx: &mut Context) -> PassResult<(Self::Output, bool)> {
@@ -162,14 +165,76 @@ impl GlobalPassMut for InstCombine {
     }
 }
 
-impl TransformPass for InstCombine {
+impl TransformPass for Instcombine {
     fn register(passman: &mut crate::ir::passman::PassManager) {
         let pass = Self::default();
         passman.register_transform(INSTCOMBINE, pass, Vec::new());
     }
 }
 
-impl Default for AInstCombine {
+impl Default for AdvancedInstcombine {
+    fn default() -> Self {
+        Self {
+            rules: vec![div_to_shift(), rem_to_shift(), div_rem_to_mul()],
+        }
+    }
+}
+
+impl LocalPassMut for AdvancedInstcombine {
+    type Output = ();
+
+    fn run(&mut self, ctx: &mut Context, func: Func) -> PassResult<(Self::Output, bool)> {
+        let mut changed = false;
+
+        let mut cursor = func.cursor();
+        while let Some(block) = cursor.next(ctx) {
+            let mut cursor = block.cursor();
+            while let Some(inst) = cursor.next(ctx) {
+                if !inst.is_used(ctx) {
+                    // if the instruction's results have no users, we can move to the next
+                    // instruction.
+                    continue;
+                }
+                for rule in &self.rules {
+                    if (rule.rewriter)(ctx, inst) {
+                        changed = true;
+                        if !inst.is_used(ctx) {
+                            // if the instruction's results have no users, we can move to the next
+                            // instruction without applying other rules
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(((), changed))
+    }
+}
+
+impl GlobalPassMut for AdvancedInstcombine {
+    type Output = ();
+
+    fn run(&mut self, ctx: &mut Context) -> PassResult<(Self::Output, bool)> {
+        let mut changed = false;
+
+        for func in ctx.funcs() {
+            let ((), local_changed) = LocalPassMut::run(self, ctx, func)?;
+            changed |= local_changed;
+        }
+
+        Ok(((), changed))
+    }
+}
+
+impl TransformPass for AdvancedInstcombine {
+    fn register(passman: &mut crate::ir::passman::PassManager) {
+        let pass = Self::default();
+        passman.register_transform(ADVANCED_INSTCOMBINE, pass, Vec::new());
+    }
+}
+
+impl Default for AggressiveInstcombine {
     fn default() -> Self {
         Self {
             rules: vec![
@@ -183,7 +248,7 @@ impl Default for AInstCombine {
     }
 }
 
-impl LocalPassMut for AInstCombine {
+impl LocalPassMut for AggressiveInstcombine {
     type Output = ();
 
     fn run(&mut self, ctx: &mut Context, func: Func) -> PassResult<(Self::Output, bool)> {
@@ -215,7 +280,7 @@ impl LocalPassMut for AInstCombine {
     }
 }
 
-impl GlobalPassMut for AInstCombine {
+impl GlobalPassMut for AggressiveInstcombine {
     type Output = ();
 
     fn run(&mut self, ctx: &mut Context) -> PassResult<(Self::Output, bool)> {
@@ -230,10 +295,10 @@ impl GlobalPassMut for AInstCombine {
     }
 }
 
-impl TransformPass for AInstCombine {
+impl TransformPass for AggressiveInstcombine {
     fn register(passman: &mut crate::ir::passman::PassManager) {
         let pass = Self::default();
-        passman.register_transform(AINSTCOMBINE, pass, Vec::new());
+        passman.register_transform(AGGRESSIVE_INSTCOMBINE, pass, Vec::new());
     }
 }
 

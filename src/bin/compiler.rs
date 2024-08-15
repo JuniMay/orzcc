@@ -28,7 +28,14 @@ use orzcc::{
             global_dce::{GlobalDce, GLOBAL_DCE},
             gvn::{GlobalValueNumbering, GVN},
             inline::{Inline, INLINE},
-            instcombine::{InstCombine, INSTCOMBINE},
+            instcombine::{
+                AdvancedInstcombine,
+                AggressiveInstcombine,
+                Instcombine,
+                ADVANCED_INSTCOMBINE,
+                AGGRESSIVE_INSTCOMBINE,
+                INSTCOMBINE,
+            },
             legalize::{Legalize, LEGALIZE},
             loops::{
                 DeadLoopElim,
@@ -101,89 +108,101 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if cmd.opt > 0 {
             let mut pipe_basic = Pipeline::default();
+            {
+                pipe_basic.add_pass(GLOBAL2LOCAL);
+                pipe_basic.add_pass(GLOBAL_DCE);
 
-            pipe_basic.add_pass(GLOBAL2LOCAL);
-            pipe_basic.add_pass(SIMPLE_DCE);
-            pipe_basic.add_pass(GLOBAL_DCE);
-            pipe_basic.add_pass(MEM2REG);
-            pipe_basic.add_pass(SIMPLE_DCE);
-            pipe_basic.add_pass(CFG_SIMPLIFY);
-            pipe_basic.add_pass(CONSTANT_FOLDING);
-            pipe_basic.add_pass(SIMPLE_DCE);
-            pipe_basic.add_pass(INSTCOMBINE);
-            pipe_basic.add_pass(SIMPLE_DCE);
-            pipe_basic.add_pass(GCM);
-            pipe_basic.add_pass(BRANCH_CONDITION_SINK);
-            pipe_basic.add_pass(GVN);
-            pipe_basic.add_pass(CFG_SIMPLIFY);
-            pipe_basic.add_pass(ELIM_CONSTANT_PHI);
-            pipe_basic.add_pass(SIMPLE_DCE);
-            pipe_basic.add_pass(CFG_SIMPLIFY);
-            pipe_basic.add_pass(BRANCH2SELECT);
-            pipe_basic.add_pass(CFG_SIMPLIFY);
+                pipe_basic.add_pass(MEM2REG);
+                pipe_basic.add_pass(ELIM_CONSTANT_PHI);
+                pipe_basic.add_pass(SIMPLE_DCE);
+                pipe_basic.add_pass(CFG_SIMPLIFY);
+
+                pipe_basic.add_pass(CONSTANT_FOLDING);
+                pipe_basic.add_pass(ELIM_CONSTANT_PHI);
+                pipe_basic.add_pass(SIMPLE_DCE);
+                pipe_basic.add_pass(CFG_SIMPLIFY);
+
+                pipe_basic.add_pass(INSTCOMBINE);
+                pipe_basic.add_pass(ELIM_CONSTANT_PHI);
+                pipe_basic.add_pass(SIMPLE_DCE);
+                pipe_basic.add_pass(CFG_SIMPLIFY);
+
+                pipe_basic.add_pass(GCM);
+                pipe_basic.add_pass(ELIM_CONSTANT_PHI);
+                pipe_basic.add_pass(SIMPLE_DCE);
+                pipe_basic.add_pass(CFG_SIMPLIFY);
+                pipe_basic.add_pass(BRANCH_CONDITION_SINK);
+
+                pipe_basic.add_pass(BRANCH2SELECT);
+                pipe_basic.add_pass(ELIM_CONSTANT_PHI);
+                pipe_basic.add_pass(SIMPLE_DCE);
+                pipe_basic.add_pass(CFG_SIMPLIFY);
+            }
+
+            let mut pipe_gvn = Pipeline::default();
+            {
+                pipe_gvn.add_pass(GVN);
+                pipe_gvn.add_pass(ELIM_CONSTANT_PHI);
+                pipe_gvn.add_pass(SIMPLE_DCE);
+                pipe_gvn.add_pass(CFG_SIMPLIFY);
+            }
+
+            let mut pipe_tco = Pipeline::default();
+            {
+                pipe_tco.add_pass(TCO);
+                pipe_tco.add_pass(ELIM_CONSTANT_PHI);
+                pipe_tco.add_pass(SIMPLE_DCE);
+                pipe_tco.add_pass(CFG_SIMPLIFY);
+            }
 
             let mut pipe_inline = Pipeline::default();
-
-            pipe_inline.add_pass(INLINE);
-            pipe_inline.add_pass(CFG_SIMPLIFY);
-            pipe_inline.add_pass(SIMPLE_DCE);
-            pipe_inline.add_pass(GLOBAL_DCE);
+            {
+                pipe_inline.add_pass(INLINE);
+                pipe_inline.add_pass(ELIM_CONSTANT_PHI);
+                pipe_inline.add_pass(SIMPLE_DCE);
+                pipe_inline.add_pass(CFG_SIMPLIFY);
+                pipe_inline.add_pass(GLOBAL_DCE);
+            }
 
             let mut pipe_unroll = Pipeline::default();
+            {
+                pipe_unroll.add_pass(LOOP_UNROLL);
+                pipe_unroll.add_pass(CONSTANT_FOLDING);
+                pipe_unroll.add_pass(ELIM_CONSTANT_PHI);
+                pipe_unroll.add_pass(SIMPLE_DCE);
+                pipe_unroll.add_pass(CFG_SIMPLIFY);
+            }
 
-            pipe_unroll.add_pass(LOOP_UNROLL);
-            pipe_unroll.add_pass(CONSTANT_FOLDING);
-            pipe_unroll.add_pass(CFG_SIMPLIFY);
-            pipe_unroll.add_pass(SIMPLE_DCE);
+            passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
+            passman.run_pipeline(&mut ir, &pipe_tco, 32, 8);
+            passman.run_pipeline(&mut ir, &pipe_inline, 32, 8);
 
-            passman.run_transform(GLOBAL2LOCAL, &mut ir, 32);
-            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-            passman.run_transform(GLOBAL_DCE, &mut ir, 32);
-            passman.run_transform(MEM2REG, &mut ir, 32);
-            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-            passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
-            passman.run_transform(CONSTANT_FOLDING, &mut ir, 32);
-            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-            passman.run_transform(INSTCOMBINE, &mut ir, 32);
-            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+            // passman.run_transform(LOOP_PEEL, &mut ir, 1);
+            // passman.run_transform(ELIM_CONSTANT_PHI, &mut ir, 32);
+            // passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+            // passman.run_transform(GCM, &mut ir, 32);
+            // passman.run_transform(BRANCH_CONDITION_SINK, &mut ir, 1);
+            // passman.run_transform(INDVAR_SIMPLIFY, &mut ir, 1);
+            // passman.run_transform(CONSTANT_FOLDING, &mut ir, 32);
+            // passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
+            // passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+            // passman.run_transform(ELIM_CONSTANT_PHI, &mut ir, 32);
+            // passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+            // passman.run_transform(DEAD_LOOP_ELIM, &mut ir, 1);
+            // passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+            // passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
+            // passman.run_transform(CONSTANT_FOLDING, &mut ir, 32);
+            // passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+            // passman.run_transform(ELIM_CONSTANT_PHI, &mut ir, 32);
+            // passman.run_transform(SIMPLE_DCE, &mut ir, 32);
 
-            passman.run_transform(TCO, &mut ir, 1);
-            passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
+            // passman.run_transform(LOOP_UNROLL, &mut ir, 2);
 
-            passman.run_transform(LOOP_PEEL, &mut ir, 1);
-            passman.run_transform(ELIM_CONSTANT_PHI, &mut ir, 32);
-            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-            passman.run_transform(GCM, &mut ir, 32);
-            passman.run_transform(BRANCH_CONDITION_SINK, &mut ir, 1);
-            passman.run_transform(INDVAR_SIMPLIFY, &mut ir, 1);
-            passman.run_transform(CONSTANT_FOLDING, &mut ir, 32);
-            passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
-            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-            passman.run_transform(ELIM_CONSTANT_PHI, &mut ir, 32);
-            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-            passman.run_transform(DEAD_LOOP_ELIM, &mut ir, 1);
-            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-            passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
-            passman.run_transform(CONSTANT_FOLDING, &mut ir, 32);
-            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-            passman.run_transform(ELIM_CONSTANT_PHI, &mut ir, 32);
-            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-
-            passman.run_transform(INLINE, &mut ir, 1);
-            passman.run_transform(CONSTANT_FOLDING, &mut ir, 32);
-            passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
-            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-            passman.run_transform(GLOBAL_DCE, &mut ir, 32);
-
-            // TODO: unroll earlier to combine load/store
-            passman.run_transform(LOOP_UNROLL, &mut ir, 2);
-            passman.run_transform(GCM, &mut ir, 32);
-            passman.run_transform(BRANCH_CONDITION_SINK, &mut ir, 1);
-            passman.run_transform(CONSTANT_FOLDING, &mut ir, 32);
-            passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
-            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+            // passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
 
             passman.run_transform(LEGALIZE, &mut ir, 1);
+
+            passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
 
             for i in 0..4 {
                 println!("Round {}", i);
@@ -191,11 +210,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let iter = passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
                 println!("pipeline basic iterations: {}", iter);
 
+                let iter = passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
+                println!("pipeline gvn iterations: {}", iter);
+
                 let iter = passman.run_pipeline(&mut ir, &pipe_inline, 32, 8);
                 println!("pipeline inline iterations: {}", iter);
 
-                let iter = passman.run_pipeline(&mut ir, &pipe_unroll, 1, 1);
-                println!("pipeline unroll iterations: {}", iter);
+                // let iter = passman.run_pipeline(&mut ir, &pipe_unroll, 1, 1);
+                // println!("pipeline unroll iterations: {}", iter);
 
                 // a little expensive, run once per round
                 passman.run_transform(ADCE, &mut ir, 1);
@@ -206,12 +228,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             passman.run_transform(BOOL2COND, &mut ir, 32);
             passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
+
             for i in 0..4 {
                 println!("Second Round {}", i);
+
+                passman.run_transform(ADVANCED_INSTCOMBINE, &mut ir, 32);
+
                 let iter = passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
                 println!("pipeline basic iterations: {}", iter);
+
+                let iter = passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
+                println!("pipeline gvn iterations: {}", iter);
+
                 passman.run_transform(ADCE, &mut ir, 1);
                 passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
+
+                if cmd.aggressive {
+                    passman.run_transform(AGGRESSIVE_INSTCOMBINE, &mut ir, 32);
+                }
             }
         } else {
             passman.run_transform(LEGALIZE, &mut ir, 1);
@@ -269,8 +303,12 @@ fn register_passes(passman: &mut PassManager) {
     Mem2reg::register(passman);
     SimpleDce::register(passman);
     Adce::register(passman);
+
     ConstantFolding::register(passman);
-    InstCombine::register(passman);
+    Instcombine::register(passman);
+    AdvancedInstcombine::register(passman);
+    AggressiveInstcombine::register(passman);
+
     ElimConstantPhi::register(passman);
     Branch2Select::register(passman);
     Bool2Cond::register(passman);

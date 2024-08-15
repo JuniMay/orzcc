@@ -622,5 +622,7 @@ impl TransformPass for LoopUnroll {
 
         passman.add_parameter("unroll-factor", 4);
         passman.add_parameter("unroll-constant-all", true);
+
+        passman.add_post_dep(LOOP_UNROLL, Box::new(CfgCanonicalize));
     }
 }

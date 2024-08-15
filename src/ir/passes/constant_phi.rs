@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
+use super::control_flow::CfgCanonicalize;
 use crate::{
     collections::linked_list::LinkedListContainerPtr,
     ir::{
@@ -71,6 +72,10 @@ impl GlobalPassMut for ElimConstantPhi {
 
 impl TransformPass for ElimConstantPhi {
     fn register(passman: &mut PassManager) {
-        passman.register_transform(ELIM_CONSTANT_PHI, ElimConstantPhi, Vec::new());
+        passman.register_transform(
+            ELIM_CONSTANT_PHI,
+            ElimConstantPhi,
+            vec![Box::new(CfgCanonicalize)],
+        );
     }
 }
