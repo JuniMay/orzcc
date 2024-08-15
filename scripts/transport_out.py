@@ -16,7 +16,7 @@ def transport_files(input_dir, output_dir):
         with open(output_file, 'w') as f:
             f.write(content)
 
-# Example usage
+# transport stdout(clang) -> tests/sysy/external_test/*.out
 input_dir = '/Users/fengsicheng/Desktop/orzcc/output'
 output_dir = '/Users/fengsicheng/Desktop/orzcc/tests/sysy/external_test'
 transport_files(input_dir, output_dir)
