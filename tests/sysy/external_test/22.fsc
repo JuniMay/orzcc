@@ -16,7 +16,7 @@ void init() {
         while (j < NQ) {
             k = 0;
             while (k < NP) {
-                A[i][j][k] = (i * j + k) % NP / NP;
+                A[i][j][k] = (i * j + k) % NP * 1.0 / NP;
                 k = k + 1;
             }
             j = j + 1;
@@ -28,7 +28,7 @@ void init() {
     while (i < NP) {
         j = 0;
         while (j < NP) {
-            C4[i][j] = (i * j % NP) / NP;
+            C4[i][j] = (i * j % NP) * 1.0 / NP;
             j = j + 1;
         }
         i = i + 1;

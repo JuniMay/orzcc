@@ -14,16 +14,16 @@ void init() {
     int j = 0;
 
     while (i < M) {
-        p[i] = (i % M) / M;
+        p[i] = (i % M) * 1.0 / M;
         i = i + 1;
     }
 
     i = 0;
     while (i < N) {
-        r[i] = (i % N) / N;
+        r[i] = (i % N) * 1.0 / N;
         j = 0;
         while (j < M) {
-            A[i][j] = (i * (j + 1) % N) / N;
+            A[i][j] = (i * (j + 1) % N) * 1.0 / N;
             j = j + 1;
         }
         i = i + 1;
@@ -56,6 +56,6 @@ void kernel_bicg() {
 int main() {
     init();
     kernel_bicg();
-    printf("%a", q[0] + s[0]);
+    printf("%a", q[0] + s[0] + s[512]);
     return 0;
 }

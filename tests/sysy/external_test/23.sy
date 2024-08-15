@@ -11,14 +11,14 @@ void init() {
     int i = 0, j = 0;
 
     while (i < N) {
-        x1[i] = (i % N) / N;
-        x2[i] = ((i + 1) % N) / N;
-        y_1[i] = ((i + 3) % N) / N;
-        y_2[i] = ((i + 4) % N) / N;
+        x1[i] = (i % N) * 1.0 / N;
+        x2[i] = ((i + 1) % N) * 1.0 / N;
+        y_1[i] = ((i + 3) % N) * 1.0 / N;
+        y_2[i] = ((i + 4) % N) * 1.0 / N;
 
         j = 0;
         while (j < N) {
-            A[i][j] = (i * j % N) / N;
+            A[i][j] = (i * j % N) * 1.0 / N;
             j = j + 1;
         }
         i = i + 1;
@@ -52,7 +52,7 @@ void kernel_mvt() {
 int main() {
     init();
     kernel_mvt();
-    putfloat(x1[24] + x2[0] + x1[1] + x2[1]);
+    putfloat(x1[0] + x2[0] + x1[1] + x2[1]);
     return 0;
 }
 

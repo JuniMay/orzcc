@@ -18,7 +18,7 @@ void init() {
     while (i < NI) {
         j = 0;
         while (j < NJ) {
-            C[i][j] = (i * j + 1) % NI / NI;
+            C[i][j] = (i * j + 1) % NI * 1.0 / NI;
             j = j + 1;
         }
         i = i + 1;
@@ -28,7 +28,7 @@ void init() {
     while (i < NI) {
         j = 0;
         while (j < NK) {
-            A[i][j] = i * (j + 1) % NK / NK;
+            A[i][j] = (i * j + 1) % NK * 1.0 / NK;
             j = j + 1;
         }
         i = i + 1;
@@ -38,7 +38,7 @@ void init() {
     while (i < NK) {
         j = 0;
         while (j < NJ) {
-            B[i][j] = i * (j + 2) % NJ / NJ;
+            B[i][j] = (i * j + 2) % NJ * 1.0 / NJ ;
             j = j + 1;
         }
         i = i + 1;
