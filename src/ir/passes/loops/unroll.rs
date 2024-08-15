@@ -1,10 +1,19 @@
-use super::{scalar_evolution::LoopScevRecord, Lcssa, LoopSimplify, Scev, ScevAnalysis};
+use super::{
+    scalar_evolution::{LoopBound, LoopScevRecord},
+    Lcssa,
+    LoopSimplify,
+    Scev,
+    ScevAnalysis,
+};
 use crate::{
     collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
     ir::{
         debug::CommentPos,
         deep_clone::DeepCloneMap,
-        passes::{control_flow::CfgCanonicalize, loops::InductionOp},
+        passes::{
+            control_flow::CfgCanonicalize,
+            loops::{scalar_evolution::LoopBoundCond, InductionOp},
+        },
         passman::{
             GlobalPassMut,
             LocalPass,
@@ -49,18 +58,25 @@ impl LoopUnroll {
     fn process_loop(&mut self, ctx: &mut Context, lp: Loop<Block>, scevs: &LoopScevRecord) -> bool {
         let mut changed = false;
 
-        let (lhs, cmp_cond, rhs) = if let Some(bound) = scevs.loop_bounds.get(&lp).unwrap() {
+        let LoopBound {
+            block_param,
+            cond: cmp_cond,
+            bound,
+            reversed,
+            ..
+        } = if let Some(bound) = scevs.loop_bounds.get(&lp).unwrap() {
             bound
         } else {
             return false;
         };
 
-        match cmp_cond {
-            ICmpCond::Eq | ICmpCond::Ne => return false,
-            // TODO: Support unsigned bounds
-            ICmpCond::Ule | ICmpCond::Ult => return false,
-            ICmpCond::Sle | ICmpCond::Slt => {}
-        }
+        let Scev {
+            block_param: repr,
+            init: start,
+            step,
+            op,
+            modulus,
+        } = scevs.scevs.get(block_param).unwrap();
 
         // trip count calculation (for sle and addition)
         // let trip count as k, init = a, upper = b
@@ -71,106 +87,85 @@ impl LoopUnroll {
         // for slt, just minus the upper bound by 1
 
         // iterate the indvars, check if we can unroll the loop
-        if let Some(Scev {
-            repr,
-            start,
-            step,
-            op,
-            modulus,
-        }) = scevs
-            .scevs
-            .get(&lp)
-            .unwrap()
-            .iter()
-            .find(|s| s.repr == *lhs || s.repr == *rhs)
+
+        println!("[ loop-unroll ] start: {:?}", start);
+
+        let mut start_const = None;
+        if let Some(inst) = start.def_inst(ctx) {
+            if let InstKind::IConst(start) = inst.kind(ctx) {
+                start_const = Some(start.as_signed());
+            }
+        }
+
+        let mut step_const = None;
+        if let Some(inst) = step.def_inst(ctx) {
+            if let InstKind::IConst(step) = inst.kind(ctx) {
+                step_const = Some(step.as_signed());
+            }
+        }
+
+        let mut bound_const = None;
+        if let Some(inst) = bound.def_inst(ctx) {
+            if let InstKind::IConst(bound) = inst.kind(ctx) {
+                bound_const = Some(bound.as_signed());
+            }
+        }
+
+        // two layers of option, outer means if there is a modulus, inner means if the
+        // modulus is a constant
+        let modulus_const = modulus.map(|v| {
+            let mut modulus_const = None;
+            if let Some(inst) = v.def_inst(ctx) {
+                if let InstKind::IConst(modulus) = inst.kind(ctx) {
+                    modulus_const = Some(modulus.as_signed());
+                }
+            }
+            modulus_const
+        });
+
+        let trip_count_const = if let (Some(start), Some(step), Some(bound), None) =
+            (start_const, step_const, bound_const, modulus_const)
         {
-            let (bound, cmp_cond, reversed) = if repr == lhs {
-                (rhs, cmp_cond, false)
-            } else if repr == rhs {
-                (lhs, cmp_cond, true)
-            } else {
-                unreachable!()
-            };
-
-            println!("[ loop-unroll ] start: {:?}", start);
-
-            let mut start_const = None;
-            if let Some(inst) = start.def_inst(ctx) {
-                if let InstKind::IConst(start) = inst.kind(ctx) {
-                    start_const = Some(start.as_signed());
+            match (op, cmp_cond, reversed) {
+                (InductionOp::Add, LoopBoundCond::Sle, false) => {
+                    let trip_count = (bound - start) / step + 1;
+                    Some(trip_count as usize)
                 }
+                (InductionOp::Add, LoopBoundCond::Slt, false) => {
+                    let trip_count = (bound - 1 - start) / step + 1;
+                    Some(trip_count as usize)
+                }
+                // TODO: support more
+                _ => None,
             }
+        } else {
+            None
+        };
 
-            let mut step_const = None;
-            if let Some(inst) = step.def_inst(ctx) {
-                if let InstKind::IConst(step) = inst.kind(ctx) {
-                    step_const = Some(step.as_signed());
+        println!("[ loop-unroll (const) ] start: {:?}", start_const);
+        println!("[ loop-unroll (const) ] step: {:?}", step_const);
+        println!("[ loop-unroll (const) ] bound: {:?}", bound_const);
+        println!("[ loop-unroll (const) ] trip count: {:?}", trip_count_const);
+
+        if let Some(_trip_count) = trip_count_const {
+            changed |= self.unroll_const(
+                ctx,
+                lp,
+                *repr,
+                start_const.unwrap(),
+                step_const.unwrap(),
+                bound_const.unwrap(),
+                trip_count_const.unwrap(),
+            );
+        } else {
+            // dynamic unrolling
+            #[allow(clippy::single_match)]
+            match (op, cmp_cond, reversed) {
+                (InductionOp::Add, LoopBoundCond::Sle | LoopBoundCond::Slt, false) => {
+                    changed |=
+                        self.unroll_dynamic(ctx, lp, *repr, *start, *step, *bound, *cmp_cond);
                 }
-            }
-
-            let mut bound_const = None;
-            if let Some(inst) = bound.def_inst(ctx) {
-                if let InstKind::IConst(bound) = inst.kind(ctx) {
-                    bound_const = Some(bound.as_signed());
-                }
-            }
-
-            // two layers of option, outer means if there is a modulus, inner means if the
-            // modulus is a constant
-            let modulus_const = modulus.map(|v| {
-                let mut modulus_const = None;
-                if let Some(inst) = v.def_inst(ctx) {
-                    if let InstKind::IConst(modulus) = inst.kind(ctx) {
-                        modulus_const = Some(modulus.as_signed());
-                    }
-                }
-                modulus_const
-            });
-
-            let trip_count_const = if let (Some(start), Some(step), Some(bound), None) =
-                (start_const, step_const, bound_const, modulus_const)
-            {
-                match (op, cmp_cond, reversed) {
-                    (InductionOp::Add, ICmpCond::Sle, false) => {
-                        let trip_count = (bound - start) / step + 1;
-                        Some(trip_count as usize)
-                    }
-                    (InductionOp::Add, ICmpCond::Slt, false) => {
-                        let trip_count = (bound - 1 - start) / step + 1;
-                        Some(trip_count as usize)
-                    }
-                    // TODO: support more
-                    _ => None,
-                }
-            } else {
-                None
-            };
-
-            println!("[ loop-unroll (const) ] start: {:?}", start_const);
-            println!("[ loop-unroll (const) ] step: {:?}", step_const);
-            println!("[ loop-unroll (const) ] bound: {:?}", bound_const);
-            println!("[ loop-unroll (const) ] trip count: {:?}", trip_count_const);
-
-            if let Some(_trip_count) = trip_count_const {
-                changed |= self.unroll_const(
-                    ctx,
-                    lp,
-                    *repr,
-                    start_const.unwrap(),
-                    step_const.unwrap(),
-                    bound_const.unwrap(),
-                    trip_count_const.unwrap(),
-                );
-            } else {
-                // dynamic unrolling
-                #[allow(clippy::single_match)]
-                match (op, cmp_cond, reversed) {
-                    (InductionOp::Add, ICmpCond::Sle | ICmpCond::Slt, false) => {
-                        changed |=
-                            self.unroll_dynamic(ctx, lp, *repr, *start, *step, *bound, *cmp_cond);
-                    }
-                    _ => {}
-                }
+                _ => {}
             }
         }
 
@@ -186,27 +181,27 @@ impl LoopUnroll {
         start: Value,
         step: Value,
         bound: Value,
-        cmp_cond: ICmpCond,
+        cmp_cond: LoopBoundCond,
     ) -> bool {
         let bound_def_block = bound.def_block(ctx);
-        if self.scev.loop_ctx.is_in_loop(bound_def_block, lp) {
+        if self.scev.loops.is_in_loop(bound_def_block, lp) {
             // not loop invariant, cannot unroll
             return false;
         }
 
         let step_def_block = step.def_block(ctx);
-        if self.scev.loop_ctx.is_in_loop(step_def_block, lp) {
+        if self.scev.loops.is_in_loop(step_def_block, lp) {
             // not loop invariant, cannot unroll
             return false;
         }
 
-        let header = lp.header(&self.scev.loop_ctx);
+        let header = lp.header(&self.scev.loops);
 
         let mut is_pre_exit = false;
-        let exits = lp.get_exit_blocks(ctx, &self.scev.loop_ctx);
+        let exits = lp.get_exit_blocks(ctx, &self.scev.loops);
 
         for succ in header.succs(ctx) {
-            if !self.scev.loop_ctx.is_in_loop(succ, lp) {
+            if !self.scev.loops.is_in_loop(succ, lp) {
                 is_pre_exit = true;
                 break;
             }
@@ -240,8 +235,8 @@ impl LoopUnroll {
         //  }
         //  ... old loop body with new i
 
-        let preheader = lp.get_preheader(ctx, &self.scev.loop_ctx).unwrap();
-        let blocks = lp.get_blocks(ctx, &self.scev.loop_ctx);
+        let preheader = lp.get_preheader(ctx, &self.scev.loops).unwrap();
+        let blocks = lp.get_blocks(ctx, &self.scev.loops);
 
         let insn: usize = blocks.iter().map(|bb| bb.insn(ctx)).sum();
         if insn * self.unroll_factor > 512 {
@@ -252,15 +247,15 @@ impl LoopUnroll {
 
         // calculate the trip count and unroll count
         let bound = match cmp_cond {
-            ICmpCond::Slt => {
+            LoopBoundCond::Slt => {
                 let iconst = Inst::iconst(ctx, 1, ty);
                 let sub = Inst::ibinary(ctx, IBinaryOp::Sub, bound, iconst.result(ctx, 0));
                 preheader.push_inst_before_terminator(ctx, iconst);
                 preheader.push_inst_before_terminator(ctx, sub);
                 sub.result(ctx, 0)
             }
-            ICmpCond::Sle => bound,
-            ICmpCond::Eq | ICmpCond::Ne | ICmpCond::Ult | ICmpCond::Ule => unimplemented!(),
+            LoopBoundCond::Sle => bound,
+            LoopBoundCond::Sgt | LoopBoundCond::Sge => unimplemented!("not supported"),
         };
         // calculate the trip count
         let sub = Inst::ibinary(ctx, IBinaryOp::Sub, bound, start);
@@ -428,12 +423,12 @@ impl LoopUnroll {
 
         self.deep_clone_map.clear();
 
-        let header = lp.header(&self.scev.loop_ctx);
+        let header = lp.header(&self.scev.loops);
         let mut curr_header = header;
 
-        let preheader = lp.get_preheader(ctx, &self.scev.loop_ctx).unwrap();
+        let preheader = lp.get_preheader(ctx, &self.scev.loops).unwrap();
 
-        let blocks = lp.get_blocks(ctx, &self.scev.loop_ctx);
+        let blocks = lp.get_blocks(ctx, &self.scev.loops);
 
         let insn: usize = blocks.iter().map(|bb| bb.insn(ctx)).sum();
 
@@ -558,10 +553,13 @@ impl LocalPassMut for LoopUnroll {
     fn run(&mut self, ctx: &mut Context, func: Func) -> PassResult<(Self::Output, bool)> {
         let scevs = LocalPass::run(&mut self.scev, ctx, func)?;
 
+        ctx.alloc_all_names();
+        println!("{}", scevs.display(ctx));
+
         let mut loops = Vec::new();
 
-        for lp in self.scev.loop_ctx.loops() {
-            let depth = lp.depth(&self.scev.loop_ctx);
+        for lp in self.scev.loops.loops() {
+            let depth = lp.depth(&self.scev.loops);
             loops.push(LoopWithDepth { lp, depth });
         }
 

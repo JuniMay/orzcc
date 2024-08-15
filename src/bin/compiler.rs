@@ -177,28 +177,32 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             passman.run_pipeline(&mut ir, &pipe_tco, 32, 8);
             passman.run_pipeline(&mut ir, &pipe_inline, 32, 8);
 
-            // passman.run_transform(LOOP_PEEL, &mut ir, 1);
-            // passman.run_transform(ELIM_CONSTANT_PHI, &mut ir, 32);
-            // passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-            // passman.run_transform(GCM, &mut ir, 32);
-            // passman.run_transform(BRANCH_CONDITION_SINK, &mut ir, 1);
-            // passman.run_transform(INDVAR_SIMPLIFY, &mut ir, 1);
-            // passman.run_transform(CONSTANT_FOLDING, &mut ir, 32);
-            // passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
-            // passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-            // passman.run_transform(ELIM_CONSTANT_PHI, &mut ir, 32);
-            // passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-            // passman.run_transform(DEAD_LOOP_ELIM, &mut ir, 1);
-            // passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-            // passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
-            // passman.run_transform(CONSTANT_FOLDING, &mut ir, 32);
-            // passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-            // passman.run_transform(ELIM_CONSTANT_PHI, &mut ir, 32);
-            // passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+            passman.run_transform(LOOP_PEEL, &mut ir, 1);
+            passman.run_transform(ELIM_CONSTANT_PHI, &mut ir, 32);
+            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+            passman.run_transform(GCM, &mut ir, 32);
+            passman.run_transform(BRANCH_CONDITION_SINK, &mut ir, 1);
+            passman.run_transform(INDVAR_SIMPLIFY, &mut ir, 1);
+            passman.run_transform(CONSTANT_FOLDING, &mut ir, 32);
+            passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
+            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+            passman.run_transform(ELIM_CONSTANT_PHI, &mut ir, 32);
+            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+            passman.run_transform(DEAD_LOOP_ELIM, &mut ir, 1);
+            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+            passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
+            passman.run_transform(CONSTANT_FOLDING, &mut ir, 32);
+            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+            passman.run_transform(ELIM_CONSTANT_PHI, &mut ir, 32);
+            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
 
-            // passman.run_transform(LOOP_UNROLL, &mut ir, 2);
+            passman.run_transform(ADCE, &mut ir, 1);
+            passman.run_transform(ELIM_CONSTANT_PHI, &mut ir, 32);
+            passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
 
-            // passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
+            passman.run_transform(LOOP_UNROLL, &mut ir, 2);
+
+            passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
 
             passman.run_transform(LEGALIZE, &mut ir, 1);
 
@@ -216,12 +220,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let iter = passman.run_pipeline(&mut ir, &pipe_inline, 32, 8);
                 println!("pipeline inline iterations: {}", iter);
 
-                // let iter = passman.run_pipeline(&mut ir, &pipe_unroll, 1, 1);
-                // println!("pipeline unroll iterations: {}", iter);
-
                 // a little expensive, run once per round
                 passman.run_transform(ADCE, &mut ir, 1);
                 passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
+
+                let iter = passman.run_pipeline(&mut ir, &pipe_unroll, 1, 1);
+                println!("pipeline unroll iterations: {}", iter);
             }
 
             passman.run_transform(BLOCK_REORDER, &mut ir, 1);

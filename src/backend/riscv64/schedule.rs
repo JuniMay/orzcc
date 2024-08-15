@@ -6,13 +6,7 @@ use std::{
 
 use super::inst::{AluOpRRR, FpuOpRR, FpuOpRRR, FpuOpRRRR, RvInst, RvInstKind};
 use crate::{
-    backend::{
-        inst::{DisplayMInst, MInst},
-        LowerConfig,
-        MBlock,
-        MContext,
-        MFunc,
-    },
+    backend::{inst::MInst, LowerConfig, MBlock, MContext, MFunc},
     collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
 };
 
@@ -882,7 +876,7 @@ fn shedule_chunk(mctx: &mut MContext<RvInst>, start: RvInst, end: RvInst, config
             s += 1;
         }
 
-        println!("scheduling: {}, s: {}", n.display(mctx), s);
+        // println!("scheduling: {}, s: {}", n.display(mctx), s);
 
         scheduled.insert(n, s);
 
