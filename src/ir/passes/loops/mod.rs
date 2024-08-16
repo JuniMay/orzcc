@@ -5,6 +5,7 @@ mod lcssa;
 mod peel;
 mod scalar_evolution;
 mod simplify;
+mod strength_reduction;
 mod unroll;
 
 pub use dead_loop_elim::{DeadLoopElim, DEAD_LOOP_ELIM};
@@ -14,4 +15,5 @@ pub use lcssa::{Lcssa, LCSSA};
 pub use peel::{LoopPeel, LOOP_PEEL};
 pub use scalar_evolution::{InductionOp, Scev, ScevAnalysis};
 pub use simplify::{LoopSimplify, LOOP_SIMPLIFY};
+pub use strength_reduction::{LoopStrengthReduction, LOOP_STRENGTH_REDUCTION};
 pub use unroll::{LoopUnroll, LOOP_UNROLL};

@@ -43,10 +43,12 @@ use orzcc::{
                 Lcssa,
                 LoopPeel,
                 LoopSimplify,
+                LoopStrengthReduction,
                 LoopUnroll,
                 DEAD_LOOP_ELIM,
                 INDVAR_SIMPLIFY,
                 LOOP_PEEL,
+                LOOP_STRENGTH_REDUCTION,
                 LOOP_UNROLL,
             },
             mem2reg::{Mem2reg, MEM2REG},
@@ -174,8 +176,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
+
             passman.run_pipeline(&mut ir, &pipe_tco, 32, 8);
+            passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
+
             passman.run_pipeline(&mut ir, &pipe_inline, 32, 8);
+            passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
+
+            passman.run_transform(LEGALIZE, &mut ir, 1);
+            passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
+
+            ir.alloc_all_names();
+
+            let iter = passman.run_transform(LOOP_STRENGTH_REDUCTION, &mut ir, 32);
+            passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
+            println!("loop strength reduction iterations: {}", iter);
 
             passman.run_transform(LOOP_PEEL, &mut ir, 1);
             passman.run_transform(ELIM_CONSTANT_PHI, &mut ir, 32);
@@ -203,8 +218,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             passman.run_transform(LOOP_UNROLL, &mut ir, 2);
 
             passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
-
-            passman.run_transform(LEGALIZE, &mut ir, 1);
 
             passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
 
@@ -329,6 +342,7 @@ fn register_passes(passman: &mut PassManager) {
     LoopPeel::register(passman);
     IndvarSimplify::register(passman);
     DeadLoopElim::register(passman);
+    LoopStrengthReduction::register(passman);
 
     GlobalValueNumbering::register(passman);
     Gcm::register(passman);

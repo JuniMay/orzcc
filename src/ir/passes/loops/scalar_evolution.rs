@@ -22,6 +22,7 @@ use crate::{
     },
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum InductionOp {
     Add,
     Sub,

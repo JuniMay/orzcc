@@ -107,7 +107,6 @@ impl Default for Instcombine {
                 sub_zero_elim(),
                 offset_zero_elim(),
                 add_to_mul(),
-                mul_to_shl(),
                 div_one_elim(),
                 div_neg_one_elim(),
                 rem_one_elim(),
@@ -175,7 +174,12 @@ impl TransformPass for Instcombine {
 impl Default for AdvancedInstcombine {
     fn default() -> Self {
         Self {
-            rules: vec![div_to_shift(), rem_to_shift(), div_rem_to_mul()],
+            rules: vec![
+                div_to_shift(),
+                rem_to_shift(),
+                div_rem_to_mul(),
+                mul_to_shl(),
+            ],
         }
     }
 }
