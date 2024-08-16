@@ -56,10 +56,11 @@ impl LoopStrengthReduction {
 
         let Scev { init, step, op, .. } = scevs.scevs.get(block_param).unwrap();
 
-        if *op != InductionOp::Add {
-            // TODO: union/101_insert_order
-            return false;
-        }
+        let ibinary_op = match op {
+            InductionOp::Add => IBinaryOp::Add,
+            InductionOp::Sub => IBinaryOp::Sub,
+            InductionOp::Mul | InductionOp::SDiv | InductionOp::Shl => return false,
+        };
 
         let mut changed = false;
 
@@ -94,13 +95,9 @@ impl LoopStrengthReduction {
                 preheader.push_inst_before_terminator(ctx, new_step);
 
                 // inside the loop, use the new block parameter and addition
-                let add = Inst::ibinary(
-                    ctx,
-                    IBinaryOp::Add,
-                    new_block_param,
-                    new_step.result(ctx, 0),
-                );
-                user.insert_after(ctx, add);
+                let induction_inst =
+                    Inst::ibinary(ctx, ibinary_op, new_block_param, new_step.result(ctx, 0));
+                user.insert_after(ctx, induction_inst);
 
                 let old = user.result(ctx, 0);
                 for user in old.users(ctx) {
@@ -118,7 +115,12 @@ impl LoopStrengthReduction {
                     if pred == preheader {
                         tail.add_succ_arg(ctx, header, new_block_param, mul.result(ctx, 0));
                     } else {
-                        tail.add_succ_arg(ctx, header, new_block_param, add.result(ctx, 0));
+                        tail.add_succ_arg(
+                            ctx,
+                            header,
+                            new_block_param,
+                            induction_inst.result(ctx, 0),
+                        );
                     }
                 }
 

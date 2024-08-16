@@ -143,6 +143,35 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let mut pipe_gvn = Pipeline::default();
             {
+                pipe_gvn.add_pass(GLOBAL2LOCAL);
+                pipe_gvn.add_pass(GLOBAL_DCE);
+
+                pipe_gvn.add_pass(MEM2REG);
+                pipe_gvn.add_pass(ELIM_CONSTANT_PHI);
+                pipe_gvn.add_pass(SIMPLE_DCE);
+                pipe_gvn.add_pass(CFG_SIMPLIFY);
+
+                pipe_gvn.add_pass(CONSTANT_FOLDING);
+                pipe_gvn.add_pass(ELIM_CONSTANT_PHI);
+                pipe_gvn.add_pass(SIMPLE_DCE);
+                pipe_gvn.add_pass(CFG_SIMPLIFY);
+
+                pipe_gvn.add_pass(INSTCOMBINE);
+                pipe_gvn.add_pass(ELIM_CONSTANT_PHI);
+                pipe_gvn.add_pass(SIMPLE_DCE);
+                pipe_gvn.add_pass(CFG_SIMPLIFY);
+
+                pipe_gvn.add_pass(GCM);
+                pipe_gvn.add_pass(ELIM_CONSTANT_PHI);
+                pipe_gvn.add_pass(SIMPLE_DCE);
+                pipe_gvn.add_pass(CFG_SIMPLIFY);
+                pipe_gvn.add_pass(BRANCH_CONDITION_SINK);
+
+                pipe_gvn.add_pass(BRANCH2SELECT);
+                pipe_gvn.add_pass(ELIM_CONSTANT_PHI);
+                pipe_gvn.add_pass(SIMPLE_DCE);
+                pipe_gvn.add_pass(CFG_SIMPLIFY);
+
                 pipe_gvn.add_pass(GVN);
                 pipe_gvn.add_pass(ELIM_CONSTANT_PHI);
                 pipe_gvn.add_pass(SIMPLE_DCE);
@@ -184,12 +213,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
 
             passman.run_transform(LEGALIZE, &mut ir, 1);
-            passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
+            passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
 
             ir.alloc_all_names();
 
             let iter = passman.run_transform(LOOP_STRENGTH_REDUCTION, &mut ir, 32);
-            passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
+            passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
             println!("loop strength reduction iterations: {}", iter);
 
             passman.run_transform(LOOP_PEEL, &mut ir, 1);
@@ -217,15 +246,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             passman.run_transform(LOOP_UNROLL, &mut ir, 2);
 
-            passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
-
             passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
 
             for i in 0..4 {
                 println!("Round {}", i);
-
-                let iter = passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
-                println!("pipeline basic iterations: {}", iter);
 
                 let iter = passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
                 println!("pipeline gvn iterations: {}", iter);
@@ -250,9 +274,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("Second Round {}", i);
 
                 passman.run_transform(ADVANCED_INSTCOMBINE, &mut ir, 32);
-
-                let iter = passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
-                println!("pipeline basic iterations: {}", iter);
 
                 let iter = passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
                 println!("pipeline gvn iterations: {}", iter);
