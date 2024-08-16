@@ -17,7 +17,10 @@ use crate::{
     backend::reg_alloc::graph_coloring_allocation::GraphColoringAllocation,
     collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
     ir::{self, CastOp, Successor},
-    utils::cfg::CfgRegion,
+    utils::{
+        cfg::{CfgInfo, CfgRegion},
+        dominance::Dominance,
+    },
 };
 
 /// A memory location
@@ -456,8 +459,10 @@ where
             self.curr_block = Some(self.blocks[&func.entry_node(self.ctx)]);
             S::gen_incoming(self, func.sig(self.ctx), params);
 
-            for block in func.iter(self.ctx) {
-                self.curr_block = Some(self.blocks[&block]);
+            let cfg = CfgInfo::new(self.ctx, func);
+            let dom = Dominance::new(self.ctx, &cfg);
+            for block in dom.rpo() {
+                self.curr_block = Some(self.blocks[block]);
                 for inst in block.iter(self.ctx) {
                     self.lower_inst(inst);
                 }

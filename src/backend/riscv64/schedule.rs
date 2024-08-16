@@ -882,7 +882,7 @@ fn shedule_chunk(mctx: &mut MContext<RvInst>, start: RvInst, end: RvInst, config
             s += 1;
         }
 
-        println!("scheduling: {}, s: {}", n.display(mctx), s);
+        // println!("scheduling: {}, s: {}", n.display(mctx), s);
 
         scheduled.insert(n, s);
 

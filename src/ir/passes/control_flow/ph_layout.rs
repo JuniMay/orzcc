@@ -1,18 +1,17 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use nalgebra::{DMatrix, DVector, Matrix, SMatrix};
+use nalgebra::{DMatrix, DVector};
 
 use super::CfgCanonicalize;
 use crate::{
     collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
     ir::{
-        block,
         passman::{GlobalPassMut, LocalPassMut, PassResult, TransformPass},
         Block,
         Context,
         Func,
     },
-    utils::{cfg::CfgNode, dfs::DfsContext},
+    utils::cfg::CfgNode,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -138,19 +137,19 @@ impl LocalPassMut for PHBlockLayout {
         }
         mat[(n_blocks - 1, 0)] -= 1.0;
 
-        println!(
-            "[ ph_layout ] Func {:?}: transition matrix: {:}",
-            func.name(ctx),
-            mat
-        );
+        // println!(
+        //     "[ ph_layout ] Func {:?}: transition matrix: {:}",
+        //     func.name(ctx),
+        //     mat
+        // );
 
         let mat_a = mat.transpose().insert_row(n_blocks, 1.0);
 
-        println!(
-            "[ ph_layout ] Func {:?}: matrix A: {:}",
-            func.name(ctx),
-            mat_a
-        );
+        // println!(
+        //     "[ ph_layout ] Func {:?}: matrix A: {:}",
+        //     func.name(ctx),
+        //     mat_a
+        // );
 
         // solve for stationary distribution
         let decomp = mat_a.svd(true, true);
@@ -229,11 +228,11 @@ impl LocalPassMut for PHBlockLayout {
             }
         }
 
-        println!(
-            "[ ph_layout ] Func {:?}: chain graph: {:?}",
-            func.name(ctx),
-            chain_graph.chains
-        );
+        // println!(
+        //     "[ ph_layout ] Func {:?}: chain graph: {:?}",
+        //     func.name(ctx),
+        //     chain_graph.chains
+        // );
 
         let mut visited_chains = HashSet::new();
         let mut final_arrangement = Vec::new();
@@ -247,11 +246,11 @@ impl LocalPassMut for PHBlockLayout {
             }
         }
 
-        println!(
-            "[ ph_layout ] Func {:?}: final arrangement: {:?}",
-            func.name(ctx),
-            final_arrangement
-        );
+        // println!(
+        //     "[ ph_layout ] Func {:?}: final arrangement: {:?}",
+        //     func.name(ctx),
+        //     final_arrangement
+        // );
 
         let return_block = func.tail(ctx).unwrap();
 
