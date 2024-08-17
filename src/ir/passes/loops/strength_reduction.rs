@@ -40,84 +40,85 @@ impl LoopStrengthReduction {
             return false;
         }
 
-        let LoopBound { block_param, .. } = if let Some(bound) = scevs.loop_bounds.get(&lp).unwrap()
-        {
-            bound
-        } else {
-            return false;
-        };
-
-        let Scev { init, step, op, .. } = scevs.scevs.get(block_param).unwrap();
-
-        let ibinary_op = match op {
-            InductionOp::Add => IBinaryOp::Add,
-            InductionOp::Sub => IBinaryOp::Sub,
-            InductionOp::Mul | InductionOp::SDiv | InductionOp::Shl => return false,
-        };
-
         let mut changed = false;
 
-        for user in block_param.users(ctx) {
-            if let InstKind::IBinary(IBinaryOp::Mul) = user.kind(ctx) {
-                let lhs = user.operand(ctx, 0);
-                let rhs = user.operand(ctx, 1);
+        let block_params = header.params(ctx).to_vec();
 
-                let k = if lhs == *block_param {
-                    rhs
-                } else if rhs == *block_param {
-                    lhs
-                } else {
-                    unreachable!()
-                };
+        for block_param in block_params {
+            let Scev { init, step, op, .. } = if let Some(scev) = scevs.scevs.get(&block_param) {
+                scev
+            } else {
+                continue;
+            };
 
-                let k_def_block = k.def_block(ctx);
-                if self.scev.loops.is_in_loop(k_def_block, lp) {
-                    // k is not a loop invariant
-                    return false;
-                }
+            let ibinary_op = match op {
+                InductionOp::Add => IBinaryOp::Add,
+                InductionOp::Sub => IBinaryOp::Sub,
+                InductionOp::Mul | InductionOp::SDiv | InductionOp::Shl => return false,
+            };
 
-                // create init * k in the preheader
-                let mul = Inst::ibinary(ctx, IBinaryOp::Mul, *init, k);
-                preheader.push_inst_before_terminator(ctx, mul);
+            for user in block_param.users(ctx) {
+                if let InstKind::IBinary(IBinaryOp::Mul) = user.kind(ctx) {
+                    let lhs = user.operand(ctx, 0);
+                    let rhs = user.operand(ctx, 1);
 
-                // create new block parameter for the loop
-                let new_block_param = header.new_param(ctx, lhs.ty(ctx));
-
-                // also need step * k as the new step for the mul
-                let new_step = Inst::ibinary(ctx, IBinaryOp::Mul, *step, k);
-                preheader.push_inst_before_terminator(ctx, new_step);
-
-                // inside the loop, use the new block parameter and addition
-                let induction_inst =
-                    Inst::ibinary(ctx, ibinary_op, new_block_param, new_step.result(ctx, 0));
-                user.insert_after(ctx, induction_inst);
-
-                let old = user.result(ctx, 0);
-                for user in old.users(ctx) {
-                    // use before add
-                    user.replace(ctx, old, new_block_param);
-                }
-
-                let preds = header.preds(ctx);
-                // single back-edge is guaranteed by loop-simplify, so there should be only
-                // two preds, preheader and backedge.
-                assert_eq!(preds.len(), 2);
-
-                for pred in preds {
-                    let tail = pred.tail(ctx).unwrap();
-                    if pred == preheader {
-                        tail.add_succ_arg(ctx, header, new_block_param, mul.result(ctx, 0));
+                    let k = if lhs == block_param {
+                        rhs
+                    } else if rhs == block_param {
+                        lhs
                     } else {
-                        tail.add_succ_arg(
-                            ctx,
-                            header,
-                            new_block_param,
-                            induction_inst.result(ctx, 0),
-                        );
-                    }
-                }
+                        unreachable!()
+                    };
 
-                changed = true;
+                    let k_def_block = k.def_block(ctx);
+                    if self.scev.loops.is_in_loop(k_def_block, lp) {
+                        // k is not a loop invariant
+                        continue;
+                    }
+
+                    // create init * k in the preheader
+                    let mul = Inst::ibinary(ctx, IBinaryOp::Mul, *init, k);
+                    preheader.push_inst_before_terminator(ctx, mul);
+
+                    // create new block parameter for the loop
+                    let new_block_param = header.new_param(ctx, lhs.ty(ctx));
+
+                    // also need step * k as the new step for the mul
+                    let new_step = Inst::ibinary(ctx, IBinaryOp::Mul, *step, k);
+                    preheader.push_inst_before_terminator(ctx, new_step);
+
+                    // inside the loop, use the new block parameter and addition
+                    let induction_inst =
+                        Inst::ibinary(ctx, ibinary_op, new_block_param, new_step.result(ctx, 0));
+                    user.insert_after(ctx, induction_inst);
+
+                    let old = user.result(ctx, 0);
+                    for user in old.users(ctx) {
+                        // use before add
+                        user.replace(ctx, old, new_block_param);
+                    }
+
+                    let preds = header.preds(ctx);
+                    // single back-edge is guaranteed by loop-simplify, so there should be only
+                    // two preds, preheader and backedge.
+                    assert_eq!(preds.len(), 2);
+
+                    for pred in preds {
+                        let tail = pred.tail(ctx).unwrap();
+                        if pred == preheader {
+                            tail.add_succ_arg(ctx, header, new_block_param, mul.result(ctx, 0));
+                        } else {
+                            tail.add_succ_arg(
+                                ctx,
+                                header,
+                                new_block_param,
+                                induction_inst.result(ctx, 0),
+                            );
+                        }
+                    }
+
+                    changed = true;
+                }
             }
         }
 
