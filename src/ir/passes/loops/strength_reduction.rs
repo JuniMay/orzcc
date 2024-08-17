@@ -2,11 +2,7 @@ use super::{scalar_evolution::LoopScevRecord, InductionOp, Lcssa, LoopSimplify, 
 use crate::{
     collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
     ir::{
-        passes::{
-            control_flow::CfgCanonicalize,
-            loops::{scalar_evolution::LoopBound, Scev},
-            simple_dce::SimpleDce,
-        },
+        passes::{control_flow::CfgCanonicalize, loops::Scev, simple_dce::SimpleDce},
         passman::{GlobalPassMut, LocalPass, LocalPassMut, PassManager, PassResult, TransformPass},
         Block,
         Context,

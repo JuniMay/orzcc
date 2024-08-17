@@ -143,6 +143,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 pipe_basic.add_pass(CFG_SIMPLIFY);
             }
 
+            // basic + gvn, run after legalization.
             let mut pipe_gvn = Pipeline::default();
             {
                 pipe_gvn.add_pass(GLOBAL2LOCAL);
@@ -206,52 +207,54 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 pipe_unroll.add_pass(CFG_SIMPLIFY);
             }
 
-            passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
+            // initial pipelines, remove redundant code and simplify the control flow.
+            {
+                passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
 
-            passman.run_pipeline(&mut ir, &pipe_tco, 32, 8);
-            passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
+                passman.run_pipeline(&mut ir, &pipe_tco, 32, 8);
+                passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
 
-            passman.run_pipeline(&mut ir, &pipe_inline, 32, 8);
-            passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
+                passman.run_pipeline(&mut ir, &pipe_inline, 32, 8);
+                passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
+            }
 
-            passman.run_transform(LEGALIZE, &mut ir, 1);
-            passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
+            // legalize to remove high level operations.
+            {
+                passman.run_transform(LEGALIZE, &mut ir, 1);
+                passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
+            }
 
-            ir.alloc_all_names();
+            // reduce the strength of operations with the loop, especially multiplication
+            // with indvars.
+            {
+                let iter = passman.run_transform(LOOP_STRENGTH_REDUCTION, &mut ir, 32);
+                println!("loop strength reduction iterations: {}", iter);
+                passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
+            }
 
-            let iter = passman.run_transform(LOOP_STRENGTH_REDUCTION, &mut ir, 32);
-            println!("loop strength reduction iterations: {}", iter);
-            passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
+            // loop peeling to remove inefficient inner loop patterns.
+            {
+                // loop-peeling tend to eliminate the inner loops that will only be executed in
+                // the first trip of outer loop.
+                passman.run_transform(LOOP_PEEL, &mut ir, 1);
+                // the control indvar of the inner loop will be simplified, and passed to the
+                // original loop, as the new init.
+                passman.run_transform(INDVAR_SIMPLIFY, &mut ir, 1);
+                // there might be nested argument passing, we did not detect that in
+                // `dead-loop-elim`, but just regard it as constant phi.
+                passman.run_transform(ELIM_CONSTANT_PHI, &mut ir, 32);
+                // remove redundant inner loops.
+                passman.run_transform(DEAD_LOOP_ELIM, &mut ir, 1);
+                // remove all redundant code.
+                passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
+            }
 
-            passman.run_transform(LOOP_PEEL, &mut ir, 1);
-            passman.run_transform(ELIM_CONSTANT_PHI, &mut ir, 32);
-            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-            passman.run_transform(GCM, &mut ir, 32);
-            passman.run_transform(BRANCH_CONDITION_SINK, &mut ir, 1);
-            passman.run_transform(INDVAR_SIMPLIFY, &mut ir, 1);
-            passman.run_transform(CONSTANT_FOLDING, &mut ir, 32);
-            passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
-            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-            passman.run_transform(ELIM_CONSTANT_PHI, &mut ir, 32);
-            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-            passman.run_transform(DEAD_LOOP_ELIM, &mut ir, 1);
-            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-            passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
-            passman.run_transform(CONSTANT_FOLDING, &mut ir, 32);
-            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-            passman.run_transform(ELIM_CONSTANT_PHI, &mut ir, 32);
-            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-
-            passman.run_transform(ADCE, &mut ir, 1);
-            passman.run_transform(ELIM_CONSTANT_PHI, &mut ir, 32);
-            passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
-
-            passman.run_transform(LOOP_UNROLL, &mut ir, 2);
-
-            passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
-
+            // iterate several times, seeking more opportunities.
             for i in 0..4 {
                 println!("Round {}", i);
+
+                // aggressive dce is a little expensive, run once per round
+                passman.run_transform(ADCE, &mut ir, 1);
 
                 let iter = passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
                 println!("pipeline gvn iterations: {}", iter);
@@ -259,23 +262,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let iter = passman.run_pipeline(&mut ir, &pipe_inline, 32, 8);
                 println!("pipeline inline iterations: {}", iter);
 
-                // a little expensive, run once per round
-                passman.run_transform(ADCE, &mut ir, 1);
-                passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
+                let iter = passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
+                println!("pipeline gvn iterations: {}", iter);
 
                 let iter = passman.run_pipeline(&mut ir, &pipe_unroll, 1, 1);
                 println!("pipeline unroll iterations: {}", iter);
+
+                let iter = passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
+                println!("pipeline gvn iterations: {}", iter);
             }
 
+            // induce offset instructions that uses induction variables. This is placed here
+            // because there can be complex alias problem after inducing the offset
+            // instructions.
             passman.run_transform(INDVAR_OFFSET, &mut ir, 32);
             passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
-            passman.run_transform(ADCE, &mut ir, 1);
-            passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
 
+            // TODO: refactor everything below.
+            passman.run_transform(ADCE, &mut ir, 1);
+            passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
+
+            // reorder after loop unrolling.
             passman.run_transform(BLOCK_REORDER, &mut ir, 1);
 
             passman.run_transform(BOOL2COND, &mut ir, 32);
-            passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
+            passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
 
             for i in 0..4 {
                 println!("Second Round {}", i);
@@ -286,7 +297,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("pipeline gvn iterations: {}", iter);
 
                 passman.run_transform(ADCE, &mut ir, 1);
-                passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
+
+                let iter = passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
+                println!("pipeline gvn iterations: {}", iter);
 
                 if cmd.aggressive {
                     passman.run_transform(AGGRESSIVE_INSTCOMBINE, &mut ir, 32);

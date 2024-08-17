@@ -60,6 +60,8 @@ impl IndvarSimplify {
         }
 
         if let (InductionOp::Add, LoopBoundCond::Slt, false) = (op, cmp_cond, reversed) {
+            // TODO: we can calculate the tripcount and simplify more. the tripcount is also
+            // used in unrolling.
             if step_const == Some(1) {
                 // replace the use of the induction variable with the bound
                 // we can only replace the use in the header, and only the
