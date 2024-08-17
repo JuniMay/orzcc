@@ -10,6 +10,9 @@ use crate::{
         Block,
         Context,
         Func,
+        IBinaryOp,
+        ICmpCond,
+        InstKind,
     },
     utils::cfg::CfgNode,
 };
@@ -99,6 +102,48 @@ pub const PH_BLOCK_LAYOUT: &str = "ph-block-layout";
 
 pub struct PHBlockLayout;
 
+impl PHBlockLayout {
+    pub fn estimate_branch_prob(ctx: &Context, block: Block) -> (f64, f64) {
+        let succs = block.succs(ctx);
+        if succs.len() != 2 {
+            panic!("block has more than 2 successors");
+        }
+
+        // rule 1: P(left_br) = 0.99 if br in loop
+        if let Some(block_name) = block.name(ctx) {
+            println!("block name: {:?}", block_name);
+            if block_name.contains("while") {
+                return (0.99, 0.01);
+            } else if block_name.contains("if") {
+                let br_inst = block.tail(ctx).unwrap();
+                if !br_inst.is_br(ctx) {
+                    panic!("block tail is not a br");
+                }
+
+                let cond = br_inst.operand(ctx, 0);
+
+                if let Some(cond_def) = cond.def_inst(ctx) {
+                    // rule 2: P(left_br) = 0.9 if br is from a icmp.ne
+                    if let InstKind::IBinary(IBinaryOp::Cmp(ICmpCond::Ne)) = cond_def.kind(ctx) {
+                        return (0.9, 0.1);
+                    }
+                }
+            }
+        }
+
+        // rule 3: P(jump_to_ret) = 0.01
+        if let Some(return_block) = block.container(ctx).unwrap().tail(ctx) {
+            if succs[0] == return_block {
+                return (0.01, 0.99);
+            } else if succs[1] == return_block {
+                return (0.99, 0.01);
+            }
+        }
+
+        // rule 4: P(left_br) = 0.5
+        (0.5, 0.5)
+    }
+}
 impl LocalPassMut for PHBlockLayout {
     type Output = ();
 
@@ -128,8 +173,9 @@ impl LocalPassMut for PHBlockLayout {
                 let succ1_index = index_map[&succs[0]];
                 let succ2_index = index_map[&succs[1]];
 
-                mat[(index, succ1_index)] -= 0.99;
-                mat[(index, succ2_index)] -= 0.01;
+                let (p1, p2) = PHBlockLayout::estimate_branch_prob(ctx, block);
+                mat[(index, succ1_index)] -= p1;
+                mat[(index, succ2_index)] -= p2;
             } else if succs.len() == 1 {
                 let succ_index = index_map[&block.succs(ctx)[0]];
                 mat[(index, succ_index)] -= 1.0;
@@ -157,7 +203,7 @@ impl LocalPassMut for PHBlockLayout {
         let mut b = DVector::<f64>::zeros(n_blocks + 1);
         b[n_blocks] = 1.0;
 
-        let stationary = decomp.solve(&b, 1e-6);
+        let stationary = decomp.solve(&b, 1e-5);
 
         if stationary.is_err() {
             println!("[ ph_layout ] stationary distribution not found");
@@ -186,12 +232,13 @@ impl LocalPassMut for PHBlockLayout {
             let succ = block.succs(ctx);
             let index = index_map[&block];
             if succ.len() == 2 {
+                let (p1, p2) = PHBlockLayout::estimate_branch_prob(ctx, block);
                 let succ1 = succ[0];
                 if succ1 != block {
                     let edge = Edge {
                         from: block,
                         to: succ1,
-                        weight: stationary_norm[index] * 0.99,
+                        weight: stationary_norm[index] * p1,
                     };
                     edges.push(edge);
                 }
@@ -200,7 +247,7 @@ impl LocalPassMut for PHBlockLayout {
                     let edge = Edge {
                         from: block,
                         to: succ2,
-                        weight: stationary_norm[index] * 0.01,
+                        weight: stationary_norm[index] * p2,
                     };
                     edges.push(edge);
                 }

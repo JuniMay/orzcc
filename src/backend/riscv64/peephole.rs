@@ -994,9 +994,6 @@ pub fn remove_redundant_labels(mctx: &mut MContext<RvInst>) -> bool {
                             inst.unlink(mctx);
                             prev.push_back(mctx, inst);
                         }
-                        cursor.next(mctx);
-                        block.remove(mctx);
-                        local_changed = true;
                     }
                 }
                 // rule 2: if the block is empty, remove it, then retarget all jumps to it to the
@@ -1009,9 +1006,17 @@ pub fn remove_redundant_labels(mctx: &mut MContext<RvInst>) -> bool {
                         match inst.kind(mctx) {
                             RvInstKind::J { .. } => {
                                 inst.redirect_branch(mctx, block.next(mctx).unwrap());
+                                label_usage
+                                    .entry(block.next(mctx).unwrap().label(mctx).clone())
+                                    .or_insert_with(FxHashSet::default)
+                                    .insert(inst);
                             }
                             RvInstKind::Br { .. } => {
                                 inst.redirect_branch(mctx, block.next(mctx).unwrap());
+                                label_usage
+                                    .entry(block.next(mctx).unwrap().label(mctx).clone())
+                                    .or_insert_with(FxHashSet::default)
+                                    .insert(inst);
                             }
                             RvInstKind::Li { .. }
                             | RvInstKind::AluRR { .. }
@@ -1028,7 +1033,14 @@ pub fn remove_redundant_labels(mctx: &mut MContext<RvInst>) -> bool {
                             | RvInstKind::LoadAddr { .. } => unreachable!(),
                         }
                     }
-                    cursor.next(mctx);
+                }
+            }
+
+            // remove empty blocks
+            let mut curr_block = func.head(mctx);
+            while let Some(block) = curr_block {
+                curr_block = block.next(mctx);
+                if block.size(mctx) == 0 {
                     block.remove(mctx);
                     local_changed = true;
                 }
@@ -1090,8 +1102,8 @@ pub fn run_peephole_after_regalloc(mctx: &mut MContext<RvInst>, config: &LowerCo
 
     // NOTE: remove redundant jump need to be run after tail duplication
     changed |= remove_redundant_jump(mctx);
-    // changed |= remove_redundant_labels(mctx);
-    // changed |= remove_redundant_jump(mctx);
+    changed |= remove_redundant_labels(mctx);
+    changed |= remove_redundant_jump(mctx);
 
     changed
 }
