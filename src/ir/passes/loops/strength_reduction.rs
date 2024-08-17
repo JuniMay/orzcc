@@ -30,13 +30,6 @@ pub struct LoopStrengthReduction {
 }
 
 impl LoopStrengthReduction {
-    fn reduction_helper(&self, ctx: &mut Context) {
-        // TODO: there might be control flow in the loop. We need to insert block params
-        // at the dominance frontiers of the definition block of the indvar, and do the
-        // renaming.
-        todo!()
-    }
-
     fn process_loop(&self, ctx: &mut Context, lp: Loop<Block>, scevs: &LoopScevRecord) -> bool {
         let preheader = lp.get_preheader(ctx, &self.scev.loops).unwrap();
         let header = lp.header(&self.scev.loops);

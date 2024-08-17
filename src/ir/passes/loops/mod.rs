@@ -1,4 +1,5 @@
 mod dead_loop_elim;
+mod indvar_offset;
 mod indvar_simplify;
 mod invariant_motion;
 mod lcssa;
@@ -9,6 +10,7 @@ mod strength_reduction;
 mod unroll;
 
 pub use dead_loop_elim::{DeadLoopElim, DEAD_LOOP_ELIM};
+pub use indvar_offset::{IndvarOffset, INDVAR_OFFSET};
 pub use indvar_simplify::{IndvarSimplify, INDVAR_SIMPLIFY};
 pub use invariant_motion::{LoopInvariantMotion, LOOP_INVARIANT_MOTION};
 pub use lcssa::{Lcssa, LCSSA};
