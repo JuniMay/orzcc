@@ -1,11 +1,11 @@
 // polybench-c-4.2 linear-algebra/kernels/mvt
-const int N = 2000;
+const int N = 8000;
 
-float A[2000][2000] = {};
-float x1[2000] = {};
-float x2[2000] = {};
-float y_1[2000] = {};
-float y_2[2000] = {};
+float A[8000][8000] = {};
+float x1[8000] = {};
+float x2[8000] = {};
+float y_1[8000] = {};
+float y_2[8000] = {};
 
 void init() {
     int i = 0, j = 0;
@@ -51,7 +51,9 @@ void kernel_mvt() {
 
 int main() {
     init();
+    starttime();
     kernel_mvt();
+    stoptime();
     putfloat(x1[0] + x2[0] + x1[1] + x2[1]);
     return 0;
 }

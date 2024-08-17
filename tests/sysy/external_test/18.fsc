@@ -14,8 +14,8 @@ float alpha;
 float beta;
 
 void init() {
-    alpha = 1.5;
-    beta = 1.2;
+    alpha = 1.5f;
+    beta = 1.2f;
 
     int i = 0;
     int j = 0;
@@ -23,7 +23,7 @@ void init() {
     while (i < NI) {
         j = 0;
         while (j < NK) {
-            A[i][j] = (i * j + 1) % NI * 1.0 / NI;
+            A[i][j] = (i * j + 1) % NI * 1.0f / NI;
             j = j + 1;
         }
         i = i + 1;
@@ -33,7 +33,7 @@ void init() {
     while (i < NK) {
         j = 0;
         while (j < NJ) {
-            B[i][j] = i * (j + 1) % NJ * 1.0 / NJ;
+            B[i][j] = i * (j + 1) % NJ * 1.0f / NJ;
             j = j + 1;
         }
         i = i + 1;
@@ -43,7 +43,7 @@ void init() {
     while (i < NJ) {
         j = 0;
         while (j < NL) {
-            C[i][j] = (i * (j + 3) + 1) % NL * 1.0 / NL;
+            C[i][j] = (i * (j + 3) + 1) % NL * 1.0f / NL;
             j = j + 1;
         }
         i = i + 1;
@@ -53,7 +53,7 @@ void init() {
     while (i < NI) {
         j = 0;
         while (j < NL) {
-            D[i][j] = i * (j + 2) % NK * 1.0 / NK;
+            D[i][j] = i * (j + 2) % NK * 1.0f / NK;
             j = j + 1;
         }
         i = i + 1;
@@ -68,7 +68,7 @@ void kernel_2mm() {
     while (i < NI) {
         j = 0;
         while (j < NJ) {
-            tmp[i][j] = 0.0;
+            tmp[i][j] = 0.0f;
             k = 0;
             while (k < NK) {
                 tmp[i][j] = tmp[i][j] + alpha * A[i][k] * B[k][j];
@@ -98,6 +98,6 @@ void kernel_2mm() {
 int main() {
     init();      
     kernel_2mm();  
-    printf("%a",D[0][0]+D[0][1]+D[1][0]+2024);
+    printf("%a",D[0][0]+D[0][1]+D[1][0]);
     return 0;
 }

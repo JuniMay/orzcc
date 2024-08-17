@@ -156,7 +156,9 @@ void kernel_deriche() {
 
 int main() {
     init();       
-    kernel_deriche(); 
+    starttime();
+    kernel_deriche();
+    stoptime(); 
     putfloat(imgOut[0][0]);
     return 0;
 }

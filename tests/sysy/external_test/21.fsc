@@ -1,13 +1,13 @@
 // polybench-c-4.2 linear-algebra/kernels/bicg
 #include <stdio.h>
-const int M = 1900;
-const int N = 2100;
+const int M = 19000;
+const int N = 21000;
 
-float A[2100][1900] = {};
-float s[1900] = {};
-float q[2100] = {};
-float p[1900] = {};
-float r[2100] = {};
+float A[N][M] = {};
+float s[M] = {};
+float q[N] = {};
+float p[M] = {};
+float r[N] = {};
 
 void init() {
     int i = 0;

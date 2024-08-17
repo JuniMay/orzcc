@@ -1,7 +1,7 @@
 // double loop
 int main(){
-    const int n = 5;
-    const int m = 11; // Need: m >= 2n+1
+    const int n = 20000;
+    const int m = 88888; // Need: m >= 2n+1
 
     int loop = n;
     int x[n] = {};
@@ -22,7 +22,7 @@ int main(){
     }
 
     int q = 1, r = 2, t = 3;
-
+    starttime();
     int l = 1;
     while (l <= loop) {
         int k = 0;
@@ -32,7 +32,7 @@ int main(){
         }
         l = l+1;
     }
-
+    stoptime();
     putint(x[0]);
     return 0;
 }

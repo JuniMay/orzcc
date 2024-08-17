@@ -96,7 +96,9 @@ void kernel_2mm() {
 
 int main() {
     init();      
-    kernel_2mm();  
-    putfloat(D[0][0]+D[0][1]+D[1][0]+2024);
+    starttime();
+    kernel_2mm();
+    stoptime();  
+    putfloat(D[0][0]+D[0][1]+D[1][0]);
     return 0;
 }

@@ -1,7 +1,7 @@
 // a sample calculation of two dimensional explicit finite difference in fluid dynamics
 #include <stdio.h>
-const int n = 10;
-const int loop = 5;
+const int n = 1000;
+const int loop = 500;
 int nl1, nl2;
 int kx, ky;
 float u1[2][n+1][3], u2[2][n+1][3], u3[2][n+1][3];

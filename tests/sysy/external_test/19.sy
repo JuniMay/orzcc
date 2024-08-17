@@ -109,7 +109,9 @@ void kernel_3mm() {
 
 int main() {
     init();      
-    kernel_3mm();  
+    starttime();
+    kernel_3mm();
+    stoptime();  
     putfloat(G[0][0]+G[1][1]+G[2][2]+G[3][3]);
     return 0;
 }

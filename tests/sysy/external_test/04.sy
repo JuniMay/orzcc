@@ -112,6 +112,8 @@ int kernel() {
 
 int main() {
     init();
+    starttime();
     putint(kernel());   
+    stoptime();
     return 0;
 }

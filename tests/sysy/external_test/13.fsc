@@ -1,12 +1,12 @@
 // polybench-c-4.2 linear-algebra/blas/gesummv
 #include <stdio.h>
-const int N = 1300;
+const int N = 13000;
 
-float A[1300][1300] = {};
-float B[1300][1300] = {};
-float tmp[1300] = {};
-float x[1300] = {};
-float y[1300] = {};
+float A[N][N] = {};
+float B[N][N] = {};
+float tmp[N] = {};
+float x[N] = {};
+float y[N] = {};
 float alpha;
 float beta;
 

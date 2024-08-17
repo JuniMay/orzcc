@@ -1,8 +1,8 @@
 // double loop
 #include <stdio.h>
 int main(){
-    const int n = 5;
-    const int m = 11; // Need: m >= 2n+1
+    const int n = 20000;
+    const int m = 88888; // Need: m >= 2n+1
 
     int loop = n;
     int x[n] = {};

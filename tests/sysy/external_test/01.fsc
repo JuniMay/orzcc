@@ -1,7 +1,7 @@
 // ICCG
 #include <stdio.h>
-const int n = 888; 
-int loop = 2; 
+const int n = 88888; 
+int loop = 500; 
 // the length of x and v should be bigger than n + [n/2]
 int x[2 * n] = {}; 
 int v[2 * n]  = {};

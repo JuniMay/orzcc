@@ -100,7 +100,9 @@ void kernel_cholesky() {
 
 int main() {
     init();
+    starttime();
     kernel_cholesky();
+    stoptime();
     putfloat(A[0][0] + A[1][1] + A[2][2]);  
     return 0;
 }

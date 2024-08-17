@@ -1,15 +1,15 @@
 // polybench-c-4.2 linear-algebra/blas/gemver
-const int N = 2000;
+const int N = 8000;
 
-float A[2000][2000] = {};
-float u1[2000] = {};
-float v1[2000] = {};
-float u2[2000] = {};
-float v2[2000] = {};
-float w[2000] = {};
-float x[2000] = {};
-float y[2000] = {};
-float z[2000] = {};
+float A[N][N] = {};
+float u1[N] = {};
+float v1[N] = {};
+float u2[N] = {};
+float v2[N] = {};
+float w[N] = {};
+float x[N] = {};
+float y[N] = {};
+float z[N] = {};
 float alpha;
 float beta;
 
@@ -83,7 +83,9 @@ void kernel_gemver() {
 
 int main() {
     init();
+    starttime();
     kernel_gemver();
+    stoptime();
     putfloat(w[0]);
     return 0;
 }

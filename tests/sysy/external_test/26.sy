@@ -85,7 +85,9 @@ void init_array(int m, int n, float A[][1000], float R[][1000], float Q[][1000])
 int main() {
 
     init_array(m, n, A, R, Q);
+    starttime();
     kernel_gramschmidt(m, n, A, R, Q);
+    stoptime();
 
     putfloat(Q[0][0]+ Q[1][1]+ Q[2][2]+ Q[3][3]+ Q[4][4]);
     return 0;

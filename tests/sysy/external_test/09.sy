@@ -1,7 +1,7 @@
 // polybench-c-4.2: medley.floyd-warshall
-const int N = 10;
+const int N = 1000;
 
-int path[100][100] = {}; 
+int path[N][N] = {}; 
 
 void init() {
     int i = 0;
@@ -44,7 +44,9 @@ void kernel_floyd_warshall() {
 
 int main() {
     init();  
-    kernel_floyd_warshall(); 
+    starttime();
+    kernel_floyd_warshall();
+    stoptime(); 
     putint(path[0][0]);
     return 0;  
 }

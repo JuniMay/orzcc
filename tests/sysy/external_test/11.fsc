@@ -1,8 +1,8 @@
 // polybench-c-4.2 linear-algebra/blas/gemm
 #include <stdio.h>
-const int NI = 10;
-const int NJ = 10;
-const int NK = 10;
+const int NI = 100;
+const int NJ = 100;
+const int NK = 100;
 
 float C[100][100] = {}; 
 float A[100][100] = {}; 

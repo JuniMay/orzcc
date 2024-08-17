@@ -1,6 +1,6 @@
 // polybench-c-4.2: datamining.correlation
-const int N = 10;
-const int M = 10;
+const int N = 100;
+const int M = 100;
 
 float data[100][100] = {};
 float corr[100][100] = {};
@@ -107,7 +107,9 @@ void kernel_correlation() {
 
 int main() {
     init();
+    starttime();
     kernel_correlation();
+    stoptime();
     putfloat(corr[0][0] + corr[0][1] + corr[0][2] + corr[0][3] + corr[0][4]);
     return 0; 
 }

@@ -1,10 +1,10 @@
 // polybench-c-4.2 linear-algebra/solvers/durbin
-const int n = 4000;
-float r[4000];
-float y[4000];
+const int n = 10000;
+float r[10000];
+float y[10000];
 
 void kernel_durbin(int n, float r[], float y[]) {
-    float z[4000];
+    float z[10000];
     float alpha;
     float beta;
     float sum;
@@ -54,9 +54,11 @@ void init_array(int n, float r[]) {
 
 int main() {
     init_array(n, r);
+    starttime();
     kernel_durbin(n, r, y);
+    stoptime();
 
-    putfloat(y[0]+y[1]+y[2]+y[3]+y[4]+1);
+    putfloat(y[0]+y[1]+y[2]+y[3]+y[4]);
 
     return 0;
 }

@@ -1,11 +1,11 @@
 // polybench-c-4.2 linear-algebra/kernels/atax
-const int M = 1900;
-const int N = 2100;
+const int M = 19000;
+const int N = 21000;
 
-float A[1900][2100] = {};
-float x[2100] = {};
-float y[2100] = {};
-float tmp[1900] = {};
+float A[M][N] = {};
+float x[N] = {};
+float y[N] = {};
+float tmp[M] = {};
 
 void init() {
     int i = 0;
@@ -57,7 +57,9 @@ void kernel_atax() {
 
 int main() {
     init();
+    starttime();
     kernel_atax();
+    stoptime();
     putfloat(y[0]+y[1]+y[2]+y[3]);
     return 0;
 }

@@ -1,12 +1,12 @@
 // polybench-c-4.2 linear-algebra/kernels/mvt
 #include <stdio.h>
-const int N = 2000;
+const int N = 8000;
 
-float A[2000][2000] = {};
-float x1[2000] = {};
-float x2[2000] = {};
-float y_1[2000] = {};
-float y_2[2000] = {};
+float A[8000][8000] = {};
+float x1[8000] = {};
+float x2[8000] = {};
+float y_1[8000] = {};
+float y_2[8000] = {};
 
 void init() {
     int i = 0, j = 0;

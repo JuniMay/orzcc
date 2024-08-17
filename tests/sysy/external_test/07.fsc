@@ -1,7 +1,7 @@
 // polybench-c-4.2: datamining.covariance
 #include <stdio.h>
-const int N = 10;
-const int M = 10;
+const int N = 100;
+const int M = 100;
 
 float data[100][100] = {};
 float cov[100][100] = {};

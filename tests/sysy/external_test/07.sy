@@ -1,6 +1,6 @@
 // polybench-c-4.2: datamining.covariance
-const int N = 10;
-const int M = 10;
+const int N = 100;
+const int M = 100;
 
 float data[100][100] = {};
 float cov[100][100] = {};
@@ -69,7 +69,9 @@ void kernel_covariance() {
 
 int main() {
     init();
+    starttime();
     kernel_covariance();
+    stoptime();
     putfloat(cov[0][0] + cov[1][1] + cov[2][2] + cov[3][3] + cov[4][4] + cov[5][5] + cov[6][6] + cov[7][7] + cov[8][8] + cov[9][9]);
     return 0; 
 }

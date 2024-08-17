@@ -1,12 +1,12 @@
 // calculate pulangke kernel (普朗克常量相关计算) 
 #include <stdio.h>
-int n = 10;
+int n = 100;
 int loop = 5;
 float expmax = 20.0;
 float u[100] = {}; 
 float v[100] = {};
-float y[100] = {0}; 
-float w[100] = {0};
+float y[100] = {}; 
+float w[100] = {};
 float x[100] = {};
 
 void init() {
@@ -51,6 +51,7 @@ float kernel() {
 
 int main() {
     init();  
-    printf("%a", 2024.0);
+    kernel();
+    printf("%a", u[0]);
     return 0;
 }

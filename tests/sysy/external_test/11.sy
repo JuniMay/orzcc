@@ -1,7 +1,7 @@
 // polybench-c-4.2 linear-algebra/blas/gemm
-const int NI = 10;
-const int NJ = 10;
-const int NK = 10;
+const int NI = 100;
+const int NJ = 100;
+const int NK = 100;
 
 float C[100][100] = {}; 
 float A[100][100] = {}; 
@@ -71,8 +71,10 @@ void kernel_gemm() {
 }
 
 int main() {
-    init();        
+    init();       
+    starttime(); 
     kernel_gemm();
+    stoptime();
     putfloat(C[0][0]+C[0][1]+C[0][2]+C[0][3]+C[0][4]+C[88][88]+A[0][0]+A[1][1]+A[2][2]+20);
     return 0;  
 }

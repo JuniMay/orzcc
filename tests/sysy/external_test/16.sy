@@ -61,7 +61,9 @@ void kernel_syrk() {
 
 int main() {
     init();
+    starttime();
     kernel_syrk();
+    stoptime();
     putfloat(C[0][0]+C[1][0]+C[2][0]+C[3][0]);
     return 0;
 }

@@ -51,7 +51,9 @@ void kernel_trmm() {
 
 int main() {
     init();
+    starttime();
     kernel_trmm();
+    stoptime();
     putfloat(B[0][0] * 2 + 1);
     return 0;
 }

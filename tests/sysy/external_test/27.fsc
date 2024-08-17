@@ -1,10 +1,10 @@
 // polybench-c-4.2 linear-algebra/solvers/trisolv
 #include <stdio.h>
-const int n = 2000;
-float L[2000][2000];
-float x[2000];
-float b[2000];
-void kernel_trisolv(int n, float L[][2000], float x[], float b[]) {
+const int n = 4000;
+float L[4000][4000];
+float x[4000];
+float b[4000];
+void kernel_trisolv(int n, float L[][4000], float x[], float b[]) {
     int i = 0, j = 0;
 
     while (i < n) {
@@ -19,7 +19,7 @@ void kernel_trisolv(int n, float L[][2000], float x[], float b[]) {
     }
 }
 
-void init_array(int n, float L[][2000], float x[], float b[]) {
+void init_array(int n, float L[][4000], float x[], float b[]) {
     int i = 0, j = 0;
     
     while (i < n) {

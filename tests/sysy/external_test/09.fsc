@@ -1,8 +1,8 @@
 // polybench-c-4.2: medley.floyd-warshall
 #include <stdio.h>
-const int N = 10;
+const int N = 1000;
 
-int path[100][100] = {}; 
+int path[N][N] = {}; 
 
 void init() {
     int i = 0;
