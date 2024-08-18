@@ -24,9 +24,20 @@ def compare_rows(csv_file, row1, row2):
             except ValueError:
                 print(f"Error converting values in {header}: '{data1[i]}' and '{data2[i]}'")
 
+def print_row_numbers_and_second_column(csv_file):
+    with open(csv_file, 'r') as file:
+        reader = csv.reader(file)
+        for index, row in enumerate(reader):
+            if len(row) > 1:  # 确保有第二列
+                print(f"Row {index}: {row[1]}")
+            else:
+                print(f"Row {index}: No second column")
+
 csv_file = './tests/testcases/result.csv'
 
-row1 = 45
-row2 = 58
+print_row_numbers_and_second_column(csv_file)
+
+row1 = int(input("Enter row1 number: "))
+row2 = int(input("Enter row2 number: "))
 
 compare_rows(csv_file, row1, row2)
