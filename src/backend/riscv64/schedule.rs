@@ -6,13 +6,7 @@ use std::{
 
 use super::inst::{AluOpRRR, FpuOpRR, FpuOpRRR, FpuOpRRRR, RvInst, RvInstKind};
 use crate::{
-    backend::{
-        inst::{DisplayMInst, MInst},
-        LowerConfig,
-        MBlock,
-        MContext,
-        MFunc,
-    },
+    backend::{inst::MInst, LowerConfig, MBlock, MContext, MFunc},
     collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
 };
 

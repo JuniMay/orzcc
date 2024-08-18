@@ -1,17 +1,23 @@
 mod dead_loop_elim;
+mod indvar_offset;
+mod indvar_reduce;
 mod indvar_simplify;
 mod invariant_motion;
 mod lcssa;
 mod peel;
 mod scalar_evolution;
 mod simplify;
+mod strength_reduction;
 mod unroll;
 
 pub use dead_loop_elim::{DeadLoopElim, DEAD_LOOP_ELIM};
+pub use indvar_offset::{IndvarOffset, INDVAR_OFFSET};
+pub use indvar_reduce::{IndvarReduce, INDVAR_REDUCE};
 pub use indvar_simplify::{IndvarSimplify, INDVAR_SIMPLIFY};
 pub use invariant_motion::{LoopInvariantMotion, LOOP_INVARIANT_MOTION};
 pub use lcssa::{Lcssa, LCSSA};
 pub use peel::{LoopPeel, LOOP_PEEL};
 pub use scalar_evolution::{InductionOp, Scev, ScevAnalysis};
 pub use simplify::{LoopSimplify, LOOP_SIMPLIFY};
+pub use strength_reduction::{LoopStrengthReduction, LOOP_STRENGTH_REDUCTION};
 pub use unroll::{LoopUnroll, LOOP_UNROLL};

@@ -2,7 +2,7 @@ use orzcc::{
     collections::diagnostic::RenderOptions,
     frontend::ir::{into_ir, Parser},
     ir::{
-        passes::instcombine::{InstCombine, INSTCOMBINE},
+        passes::instcombine::{Instcombine, INSTCOMBINE},
         passman::{PassManager, TransformPass},
     },
 };
@@ -28,7 +28,7 @@ fn test_ir_instcombine_mul_to_shl() {
 
     let mut passman = PassManager::default();
 
-    InstCombine::register(&mut passman);
+    Instcombine::register(&mut passman);
 
     assert_eq!(passman.run_transform(INSTCOMBINE, &mut ctx, 1), 1);
 
@@ -57,7 +57,7 @@ fn test_ir_instcombine_mv_const_rhs() {
 
     let mut passman = PassManager::default();
 
-    InstCombine::register(&mut passman);
+    Instcombine::register(&mut passman);
 
     assert_eq!(passman.run_transform(INSTCOMBINE, &mut ctx, 1), 1);
 
@@ -86,7 +86,7 @@ fn test_ir_instcombine_add_zero_elim() {
 
     let mut passman = PassManager::default();
 
-    InstCombine::register(&mut passman);
+    Instcombine::register(&mut passman);
 
     assert_eq!(passman.run_transform(INSTCOMBINE, &mut ctx, 3), 2);
 

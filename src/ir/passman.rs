@@ -156,6 +156,7 @@ pub struct PassManager {
     parameters: ParamStorage,
     transforms: FxHashMap<String, Box<dyn TransformPass>>,
     deps: FxHashMap<String, Vec<Box<dyn TransformPass>>>,
+    post_deps: FxHashMap<String, Vec<Box<dyn TransformPass>>>,
 }
 
 #[derive(Default)]
@@ -189,6 +190,11 @@ impl PassManager {
         self.deps.insert(name, deps);
     }
 
+    pub fn add_post_dep(&mut self, name: impl Into<String>, dep: Box<dyn TransformPass>) {
+        let name = name.into();
+        self.post_deps.entry(name).or_default().push(dep);
+    }
+
     pub fn gather_transform_names(&self) -> Vec<String> {
         let mut names: Vec<String> = self
             .transforms
@@ -215,29 +221,34 @@ impl PassManager {
         ctx: &mut Context,
         max_iter: usize,
     ) -> usize {
-        let mut iter = 0;
         let name = name.into();
-        for _ in 0..max_iter {
+
+        let deps = &mut self.deps;
+        let transforms = &mut self.transforms;
+        let params = &self.parameters;
+
+        let mut iter = 0;
+        let transform = transforms.get_mut(&name).unwrap();
+        GlobalPassMut::fetch_params(transform.as_mut(), params);
+
+        self.post_deps.entry(name.clone()).or_default();
+
+        while iter < max_iter {
             iter += 1;
-            let mut changed = false;
-
-            let deps = &mut self.deps;
-            let transforms = &mut self.transforms;
-            let params = &self.parameters;
-
-            for pass in deps.get_mut(&name).unwrap() {
-                GlobalPassMut::fetch_params(pass.as_mut(), params);
-                let (_, local_changed) = GlobalPassMut::run(pass.as_mut(), ctx).unwrap();
-                changed |= local_changed;
+            for dep in deps.get_mut(&name).unwrap() {
+                GlobalPassMut::fetch_params(dep.as_mut(), params);
+                let _ = GlobalPassMut::run(dep.as_mut(), ctx).unwrap();
             }
-            let transform = transforms.get_mut(&name).unwrap();
-            GlobalPassMut::fetch_params(transform.as_mut(), params);
             let (_, local_changed) = GlobalPassMut::run(transform.as_mut(), ctx).unwrap();
-            changed |= local_changed;
-            if !changed {
+            if !local_changed {
                 break;
             }
+            for post_dep in self.post_deps.get_mut(&name).unwrap() {
+                GlobalPassMut::fetch_params(post_dep.as_mut(), params);
+                let _ = GlobalPassMut::run(post_dep.as_mut(), ctx).unwrap();
+            }
         }
+
         iter
     }
 

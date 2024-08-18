@@ -30,18 +30,31 @@ use orzcc::{
             global_dce::{GlobalDce, GLOBAL_DCE},
             gvn::{GlobalValueNumbering, GVN},
             inline::{Inline, INLINE},
-            instcombine::{InstCombine, INSTCOMBINE},
+            instcombine::{
+                AdvancedInstcombine,
+                AggressiveInstcombine,
+                Instcombine,
+                ADVANCED_INSTCOMBINE,
+                AGGRESSIVE_INSTCOMBINE,
+                INSTCOMBINE,
+            },
             legalize::{Legalize, LEGALIZE},
             loops::{
                 DeadLoopElim,
+                IndvarOffset,
+                IndvarReduce,
                 IndvarSimplify,
                 Lcssa,
                 LoopPeel,
                 LoopSimplify,
+                LoopStrengthReduction,
                 LoopUnroll,
                 DEAD_LOOP_ELIM,
+                INDVAR_OFFSET,
+                INDVAR_REDUCE,
                 INDVAR_SIMPLIFY,
                 LOOP_PEEL,
+                LOOP_STRENGTH_REDUCTION,
                 LOOP_UNROLL,
             },
             mem2reg::{Mem2reg, MEM2REG},
@@ -68,7 +81,8 @@ struct CliCommand {
     emit_vcode: Option<String>,
     /// Optimization level
     opt: u8,
-
+    /// If aggressive optimizations are enabled
+    aggressive: bool,
     /// Lower config
     lower_cfg: LowerConfig,
 }
@@ -103,117 +117,207 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         if cmd.opt > 0 {
             let mut pipe_basic = Pipeline::default();
+            {
+                pipe_basic.add_pass(GLOBAL2LOCAL);
+                pipe_basic.add_pass(GLOBAL_DCE);
 
-            pipe_basic.add_pass(GLOBAL2LOCAL);
-            pipe_basic.add_pass(SIMPLE_DCE);
-            pipe_basic.add_pass(GLOBAL_DCE);
-            pipe_basic.add_pass(MEM2REG);
-            pipe_basic.add_pass(SIMPLE_DCE);
-            pipe_basic.add_pass(CFG_SIMPLIFY);
-            pipe_basic.add_pass(CONSTANT_FOLDING);
-            pipe_basic.add_pass(SIMPLE_DCE);
-            pipe_basic.add_pass(INSTCOMBINE);
-            pipe_basic.add_pass(SIMPLE_DCE);
-            pipe_basic.add_pass(GCM);
-            pipe_basic.add_pass(BRANCH_CONDITION_SINK);
-            pipe_basic.add_pass(GVN);
-            pipe_basic.add_pass(CFG_SIMPLIFY);
-            pipe_basic.add_pass(ELIM_CONSTANT_PHI);
-            pipe_basic.add_pass(SIMPLE_DCE);
-            pipe_basic.add_pass(CFG_SIMPLIFY);
-            pipe_basic.add_pass(BRANCH2SELECT);
-            pipe_basic.add_pass(CFG_SIMPLIFY);
+                pipe_basic.add_pass(MEM2REG);
+                pipe_basic.add_pass(ELIM_CONSTANT_PHI);
+                pipe_basic.add_pass(SIMPLE_DCE);
+                pipe_basic.add_pass(CFG_SIMPLIFY);
+
+                pipe_basic.add_pass(CONSTANT_FOLDING);
+                pipe_basic.add_pass(ELIM_CONSTANT_PHI);
+                pipe_basic.add_pass(SIMPLE_DCE);
+                pipe_basic.add_pass(CFG_SIMPLIFY);
+
+                pipe_basic.add_pass(INSTCOMBINE);
+                pipe_basic.add_pass(ELIM_CONSTANT_PHI);
+                pipe_basic.add_pass(SIMPLE_DCE);
+                pipe_basic.add_pass(CFG_SIMPLIFY);
+
+                pipe_basic.add_pass(GCM);
+                pipe_basic.add_pass(ELIM_CONSTANT_PHI);
+                pipe_basic.add_pass(SIMPLE_DCE);
+                pipe_basic.add_pass(CFG_SIMPLIFY);
+                pipe_basic.add_pass(BRANCH_CONDITION_SINK);
+
+                pipe_basic.add_pass(BRANCH2SELECT);
+                pipe_basic.add_pass(ELIM_CONSTANT_PHI);
+                pipe_basic.add_pass(SIMPLE_DCE);
+                pipe_basic.add_pass(CFG_SIMPLIFY);
+            }
+
+            // basic + gvn, run after legalization.
+            let mut pipe_gvn = Pipeline::default();
+            {
+                pipe_gvn.add_pass(GLOBAL2LOCAL);
+                pipe_gvn.add_pass(GLOBAL_DCE);
+
+                pipe_gvn.add_pass(MEM2REG);
+                pipe_gvn.add_pass(ELIM_CONSTANT_PHI);
+                pipe_gvn.add_pass(SIMPLE_DCE);
+                pipe_gvn.add_pass(CFG_SIMPLIFY);
+
+                pipe_gvn.add_pass(CONSTANT_FOLDING);
+                pipe_gvn.add_pass(ELIM_CONSTANT_PHI);
+                pipe_gvn.add_pass(SIMPLE_DCE);
+                pipe_gvn.add_pass(CFG_SIMPLIFY);
+
+                pipe_gvn.add_pass(INSTCOMBINE);
+                pipe_gvn.add_pass(ELIM_CONSTANT_PHI);
+                pipe_gvn.add_pass(SIMPLE_DCE);
+                pipe_gvn.add_pass(CFG_SIMPLIFY);
+
+                pipe_gvn.add_pass(GCM);
+                pipe_gvn.add_pass(ELIM_CONSTANT_PHI);
+                pipe_gvn.add_pass(SIMPLE_DCE);
+                pipe_gvn.add_pass(CFG_SIMPLIFY);
+                pipe_gvn.add_pass(BRANCH_CONDITION_SINK);
+
+                pipe_gvn.add_pass(BRANCH2SELECT);
+                pipe_gvn.add_pass(ELIM_CONSTANT_PHI);
+                pipe_gvn.add_pass(SIMPLE_DCE);
+                pipe_gvn.add_pass(CFG_SIMPLIFY);
+
+                pipe_gvn.add_pass(GVN);
+                pipe_gvn.add_pass(ELIM_CONSTANT_PHI);
+                pipe_gvn.add_pass(SIMPLE_DCE);
+                pipe_gvn.add_pass(CFG_SIMPLIFY);
+            }
+
+            let mut pipe_tco = Pipeline::default();
+            {
+                pipe_tco.add_pass(TCO);
+                pipe_tco.add_pass(ELIM_CONSTANT_PHI);
+                pipe_tco.add_pass(SIMPLE_DCE);
+                pipe_tco.add_pass(CFG_SIMPLIFY);
+            }
 
             let mut pipe_inline = Pipeline::default();
-
-            pipe_inline.add_pass(INLINE);
-            pipe_inline.add_pass(CFG_SIMPLIFY);
-            pipe_inline.add_pass(SIMPLE_DCE);
-            pipe_inline.add_pass(GLOBAL_DCE);
+            {
+                pipe_inline.add_pass(INLINE);
+                pipe_inline.add_pass(ELIM_CONSTANT_PHI);
+                pipe_inline.add_pass(SIMPLE_DCE);
+                pipe_inline.add_pass(CFG_SIMPLIFY);
+                pipe_inline.add_pass(GLOBAL_DCE);
+            }
 
             let mut pipe_unroll = Pipeline::default();
+            {
+                pipe_unroll.add_pass(LOOP_UNROLL);
+                pipe_unroll.add_pass(CONSTANT_FOLDING);
+                pipe_unroll.add_pass(ELIM_CONSTANT_PHI);
+                pipe_unroll.add_pass(SIMPLE_DCE);
+                pipe_unroll.add_pass(CFG_SIMPLIFY);
+            }
 
-            pipe_unroll.add_pass(LOOP_UNROLL);
-            pipe_unroll.add_pass(CONSTANT_FOLDING);
-            pipe_unroll.add_pass(CFG_SIMPLIFY);
-            pipe_unroll.add_pass(SIMPLE_DCE);
+            // initial pipelines, remove redundant code and simplify the control flow.
+            {
+                passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
 
-            passman.run_transform(GLOBAL2LOCAL, &mut ir, 32);
-            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-            passman.run_transform(GLOBAL_DCE, &mut ir, 32);
-            passman.run_transform(MEM2REG, &mut ir, 32);
-            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-            passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
-            passman.run_transform(CONSTANT_FOLDING, &mut ir, 32);
-            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-            passman.run_transform(INSTCOMBINE, &mut ir, 32);
-            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+                passman.run_pipeline(&mut ir, &pipe_tco, 32, 8);
+                passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
 
-            passman.run_transform(TCO, &mut ir, 1);
-            passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
+                passman.run_pipeline(&mut ir, &pipe_inline, 32, 8);
+                passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
+            }
 
-            passman.run_transform(LOOP_PEEL, &mut ir, 1);
-            passman.run_transform(ELIM_CONSTANT_PHI, &mut ir, 32);
-            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-            passman.run_transform(GCM, &mut ir, 32);
-            passman.run_transform(BRANCH_CONDITION_SINK, &mut ir, 1);
-            passman.run_transform(INDVAR_SIMPLIFY, &mut ir, 1);
-            passman.run_transform(CONSTANT_FOLDING, &mut ir, 32);
-            passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
-            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-            passman.run_transform(ELIM_CONSTANT_PHI, &mut ir, 32);
-            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-            passman.run_transform(DEAD_LOOP_ELIM, &mut ir, 1);
-            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-            passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
-            passman.run_transform(CONSTANT_FOLDING, &mut ir, 32);
-            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-            passman.run_transform(ELIM_CONSTANT_PHI, &mut ir, 32);
-            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+            // legalize to remove high level operations.
+            {
+                passman.run_transform(LEGALIZE, &mut ir, 1);
+                passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
+            }
 
-            passman.run_transform(INLINE, &mut ir, 1);
-            passman.run_transform(CONSTANT_FOLDING, &mut ir, 32);
-            passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
-            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
-            passman.run_transform(GLOBAL_DCE, &mut ir, 32);
+            // reduce the strength of operations with the loop, especially multiplication
+            // with indvars.
+            {
+                // remove redundant induction variables.
+                let iter = passman.run_transform(INDVAR_REDUCE, &mut ir, 32);
+                println!("indvar-reduce iterations: {}", iter);
+                passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
 
-            // TODO: unroll earlier to combine load/store
-            passman.run_transform(LOOP_UNROLL, &mut ir, 2);
-            passman.run_transform(GCM, &mut ir, 32);
-            passman.run_transform(BRANCH_CONDITION_SINK, &mut ir, 1);
-            passman.run_transform(CONSTANT_FOLDING, &mut ir, 32);
-            passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
-            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+                let iter = passman.run_transform(LOOP_STRENGTH_REDUCTION, &mut ir, 32);
+                println!("loop strength reduction iterations: {}", iter);
+                passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
+            }
 
-            passman.run_transform(LEGALIZE, &mut ir, 1);
+            // loop peeling to remove inefficient inner loop patterns.
+            {
+                // loop-peeling tend to eliminate the inner loops that will only be executed in
+                // the first trip of outer loop.
+                passman.run_transform(LOOP_PEEL, &mut ir, 1);
+                // the control indvar of the inner loop will be simplified, and passed to the
+                // original loop, as the new init.
+                passman.run_transform(INDVAR_SIMPLIFY, &mut ir, 1);
+                // there might be nested argument passing, we did not detect that in
+                // `dead-loop-elim`, but just regard it as constant phi.
+                passman.run_transform(ELIM_CONSTANT_PHI, &mut ir, 32);
+                // remove redundant inner loops.
+                passman.run_transform(DEAD_LOOP_ELIM, &mut ir, 1);
+                // remove all redundant code.
+                passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
+            }
 
+            // iterate several times, seeking more opportunities.
             for i in 0..4 {
                 println!("Round {}", i);
 
-                let iter = passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
-                println!("pipeline basic iterations: {}", iter);
+                // aggressive dce is a little expensive, run once per round
+                passman.run_transform(ADCE, &mut ir, 1);
+
+                let iter = passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
+                println!("pipeline gvn iterations: {}", iter);
 
                 let iter = passman.run_pipeline(&mut ir, &pipe_inline, 32, 8);
                 println!("pipeline inline iterations: {}", iter);
 
+                let iter = passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
+                println!("pipeline gvn iterations: {}", iter);
+
                 let iter = passman.run_pipeline(&mut ir, &pipe_unroll, 1, 1);
                 println!("pipeline unroll iterations: {}", iter);
 
-                // a little expensive, run once per round
-                passman.run_transform(ADCE, &mut ir, 1);
-                passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
+                let iter = passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
+                println!("pipeline gvn iterations: {}", iter);
             }
 
+            // optimize address generation inside loops.
+            {
+                // induce offset instructions that uses induction variables. This is placed here
+                // because there can be complex alias problem after inducing the offset
+                // instructions.
+                passman.run_transform(INDVAR_OFFSET, &mut ir, 32);
+                passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
+
+                // aggressive dce will remove redundant indvars after `indvar-offset`
+                passman.run_transform(ADCE, &mut ir, 1);
+                passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
+            }
+
+            // reorder after loop unrolling.
             passman.run_transform(BLOCK_REORDER, &mut ir, 1);
 
+            // TODO: refactor everything below.
             passman.run_transform(BOOL2COND, &mut ir, 32);
-            passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
+            passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
+
             for i in 0..4 {
                 println!("Second Round {}", i);
-                let iter = passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
-                println!("pipeline basic iterations: {}", iter);
+
+                passman.run_transform(ADVANCED_INSTCOMBINE, &mut ir, 32);
+
+                let iter = passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
+                println!("pipeline gvn iterations: {}", iter);
+
                 passman.run_transform(ADCE, &mut ir, 1);
-                passman.run_transform(CFG_SIMPLIFY, &mut ir, 32);
+
+                let iter = passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
+                println!("pipeline gvn iterations: {}", iter);
+
+                if cmd.aggressive {
+                    passman.run_transform(AGGRESSIVE_INSTCOMBINE, &mut ir, 32);
+                }
             }
 
             // reorder
@@ -240,7 +344,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         lower_ctx.lower();
 
         if cmd.opt > 0 {
-            riscv64::run_peephole(lower_ctx.mctx_mut(), &cmd.lower_cfg);
+            riscv64::run_peephole(lower_ctx.mctx_mut(), &cmd.lower_cfg, cmd.aggressive);
             SimplifyCfg::run(lower_ctx.mctx_mut(), &cmd.lower_cfg);
             RegisterCoalescing::run::<RvLowerSpec>(&mut lower_ctx, &cmd.lower_cfg);
             schedule(lower_ctx.mctx_mut(), &cmd.lower_cfg, Some(128));
@@ -278,8 +382,12 @@ fn register_passes(passman: &mut PassManager) {
     Mem2reg::register(passman);
     SimpleDce::register(passman);
     Adce::register(passman);
+
     ConstantFolding::register(passman);
-    InstCombine::register(passman);
+    Instcombine::register(passman);
+    AdvancedInstcombine::register(passman);
+    AggressiveInstcombine::register(passman);
+
     ElimConstantPhi::register(passman);
     Branch2Select::register(passman);
     Bool2Cond::register(passman);
@@ -296,6 +404,9 @@ fn register_passes(passman: &mut PassManager) {
     LoopPeel::register(passman);
     IndvarSimplify::register(passman);
     DeadLoopElim::register(passman);
+    LoopStrengthReduction::register(passman);
+    IndvarOffset::register(passman);
+    IndvarReduce::register(passman);
 
     GlobalValueNumbering::register(passman);
     Gcm::register(passman);
@@ -358,6 +469,11 @@ fn cli(passman: &mut PassManager) -> Command {
                 .long("no-omit-frame-pointer")
                 .action(clap::ArgAction::Count),
         )
+        .arg(
+            Arg::new("aggressive")
+                .long("aggressive")
+                .action(clap::ArgAction::Count),
+        )
         .args(passman.get_cli_args())
 }
 
@@ -403,6 +519,8 @@ fn parse_args(passman: &mut PassManager) -> CliCommand {
         combine_stack_adjustments,
     };
 
+    let aggressive = matches.get_count("aggressive") > 0;
+
     CliCommand {
         output,
         source,
@@ -411,6 +529,7 @@ fn parse_args(passman: &mut PassManager) -> CliCommand {
         emit_ir,
         emit_vcode,
         opt,
+        aggressive,
         lower_cfg,
     }
 }

@@ -1,13 +1,15 @@
-use super::{scalar_evolution::LoopScevRecord, Lcssa, LoopSimplify, Scev, ScevAnalysis};
+use super::{scalar_evolution::LoopScevRecord, Lcssa, LoopSimplify, ScevAnalysis};
 use crate::{
     collections::linked_list::LinkedListContainerPtr,
     ir::{
-        passes::control_flow::CfgCanonicalize,
+        passes::{
+            control_flow::CfgCanonicalize,
+            loops::scalar_evolution::{LoopBound, LoopBoundCond},
+        },
         passman::{GlobalPassMut, LocalPass, LocalPassMut, PassResult, TransformPass},
         Block,
         Context,
         Func,
-        ICmpCond,
         Inst,
         Ty,
     },
@@ -29,63 +31,46 @@ impl DeadLoopElim {
     fn process_loop(&mut self, ctx: &mut Context, lp: Loop<Block>, scevs: &LoopScevRecord) -> bool {
         let mut changed = false;
 
-        let (lhs, cmp_cond, rhs) = if let Some(bound) = scevs.loop_bounds.get(&lp).unwrap() {
+        let LoopBound {
+            block_param: repr,
+            cond: cmp_cond,
+            bound,
+            reversed,
+            ..
+        } = if let Some(bound) = scevs.loop_bounds.get(&lp).unwrap() {
             bound
         } else {
             return false;
         };
 
-        match cmp_cond {
-            ICmpCond::Eq | ICmpCond::Ne => return false,
-            // TODO: Support unsigned bounds
-            ICmpCond::Ule | ICmpCond::Ult => return false,
-            ICmpCond::Sle | ICmpCond::Slt => {}
+        let preheader = lp.get_preheader(ctx, &self.scev.loops).unwrap();
+        let header = lp.header(&self.scev.loops);
+        let jump = preheader.tail(ctx).unwrap();
+
+        let br = header.tail(ctx).unwrap();
+
+        assert!(jump.is_jump(ctx));
+
+        if !br.is_br(ctx) {
+            return false;
         }
 
-        if let Some(Scev { repr, .. }) = scevs
-            .scevs
-            .get(&lp)
-            .unwrap()
-            .iter()
-            .find(|s| s.repr == *lhs || s.repr == *rhs)
-        {
-            let (bound, cmp_cond, reversed) = if repr == lhs {
-                (rhs, cmp_cond, false)
-            } else if repr == rhs {
-                (lhs, cmp_cond, true)
-            } else {
-                unreachable!()
-            };
+        let initial_arg = jump.succ(ctx, 0).get_arg(*repr).unwrap();
 
-            let preheader = lp.get_preheader(ctx, &self.scev.loop_ctx).unwrap();
-            let header = lp.header(&self.scev.loop_ctx);
-            let jump = preheader.tail(ctx).unwrap();
+        if initial_arg == *bound && *cmp_cond == LoopBoundCond::Slt && !reversed {
+            // this is a dead loop, replace the compare result to be always
+            // false.
+            let i1 = Ty::int(ctx, 1);
+            let iconst = Inst::iconst(ctx, false, i1);
+            header.push_front(ctx, iconst);
 
-            let br = header.tail(ctx).unwrap();
+            let cond = br.operand(ctx, 0);
 
-            assert!(jump.is_jump(ctx));
-
-            if !br.is_br(ctx) {
-                return false;
+            for user in cond.users(ctx) {
+                user.replace(ctx, cond, iconst.result(ctx, 0));
             }
 
-            let initial_arg = jump.succ(ctx, 0).get_arg(*repr).unwrap();
-
-            if initial_arg == *bound && *cmp_cond == ICmpCond::Slt && !reversed {
-                // this is a dead loop, replace the compare result to be always
-                // false.
-                let i1 = Ty::int(ctx, 1);
-                let iconst = Inst::iconst(ctx, false, i1);
-                header.push_front(ctx, iconst);
-
-                let cond = br.operand(ctx, 0);
-
-                for user in cond.users(ctx) {
-                    user.replace(ctx, cond, iconst.result(ctx, 0));
-                }
-
-                changed = true;
-            }
+            changed = true;
         }
 
         changed
@@ -102,8 +87,8 @@ impl LocalPassMut for DeadLoopElim {
 
         let mut loops = Vec::new();
 
-        for lp in self.scev.loop_ctx.loops() {
-            let depth = lp.depth(&self.scev.loop_ctx);
+        for lp in self.scev.loops.loops() {
+            let depth = lp.depth(&self.scev.loops);
             loops.push(LoopWithDepth { lp, depth });
         }
 
@@ -121,8 +106,8 @@ impl GlobalPassMut for DeadLoopElim {
     type Output = ();
 
     fn run(&mut self, ctx: &mut Context) -> PassResult<(Self::Output, bool)> {
-        ctx.alloc_all_names();
-        println!("{}", ctx.display(true));
+        // ctx.alloc_all_names();
+        // println!("{}", ctx.display(true));
 
         let mut changed = false;
         for func in ctx.funcs() {

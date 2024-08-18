@@ -327,18 +327,18 @@ def test(
         log_path = os.path.join(output_dir, f"{basename}.log")
         log_file = open(log_path, "w")
 
-        command = (
-            f"clang --target=riscv64 -march=rv64imafdc_zba_zbb -w -xc -O3 -S {testcase}.sy"
-            f" -o {clang_asm_path}"
-        )
+        # command = (
+        #     f"clang --target=riscv64 -march=rv64imafdc_zba_zbb -w -xc -Wno-implicit-function-declaration -O3 -S {testcase}.sy"
+        #     f" -o {clang_asm_path}"
+        # )
 
-        exec_result = execute(command, exec_timeout)
-        log(log_file, command, exec_result)
+        # exec_result = execute(command, exec_timeout)
+        # log(log_file, command, exec_result)
 
-        if exec_result["returncode"] is None or exec_result["stderr"] != "":
-            result_md_table += f"| `{testcase}` | 😢 CE |\n"
-            print(f"\033[33m[  ERROR  ] (clang CE)\033[0m {testcase}, see: ", log_path)
-            continue
+        # if exec_result["returncode"] is None or exec_result["stderr"] != "":
+        #     result_md_table += f"| `{testcase}` | 😢 CE |\n"
+        #     print(f"\033[33m[  ERROR  ] (clang CE)\033[0m {testcase}, see: ", log_path)
+        #     continue
 
         command = (
             f"{executable_path} -S "

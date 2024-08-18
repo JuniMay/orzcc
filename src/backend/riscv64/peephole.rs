@@ -1057,7 +1057,7 @@ pub fn remove_redundant_labels(mctx: &mut MContext<RvInst>) -> bool {
     changed
 }
 
-pub fn run_peephole(mctx: &mut MContext<RvInst>, config: &LowerConfig) -> bool {
+pub fn run_peephole(mctx: &mut MContext<RvInst>, config: &LowerConfig, aggressive: bool) -> bool {
     let mut runner1 = PeepholeRunner::new();
     let mut runner2 = PeepholeRunner::new();
     let mut runner3 = PeepholeRunner::new();
@@ -1065,10 +1065,14 @@ pub fn run_peephole(mctx: &mut MContext<RvInst>, config: &LowerConfig) -> bool {
     runner1.add_rule(li_dce());
     runner1.add_rule(remove_identity_move());
     runner1.add_rule(remove_redundant_move());
-    runner1.add_rule(remove_redundant_move_word()); // aggressive
+    if aggressive {
+        runner1.add_rule(remove_redundant_move_word());
+    }
 
     runner2.add_rule(fuse_cmp_br());
-    runner2.add_rule(fuse_fmul_faddfsub()); // aggressive
+    if aggressive {
+        runner2.add_rule(fuse_fmul_faddfsub());
+    }
     runner2.add_rule(fuse_sub_br());
 
     runner3.add_rule(fuse_xori_cmp_br());

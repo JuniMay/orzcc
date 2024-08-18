@@ -1,4 +1,4 @@
-use super::control_flow::CfgSimplify;
+use super::control_flow::{CfgCanonicalize, CfgSimplify};
 use crate::{
     collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
     ir::{
@@ -117,5 +117,6 @@ impl GlobalPassMut for Tco {
 impl TransformPass for Tco {
     fn register(passman: &mut PassManager) {
         passman.register_transform(TCO, Tco, vec![Box::new(CfgSimplify)]);
+        passman.add_post_dep(TCO, Box::new(CfgCanonicalize));
     }
 }
