@@ -48,6 +48,7 @@ impl TryFrom<IBinaryOp> for InductionOp {
 }
 
 /// Basic recurrence record.
+#[derive(Debug, Clone)]
 pub struct Scev {
     /// The representative value of this induction variable, typically the loop
     /// parameter.

@@ -40,6 +40,7 @@ use orzcc::{
             loops::{
                 DeadLoopElim,
                 IndvarOffset,
+                IndvarReduce,
                 IndvarSimplify,
                 Lcssa,
                 LoopPeel,
@@ -48,6 +49,7 @@ use orzcc::{
                 LoopUnroll,
                 DEAD_LOOP_ELIM,
                 INDVAR_OFFSET,
+                INDVAR_REDUCE,
                 INDVAR_SIMPLIFY,
                 LOOP_PEEL,
                 LOOP_STRENGTH_REDUCTION,
@@ -227,6 +229,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // reduce the strength of operations with the loop, especially multiplication
             // with indvars.
             {
+                // remove redundant induction variables.
+                let iter = passman.run_transform(INDVAR_REDUCE, &mut ir, 32);
+                println!("indvar-reduce iterations: {}", iter);
+                passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
+
                 let iter = passman.run_transform(LOOP_STRENGTH_REDUCTION, &mut ir, 32);
                 println!("loop strength reduction iterations: {}", iter);
                 passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
@@ -272,19 +279,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("pipeline gvn iterations: {}", iter);
             }
 
-            // induce offset instructions that uses induction variables. This is placed here
-            // because there can be complex alias problem after inducing the offset
-            // instructions.
-            passman.run_transform(INDVAR_OFFSET, &mut ir, 32);
-            passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
+            // optimize address generation inside loops.
+            {
+                // induce offset instructions that uses induction variables. This is placed here
+                // because there can be complex alias problem after inducing the offset
+                // instructions.
+                passman.run_transform(INDVAR_OFFSET, &mut ir, 32);
+                passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
 
-            // TODO: refactor everything below.
-            passman.run_transform(ADCE, &mut ir, 1);
-            passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
+                // aggressive dce will remove redundant indvars after `indvar-offset`
+                passman.run_transform(ADCE, &mut ir, 1);
+                passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
+            }
 
             // reorder after loop unrolling.
             passman.run_transform(BLOCK_REORDER, &mut ir, 1);
 
+            // TODO: refactor everything below.
             passman.run_transform(BOOL2COND, &mut ir, 32);
             passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
 
@@ -385,6 +396,7 @@ fn register_passes(passman: &mut PassManager) {
     DeadLoopElim::register(passman);
     LoopStrengthReduction::register(passman);
     IndvarOffset::register(passman);
+    IndvarReduce::register(passman);
 
     GlobalValueNumbering::register(passman);
     Gcm::register(passman);

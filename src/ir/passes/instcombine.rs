@@ -99,9 +99,9 @@ impl Default for Instcombine {
     fn default() -> Self {
         Self {
             rules: vec![
+                mv_const_rhs(),
                 mul_zero_elim(),
                 mul_one_elim(),
-                mv_const_rhs(),
                 add_zero_elim(),
                 assoc_sub_zero(),
                 sub_zero_elim(),
@@ -112,6 +112,8 @@ impl Default for Instcombine {
                 rem_one_elim(),
                 shl_zero_elim(), // not tested
                 shr_zero_elim(), // not tested
+                redistribute_const(), // aggressive
+                // reassociate() // 
             ],
         }
     }
@@ -2071,6 +2073,188 @@ const fn mv_same_together() -> Rule {
                     return true;
                 } else {
                     return false;
+                }
+            }
+            false
+        },
+    }
+}
+
+/// Distribute add/sub & mul with constants, create more opportunities for
+/// induction variables.
+///
+/// `(x +- c1) * c2` => x * c2 +- c1 * c2
+const fn redistribute_const() -> Rule {
+    Rule {
+        rewriter: |ctx, inst| {
+            if let Ik::IBinary(IBinaryOp::Mul) = inst.kind(ctx) {
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
+                if let ValueKind::InstResult { inst: lhs_inst, .. } = lhs.kind(ctx) {
+                    if let Ik::IBinary(lhs_op) = lhs_inst.kind(ctx) {
+                        let lhs_lhs = lhs_inst.operand(ctx, 0);
+                        let lhs_rhs = lhs_inst.operand(ctx, 1);
+                        let lhs_op = *lhs_op;
+
+                        if lhs_op != IBinaryOp::Add && lhs_op != IBinaryOp::Sub {
+                            return false;
+                        }
+
+                        if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                            if let Ik::IConst(_) = rhs_inst.kind(ctx) {
+                                if let ValueKind::InstResult {
+                                    inst: lhs_rhs_inst, ..
+                                } = lhs_rhs.kind(ctx)
+                                {
+                                    if let Ik::IConst(_) = lhs_rhs_inst.kind(ctx) {
+                                        let new_lhs =
+                                            Inst::ibinary(ctx, IBinaryOp::Mul, lhs_lhs, rhs);
+                                        let new_rhs =
+                                            Inst::ibinary(ctx, IBinaryOp::Mul, lhs_rhs, rhs);
+                                        let new_add = Inst::ibinary(
+                                            ctx,
+                                            lhs_op,
+                                            new_lhs.result(ctx, 0),
+                                            new_rhs.result(ctx, 0),
+                                        );
+                                        inst.insert_after(ctx, new_lhs);
+                                        new_lhs.insert_after(ctx, new_rhs);
+                                        new_rhs.insert_after(ctx, new_add);
+                                        for user in dst.users(ctx) {
+                                            user.replace(ctx, dst, new_add.result(ctx, 0));
+                                        }
+                                        return true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            false
+        },
+    }
+}
+
+/// Associate more.
+///
+/// (x +- c1) +- (y +- c2) => (x +- y) +- (c1 +- c2)
+const fn reassociate() -> Rule {
+    Rule {
+        rewriter: |ctx, inst| {
+            if let Ik::IBinary(op) = inst.kind(ctx) {
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+                let op = *op;
+
+                if let ValueKind::InstResult { inst: lhs_inst, .. } = lhs.kind(ctx) {
+                    if let Ik::IBinary(lhs_op) = lhs_inst.kind(ctx) {
+                        let lhs_lhs = lhs_inst.operand(ctx, 0);
+                        let lhs_rhs = lhs_inst.operand(ctx, 1);
+                        let lhs_op = *lhs_op;
+
+                        if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                            if let Ik::IBinary(rhs_op) = rhs_inst.kind(ctx) {
+                                let rhs_lhs = rhs_inst.operand(ctx, 0);
+                                let rhs_rhs = rhs_inst.operand(ctx, 1);
+                                let rhs_op = *rhs_op;
+
+                                if let ValueKind::InstResult {
+                                    inst: lhs_rhs_inst, ..
+                                } = lhs_rhs.kind(ctx)
+                                {
+                                    if let ValueKind::InstResult {
+                                        inst: rhs_rhs_inst, ..
+                                    } = rhs_rhs.kind(ctx)
+                                    {
+                                        if let Ik::IConst(_) = lhs_rhs_inst.kind(ctx) {
+                                            if let Ik::IConst(_) = rhs_rhs_inst.kind(ctx) {
+                                                // (x + c1) + (y + c2) => (x + y) + (c1 + c2)
+                                                // (x + c1) + (y - c2) => (x + y) + (c1 - c2)
+                                                // (x - c1) + (y - c2) => (x + y) - (c1 + c2)
+                                                // (x - c1) + (y + c2) => (x + y) - (c1 - c2)
+                                                // (x + c1) - (y + c2) => (x - y) + (c1 - c2)
+                                                // (x + c1) - (y - c2) => (x - y) + (c1 + c2)
+                                                // (x - c1) - (y - c2) => (x - y) - (c1 - c2)
+                                                // (x - c1) - (y + c2) => (x - y) - (c1 + c2)
+
+                                                let new_lhs_op = op;
+                                                let new_op = lhs_op;
+                                                let new_rhs_op = match (lhs_op, op, rhs_op) {
+                                                    (
+                                                        IBinaryOp::Add,
+                                                        IBinaryOp::Add,
+                                                        IBinaryOp::Add,
+                                                    ) => IBinaryOp::Add,
+                                                    (
+                                                        IBinaryOp::Add,
+                                                        IBinaryOp::Add,
+                                                        IBinaryOp::Sub,
+                                                    ) => IBinaryOp::Sub,
+                                                    (
+                                                        IBinaryOp::Sub,
+                                                        IBinaryOp::Add,
+                                                        IBinaryOp::Sub,
+                                                    ) => IBinaryOp::Add,
+                                                    (
+                                                        IBinaryOp::Sub,
+                                                        IBinaryOp::Add,
+                                                        IBinaryOp::Add,
+                                                    ) => IBinaryOp::Sub,
+                                                    (
+                                                        IBinaryOp::Add,
+                                                        IBinaryOp::Sub,
+                                                        IBinaryOp::Add,
+                                                    ) => IBinaryOp::Sub,
+                                                    (
+                                                        IBinaryOp::Add,
+                                                        IBinaryOp::Sub,
+                                                        IBinaryOp::Sub,
+                                                    ) => IBinaryOp::Add,
+                                                    (
+                                                        IBinaryOp::Sub,
+                                                        IBinaryOp::Sub,
+                                                        IBinaryOp::Sub,
+                                                    ) => IBinaryOp::Sub,
+                                                    (
+                                                        IBinaryOp::Sub,
+                                                        IBinaryOp::Sub,
+                                                        IBinaryOp::Add,
+                                                    ) => IBinaryOp::Add,
+                                                    _ => return false,
+                                                };
+
+                                                let new_lhs = Inst::ibinary(
+                                                    ctx, new_lhs_op, lhs_lhs, rhs_lhs,
+                                                );
+                                                let new_rhs = Inst::ibinary(
+                                                    ctx, new_rhs_op, lhs_rhs, rhs_rhs,
+                                                );
+                                                let new_inst = Inst::ibinary(
+                                                    ctx,
+                                                    new_op,
+                                                    new_lhs.result(ctx, 0),
+                                                    new_rhs.result(ctx, 0),
+                                                );
+
+                                                inst.insert_after(ctx, new_lhs);
+                                                new_lhs.insert_after(ctx, new_rhs);
+                                                new_rhs.insert_after(ctx, new_inst);
+                                                for user in dst.users(ctx) {
+                                                    user.replace(ctx, dst, new_inst.result(ctx, 0));
+                                                }
+
+                                                return true;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
             false
