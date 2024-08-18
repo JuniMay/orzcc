@@ -19,8 +19,10 @@ use orzcc::{
                 BlockReorder,
                 CfgCanonicalize,
                 CfgSimplify,
+                PHBlockLayout,
                 BLOCK_REORDER,
                 CFG_SIMPLIFY,
+                PH_BLOCK_LAYOUT,
             },
             fold::{ConstantFolding, CONSTANT_FOLDING},
             gcm::{Gcm, GCM},
@@ -219,6 +221,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             passman.run_transform(SIMPLE_DCE, &mut ir, 32);
             passman.run_transform(BRANCH_CONDITION_SINK, &mut ir, 1);
             passman.run_transform(BLOCK_REORDER, &mut ir, 1);
+            passman.run_transform(PH_BLOCK_LAYOUT, &mut ir, 1);
         } else {
             passman.run_transform(LEGALIZE, &mut ir, 1);
         }
@@ -298,6 +301,7 @@ fn register_passes(passman: &mut PassManager) {
     Gcm::register(passman);
     BranchConditionSink::register(passman);
     StaticBranchPrediction::register(passman);
+    PHBlockLayout::register(passman);
 
     Legalize::register(passman);
     BlockReorder::register(passman);
