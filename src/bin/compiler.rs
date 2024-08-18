@@ -310,14 +310,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let iter = passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
                 println!("pipeline gvn iterations: {}", iter);
 
+                // if cmd.aggressive {
+                passman.run_transform(AGGRESSIVE_INSTCOMBINE, &mut ir, 32);
+                // }
+
                 passman.run_transform(ADCE, &mut ir, 1);
 
                 let iter = passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
                 println!("pipeline gvn iterations: {}", iter);
-
-                if cmd.aggressive {
-                    passman.run_transform(AGGRESSIVE_INSTCOMBINE, &mut ir, 32);
-                }
             }
 
             // reorder
