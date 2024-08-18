@@ -36,6 +36,8 @@ impl FoldedConstant {
             panic!("unwrap_float: not a float constant");
         }
     }
+
+    pub fn is_undef(&self) -> bool { matches!(self, FoldedConstant::Undef) }
 }
 
 /// The context of the constant folding.
@@ -62,8 +64,14 @@ impl FoldContext {
 
 impl Inst {
     /// Fold the instruction with a given constant folding context.
-    pub fn fold(self, ctx: &Context, fold_ctx: &mut FoldContext) -> Option<FoldedConstant> {
+    pub fn fold(
+        self,
+        ctx: &Context,
+        fold_ctx: &mut FoldContext,
+        aggressive: bool,
+    ) -> Option<FoldedConstant> {
         match self.kind(ctx) {
+            // XXX: SysY undefined value is not defined accurately.
             InstKind::Undef => Some(FoldedConstant::Undef),
             InstKind::IConst(value) => {
                 let width = self.result(ctx, 0).ty(ctx).bitwidth(ctx);
@@ -301,8 +309,8 @@ impl Inst {
                                 mut_int_val.signext(target_width);
                                 Some(FoldedConstant::Integer(mut_int_val))
                             }
-                            CastOp::UiToFp => {
-                                // FIXME: 在38_light2d中，存在cast int 100000006 to float
+                            CastOp::UiToFp if aggressive => {
+                                // AGGRESSIVE: 在38_light2d中，存在cast int 100000006 to float
                                 // 100000010的情况。
                                 let target_ty = self.result(ctx, 0).ty(ctx);
                                 let u64_val: u64 = mut_int_val.into();
@@ -315,7 +323,7 @@ impl Inst {
                                 };
                                 Some(FoldedConstant::Float(float_val))
                             }
-                            CastOp::SiToFp => {
+                            CastOp::SiToFp if aggressive => {
                                 let target_ty = self.result(ctx, 0).ty(ctx);
                                 let u64_val: u64 = mut_int_val.into();
                                 let i64_val: i64 =
@@ -334,6 +342,8 @@ impl Inst {
                             | CastOp::FpToSi
                             | CastOp::Bitcast
                             | CastOp::FpExt
+                            | CastOp::UiToFp
+                            | CastOp::SiToFp
                             | CastOp::PtrToInt
                             | CastOp::IntToPtr => None,
                         }

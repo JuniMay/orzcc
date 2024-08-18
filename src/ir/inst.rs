@@ -1495,7 +1495,8 @@ impl Inst {
     }
 
     /// AGGRESSIVE: FBinary associations can result in precision and rounding
-    /// errors
+    /// errors, and integer associations may lead to overflow and undefined
+    /// behaviors.
     pub fn is_associative(self, ctx: &Context) -> bool {
         use InstKind as Ik;
 
@@ -1506,9 +1507,10 @@ impl Inst {
                 | Ik::IBinary(IBinaryOp::And)
                 | Ik::IBinary(IBinaryOp::Or)
                 | Ik::IBinary(IBinaryOp::Xor)
-                | Ik::IBinary(IBinaryOp::Min) // TODO: aggressive option
-                | Ik::IBinary(IBinaryOp::Max) /* | Ik::FBinary(FBinaryOp::Add)  // aggressive
-                                               * | Ik::FBinary(FBinaryOp::Mul) // aggressive */
+                | Ik::IBinary(IBinaryOp::Min)
+                | Ik::IBinary(IBinaryOp::Max) 
+                | Ik::FBinary(FBinaryOp::Add) // aggressive
+                | Ik::FBinary(FBinaryOp::Mul) // aggressive
         )
     }
 

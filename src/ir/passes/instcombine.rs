@@ -51,24 +51,6 @@
 //!
 //! [1]: where @ is a commutative binary operator.
 
-// TODO: Now this pass only contains a few simple rules, we need to add more
-// rules to make it more powerful.
-//
-// TODO: Some rules **MIGHT** be applicable to floating-point instructions.
-//
-// TODO: Some simplification might extend the liverange of the value, which can
-// potentially increase the register pressure. Maybe we need a `sink` pass to
-// sink the instructions.
-//
-// TODO: We are not sure about the sequence of the rules. Theoretically,
-// because of the iterative feature of the pass manager, the sequence of the
-// rules should not matter, but we need to test it.
-//
-// TODO: There are aggressive rules in this pass, maybe we should separate them
-// from the non-aggressive ones.
-//
-// TODO: Find a way to test these rules one by one.
-
 use crate::{
     collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
     ir::{
@@ -88,6 +70,10 @@ use crate::{
 
 pub const INSTCOMBINE: &str = "instcombine";
 
+pub const AGGRESSIVE_INSTCOMBINE: &str = "aggressive-instcombine";
+
+pub const ADVANCED_INSTCOMBINE: &str = "advanced-instcombine";
+
 /// A rule for instcombine.
 struct Rule {
     /// The rewriter function.
@@ -97,42 +83,43 @@ struct Rule {
     rewriter: fn(&mut Context, Inst) -> bool,
 }
 
-pub struct InstCombine {
+pub struct Instcombine {
     rules: Vec<Rule>,
 }
 
-impl Default for InstCombine {
+pub struct AggressiveInstcombine {
+    rules: Vec<Rule>,
+}
+
+pub struct AdvancedInstcombine {
+    rules: Vec<Rule>,
+}
+
+impl Default for Instcombine {
     fn default() -> Self {
         Self {
             rules: vec![
-                mv_same_together(),     // aggressive
-                sub_identity_to_zero(), // aggressive
+                mv_const_rhs(),
                 mul_zero_elim(),
                 mul_one_elim(),
-                mv_const_rhs(),
                 add_zero_elim(),
                 assoc_sub_zero(),
                 sub_zero_elim(),
                 offset_zero_elim(),
                 add_to_mul(),
-                mul_to_shl(),
-                assoc_const(),      // aggressive
-                distributive_one(), // aggressive
-                distributive(),     // aggressive
                 div_one_elim(),
                 div_neg_one_elim(),
-                div_to_shift(),
                 rem_one_elim(),
-                rem_to_shift(),
-                div_rem_to_mul(),
                 shl_zero_elim(), // not tested
                 shr_zero_elim(), // not tested
+                redistribute_const(), // aggressive
+                // reassociate() // 
             ],
         }
     }
 }
 
-impl LocalPassMut for InstCombine {
+impl LocalPassMut for Instcombine {
     type Output = ();
 
     fn run(&mut self, ctx: &mut Context, func: Func) -> PassResult<(Self::Output, bool)> {
@@ -164,7 +151,7 @@ impl LocalPassMut for InstCombine {
     }
 }
 
-impl GlobalPassMut for InstCombine {
+impl GlobalPassMut for Instcombine {
     type Output = ();
 
     fn run(&mut self, ctx: &mut Context) -> PassResult<(Self::Output, bool)> {
@@ -179,10 +166,145 @@ impl GlobalPassMut for InstCombine {
     }
 }
 
-impl TransformPass for InstCombine {
+impl TransformPass for Instcombine {
     fn register(passman: &mut crate::ir::passman::PassManager) {
         let pass = Self::default();
         passman.register_transform(INSTCOMBINE, pass, Vec::new());
+    }
+}
+
+impl Default for AdvancedInstcombine {
+    fn default() -> Self {
+        Self {
+            rules: vec![
+                div_to_shift(),
+                rem_to_shift(),
+                div_rem_to_mul(),
+                mul_to_shl(),
+            ],
+        }
+    }
+}
+
+impl LocalPassMut for AdvancedInstcombine {
+    type Output = ();
+
+    fn run(&mut self, ctx: &mut Context, func: Func) -> PassResult<(Self::Output, bool)> {
+        let mut changed = false;
+
+        let mut cursor = func.cursor();
+        while let Some(block) = cursor.next(ctx) {
+            let mut cursor = block.cursor();
+            while let Some(inst) = cursor.next(ctx) {
+                if !inst.is_used(ctx) {
+                    // if the instruction's results have no users, we can move to the next
+                    // instruction.
+                    continue;
+                }
+                for rule in &self.rules {
+                    if (rule.rewriter)(ctx, inst) {
+                        changed = true;
+                        if !inst.is_used(ctx) {
+                            // if the instruction's results have no users, we can move to the next
+                            // instruction without applying other rules
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(((), changed))
+    }
+}
+
+impl GlobalPassMut for AdvancedInstcombine {
+    type Output = ();
+
+    fn run(&mut self, ctx: &mut Context) -> PassResult<(Self::Output, bool)> {
+        let mut changed = false;
+
+        for func in ctx.funcs() {
+            let ((), local_changed) = LocalPassMut::run(self, ctx, func)?;
+            changed |= local_changed;
+        }
+
+        Ok(((), changed))
+    }
+}
+
+impl TransformPass for AdvancedInstcombine {
+    fn register(passman: &mut crate::ir::passman::PassManager) {
+        let pass = Self::default();
+        passman.register_transform(ADVANCED_INSTCOMBINE, pass, Vec::new());
+    }
+}
+
+impl Default for AggressiveInstcombine {
+    fn default() -> Self {
+        Self {
+            rules: vec![
+                mv_same_together(),     // aggressive
+                sub_identity_to_zero(), // aggressive
+                assoc_const(),          // aggressive
+                distributive_one(),     // aggressive
+                distributive(),         // aggressive
+            ],
+        }
+    }
+}
+
+impl LocalPassMut for AggressiveInstcombine {
+    type Output = ();
+
+    fn run(&mut self, ctx: &mut Context, func: Func) -> PassResult<(Self::Output, bool)> {
+        let mut changed = false;
+
+        let mut cursor = func.cursor();
+        while let Some(block) = cursor.next(ctx) {
+            let mut cursor = block.cursor();
+            while let Some(inst) = cursor.next(ctx) {
+                if !inst.is_used(ctx) {
+                    // if the instruction's results have no users, we can move to the next
+                    // instruction.
+                    continue;
+                }
+                for rule in &self.rules {
+                    if (rule.rewriter)(ctx, inst) {
+                        changed = true;
+                        if !inst.is_used(ctx) {
+                            // if the instruction's results have no users, we can move to the next
+                            // instruction without applying other rules
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(((), changed))
+    }
+}
+
+impl GlobalPassMut for AggressiveInstcombine {
+    type Output = ();
+
+    fn run(&mut self, ctx: &mut Context) -> PassResult<(Self::Output, bool)> {
+        let mut changed = false;
+
+        for func in ctx.funcs() {
+            let ((), local_changed) = LocalPassMut::run(self, ctx, func)?;
+            changed |= local_changed;
+        }
+
+        Ok(((), changed))
+    }
+}
+
+impl TransformPass for AggressiveInstcombine {
+    fn register(passman: &mut crate::ir::passman::PassManager) {
+        let pass = Self::default();
+        passman.register_transform(AGGRESSIVE_INSTCOMBINE, pass, Vec::new());
     }
 }
 
@@ -556,6 +678,450 @@ const fn assoc_sub_zero() -> Rule {
                                     return true;
                                 }
                             }
+                        }
+                    }
+                }
+            }
+            false
+        },
+    }
+}
+
+// Eliminate division by one
+const fn div_one_elim() -> Rule {
+    Rule {
+        rewriter: |ctx, inst| {
+            if let Ik::IBinary(IBinaryOp::SDiv) = inst.kind(ctx) {
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
+                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                    if let Ik::IConst(v) = rhs_inst.kind(ctx) {
+                        if v.is_one() {
+                            for user in dst.users(ctx) {
+                                user.replace(ctx, dst, lhs);
+                            }
+                            return true;
+                        }
+                    }
+                }
+            }
+            false
+        },
+    }
+}
+
+// Eliminate division by negative one
+const fn div_neg_one_elim() -> Rule {
+    Rule {
+        rewriter: |ctx, inst| {
+            if let Ik::IBinary(IBinaryOp::SDiv) = inst.kind(ctx) {
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
+                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                    if let Ik::IConst(v) = rhs_inst.kind(ctx) {
+                        if v.as_signed() == -1 {
+                            let zero = Inst::iconst(ctx, 0, dst.ty(ctx));
+                            let neg = Inst::ibinary(ctx, IBinaryOp::Sub, zero.result(ctx, 0), lhs);
+                            inst.insert_after(ctx, zero);
+                            zero.insert_after(ctx, neg);
+                            for user in dst.users(ctx) {
+                                user.replace(ctx, dst, neg.result(ctx, 0));
+                            }
+                            return true;
+                        }
+                    }
+                }
+            }
+            false
+        },
+    }
+}
+
+/// Replace division with shift (and add).
+const fn div_to_shift() -> Rule {
+    Rule {
+        rewriter: |ctx, inst| {
+            if let Ik::IBinary(IBinaryOp::SDiv) = inst.kind(ctx) {
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
+                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                    if let Ik::IConst(mut v) = rhs_inst.kind(ctx) {
+                        let is_v_neg = if v.as_signed() < 0 {
+                            v = IntConstant::from(-v.as_signed());
+                            true
+                        } else {
+                            false
+                        };
+                        if v.is_power_of_two() {
+                            let k = v.trailing_zeros();
+                            if k == 0 {
+                                return false;
+                            }
+                            let bitwidth = lhs.ty(ctx).bitwidth(ctx) as u8;
+                            let shamt_ks1 = IntConstant::from(k - 1);
+                            let shamt_wsk = IntConstant::from(bitwidth as u32 - k);
+                            let shamt_k: IntConstant = IntConstant::from(k);
+
+                            let temp0 = Inst::iconst(ctx, shamt_ks1, lhs.ty(ctx));
+                            let temp1 =
+                                Inst::ibinary(ctx, IBinaryOp::AShr, lhs, temp0.result(ctx, 0));
+                            let temp2 = Inst::iconst(ctx, shamt_wsk, lhs.ty(ctx));
+                            let temp3 = Inst::ibinary(
+                                ctx,
+                                IBinaryOp::LShr,
+                                temp1.result(ctx, 0),
+                                temp2.result(ctx, 0),
+                            );
+                            let temp4 =
+                                Inst::ibinary(ctx, IBinaryOp::Add, lhs, temp3.result(ctx, 0));
+                            let temp5 = Inst::iconst(ctx, shamt_k, dst.ty(ctx));
+                            let final_inst = Inst::ibinary(
+                                ctx,
+                                IBinaryOp::AShr,
+                                temp4.result(ctx, 0),
+                                temp5.result(ctx, 0),
+                            );
+
+                            inst.insert_after(ctx, temp0);
+                            temp0.insert_after(ctx, temp1);
+                            temp1.insert_after(ctx, temp2);
+                            temp2.insert_after(ctx, temp3);
+                            temp3.insert_after(ctx, temp4);
+                            temp4.insert_after(ctx, temp5);
+                            temp5.insert_after(ctx, final_inst);
+                            let dst_new = if is_v_neg {
+                                let i_zero = Inst::iconst(ctx, 0, dst.ty(ctx));
+                                let i_neg = Inst::ibinary(
+                                    ctx,
+                                    IBinaryOp::Sub,
+                                    i_zero.result(ctx, 0),
+                                    final_inst.result(ctx, 0),
+                                );
+                                final_inst.insert_after(ctx, i_zero);
+                                i_zero.insert_after(ctx, i_neg);
+                                i_neg.result(ctx, 0)
+                            } else {
+                                final_inst.result(ctx, 0)
+                            };
+
+                            for user in dst.users(ctx) {
+                                user.replace(ctx, dst, dst_new);
+                            }
+                            return true;
+                        }
+                    }
+                }
+            }
+            false
+        },
+    }
+}
+
+// Eliminate modulo by (negative) one
+const fn rem_one_elim() -> Rule {
+    Rule {
+        rewriter: |ctx, inst| {
+            if let Ik::IBinary(IBinaryOp::SRem) = inst.kind(ctx) {
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
+                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                    if let Ik::IConst(mut v) = rhs_inst.kind(ctx) {
+                        if v.as_signed() < 0 {
+                            v = IntConstant::from(-v.as_signed())
+                        }
+                        if v.is_one() {
+                            let zero = Inst::iconst(ctx, 0, dst.ty(ctx));
+                            inst.insert_after(ctx, zero);
+
+                            for user in dst.users(ctx) {
+                                user.replace(ctx, dst, zero.result(ctx, 0));
+                            }
+                            return true;
+                        }
+                    }
+                }
+            }
+            false
+        },
+    }
+}
+
+/// Replace modulo with shift (and sub).
+const fn rem_to_shift() -> Rule {
+    Rule {
+        rewriter: |ctx, inst| {
+            if let Ik::IBinary(IBinaryOp::SRem) = inst.kind(ctx) {
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
+                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                    if let Ik::IConst(mut v) = rhs_inst.kind(ctx) {
+                        if v.as_signed() < 0 {
+                            v = IntConstant::from(-v.as_signed())
+                        }
+                        if v.is_power_of_two() {
+                            let k = v.trailing_zeros();
+                            if k == 0 {
+                                return false;
+                            }
+                            let bitwidth = lhs.ty(ctx).bitwidth(ctx) as u8;
+                            let shamt_wsk = IntConstant::from(bitwidth as u32 - k);
+                            let andwith = IntConstant::from(v.as_signed() as u32 - 1);
+
+                            let tmp0 =
+                                Inst::iconst(ctx, IntConstant::from(bitwidth - 1), lhs.ty(ctx));
+                            let tmp1 =
+                                Inst::ibinary(ctx, IBinaryOp::AShr, lhs, tmp0.result(ctx, 0));
+                            let tmp2 = Inst::iconst(ctx, shamt_wsk, dst.ty(ctx));
+                            let tmp3 = Inst::ibinary(
+                                ctx,
+                                IBinaryOp::LShr,
+                                tmp1.result(ctx, 0),
+                                tmp2.result(ctx, 0),
+                            );
+                            let tmp4 = Inst::ibinary(ctx, IBinaryOp::Add, lhs, tmp3.result(ctx, 0));
+                            let tmp5 = Inst::iconst(ctx, andwith, dst.ty(ctx));
+                            let tmp6 = Inst::ibinary(
+                                ctx,
+                                IBinaryOp::And,
+                                tmp4.result(ctx, 0),
+                                tmp5.result(ctx, 0),
+                            );
+                            let final_inst = Inst::ibinary(
+                                ctx,
+                                IBinaryOp::Sub,
+                                tmp6.result(ctx, 0),
+                                tmp3.result(ctx, 0),
+                            );
+
+                            inst.insert_after(ctx, tmp0);
+                            tmp0.insert_after(ctx, tmp1);
+                            tmp1.insert_after(ctx, tmp2);
+                            tmp2.insert_after(ctx, tmp3);
+                            tmp3.insert_after(ctx, tmp4);
+                            tmp4.insert_after(ctx, tmp5);
+                            tmp5.insert_after(ctx, tmp6);
+                            tmp6.insert_after(ctx, final_inst);
+
+                            for user in dst.users(ctx) {
+                                user.replace(ctx, dst, final_inst.result(ctx, 0));
+                            }
+                            return true;
+                        }
+                    }
+                }
+            }
+            false
+        },
+    }
+}
+
+const fn div_rem_to_mul() -> Rule {
+    Rule {
+        rewriter: |ctx, inst| {
+            if let Ik::IBinary(op) = inst.kind(ctx) {
+                let is_div = matches!(op, IBinaryOp::SDiv);
+                let is_rem = matches!(op, IBinaryOp::SRem);
+                if !is_div && !is_rem {
+                    return false;
+                }
+
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
+                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                    if let Ik::IConst(mut v) = rhs_inst.kind(ctx) {
+                        if v.is_zero() {
+                            return false;
+                        }
+                        let is_v_neg = if v.as_signed() < 0 {
+                            v = IntConstant::from(-v.as_signed());
+                            true
+                        } else {
+                            false
+                        };
+                        if !v.is_power_of_two() {
+                            let bitwidth = lhs.ty(ctx).bitwidth(ctx);
+                            if bitwidth != 32 {
+                                return false;
+                            }
+                            // TODO:
+                            // (magi, disp) = magic(rhs);
+                            // bitwidth = 32
+                            //
+                            // // mulh v1= lhs, magi
+                            // let v2 = i64 (Ty::int(64))
+                            //
+                            // srai v2= v1, (disp - bitwidth)
+                            // srli v3= lhs, (bitwidth - 1)
+                            // add ans= v2, v3
+                            //
+                            let int64 = Ty::int(ctx, 64);
+                            let (magi, disp) = magic(bitwidth as u64, v.as_signed() as u64);
+
+                            // temp0-temp5: 使用64位整数的乘法和右移来模拟32位整数与魔数的高位乘法。
+                            let temp0 = Inst::cast(ctx, CastOp::SExt, lhs, int64);
+                            let temp1 = Inst::iconst(ctx, magi, int64);
+                            let temp2 = Inst::ibinary(
+                                ctx,
+                                IBinaryOp::Mul,
+                                temp0.result(ctx, 0),
+                                temp1.result(ctx, 0),
+                            );
+                            let temp3 = Inst::iconst(ctx, IntConstant::from(disp), int64);
+                            let temp4 = Inst::ibinary(
+                                ctx,
+                                IBinaryOp::AShr,
+                                temp2.result(ctx, 0),
+                                temp3.result(ctx, 0),
+                            );
+                            let temp5 =
+                                Inst::cast(ctx, CastOp::Trunc, temp4.result(ctx, 0), lhs.ty(ctx));
+                            // temp6-temp7: 获得符号位用于修正
+                            let temp6 = Inst::iconst(
+                                ctx,
+                                IntConstant::from(bitwidth as u64 - 1),
+                                lhs.ty(ctx),
+                            );
+                            let temp7 =
+                                Inst::ibinary(ctx, IBinaryOp::LShr, lhs, temp6.result(ctx, 0));
+                            // final_inst: 使用符号位修正结果，得到除法结果。
+                            let temp8 = Inst::ibinary(
+                                ctx,
+                                IBinaryOp::Add,
+                                temp5.result(ctx, 0),
+                                temp7.result(ctx, 0),
+                            );
+
+                            inst.insert_after(ctx, temp0);
+                            temp0.insert_after(ctx, temp1);
+                            temp1.insert_after(ctx, temp2);
+                            temp2.insert_after(ctx, temp3);
+                            temp3.insert_after(ctx, temp4);
+                            temp4.insert_after(ctx, temp5);
+                            temp5.insert_after(ctx, temp6);
+                            temp6.insert_after(ctx, temp7);
+                            temp7.insert_after(ctx, temp8);
+
+                            // 处理取模的情况，并确定final_inst。
+                            let final_inst = if is_div {
+                                temp8
+                            } else if is_rem {
+                                let temp9 = Inst::iconst(ctx, v, lhs.ty(ctx));
+                                let temp10 = Inst::ibinary(
+                                    ctx,
+                                    IBinaryOp::Mul,
+                                    temp8.result(ctx, 0),
+                                    temp9.result(ctx, 0),
+                                );
+                                let temp11 =
+                                    Inst::ibinary(ctx, IBinaryOp::Sub, lhs, temp10.result(ctx, 0));
+
+                                temp8.insert_after(ctx, temp9);
+                                temp9.insert_after(ctx, temp10);
+                                temp10.insert_after(ctx, temp11);
+
+                                temp11
+                            } else {
+                                panic!("unreachable")
+                            };
+
+                            // 处理结果的符号，并确定dst_new。
+                            let dst_new = if is_v_neg {
+                                let i_zero = Inst::iconst(ctx, 0, dst.ty(ctx));
+                                let i_neg = Inst::ibinary(
+                                    ctx,
+                                    IBinaryOp::Sub,
+                                    i_zero.result(ctx, 0),
+                                    final_inst.result(ctx, 0),
+                                );
+                                final_inst.insert_after(ctx, i_zero);
+                                i_zero.insert_after(ctx, i_neg);
+                                i_neg.result(ctx, 0)
+                            } else {
+                                final_inst.result(ctx, 0)
+                            };
+
+                            for user in dst.users(ctx) {
+                                user.replace(ctx, dst, dst_new);
+                            }
+                            return true;
+                        }
+                    }
+                }
+            }
+            false
+        },
+    }
+}
+
+// 仅用于div_rem_to_mul。
+fn magic(w: u64, d: u64) -> (u64, u64) {
+    // w = bitwidth
+    // d = divisor
+    let nc = (1 << (w - 1)) - (1 << (w - 1)) % d - 1; // FIXME: 93_nested_call.sy div 0
+    let mut p = w;
+    while 1 << p <= nc * (d - (1 << p) % d) {
+        p += 1;
+    }
+    let s = p;
+    let m = ((1 << p) + d - (1 << p) % d) / d;
+
+    // m = magi(c number)
+    // s = disp(lacement)
+    (m, s)
+}
+
+// Eliminate shift by zero
+const fn shl_zero_elim() -> Rule {
+    Rule {
+        rewriter: |ctx, inst| {
+            if let Ik::IBinary(IBinaryOp::Shl) = inst.kind(ctx) {
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
+                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                    if let Ik::IConst(v) = rhs_inst.kind(ctx) {
+                        if v.is_zero() {
+                            for user in dst.users(ctx) {
+                                user.replace(ctx, dst, lhs);
+                            }
+                            return true;
+                        }
+                    }
+                }
+            }
+            false
+        },
+    }
+}
+
+// Eliminate shift by zero
+const fn shr_zero_elim() -> Rule {
+    Rule {
+        rewriter: |ctx, inst| {
+            if let Ik::IBinary(IBinaryOp::LShr | IBinaryOp::AShr) = inst.kind(ctx) {
+                let lhs = inst.operand(ctx, 0);
+                let rhs = inst.operand(ctx, 1);
+                let dst = inst.result(ctx, 0);
+
+                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                    if let Ik::IConst(v) = rhs_inst.kind(ctx) {
+                        if v.is_zero() {
+                            for user in dst.users(ctx) {
+                                user.replace(ctx, dst, lhs);
+                            }
+                            return true;
                         }
                     }
                 }
@@ -1442,7 +2008,6 @@ const fn distributive() -> Rule {
 /// @ y`
 ///
 /// note: this rule better to run after add_to_mul
-/// AGGRESSIVE: float may cause accuracy problem
 const fn mv_same_together() -> Rule {
     Rule {
         rewriter: |ctx, inst| {
@@ -1515,22 +2080,55 @@ const fn mv_same_together() -> Rule {
     }
 }
 
-// Eliminate division by one
-const fn div_one_elim() -> Rule {
+/// Distribute add/sub & mul with constants, create more opportunities for
+/// induction variables.
+///
+/// `(x +- c1) * c2` => x * c2 +- c1 * c2
+const fn redistribute_const() -> Rule {
     Rule {
         rewriter: |ctx, inst| {
-            if let Ik::IBinary(IBinaryOp::SDiv) = inst.kind(ctx) {
+            if let Ik::IBinary(IBinaryOp::Mul) = inst.kind(ctx) {
                 let lhs = inst.operand(ctx, 0);
                 let rhs = inst.operand(ctx, 1);
                 let dst = inst.result(ctx, 0);
 
-                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
-                    if let Ik::IConst(v) = rhs_inst.kind(ctx) {
-                        if v.is_one() {
-                            for user in dst.users(ctx) {
-                                user.replace(ctx, dst, lhs);
+                if let ValueKind::InstResult { inst: lhs_inst, .. } = lhs.kind(ctx) {
+                    if let Ik::IBinary(lhs_op) = lhs_inst.kind(ctx) {
+                        let lhs_lhs = lhs_inst.operand(ctx, 0);
+                        let lhs_rhs = lhs_inst.operand(ctx, 1);
+                        let lhs_op = *lhs_op;
+
+                        if lhs_op != IBinaryOp::Add && lhs_op != IBinaryOp::Sub {
+                            return false;
+                        }
+
+                        if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                            if let Ik::IConst(_) = rhs_inst.kind(ctx) {
+                                if let ValueKind::InstResult {
+                                    inst: lhs_rhs_inst, ..
+                                } = lhs_rhs.kind(ctx)
+                                {
+                                    if let Ik::IConst(_) = lhs_rhs_inst.kind(ctx) {
+                                        let new_lhs =
+                                            Inst::ibinary(ctx, IBinaryOp::Mul, lhs_lhs, rhs);
+                                        let new_rhs =
+                                            Inst::ibinary(ctx, IBinaryOp::Mul, lhs_rhs, rhs);
+                                        let new_add = Inst::ibinary(
+                                            ctx,
+                                            lhs_op,
+                                            new_lhs.result(ctx, 0),
+                                            new_rhs.result(ctx, 0),
+                                        );
+                                        inst.insert_after(ctx, new_lhs);
+                                        new_lhs.insert_after(ctx, new_rhs);
+                                        new_rhs.insert_after(ctx, new_add);
+                                        for user in dst.users(ctx) {
+                                            user.replace(ctx, dst, new_add.result(ctx, 0));
+                                        }
+                                        return true;
+                                    }
+                                }
                             }
-                            return true;
                         }
                     }
                 }
@@ -1540,416 +2138,121 @@ const fn div_one_elim() -> Rule {
     }
 }
 
-// Eliminate division by negative one
-const fn div_neg_one_elim() -> Rule {
-    Rule {
-        rewriter: |ctx, inst| {
-            if let Ik::IBinary(IBinaryOp::SDiv) = inst.kind(ctx) {
-                let lhs = inst.operand(ctx, 0);
-                let rhs = inst.operand(ctx, 1);
-                let dst = inst.result(ctx, 0);
-
-                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
-                    if let Ik::IConst(v) = rhs_inst.kind(ctx) {
-                        if v.as_signed() == -1 {
-                            let zero = Inst::iconst(ctx, 0, dst.ty(ctx));
-                            let neg = Inst::ibinary(ctx, IBinaryOp::Sub, zero.result(ctx, 0), lhs);
-                            inst.insert_after(ctx, zero);
-                            zero.insert_after(ctx, neg);
-                            for user in dst.users(ctx) {
-                                user.replace(ctx, dst, neg.result(ctx, 0));
-                            }
-                            return true;
-                        }
-                    }
-                }
-            }
-            false
-        },
-    }
-}
-
-/// Replace division with shift (and add).
-const fn div_to_shift() -> Rule {
-    Rule {
-        rewriter: |ctx, inst| {
-            if let Ik::IBinary(IBinaryOp::SDiv) = inst.kind(ctx) {
-                let lhs = inst.operand(ctx, 0);
-                let rhs = inst.operand(ctx, 1);
-                let dst = inst.result(ctx, 0);
-
-                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
-                    if let Ik::IConst(mut v) = rhs_inst.kind(ctx) {
-                        let is_v_neg = if v.as_signed() < 0 {
-                            v = IntConstant::from(-v.as_signed());
-                            true
-                        } else {
-                            false
-                        };
-                        if v.is_power_of_two() {
-                            let k = v.trailing_zeros();
-                            if k == 0 {
-                                return false;
-                            }
-                            let bitwidth = lhs.ty(ctx).bitwidth(ctx) as u8;
-                            let shamt_ks1 = IntConstant::from(k - 1);
-                            let shamt_wsk = IntConstant::from(bitwidth as u32 - k);
-                            let shamt_k: IntConstant = IntConstant::from(k);
-
-                            let temp0 = Inst::iconst(ctx, shamt_ks1, lhs.ty(ctx));
-                            let temp1 =
-                                Inst::ibinary(ctx, IBinaryOp::AShr, lhs, temp0.result(ctx, 0));
-                            let temp2 = Inst::iconst(ctx, shamt_wsk, lhs.ty(ctx));
-                            let temp3 = Inst::ibinary(
-                                ctx,
-                                IBinaryOp::LShr,
-                                temp1.result(ctx, 0),
-                                temp2.result(ctx, 0),
-                            );
-                            let temp4 =
-                                Inst::ibinary(ctx, IBinaryOp::Add, lhs, temp3.result(ctx, 0));
-                            let temp5 = Inst::iconst(ctx, shamt_k, dst.ty(ctx));
-                            let final_inst = Inst::ibinary(
-                                ctx,
-                                IBinaryOp::AShr,
-                                temp4.result(ctx, 0),
-                                temp5.result(ctx, 0),
-                            );
-
-                            inst.insert_after(ctx, temp0);
-                            temp0.insert_after(ctx, temp1);
-                            temp1.insert_after(ctx, temp2);
-                            temp2.insert_after(ctx, temp3);
-                            temp3.insert_after(ctx, temp4);
-                            temp4.insert_after(ctx, temp5);
-                            temp5.insert_after(ctx, final_inst);
-                            let dst_new = if is_v_neg {
-                                let i_zero = Inst::iconst(ctx, 0, dst.ty(ctx));
-                                let i_neg = Inst::ibinary(
-                                    ctx,
-                                    IBinaryOp::Sub,
-                                    i_zero.result(ctx, 0),
-                                    final_inst.result(ctx, 0),
-                                );
-                                final_inst.insert_after(ctx, i_zero);
-                                i_zero.insert_after(ctx, i_neg);
-                                i_neg.result(ctx, 0)
-                            } else {
-                                final_inst.result(ctx, 0)
-                            };
-
-                            for user in dst.users(ctx) {
-                                user.replace(ctx, dst, dst_new);
-                            }
-                            return true;
-                        }
-                    }
-                }
-            }
-            false
-        },
-    }
-}
-
-// Eliminate modulo by (negative) one
-const fn rem_one_elim() -> Rule {
-    Rule {
-        rewriter: |ctx, inst| {
-            if let Ik::IBinary(IBinaryOp::SRem) = inst.kind(ctx) {
-                let rhs = inst.operand(ctx, 1);
-                let dst = inst.result(ctx, 0);
-
-                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
-                    if let Ik::IConst(mut v) = rhs_inst.kind(ctx) {
-                        if v.as_signed() < 0 {
-                            v = IntConstant::from(-v.as_signed())
-                        }
-                        if v.is_one() {
-                            let zero = Inst::iconst(ctx, 0, dst.ty(ctx));
-                            inst.insert_after(ctx, zero);
-
-                            for user in dst.users(ctx) {
-                                user.replace(ctx, dst, zero.result(ctx, 0));
-                            }
-                            return true;
-                        }
-                    }
-                }
-            }
-            false
-        },
-    }
-}
-
-/// Replace modulo with shift (and sub).
-const fn rem_to_shift() -> Rule {
-    Rule {
-        rewriter: |ctx, inst| {
-            if let Ik::IBinary(IBinaryOp::SRem) = inst.kind(ctx) {
-                let lhs = inst.operand(ctx, 0);
-                let rhs = inst.operand(ctx, 1);
-                let dst = inst.result(ctx, 0);
-
-                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
-                    if let Ik::IConst(mut v) = rhs_inst.kind(ctx) {
-                        if v.as_signed() < 0 {
-                            v = IntConstant::from(-v.as_signed())
-                        }
-                        if v.is_power_of_two() {
-                            let k = v.trailing_zeros();
-                            if k == 0 {
-                                return false;
-                            }
-                            let bitwidth = lhs.ty(ctx).bitwidth(ctx) as u8;
-                            let shamt_wsk = IntConstant::from(bitwidth as u32 - k);
-                            let andwith = IntConstant::from(v.as_signed() as u32 - 1);
-
-                            let tmp0 =
-                                Inst::iconst(ctx, IntConstant::from(bitwidth - 1), lhs.ty(ctx));
-                            let tmp1 =
-                                Inst::ibinary(ctx, IBinaryOp::AShr, lhs, tmp0.result(ctx, 0));
-                            let tmp2 = Inst::iconst(ctx, shamt_wsk, dst.ty(ctx));
-                            let tmp3 = Inst::ibinary(
-                                ctx,
-                                IBinaryOp::LShr,
-                                tmp1.result(ctx, 0),
-                                tmp2.result(ctx, 0),
-                            );
-                            let tmp4 = Inst::ibinary(ctx, IBinaryOp::Add, lhs, tmp3.result(ctx, 0));
-                            let tmp5 = Inst::iconst(ctx, andwith, dst.ty(ctx));
-                            let tmp6 = Inst::ibinary(
-                                ctx,
-                                IBinaryOp::And,
-                                tmp4.result(ctx, 0),
-                                tmp5.result(ctx, 0),
-                            );
-                            let final_inst = Inst::ibinary(
-                                ctx,
-                                IBinaryOp::Sub,
-                                tmp6.result(ctx, 0),
-                                tmp3.result(ctx, 0),
-                            );
-
-                            inst.insert_after(ctx, tmp0);
-                            tmp0.insert_after(ctx, tmp1);
-                            tmp1.insert_after(ctx, tmp2);
-                            tmp2.insert_after(ctx, tmp3);
-                            tmp3.insert_after(ctx, tmp4);
-                            tmp4.insert_after(ctx, tmp5);
-                            tmp5.insert_after(ctx, tmp6);
-                            tmp6.insert_after(ctx, final_inst);
-
-                            for user in dst.users(ctx) {
-                                user.replace(ctx, dst, final_inst.result(ctx, 0));
-                            }
-                            return true;
-                        }
-                    }
-                }
-            }
-            false
-        },
-    }
-}
-
-const fn div_rem_to_mul() -> Rule {
+/// Associate more.
+///
+/// (x +- c1) +- (y +- c2) => (x +- y) +- (c1 +- c2)
+const fn reassociate() -> Rule {
     Rule {
         rewriter: |ctx, inst| {
             if let Ik::IBinary(op) = inst.kind(ctx) {
-                let is_div = matches!(op, IBinaryOp::SDiv);
-                let is_rem = matches!(op, IBinaryOp::SRem);
-                if !is_div && !is_rem {
-                    return false;
-                }
-
                 let lhs = inst.operand(ctx, 0);
                 let rhs = inst.operand(ctx, 1);
                 let dst = inst.result(ctx, 0);
+                let op = *op;
 
-                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
-                    if let Ik::IConst(mut v) = rhs_inst.kind(ctx) {
-                        if v.is_zero() {
-                            return false;
-                        }
-                        let is_v_neg = if v.as_signed() < 0 {
-                            v = IntConstant::from(-v.as_signed());
-                            true
-                        } else {
-                            false
-                        };
-                        if !v.is_power_of_two() {
-                            let bitwidth = lhs.ty(ctx).bitwidth(ctx);
-                            if bitwidth != 32 {
-                                return false;
+                if let ValueKind::InstResult { inst: lhs_inst, .. } = lhs.kind(ctx) {
+                    if let Ik::IBinary(lhs_op) = lhs_inst.kind(ctx) {
+                        let lhs_lhs = lhs_inst.operand(ctx, 0);
+                        let lhs_rhs = lhs_inst.operand(ctx, 1);
+                        let lhs_op = *lhs_op;
+
+                        if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
+                            if let Ik::IBinary(rhs_op) = rhs_inst.kind(ctx) {
+                                let rhs_lhs = rhs_inst.operand(ctx, 0);
+                                let rhs_rhs = rhs_inst.operand(ctx, 1);
+                                let rhs_op = *rhs_op;
+
+                                if let ValueKind::InstResult {
+                                    inst: lhs_rhs_inst, ..
+                                } = lhs_rhs.kind(ctx)
+                                {
+                                    if let ValueKind::InstResult {
+                                        inst: rhs_rhs_inst, ..
+                                    } = rhs_rhs.kind(ctx)
+                                    {
+                                        if let Ik::IConst(_) = lhs_rhs_inst.kind(ctx) {
+                                            if let Ik::IConst(_) = rhs_rhs_inst.kind(ctx) {
+                                                // (x + c1) + (y + c2) => (x + y) + (c1 + c2)
+                                                // (x + c1) + (y - c2) => (x + y) + (c1 - c2)
+                                                // (x - c1) + (y - c2) => (x + y) - (c1 + c2)
+                                                // (x - c1) + (y + c2) => (x + y) - (c1 - c2)
+                                                // (x + c1) - (y + c2) => (x - y) + (c1 - c2)
+                                                // (x + c1) - (y - c2) => (x - y) + (c1 + c2)
+                                                // (x - c1) - (y - c2) => (x - y) - (c1 - c2)
+                                                // (x - c1) - (y + c2) => (x - y) - (c1 + c2)
+
+                                                let new_lhs_op = op;
+                                                let new_op = lhs_op;
+                                                let new_rhs_op = match (lhs_op, op, rhs_op) {
+                                                    (
+                                                        IBinaryOp::Add,
+                                                        IBinaryOp::Add,
+                                                        IBinaryOp::Add,
+                                                    ) => IBinaryOp::Add,
+                                                    (
+                                                        IBinaryOp::Add,
+                                                        IBinaryOp::Add,
+                                                        IBinaryOp::Sub,
+                                                    ) => IBinaryOp::Sub,
+                                                    (
+                                                        IBinaryOp::Sub,
+                                                        IBinaryOp::Add,
+                                                        IBinaryOp::Sub,
+                                                    ) => IBinaryOp::Add,
+                                                    (
+                                                        IBinaryOp::Sub,
+                                                        IBinaryOp::Add,
+                                                        IBinaryOp::Add,
+                                                    ) => IBinaryOp::Sub,
+                                                    (
+                                                        IBinaryOp::Add,
+                                                        IBinaryOp::Sub,
+                                                        IBinaryOp::Add,
+                                                    ) => IBinaryOp::Sub,
+                                                    (
+                                                        IBinaryOp::Add,
+                                                        IBinaryOp::Sub,
+                                                        IBinaryOp::Sub,
+                                                    ) => IBinaryOp::Add,
+                                                    (
+                                                        IBinaryOp::Sub,
+                                                        IBinaryOp::Sub,
+                                                        IBinaryOp::Sub,
+                                                    ) => IBinaryOp::Sub,
+                                                    (
+                                                        IBinaryOp::Sub,
+                                                        IBinaryOp::Sub,
+                                                        IBinaryOp::Add,
+                                                    ) => IBinaryOp::Add,
+                                                    _ => return false,
+                                                };
+
+                                                let new_lhs = Inst::ibinary(
+                                                    ctx, new_lhs_op, lhs_lhs, rhs_lhs,
+                                                );
+                                                let new_rhs = Inst::ibinary(
+                                                    ctx, new_rhs_op, lhs_rhs, rhs_rhs,
+                                                );
+                                                let new_inst = Inst::ibinary(
+                                                    ctx,
+                                                    new_op,
+                                                    new_lhs.result(ctx, 0),
+                                                    new_rhs.result(ctx, 0),
+                                                );
+
+                                                inst.insert_after(ctx, new_lhs);
+                                                new_lhs.insert_after(ctx, new_rhs);
+                                                new_rhs.insert_after(ctx, new_inst);
+                                                for user in dst.users(ctx) {
+                                                    user.replace(ctx, dst, new_inst.result(ctx, 0));
+                                                }
+
+                                                return true;
+                                            }
+                                        }
+                                    }
+                                }
                             }
-                            // TODO:
-                            // (magi, disp) = magic(rhs);
-                            // bitwidth = 32
-                            //
-                            // // mulh v1= lhs, magi
-                            // let v2 = i64 (Ty::int(64))
-                            //
-                            // srai v2= v1, (disp - bitwidth)
-                            // srli v3= lhs, (bitwidth - 1)
-                            // add ans= v2, v3
-                            //
-                            let int64 = Ty::int(ctx, 64);
-                            let (magi, disp) = magic(bitwidth as u64, v.as_signed() as u64);
-
-                            // temp0-temp5: 使用64位整数的乘法和右移来模拟32位整数与魔数的高位乘法。
-                            let temp0 = Inst::cast(ctx, CastOp::SExt, lhs, int64);
-                            let temp1 = Inst::iconst(ctx, magi, int64);
-                            let temp2 = Inst::ibinary(
-                                ctx,
-                                IBinaryOp::Mul,
-                                temp0.result(ctx, 0),
-                                temp1.result(ctx, 0),
-                            );
-                            let temp3 = Inst::iconst(ctx, IntConstant::from(disp), int64);
-                            let temp4 = Inst::ibinary(
-                                ctx,
-                                IBinaryOp::AShr,
-                                temp2.result(ctx, 0),
-                                temp3.result(ctx, 0),
-                            );
-                            let temp5 =
-                                Inst::cast(ctx, CastOp::Trunc, temp4.result(ctx, 0), lhs.ty(ctx));
-                            // temp6-temp7: 获得符号位用于修正
-                            let temp6 = Inst::iconst(
-                                ctx,
-                                IntConstant::from(bitwidth as u64 - 1),
-                                lhs.ty(ctx),
-                            );
-                            let temp7 =
-                                Inst::ibinary(ctx, IBinaryOp::LShr, lhs, temp6.result(ctx, 0));
-                            // final_inst: 使用符号位修正结果，得到除法结果。
-                            let temp8 = Inst::ibinary(
-                                ctx,
-                                IBinaryOp::Add,
-                                temp5.result(ctx, 0),
-                                temp7.result(ctx, 0),
-                            );
-
-                            inst.insert_after(ctx, temp0);
-                            temp0.insert_after(ctx, temp1);
-                            temp1.insert_after(ctx, temp2);
-                            temp2.insert_after(ctx, temp3);
-                            temp3.insert_after(ctx, temp4);
-                            temp4.insert_after(ctx, temp5);
-                            temp5.insert_after(ctx, temp6);
-                            temp6.insert_after(ctx, temp7);
-                            temp7.insert_after(ctx, temp8);
-
-                            // 处理取模的情况，并确定final_inst。
-                            let final_inst = if is_div {
-                                temp8
-                            } else if is_rem {
-                                let temp9 = Inst::iconst(ctx, v, lhs.ty(ctx));
-                                let temp10 = Inst::ibinary(
-                                    ctx,
-                                    IBinaryOp::Mul,
-                                    temp8.result(ctx, 0),
-                                    temp9.result(ctx, 0),
-                                );
-                                let temp11 =
-                                    Inst::ibinary(ctx, IBinaryOp::Sub, lhs, temp10.result(ctx, 0));
-
-                                temp8.insert_after(ctx, temp9);
-                                temp9.insert_after(ctx, temp10);
-                                temp10.insert_after(ctx, temp11);
-
-                                temp11
-                            } else {
-                                panic!("unreachable")
-                            };
-
-                            // 处理结果的符号，并确定dst_new。
-                            let dst_new = if is_v_neg {
-                                let i_zero = Inst::iconst(ctx, 0, dst.ty(ctx));
-                                let i_neg = Inst::ibinary(
-                                    ctx,
-                                    IBinaryOp::Sub,
-                                    i_zero.result(ctx, 0),
-                                    final_inst.result(ctx, 0),
-                                );
-                                final_inst.insert_after(ctx, i_zero);
-                                i_zero.insert_after(ctx, i_neg);
-                                i_neg.result(ctx, 0)
-                            } else {
-                                final_inst.result(ctx, 0)
-                            };
-
-                            for user in dst.users(ctx) {
-                                user.replace(ctx, dst, dst_new);
-                            }
-                            return true;
-                        }
-                    }
-                }
-            }
-            false
-        },
-    }
-}
-
-// 仅用于div_rem_to_mul。
-fn magic(w: u64, d: u64) -> (u64, u64) {
-    // w = bitwidth
-    // d = divisor
-    let nc = (1 << (w - 1)) - (1 << (w - 1)) % d - 1; // FIXME: 93_nested_call.sy div 0
-    let mut p = w;
-    while 1 << p <= nc * (d - (1 << p) % d) {
-        p += 1;
-    }
-    let s = p;
-    let m = ((1 << p) + d - (1 << p) % d) / d;
-
-    // m = magi(c number)
-    // s = disp(lacement)
-    (m, s)
-}
-
-// Eliminate shift by zero
-const fn shl_zero_elim() -> Rule {
-    Rule {
-        rewriter: |ctx, inst| {
-            if let Ik::IBinary(IBinaryOp::Shl) = inst.kind(ctx) {
-                let lhs = inst.operand(ctx, 0);
-                let rhs = inst.operand(ctx, 1);
-                let dst = inst.result(ctx, 0);
-
-                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
-                    if let Ik::IConst(v) = rhs_inst.kind(ctx) {
-                        if v.is_zero() {
-                            for user in dst.users(ctx) {
-                                user.replace(ctx, dst, lhs);
-                            }
-                            return true;
-                        }
-                    }
-                }
-            }
-            false
-        },
-    }
-}
-
-// Eliminate shift by zero
-const fn shr_zero_elim() -> Rule {
-    Rule {
-        rewriter: |ctx, inst| {
-            if let Ik::IBinary(IBinaryOp::LShr | IBinaryOp::AShr) = inst.kind(ctx) {
-                let lhs = inst.operand(ctx, 0);
-                let rhs = inst.operand(ctx, 1);
-                let dst = inst.result(ctx, 0);
-
-                if let ValueKind::InstResult { inst: rhs_inst, .. } = rhs.kind(ctx) {
-                    if let Ik::IConst(v) = rhs_inst.kind(ctx) {
-                        if v.is_zero() {
-                            for user in dst.users(ctx) {
-                                user.replace(ctx, dst, lhs);
-                            }
-                            return true;
                         }
                     }
                 }

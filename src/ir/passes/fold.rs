@@ -32,7 +32,7 @@ impl LocalPassMut for ConstantFolding {
                 if inst.results(ctx).len() != 1 {
                     continue;
                 }
-                if let Some(constant) = inst.fold(ctx, &mut self.fold_ctx) {
+                if let Some(constant) = inst.fold(ctx, &mut self.fold_ctx, false) {
                     let value = inst.result(ctx, 0);
                     self.fold_ctx.set(value, constant);
                     folded_insts.push(inst);

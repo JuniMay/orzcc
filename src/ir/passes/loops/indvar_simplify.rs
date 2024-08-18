@@ -1,4 +1,10 @@
-use super::{scalar_evolution::LoopScevRecord, Lcssa, LoopSimplify, Scev, ScevAnalysis};
+use super::{
+    scalar_evolution::{LoopBound, LoopBoundCond, LoopScevRecord},
+    Lcssa,
+    LoopSimplify,
+    Scev,
+    ScevAnalysis,
+};
 use crate::{
     collections::linked_list::LinkedListContainerPtr,
     ir::{
@@ -7,7 +13,6 @@ use crate::{
         Block,
         Context,
         Func,
-        ICmpCond,
         InstKind,
     },
     utils::{
@@ -28,64 +33,56 @@ impl IndvarSimplify {
     fn process_loop(&mut self, ctx: &mut Context, lp: Loop<Block>, scevs: &LoopScevRecord) -> bool {
         let mut changed = false;
 
-        let (lhs, cmp_cond, rhs) = if let Some(bound) = scevs.loop_bounds.get(&lp).unwrap() {
+        let LoopBound {
+            block_param,
+            cond: cmp_cond,
+            bound,
+            reversed,
+            ..
+        } = if let Some(bound) = scevs.loop_bounds.get(&lp).unwrap() {
             bound
         } else {
             return false;
         };
 
-        match cmp_cond {
-            ICmpCond::Eq | ICmpCond::Ne => return false,
-            // TODO: Support unsigned bounds
-            ICmpCond::Ule | ICmpCond::Ult => return false,
-            ICmpCond::Sle | ICmpCond::Slt => {}
+        let Scev {
+            block_param: repr,
+            step,
+            op,
+            ..
+        } = scevs.scevs.get(block_param).unwrap();
+
+        let mut step_const = None;
+        if let Some(inst) = step.def_inst(ctx) {
+            if let InstKind::IConst(step) = inst.kind(ctx) {
+                step_const = Some(step.as_signed());
+            }
         }
 
-        if let Some(Scev { repr, step, op, .. }) = scevs
-            .scevs
-            .get(&lp)
-            .unwrap()
-            .iter()
-            .find(|s| s.repr == *lhs || s.repr == *rhs)
-        {
-            let (bound, cmp_cond, reversed) = if repr == lhs {
-                (rhs, cmp_cond, false)
-            } else if repr == rhs {
-                (lhs, cmp_cond, true)
-            } else {
-                unreachable!()
-            };
+        if let (InductionOp::Add, LoopBoundCond::Slt, false) = (op, cmp_cond, reversed) {
+            // TODO: we can calculate the tripcount and simplify more. the tripcount is also
+            // used in unrolling.
+            if step_const == Some(1) {
+                // replace the use of the induction variable with the bound
+                // we can only replace the use in the header, and only the
+                // successor jump to exit blocks.
+                let header = lp.header(&self.scev.loops);
+                let tail = header.tail(ctx).unwrap();
 
-            let mut step_const = None;
-            if let Some(inst) = step.def_inst(ctx) {
-                if let InstKind::IConst(step) = inst.kind(ctx) {
-                    step_const = Some(step.as_signed());
+                if !tail.is_br(ctx) {
+                    return false;
                 }
-            }
 
-            if let (InductionOp::Add, ICmpCond::Slt, false) = (op, cmp_cond, reversed) {
-                if step_const == Some(1) {
-                    // replace the use of the induction variable with the bound
-                    // we can only replace the use in the header, and only the
-                    // successor jump to exit blocks.
-                    let header = lp.header(&self.scev.loop_ctx);
-                    let tail = header.tail(ctx).unwrap();
+                let blocks = lp.get_blocks(ctx, &self.scev.loops);
 
-                    if !tail.is_br(ctx) {
-                        return false;
-                    }
-
-                    let blocks = lp.get_blocks(ctx, &self.scev.loop_ctx);
-
-                    if blocks.len() != 2 {
-                        // only process the loop with 2 blocks, header and body (also the backedge).
-                        return false;
-                    }
-
-                    tail.replace(ctx, *repr, *bound);
-
-                    changed = true;
+                if blocks.len() != 2 {
+                    // only process the loop with 2 blocks, header and body (also the backedge).
+                    return false;
                 }
+
+                tail.replace(ctx, *repr, *bound);
+
+                changed = true;
             }
         }
 
@@ -103,8 +100,8 @@ impl LocalPassMut for IndvarSimplify {
 
         let mut loops = Vec::new();
 
-        for lp in self.scev.loop_ctx.loops() {
-            let depth = lp.depth(&self.scev.loop_ctx);
+        for lp in self.scev.loops.loops() {
+            let depth = lp.depth(&self.scev.loops);
             loops.push(LoopWithDepth { lp, depth });
         }
 

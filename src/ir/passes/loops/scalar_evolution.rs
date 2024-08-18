@@ -9,18 +9,20 @@ use crate::{
         Func,
         IBinaryOp,
         ICmpCond,
+        Inst,
         InstKind,
         Value,
         ValueKind,
     },
     utils::{
-        cfg::CfgInfo,
+        cfg::{CfgInfo, CfgNode},
         def_use::Usable,
         dominance::Dominance,
         loop_info::{Loop, LoopContext},
     },
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum InductionOp {
     Add,
     Sub,
@@ -45,19 +47,43 @@ impl TryFrom<IBinaryOp> for InductionOp {
     }
 }
 
-/// A record of an induction variable.
+/// Basic recurrence record.
+#[derive(Debug, Clone)]
 pub struct Scev {
     /// The representative value of this induction variable, typically the loop
     /// parameter.
-    pub repr: Value,
+    pub block_param: Value,
     /// The start value of this induction variable.
-    pub start: Value,
+    pub init: Value,
     /// The evolving step of this induction variable.
     pub step: Value,
     /// The evolution method of this induction variable.
     pub op: InductionOp,
     /// The modulus of this induction variable.
     pub modulus: Option<Value>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum LoopBoundCond {
+    Slt,
+    Sle,
+    Sgt,
+    Sge,
+}
+
+/// A record for loop bound.
+pub struct LoopBound {
+    /// The block parameter representing the basic recurrence.
+    pub block_param: Value,
+    /// The instruction for comparison
+    pub cmp_inst: Inst,
+    /// The comparison condition
+    pub cond: LoopBoundCond,
+    /// The bound value
+    pub bound: Value,
+    /// If this is a reversed comparison, i.e., bound is the lhs in the
+    /// instruction.
+    pub reversed: bool,
 }
 
 pub struct DisplayScev<'a> {
@@ -67,7 +93,7 @@ pub struct DisplayScev<'a> {
 
 impl<'a> std::fmt::Display for DisplayScev<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let start = self.scev.start.name(self.ctx).unwrap();
+        let start = self.scev.init.name(self.ctx).unwrap();
         let step = self.scev.step.name(self.ctx).unwrap();
 
         let modulus = self
@@ -101,18 +127,16 @@ impl Scev {
 /// operations.
 #[derive(Default)]
 pub struct ScevAnalysis {
-    pub(super) loop_ctx: LoopContext<Block>,
+    pub(super) loops: LoopContext<Block>,
     pub(super) dominance: Dominance<Block>,
-    // TODO: union-find might be useful for some complex tree-shaped operations, and maybe we can
-    // re-associate the operations to get a indvar expression.
-    indvars: Vec<Scev>,
+    indvars: FxHashMap<Value, Scev>,
 }
 
 impl ScevAnalysis {
     fn process_loop(&mut self, ctx: &Context, lp: Loop<Block>) {
         // after loop-simplify, the header should have exactly two predecessors. one is
         // the preheader, the other is the latch.
-        let header = lp.header(&self.loop_ctx);
+        let header = lp.header(&self.loops);
 
         for param in header.params(ctx) {
             // all the block params in the header are suspected to be induction variables.
@@ -141,7 +165,7 @@ impl ScevAnalysis {
 
                 let pred_block = pred_inst.container(ctx).unwrap();
 
-                if self.loop_ctx.is_in_loop(pred_block, lp) {
+                if self.loops.is_in_loop(pred_block, lp) {
                     // the incoming value is from inside the loop, it should be the evolving
                     // value of the induction variable.
                     evolving = Some(incoming);
@@ -159,15 +183,15 @@ impl ScevAnalysis {
             }
 
             // get the most initial start value.
-            let mut start = start.unwrap();
+            let mut init = start.unwrap();
             // the start can be a block param in the preheader, so get the def block of the
             // start value, if the start is a block param and there is only one predecessor,
             // get the incoming value.
-            while let ValueKind::BlockParam { block, .. } = start.kind(ctx) {
+            while let ValueKind::BlockParam { block, .. } = init.kind(ctx) {
                 if block.preds(ctx).len() == 1 {
                     // one predecessor -> one inst & one succ in the inst -> just get the 0-th user
                     if let Some(succ) = block.users(ctx)[0].succ_to(ctx, *block).next() {
-                        start = succ.get_arg(start).unwrap();
+                        init = succ.get_arg(init).unwrap();
                         break;
                     }
                 } else {
@@ -186,7 +210,7 @@ impl ScevAnalysis {
             //
             // The instruction should be `%evolving = <op> %param, %step`, where `%step` is
             // an loop-invariant value. Here we simply check if the `%step` is defined
-            // outside the loop, and let LICM to do the preparation
+            // outside the loop, and let LICM/GCM to do the preparation
             let def_inst = if let Some(def_inst) = evolving.def_inst(ctx) {
                 def_inst
             } else {
@@ -208,7 +232,7 @@ impl ScevAnalysis {
                     continue;
                 };
 
-                if self.loop_ctx.is_in_loop(step.def_block(ctx), lp) {
+                if self.loops.is_in_loop(step.def_block(ctx), lp) {
                     // the step is not defined outside the loop, this is not an induction variable.
                     // again, this is a conservative approach to check, we should let LICM to do the
                     // preparation.
@@ -228,39 +252,96 @@ impl ScevAnalysis {
                 };
 
                 let indvar = Scev {
-                    repr: *param,
-                    start,
+                    block_param: *param,
+                    init,
                     step,
                     op: ind_op,
                     modulus: None,
                 };
 
-                self.indvars.push(indvar);
+                self.indvars.insert(*param, indvar);
             }
         }
     }
 
-    pub fn find_loop_bound(
-        &mut self,
-        ctx: &Context,
-        lp: Loop<Block>,
-    ) -> Option<(Value, ICmpCond, Value)> {
-        let header = lp.header(&self.loop_ctx);
-        // TODO: is this right?
+    pub fn find_loop_bound(&mut self, ctx: &Context, lp: Loop<Block>) -> Option<LoopBound> {
+        let exits = lp.get_exit_blocks(ctx, &self.loops);
 
+        if exits.len() != 1 {
+            // we only support single exit loop.
+            println!("[ scev-analysis ] multiple exits in loop, not supported.");
+            return None;
+        }
+
+        let header = lp.header(&self.loops);
+
+        let mut pre_exit = false;
+        for succ in header.succs(ctx) {
+            if exits.contains(&succ) {
+                pre_exit = true;
+                break;
+            }
+        }
+        if !pre_exit {
+            println!("[ scev-analysis ] header is not pre-exit block, not supported");
+            return None;
+        }
+
+        // this should be a branch instruction.
         let tail = header.tail(ctx).unwrap();
+
         let mut loop_bound = None;
 
         if let InstKind::Br = tail.kind(ctx) {
             let cond = tail.operand(ctx, 0);
 
             if let Some(inst) = cond.def_inst(ctx) {
-                if let InstKind::IBinary(IBinaryOp::Cmp(cmp_cond)) = inst.kind(ctx) {
+                if let InstKind::IBinary(IBinaryOp::Cmp(cond @ (ICmpCond::Slt | ICmpCond::Sle))) =
+                    inst.kind(ctx)
+                {
                     let lhs = inst.operand(ctx, 0);
                     let rhs = inst.operand(ctx, 1);
 
-                    // not checing if lhs/rhs is the block param/indvar
-                    loop_bound = Some((lhs, *cmp_cond, rhs));
+                    // the compare form should be:
+                    // 1. indvar <op> invariant
+                    // 2. invariant <op> indvar (revsersed)
+                    let (indvar, invariant, reversed) = if self.indvars.contains_key(&lhs) {
+                        // also check if the bound is loop-invariant.
+                        let def_block = rhs.def_block(ctx);
+                        if self.loops.is_in_loop(def_block, lp) {
+                            return None;
+                        }
+                        (lhs, rhs, false)
+                    } else if self.indvars.contains_key(&rhs) {
+                        let def_block = lhs.def_block(ctx);
+                        if self.loops.is_in_loop(def_block, lp) {
+                            return None;
+                        }
+                        (rhs, lhs, true)
+                    } else {
+                        // the compare is not related to the loop parameter.
+                        return None;
+                    };
+
+                    let cond = if *cond == ICmpCond::Slt && !reversed {
+                        LoopBoundCond::Slt
+                    } else if *cond == ICmpCond::Sle && !reversed {
+                        LoopBoundCond::Sle
+                    } else if *cond == ICmpCond::Slt && reversed {
+                        LoopBoundCond::Sgt
+                    } else if *cond == ICmpCond::Sle && reversed {
+                        LoopBoundCond::Sge
+                    } else {
+                        unreachable!()
+                    };
+
+                    loop_bound = Some(LoopBound {
+                        block_param: indvar,
+                        cmp_inst: inst,
+                        cond,
+                        bound: invariant,
+                        reversed,
+                    });
                 }
             }
         }
@@ -272,15 +353,9 @@ impl ScevAnalysis {
 #[derive(Default)]
 pub struct LoopScevRecord {
     /// The loop parameter.
-    pub loop_bounds: FxHashMap<Loop<Block>, Option<(Value, ICmpCond, Value)>>,
+    pub loop_bounds: FxHashMap<Loop<Block>, Option<LoopBound>>,
     /// The detected loop induction variables.
-    pub scevs: FxHashMap<Loop<Block>, Vec<Scev>>,
-}
-
-impl LoopScevRecord {
-    pub fn iter(&self) -> impl Iterator<Item = &Scev> {
-        self.scevs.iter().flat_map(|(_, v)| v.iter())
-    }
+    pub scevs: FxHashMap<Value, Scev>,
 }
 
 pub struct DisplayLoopScevRecord<'a> {
@@ -290,23 +365,39 @@ pub struct DisplayLoopScevRecord<'a> {
 
 impl<'a> std::fmt::Display for DisplayLoopScevRecord<'a> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        for (lp, bound) in self.record.loop_bounds.iter() {
-            if let Some(bound) = bound {
-                let (lhs, cond, rhs) = bound;
+        for (_, bound) in self.record.loop_bounds.iter() {
+            if let Some(LoopBound {
+                block_param,
+                cond,
+                bound,
+                reversed,
+                ..
+            }) = bound
+            {
+                let param_name = block_param.name(self.ctx).unwrap();
+                let bound_name = bound.name(self.ctx).unwrap();
+
+                let cond = match cond {
+                    LoopBoundCond::Slt => "slt",
+                    LoopBoundCond::Sle => "sle",
+                    LoopBoundCond::Sgt => "sgt",
+                    LoopBoundCond::Sge => "sge",
+                };
+
                 writeln!(
                     f,
-                    "loop bound: {} {} {}",
-                    lhs.name(self.ctx).unwrap(),
+                    "{} {} {} {}",
+                    param_name,
                     cond,
-                    rhs.name(self.ctx).unwrap()
+                    bound_name,
+                    if *reversed { "reversed" } else { "" }
                 )?;
-            } else {
-                writeln!(f, "loop bound: none")?;
             }
+        }
 
-            for scev in self.record.scevs.get(lp).unwrap() {
-                writeln!(f, "  {}", scev.display(self.ctx))?;
-            }
+        for (param, scev) in self.record.scevs.iter() {
+            let param_name = param.name(self.ctx).unwrap();
+            writeln!(f, "{}: {}", param_name, scev.display(self.ctx))?;
         }
 
         Ok(())
@@ -326,17 +417,18 @@ impl LocalPass for ScevAnalysis {
         let cfg = CfgInfo::new(ctx, func);
 
         self.dominance = Dominance::new(ctx, &cfg);
-        self.loop_ctx = LoopContext::new(&cfg, &self.dominance);
+        self.loops = LoopContext::new(&cfg, &self.dominance);
         self.indvars.clear();
 
         let mut result = LoopScevRecord::default();
 
-        for lp in self.loop_ctx.loops() {
+        for lp in self.loops.loops() {
             self.process_loop(ctx, lp);
             let bound = self.find_loop_bound(ctx, lp);
             result.loop_bounds.insert(lp, bound);
-            result.scevs.insert(lp, self.indvars.drain(..).collect());
         }
+
+        result.scevs = self.indvars.drain().collect();
 
         Ok(result)
     }
