@@ -22,10 +22,7 @@ use rustc_hash::FxHashMap;
 
 use super::CfgCanonicalize;
 use crate::{
-    collections::{
-        linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
-        storage::ArenaPtr,
-    },
+    collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
     ir::{
         passman::{GlobalPassMut, LocalPassMut, PassManager, PassResult, TransformPass},
         remove_all_insts,
@@ -351,12 +348,12 @@ impl CfgSimplify {
 
             let mut insts_to_remove = Vec::new();
 
-            for (inst_then, inst_else) in insts_then.iter().zip(insts_else.iter()) {
-                if inst_then.deref(ctx) != inst_else.deref(ctx) {
+            for (&inst_then, &inst_else) in insts_then.iter().zip(insts_else.iter()) {
+                if !inst_then.ctx_eq(ctx, inst_else) {
                     same = false;
                     break;
                 }
-                insts_to_remove.push(*inst_else);
+                insts_to_remove.push(inst_else);
             }
 
             if same {
