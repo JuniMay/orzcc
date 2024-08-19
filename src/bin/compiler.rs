@@ -47,6 +47,7 @@ use orzcc::{
                 IndvarReduce,
                 IndvarSimplify,
                 Lcssa,
+                LoopInvariantMotion,
                 LoopPeel,
                 LoopSimplify,
                 LoopStrengthReduction,
@@ -55,6 +56,7 @@ use orzcc::{
                 INDVAR_OFFSET,
                 INDVAR_REDUCE,
                 INDVAR_SIMPLIFY,
+                LOOP_INVARIANT_MOTION,
                 LOOP_PEEL,
                 LOOP_STRENGTH_REDUCTION,
                 LOOP_UNROLL,
@@ -220,9 +222,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 passman.run_pipeline(&mut ir, &pipe_tco, 32, 8);
                 passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
-
-                passman.run_pipeline(&mut ir, &pipe_inline, 32, 8);
-                passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
             }
 
             // legalize to remove high level operations.
@@ -258,6 +257,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 // remove redundant inner loops.
                 passman.run_transform(DEAD_LOOP_ELIM, &mut ir, 1);
                 // remove all redundant code.
+                passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
+                // remove unnecessary control flow.
+                passman.run_transform(ADCE, &mut ir, 1);
+                passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
+                // licm, for partial impure function and operations.
+                passman.run_transform(LOOP_INVARIANT_MOTION, &mut ir, 32);
                 passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
             }
 
@@ -410,6 +415,7 @@ fn register_passes(passman: &mut PassManager) {
     LoopStrengthReduction::register(passman);
     IndvarOffset::register(passman);
     IndvarReduce::register(passman);
+    LoopInvariantMotion::register(passman);
 
     GlobalValueNumbering::register(passman);
     Gcm::register(passman);

@@ -1518,6 +1518,14 @@ impl Inst {
 
     pub fn is_store(self, ctx: &Context) -> bool { matches!(self.deref(ctx).kind, InstKind::Store) }
 
+    pub fn is_load_elem(self, ctx: &Context) -> bool {
+        matches!(self.deref(ctx).kind, InstKind::LoadElem { .. })
+    }
+
+    pub fn is_store_elem(self, ctx: &Context) -> bool {
+        matches!(self.deref(ctx).kind, InstKind::StoreElem { .. })
+    }
+
     pub fn is_commutative(self, ctx: &Context) -> bool {
         use InstKind as Ik;
 

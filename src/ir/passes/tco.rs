@@ -87,6 +87,19 @@ impl LocalPassMut for Tco {
         }
 
         old_entry.insert_before(ctx, new_entry);
+
+        // move all the stack slots from old entry to the new entry
+        let mut curr_inst = old_entry.head(ctx);
+        while let Some(inst) = curr_inst {
+            curr_inst = inst.next(ctx);
+            if inst.is_stack_slot(ctx) {
+                inst.unlink(ctx);
+                new_entry.push_back(ctx, inst);
+            } else {
+                break;
+            }
+        }
+
         let jump = Inst::jump(ctx, old_entry, new_params);
         new_entry.push_back(ctx, jump);
 

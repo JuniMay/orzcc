@@ -14,7 +14,11 @@ use crate::{
         ICmpCond,
         InstKind,
     },
-    utils::cfg::CfgNode,
+    utils::{
+        cfg::{CfgInfo, CfgNode},
+        dominance::Dominance,
+        loop_info::LoopContext,
+    },
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -100,54 +104,116 @@ pub struct Edge {
 
 pub const PH_BLOCK_LAYOUT: &str = "ph-block-layout";
 
-pub struct PHBlockLayout;
+#[derive(Default)]
+pub struct PHBlockLayout {
+    loops: LoopContext<Block>,
+}
 
 impl PHBlockLayout {
-    pub fn estimate_branch_prob(ctx: &Context, block: Block) -> (f64, f64) {
+    pub fn estimate_branch_prob(&self, ctx: &Context, block: Block) -> (f64, f64) {
         let succs = block.succs(ctx);
         if succs.len() != 2 {
             panic!("block has more than 2 successors");
         }
 
-        // rule 1: P(left_br) = 0.99 if br in loop
-        if let Some(block_name) = block.name(ctx) {
-            println!("block name: {:?}", block_name);
-            if block_name.contains("while") {
-                return (0.99, 0.01);
-            } else if block_name.contains("if") {
-                let br_inst = block.tail(ctx).unwrap();
-                if !br_inst.is_br(ctx) {
-                    panic!("block tail is not a br");
+        if let Some(lp) = self.loops.get_loop(block) {
+            let header = lp.header(&self.loops);
+
+            if header == block {
+                // the header has greater possibility to jump into the loop.
+                assert_eq!(succs.len(), 2);
+                if self.loops.is_in_loop(succs[0], lp) && !self.loops.is_in_loop(succs[1], lp) {
+                    return (0.99, 0.01);
+                } else if self.loops.is_in_loop(succs[1], lp)
+                    && !self.loops.is_in_loop(succs[0], lp)
+                {
+                    return (0.01, 0.99);
+                }
+            } else {
+                // the block is inside the loop, but not the header, we have
+                // several heuristics
+                // 1. one successor is the header, the other is not (but inside the loop), we
+                //    have little possibility to jump back to the header, because this is
+                //    typically a continue.
+                // 2. one successor is outside the loop, the other is inside the loop, this is
+                //    typically a break. We assign greater possibility to stay in the loop.
+
+                // rule 1
+                if succs[0] == header && succs[1] != header && self.loops.is_in_loop(succs[1], lp) {
+                    return (0.2, 0.8);
+                } else if succs[1] == header
+                    && succs[0] != header
+                    && self.loops.is_in_loop(succs[0], lp)
+                {
+                    return (0.8, 0.2);
                 }
 
-                let cond = br_inst.operand(ctx, 0);
-
-                if let Some(cond_def) = cond.def_inst(ctx) {
-                    // rule 2: P(left_br) = 0.9 if br is from a icmp.ne
-                    if let InstKind::IBinary(IBinaryOp::Cmp(ICmpCond::Ne)) = cond_def.kind(ctx) {
-                        return (0.9, 0.1);
-                    }
+                // rule 2
+                if !self.loops.is_in_loop(succs[0], lp) && self.loops.is_in_loop(succs[1], lp) {
+                    // stay in the loop
+                    return (0.2, 0.8);
+                } else if !self.loops.is_in_loop(succs[1], lp)
+                    && self.loops.is_in_loop(succs[0], lp)
+                {
+                    return (0.8, 0.2);
                 }
             }
         }
 
-        // rule 3: P(jump_to_ret) = 0.01
-        if let Some(return_block) = block.container(ctx).unwrap().tail(ctx) {
-            if succs[0] == return_block {
+        // the block is not inside any loops, several heuristics:
+        // 1. one successor is a header of a loop, the other is not, the one that is in
+        //    the loop has greater possibility to be taken
+        if let Some(lp) = self.loops.get_loop(succs[0]) {
+            if lp.header(&self.loops) == succs[0] && succs[0] != succs[1] {
+                // backedge, mostly, or a pseudo preheader, greater possibility
+                // to be taken
+                return (0.99, 0.01);
+            }
+        }
+
+        if let Some(lp) = self.loops.get_loop(succs[1]) {
+            if lp.header(&self.loops) == succs[1] && succs[0] != succs[1] {
                 return (0.01, 0.99);
-            } else if succs[1] == return_block {
+            }
+        }
+
+        // 2. smaller possibility to jump to the return block
+        if let Some(return_block) = block.container(ctx).unwrap().tail(ctx) {
+            if succs[0] == return_block && succs[1] != return_block {
+                return (0.01, 0.99);
+            } else if succs[1] == return_block && succs[0] != return_block {
                 return (0.99, 0.01);
             }
         }
 
-        // rule 4: P(left_br) = 0.5
-        (0.5, 0.5)
+        let br_inst = block.tail(ctx).unwrap();
+        if !br_inst.is_br(ctx) {
+            panic!("block tail is not a br");
+        }
+        let cond = br_inst.operand(ctx, 0);
+        if let Some(cond_def) = cond.def_inst(ctx) {
+            if let InstKind::IBinary(IBinaryOp::Cmp(cond)) = cond_def.kind(ctx) {
+                if *cond == ICmpCond::Ne {
+                    return (0.9, 0.1);
+                } else if *cond == ICmpCond::Eq {
+                    return (0.1, 0.9);
+                }
+            }
+        }
+
+        // regard the first successor to be taken
+        (0.6, 0.4)
     }
 }
 impl LocalPassMut for PHBlockLayout {
     type Output = ();
 
     fn run(&mut self, ctx: &mut Context, func: Func) -> PassResult<(Self::Output, bool)> {
+        let cfg = CfgInfo::new(ctx, func);
+        let dominance = Dominance::new(ctx, &cfg);
+
+        self.loops = LoopContext::new(&cfg, &dominance);
+
         // abort if the function is too large
         let n_blocks = func.iter(ctx).count();
         if n_blocks > 1000 {
@@ -173,7 +239,7 @@ impl LocalPassMut for PHBlockLayout {
                 let succ1_index = index_map[&succs[0]];
                 let succ2_index = index_map[&succs[1]];
 
-                let (p1, p2) = PHBlockLayout::estimate_branch_prob(ctx, block);
+                let (p1, p2) = self.estimate_branch_prob(ctx, block);
                 mat[(index, succ1_index)] -= p1;
                 mat[(index, succ2_index)] -= p2;
             } else if succs.len() == 1 {
@@ -232,7 +298,7 @@ impl LocalPassMut for PHBlockLayout {
             let succ = block.succs(ctx);
             let index = index_map[&block];
             if succ.len() == 2 {
-                let (p1, p2) = PHBlockLayout::estimate_branch_prob(ctx, block);
+                let (p1, p2) = self.estimate_branch_prob(ctx, block);
                 let succ1 = succ[0];
                 if succ1 != block {
                     let edge = Edge {
@@ -340,7 +406,7 @@ impl TransformPass for PHBlockLayout {
     {
         passman.register_transform(
             PH_BLOCK_LAYOUT,
-            PHBlockLayout,
+            PHBlockLayout::default(),
             vec![Box::new(CfgCanonicalize)],
         );
     }

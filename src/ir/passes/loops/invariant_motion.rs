@@ -6,6 +6,7 @@ use super::simplify::LoopSimplify;
 use crate::{
     collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
     ir::{
+        function_analysis::FunctionAnalysis,
         passes::control_flow::CfgCanonicalize,
         passman::{GlobalPassMut, LocalPassMut, PassManager, PassResult, TransformPass},
         Block,
@@ -26,6 +27,7 @@ pub const LOOP_INVARIANT_MOTION: &str = "loop-invariant-motion";
 #[derive(Default)]
 pub struct LoopInvariantMotion {
     loop_ctx: LoopContext<Block>,
+    func_analysis: FunctionAnalysis,
 }
 
 impl LoopInvariantMotion {
@@ -36,6 +38,27 @@ impl LoopInvariantMotion {
         let preheader = lp
             .get_preheader(ctx, &self.loop_ctx)
             .expect("preheader should have been created by loop-simplify");
+
+        let blocks = lp.get_blocks(ctx, &self.loop_ctx);
+        let mut loop_not_partial = false;
+        for block in blocks {
+            for inst in block.iter(ctx) {
+                if inst.is_store(ctx) || inst.is_store_elem(ctx) || inst.is_call_indirect(ctx) {
+                    loop_not_partial = true;
+                    break;
+                } else if let Ik::Call(sym) = inst.kind(ctx) {
+                    if let Some(func) = ctx.lookup_func(sym) {
+                        if !self.func_analysis.is_partial(func) {
+                            loop_not_partial = true;
+                            break;
+                        }
+                    } else {
+                        loop_not_partial = true;
+                        break;
+                    }
+                }
+            }
+        }
 
         let mut visited = FxHashSet::default();
         let mut queue = VecDeque::new();
@@ -87,21 +110,21 @@ impl LoopInvariantMotion {
                     | Ik::Offset => {
                         // these instructions are movable
                     }
-                    Ik::Call(_) | Ik::CallIndirect(_) => {
-                        // TODO: we need to decide if there are any side effects
-                        movable = false;
+                    Ik::CallIndirect(_) => movable = false,
+                    Ik::Call(sym) => {
+                        if let Some(func) = ctx.lookup_func(sym) {
+                            movable =
+                                movable && self.func_analysis.is_partial(func) && !loop_not_partial;
+                        } else {
+                            movable = false;
+                        }
                     }
-                    Ik::Load => {
-                        // we don't know if any store in the loop modifies the
-                        // address, so we can't move the load
-                        movable = false;
+                    Ik::Load | Ik::LoadElem { .. } => {
+                        if loop_not_partial {
+                            movable = false;
+                        }
                     }
-                    Ik::Store
-                    | Ik::Br
-                    | Ik::Jump
-                    | Ik::Ret
-                    | Ik::LoadElem { .. }
-                    | Ik::StoreElem { .. } => {
+                    Ik::Store | Ik::Br | Ik::Jump | Ik::Ret | Ik::StoreElem { .. } => {
                         // these instructions are not movable
                         movable = false;
                     }
@@ -165,6 +188,8 @@ impl GlobalPassMut for LoopInvariantMotion {
     type Output = ();
 
     fn run(&mut self, ctx: &mut Context) -> PassResult<(Self::Output, bool)> {
+        self.func_analysis.analyze_all(ctx);
+
         let mut changed = false;
         for func in ctx.funcs() {
             let (_, local_changed) = LocalPassMut::run(self, ctx, func).unwrap();
