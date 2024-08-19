@@ -1419,6 +1419,63 @@ impl Inst {
         inst
     }
 
+    pub fn deep_clone_sync(self, ctx: &mut Context, map: &mut DeepCloneMap, sync_map: &mut DeepCloneMap) -> Inst {
+        let kind = self.kind(ctx).clone();
+
+        let opds = self
+            .operands(ctx)
+            .into_iter()
+            .map(|opd| map.get_value_or_old(opd))
+            .collect::<Vec<_>>();
+
+        let result_tys = self
+            .results(ctx)
+            .iter()
+            .map(|r| r.ty(ctx))
+            .collect::<Vec<_>>();
+
+        let inst = Self::new(ctx, kind, result_tys, opds);
+
+        // succs
+        let blocks = self
+            .deref(ctx)
+            .successors
+            .iter()
+            .map(|succ| {
+                let old_block = succ.block();
+                let new_block = map.get_block_or_old(old_block);
+
+                let args = old_block
+                    .params(ctx)
+                    .iter()
+                    .zip(new_block.params(ctx).iter())
+                    .map(|(old_param, new_param)| {
+                        let old_arg = succ.get_arg(*old_param).unwrap();
+                        let new_arg = map.get_value_or_old(old_arg);
+                        (*new_param, new_arg)
+                    })
+                    .collect::<FxHashMap<_, _>>();
+
+                (new_block, args)
+            })
+            .collect::<Vec<_>>();
+
+        for (block, args) in blocks {
+            let mut new_succ = Successor::new(Operand::new(ctx, block, inst));
+            for (param, arg) in args {
+                new_succ.add_arg(param, Operand::new(ctx, arg, inst));
+            }
+            inst.add_successor(ctx, new_succ);
+        }
+
+        for (old_result, new_result) in self.results(ctx).iter().zip(inst.results(ctx).iter()) {
+            map.insert_value(*old_result, *new_result);
+            sync_map.insert_value(*old_result, *new_result);
+        }
+
+        inst
+    }
+
     pub fn is_stack_slot(self, ctx: &Context) -> bool {
         matches!(self.deref(ctx).kind, InstKind::StackSlot(_))
     }

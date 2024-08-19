@@ -38,6 +38,7 @@ use orzcc::{
             },
             legalize::{Legalize, LEGALIZE},
             loops::{
+                AutoParallelize,
                 DeadLoopElim,
                 IndvarOffset,
                 IndvarSimplify,
@@ -46,6 +47,7 @@ use orzcc::{
                 LoopSimplify,
                 LoopStrengthReduction,
                 LoopUnroll,
+                AUTO_PARALLELIZE,
                 DEAD_LOOP_ELIM,
                 INDVAR_OFFSET,
                 INDVAR_SIMPLIFY,
@@ -198,6 +200,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 pipe_inline.add_pass(GLOBAL_DCE);
             }
 
+            let mut pipe_parallelize = Pipeline::default();
+            {
+                pipe_parallelize.add_pass(ELIM_CONSTANT_PHI);
+                pipe_parallelize.add_pass(ADCE);
+                pipe_parallelize.add_pass(CFG_SIMPLIFY);
+                pipe_parallelize.add_pass(SIMPLE_DCE);
+                pipe_parallelize.add_pass(AUTO_PARALLELIZE);
+                pipe_parallelize.add_pass(CFG_SIMPLIFY);
+                pipe_parallelize.add_pass(SIMPLE_DCE);
+            }
+
             let mut pipe_unroll = Pipeline::default();
             {
                 pipe_unroll.add_pass(LOOP_UNROLL);
@@ -216,6 +229,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 passman.run_pipeline(&mut ir, &pipe_inline, 32, 8);
                 passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
+            }
+
+            // auto parallelize
+            {
+                // dump before parallelize
+                // ir.alloc_all_names();
+                // std::fs::write("./before.orzir", format!("{}", ir.display(true)))?;
+
+                passman.run_pipeline(&mut ir, &pipe_parallelize, 32, 1);
+
+                // dump after parallelize
+                ir.alloc_all_names();
+                // std::fs::write("./after.orzir", format!("{}",
+                // ir.display(true)))?; passman.run_pipeline(&
+                // mut ir, &pipe_basic, 32, 8);
             }
 
             // legalize to remove high level operations.
@@ -392,6 +420,7 @@ fn register_passes(passman: &mut PassManager) {
 
     Legalize::register(passman);
     BlockReorder::register(passman);
+    AutoParallelize::register(passman);
 }
 
 fn cli(passman: &mut PassManager) -> Command {

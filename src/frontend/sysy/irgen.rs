@@ -657,6 +657,33 @@ impl IrGenContext {
         let memset_sig = ir::Signature::new(vec![ptr, int, int], vec![void]);
         self.ctx.add_func_decl("memset", memset_sig);
     }
+
+    fn gen_orzcclib(&mut self) {
+        self.symtable.register_orzcclib();
+        let orzcclib_names = [
+            "orzcc_init_var_list",
+            "orzcc_free_var_list",
+            "orzcc_var_list_push_int",
+            "orzcc_var_list_push_float",
+            "orzcc_var_list_push_ptr",
+            "orzcc_var_list_get_int",
+            "orzcc_var_list_get_float",
+            "orzcc_var_list_get_ptr",
+            "orzcc_var_list_get_start",
+            "orzcc_var_list_get_end",
+            "orzcc_var_list_ret_int",
+            "orzcc_var_list_ret_float",
+            "orzcc_parallel_for",
+            "orzcc_parallel_for_reduce_add_int",
+            "orzcc_parallel_for_reduce_add_float",
+        ];
+
+        for name in orzcclib_names.iter() {
+            let entry = self.symtable.lookup(name).unwrap();
+            let sig = self.gen_sig(&entry.ty.clone());
+            self.ctx.add_func_decl(name, sig);
+        }
+    }
 }
 
 pub trait IrGen {
@@ -667,6 +694,7 @@ impl IrGen for CompUnit {
     fn irgen(&self, irgen: &mut IrGenContext) {
         irgen.symtable.enter_scope();
         irgen.gen_sysylib();
+        irgen.gen_orzcclib();
         for item in &self.items {
             item.irgen(irgen);
         }

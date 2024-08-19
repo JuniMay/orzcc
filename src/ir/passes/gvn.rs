@@ -144,7 +144,12 @@ impl GlobalValueNumbering {
                     while let Some(last_inst) = curr_inst.prev(ctx) {
                         match last_inst.kind(ctx) {
                             InstKind::Store => {
-                                match AliasAnalysis::analyze(ctx, ptr, last_inst.operand(ctx, 1)) {
+                                match AliasAnalysis::analyze(
+                                    ctx,
+                                    ptr,
+                                    last_inst.operand(ctx, 1),
+                                    false,
+                                ) {
                                     AliasAnalysisResult::MustAlias => {
                                         // if we get a must alias, we can replace the load with the
                                         // store's val
@@ -163,7 +168,12 @@ impl GlobalValueNumbering {
                                 }
                             }
                             InstKind::Load => {
-                                match AliasAnalysis::analyze(ctx, ptr, last_inst.operand(ctx, 0)) {
+                                match AliasAnalysis::analyze(
+                                    ctx,
+                                    ptr,
+                                    last_inst.operand(ctx, 0),
+                                    false,
+                                ) {
                                     AliasAnalysisResult::MustAlias => {
                                         // if we get a must alias, we can replace the load with the
                                         // load's val
@@ -199,7 +209,12 @@ impl GlobalValueNumbering {
                             | InstKind::StackSlot(_)
                             | InstKind::Cast(CastOp::IntToPtr) => {
                                 // if we get a get_global, offset or stack_slot, we can't continue
-                                match AliasAnalysis::analyze(ctx, ptr, last_inst.result(ctx, 0)) {
+                                match AliasAnalysis::analyze(
+                                    ctx,
+                                    ptr,
+                                    last_inst.result(ctx, 0),
+                                    false,
+                                ) {
                                     AliasAnalysisResult::MustAlias
                                     | AliasAnalysisResult::MayAlias => {
                                         // if we get a must alias, we meet the
@@ -268,6 +283,7 @@ impl GlobalValueNumbering {
                                             ctx,
                                             ptr,
                                             block_inst.operand(ctx, 1),
+                                            false,
                                         ) {
                                             AliasAnalysisResult::MustAlias => {
                                                 // if we get a must alias, we can replace the load
@@ -292,6 +308,7 @@ impl GlobalValueNumbering {
                                             ctx,
                                             ptr,
                                             block_inst.operand(ctx, 0),
+                                            false,
                                         ) {
                                             AliasAnalysisResult::MustAlias => {
                                                 // if we get a must alias, we can replace the load
@@ -333,6 +350,7 @@ impl GlobalValueNumbering {
                                             ctx,
                                             ptr,
                                             block_inst.result(ctx, 0),
+                                            false,
                                         ) {
                                             AliasAnalysisResult::MustAlias
                                             | AliasAnalysisResult::MayAlias => {

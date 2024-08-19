@@ -30,7 +30,7 @@ fn test_alias_analysis() {
         // test all pointer pairs
         for a in &pointers {
             for b in &pointers {
-                let result = AliasAnalysis::analyze(&ctx, *a, *b);
+                let result = AliasAnalysis::analyze(&ctx, *a, *b, true);
                 println!("{:?} {:?} {:}", a, b, result);
             }
         }

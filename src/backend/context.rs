@@ -84,8 +84,16 @@ where
     I: DisplayMInst<'a>,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let lib = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/lib/orzcc-runtime-lib.s"
+        ));
+
         writeln!(f, "\t.attribute arch, \"{}\"", self.mctx.arch())?;
         // writeln!(f, "\t.option pic")?;
+
+        writeln!(f, "{}", lib)?;
+
         writeln!(f, "\t.text")?;
         for (_, func_data) in self.mctx.funcs.iter() {
             let func = func_data.self_ptr();
