@@ -694,71 +694,59 @@ where
                 let then_succ = inst.succ(self.ctx, 0);
                 let else_succ = inst.succ(self.ctx, 1);
 
+                let then_block = then_succ.block();
+                let else_block = else_succ.block();
+
                 let mblock_then = self.blocks[&then_succ.block()];
                 let mblock_else = self.blocks[&else_succ.block()];
 
-                // TODO: we can do better if there are no lost-copy problem between the two
-                // successors.
+                let this_block = self.curr_block.unwrap();
+
                 if then_succ.args().is_empty() {
                     // if there are no arugments to pass, we can just br, without creating a new
                     // block because no lost-copy problem will happen
                     S::gen_br(self, mcond, mblock_then);
-
-                    if else_succ.args().is_empty() {
-                        // if there are no arguments to pass, we can just br, without creating a new
-                        // block because no lost-copy problem will happen
-                        S::gen_jump(self, mblock_else);
-                    } else {
-                        // create a new block to jump
-                        let mblock_else_arg_passing = MBlock::new(
-                            &mut self.mctx,
-                            format!(".__machbb_{}", self.label_counter),
-                        );
-                        self.label_counter += 1;
-
-                        S::gen_jump(self, mblock_else_arg_passing);
-
-                        mblock_else.insert_before(self.mctx_mut(), mblock_else_arg_passing);
-
-                        self.curr_block = Some(mblock_else_arg_passing);
-
-                        self.lower_succ(else_succ);
-                        S::gen_jump(self, mblock_else);
-                    }
-                } else {
+                } else if then_block.preds(self.ctx).len() > 1 {
                     let mblock_then_arg_passing =
                         MBlock::new(&mut self.mctx, format!(".__machbb_{}", self.label_counter));
                     self.label_counter += 1;
 
-                    let this_mblock = self.curr_block.unwrap();
-                    this_mblock.insert_after(self.mctx_mut(), mblock_then_arg_passing);
-
+                    this_block.insert_after(self.mctx_mut(), mblock_then_arg_passing);
                     S::gen_br(self, mcond, mblock_then_arg_passing);
-
-                    if else_succ.args().is_empty() {
-                        // if there are no arguments to pass, we can just br, without creating a new
-                        // block because no lost-copy problem will happen
-                        S::gen_jump(self, mblock_else);
-                    } else {
-                        let mblock_else_arg_passing = MBlock::new(
-                            &mut self.mctx,
-                            format!(".__machbb_{}", self.label_counter),
-                        );
-                        self.label_counter += 1;
-
-                        mblock_else.insert_before(self.mctx_mut(), mblock_else_arg_passing);
-
-                        S::gen_jump(self, mblock_else_arg_passing);
-
-                        self.curr_block = Some(mblock_else_arg_passing);
-                        self.lower_succ(else_succ);
-                        S::gen_jump(self, mblock_else);
-                    }
 
                     self.curr_block = Some(mblock_then_arg_passing);
                     self.lower_succ(then_succ);
-
                     S::gen_jump(self, mblock_then);
+                } else {
+                    // pass arguments at the beginning of the destination block
+                    S::gen_br(self, mcond, mblock_then);
+                    self.curr_block = Some(mblock_then);
+                    self.lower_succ(then_succ);
+                }
+
+                self.curr_block = Some(this_block);
+
+                if else_succ.args().is_empty() {
+                    // if there are no arguments to pass, we can just br, without creating a new
+                    // block because no lost-copy problem will happen
+                    S::gen_jump(self, mblock_else);
+                } else if else_block.preds(self.ctx).len() > 1 {
+                    let mblock_else_arg_passing =
+                        MBlock::new(&mut self.mctx, format!(".__machbb_{}", self.label_counter));
+                    self.label_counter += 1;
+
+                    S::gen_jump(self, mblock_else_arg_passing);
+
+                    mblock_else.insert_before(self.mctx_mut(), mblock_else_arg_passing);
+
+                    self.curr_block = Some(mblock_else_arg_passing);
+                    self.lower_succ(else_succ);
+                    S::gen_jump(self, mblock_else);
+                } else {
+                    // pass arguments at the beginning of the destination block
+                    S::gen_jump(self, mblock_else);
+                    self.curr_block = Some(mblock_else);
+                    self.lower_succ(else_succ);
                 }
             }
             Ik::Call(symbol) => {
