@@ -266,8 +266,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
             }
 
-            let iter = passman.run_pipeline(&mut ir, &pipe_inline, 32, 8);
+            let iter = passman.run_pipeline(&mut ir, &pipe_inline, 32, 2);
             println!("pipeline inline iterations: {}", iter);
+
+            let iter = passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
+            println!("pipeline gvn iterations: {}", iter);
 
             let iter = passman.run_pipeline(&mut ir, &pipe_unroll, 1, 1);
             println!("pipeline unroll iterations: {}", iter);

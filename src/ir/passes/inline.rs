@@ -231,7 +231,7 @@ impl LocalPassMut for Inline {
     type Output = ();
 
     fn run(&mut self, ctx: &mut Context, func: Func) -> PassResult<(Self::Output, bool)> {
-        let mut changed = false;
+        let mut _changed = false;
 
         let mut call_count = FxHashMap::default();
 
@@ -256,12 +256,12 @@ impl LocalPassMut for Inline {
             while let Some(inst) = curr_inst {
                 curr_inst = inst.next(ctx);
                 if inst.is_call(ctx) {
-                    changed |= self.inline_one_call(ctx, func, inst, &call_count);
+                    _changed |= self.inline_one_call(ctx, func, inst, &call_count);
                 }
             }
         }
 
-        Ok(((), changed))
+        Ok(((), false))
     }
 }
 
