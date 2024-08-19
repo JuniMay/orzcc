@@ -237,19 +237,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
             }
 
-            // auto parallelize
+            // loop peeling to remove inefficient inner loop patterns.
             {
-                // dump before parallelize
-                // ir.alloc_all_names();
-                // std::fs::write("./before.orzir", format!("{}", ir.display(true)))?;
-
-                passman.run_pipeline(&mut ir, &pipe_parallelize, 32, 1);
-
-                // dump after parallelize
-                ir.alloc_all_names();
-                // std::fs::write("./after.orzir", format!("{}",
-                // ir.display(true)))?; passman.run_pipeline(&
-                // mut ir, &pipe_basic, 32, 8);
+                // loop-peeling tend to eliminate the inner loops that will only be executed in
+                // the first trip of outer loop.
+                passman.run_transform(LOOP_PEEL, &mut ir, 1);
+                // the control indvar of the inner loop will be simplified, and passed to the
+                // original loop, as the new init.
+                passman.run_transform(INDVAR_SIMPLIFY, &mut ir, 1);
+                // there might be nested argument passing, we did not detect that in
+                // `dead-loop-elim`, but just regard it as constant phi.
+                passman.run_transform(ELIM_CONSTANT_PHI, &mut ir, 32);
+                // remove redundant inner loops.
+                passman.run_transform(DEAD_LOOP_ELIM, &mut ir, 1);
+                // remove all redundant code.
+                passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
+                // remove unnecessary control flow.
+                passman.run_transform(ADCE, &mut ir, 1);
+                passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
+                // licm, for partial impure function and operations.
+                passman.run_transform(LOOP_INVARIANT_MOTION, &mut ir, 32);
+                passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
             }
 
             // auto parallelize
@@ -283,29 +291,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 let iter = passman.run_transform(LOOP_STRENGTH_REDUCTION, &mut ir, 32);
                 println!("loop strength reduction iterations: {}", iter);
-                passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
-            }
-
-            // loop peeling to remove inefficient inner loop patterns.
-            {
-                // loop-peeling tend to eliminate the inner loops that will only be executed in
-                // the first trip of outer loop.
-                passman.run_transform(LOOP_PEEL, &mut ir, 1);
-                // the control indvar of the inner loop will be simplified, and passed to the
-                // original loop, as the new init.
-                passman.run_transform(INDVAR_SIMPLIFY, &mut ir, 1);
-                // there might be nested argument passing, we did not detect that in
-                // `dead-loop-elim`, but just regard it as constant phi.
-                passman.run_transform(ELIM_CONSTANT_PHI, &mut ir, 32);
-                // remove redundant inner loops.
-                passman.run_transform(DEAD_LOOP_ELIM, &mut ir, 1);
-                // remove all redundant code.
-                passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
-                // remove unnecessary control flow.
-                passman.run_transform(ADCE, &mut ir, 1);
-                passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
-                // licm, for partial impure function and operations.
-                passman.run_transform(LOOP_INVARIANT_MOTION, &mut ir, 32);
                 passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
             }
 

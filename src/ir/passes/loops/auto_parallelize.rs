@@ -32,6 +32,7 @@ use crate::{
         Value,
     },
     utils::{
+        cfg::CfgNode,
         def_use::{Usable, User},
         loop_info::{Loop, LoopWithDepth},
     },
@@ -386,6 +387,16 @@ impl AutoParallelize {
                 .into_iter()
                 .next()
                 .unwrap();
+
+            // no break in loop
+            for block in loop_blocks
+                .iter()
+                .filter(|block| **block != lp.header(&self.scev.loops))
+            {
+                if block.succs(ctx).contains(&exit_block) {
+                    return false;
+                }
+            }
 
             // search for used values that are defined outside the loop
             let mut defined_inside = FxHashSet::default();
