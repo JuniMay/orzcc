@@ -11,7 +11,6 @@ use super::{
 use crate::{
     collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
     ir::{
-        alias_analysis::{AliasAnalysis, AliasAnalysisResult},
         deep_clone::DeepCloneMap,
         function_analysis::FunctionAnalysis,
         passes::{
@@ -451,7 +450,7 @@ impl AutoParallelize {
             for operand in defined_outside {
                 if let Some(inst) = operand.def_inst(ctx) {
                     if let InstKind::IConst(val) = inst.kind(ctx) {
-                        constants.insert(operand, *val);
+                        constants.insert(operand, (*val, operand.ty(ctx)));
                     } else {
                         params_to_pass.push(operand);
                     }
@@ -523,8 +522,8 @@ impl AutoParallelize {
             };
 
             // constants
-            for (const_value, constant) in constants {
-                let payload_constant = Inst::iconst(ctx, constant, i32_ty);
+            for (const_value, (constant, ty)) in constants {
+                let payload_constant = Inst::iconst(ctx, constant, ty);
                 payload_header.push_back(ctx, payload_constant);
                 deep_clone_map.insert_value(const_value, payload_constant.result(ctx, 0));
                 header_deep_clone_map.insert_value(const_value, payload_constant.result(ctx, 0));

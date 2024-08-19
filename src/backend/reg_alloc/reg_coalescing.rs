@@ -4,15 +4,7 @@ use rustc_hash::FxHashSet;
 
 use super::live_interval_analysis;
 use crate::{
-    backend::{
-        inst::MInst,
-        regs::RegDefUse,
-        riscv64::regs::display,
-        LowerConfig,
-        LowerContext,
-        LowerSpec,
-        MFunc,
-    },
+    backend::{inst::MInst, regs::RegDefUse, LowerConfig, LowerContext, LowerSpec, MFunc},
     collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
 };
 
