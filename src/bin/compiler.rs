@@ -266,6 +266,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
             }
 
+            let iter = passman.run_pipeline(&mut ir, &pipe_inline, 32, 8);
+            println!("pipeline inline iterations: {}", iter);
+
+            let iter = passman.run_pipeline(&mut ir, &pipe_unroll, 1, 1);
+            println!("pipeline unroll iterations: {}", iter);
+
             // iterate several times, seeking more opportunities.
             for i in 0..4 {
                 println!("Round {}", i);
@@ -281,9 +287,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 let iter = passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
                 println!("pipeline gvn iterations: {}", iter);
-
-                let iter = passman.run_pipeline(&mut ir, &pipe_unroll, 1, 1);
-                println!("pipeline unroll iterations: {}", iter);
 
                 let iter = passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
                 println!("pipeline gvn iterations: {}", iter);
@@ -317,9 +320,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let iter = passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
                 println!("pipeline gvn iterations: {}", iter);
 
-                // if cmd.aggressive {
-                passman.run_transform(AGGRESSIVE_INSTCOMBINE, &mut ir, 32);
-                // }
+                if cmd.aggressive {
+                    passman.run_transform(AGGRESSIVE_INSTCOMBINE, &mut ir, 32);
+                }
 
                 passman.run_transform(ADCE, &mut ir, 1);
 

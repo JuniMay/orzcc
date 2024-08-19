@@ -257,7 +257,7 @@ impl LocalPassMut for Gcm {
             }
         }
 
-        println!("[ gcm ] GVN iterations: {}", gvn_count);
+        // println!("[ gcm ] GVN iterations: {}", gvn_count);
 
         for inst in insts.iter() {
             self.schedule_early(ctx, *inst, func);

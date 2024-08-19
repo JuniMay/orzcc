@@ -310,6 +310,6 @@ impl TransformPass for Inline {
         );
 
         passman.add_parameter("inline-max-depth", 2);
-        passman.add_parameter("inline-max-insn", 1024);
+        passman.add_parameter("inline-max-insn", 512);
     }
 }
