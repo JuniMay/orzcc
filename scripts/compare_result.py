@@ -19,8 +19,9 @@ def compare_rows(csv_file, row1, row2):
             try:
                 value1 = float(value1_str)
                 value2 = float(value2_str)
-                diff = value1 - value2
-                print(f"Difference in {header} (row1 - row2): {diff}")
+                diff = value2 - value1
+                diff = diff / value1 * 100
+                print(f"Difference in {header} (row1 - row2): {diff}%")
             except ValueError:
                 print(f"Error converting values in {header}: '{data1[i]}' and '{data2[i]}'")
 
