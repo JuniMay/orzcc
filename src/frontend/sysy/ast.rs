@@ -616,6 +616,102 @@ impl SymbolTable {
         self.insert("_sysy_starttime", starttime);
         self.insert("_sysy_stoptime", stoptime);
     }
+
+    pub fn register_orzcclib(&mut self) {
+        assert_eq!(self.stack.len(), 1);
+
+        let orzcc_init_var_list =
+            SymbolEntry::from_ty(Type::func(vec![Type::int()], Type::ptr(Type::void())));
+        let orzcc_free_var_list =
+            SymbolEntry::from_ty(Type::func(vec![Type::ptr(Type::void())], Type::void()));
+        let orzcc_var_list_push_int = SymbolEntry::from_ty(Type::func(
+            vec![Type::ptr(Type::void()), Type::int()],
+            Type::void(),
+        ));
+        let orzcc_var_list_push_float = SymbolEntry::from_ty(Type::func(
+            vec![Type::ptr(Type::void()), Type::float()],
+            Type::void(),
+        ));
+        let orzcc_var_list_push_ptr = SymbolEntry::from_ty(Type::func(
+            vec![Type::ptr(Type::void()), Type::ptr(Type::void())],
+            Type::void(),
+        ));
+        let orzcc_var_list_get_int = SymbolEntry::from_ty(Type::func(
+            vec![Type::ptr(Type::void()), Type::int()],
+            Type::int(),
+        ));
+        let orzcc_var_list_get_float = SymbolEntry::from_ty(Type::func(
+            vec![Type::ptr(Type::void()), Type::int()],
+            Type::float(),
+        ));
+        let orzcc_var_list_get_ptr = SymbolEntry::from_ty(Type::func(
+            vec![Type::ptr(Type::void()), Type::int()],
+            Type::ptr(Type::void()),
+        ));
+        let orzcc_var_list_get_start =
+            SymbolEntry::from_ty(Type::func(vec![Type::ptr(Type::void())], Type::int()));
+        let orzcc_var_list_get_end =
+            SymbolEntry::from_ty(Type::func(vec![Type::ptr(Type::void())], Type::int()));
+        let orzcc_var_list_ret_int = SymbolEntry::from_ty(Type::func(
+            vec![Type::ptr(Type::void()), Type::int()],
+            Type::void(),
+        ));
+        let orzcc_var_list_ret_float = SymbolEntry::from_ty(Type::func(
+            vec![Type::ptr(Type::void()), Type::float()],
+            Type::void(),
+        ));
+        let orzcc_parallel_for = SymbolEntry::from_ty(Type::func(
+            vec![
+                Type::int(),
+                Type::int(),
+                Type::ptr(Type::void()),
+                Type::ptr(Type::void()),
+            ],
+            Type::void(),
+        ));
+        let orzcc_parallel_for_reduce_add_int = SymbolEntry::from_ty(Type::func(
+            vec![
+                Type::int(),
+                Type::int(),
+                Type::ptr(Type::void()),
+                Type::ptr(Type::void()),
+                Type::int(),
+            ],
+            Type::int(),
+        ));
+        let orzcc_parallel_for_reduce_add_float = SymbolEntry::from_ty(Type::func(
+            vec![
+                Type::int(),
+                Type::int(),
+                Type::ptr(Type::void()),
+                Type::ptr(Type::void()),
+                Type::float(),
+            ],
+            Type::float(),
+        ));
+
+        self.insert("orzcc_init_var_list", orzcc_init_var_list);
+        self.insert("orzcc_free_var_list", orzcc_free_var_list);
+        self.insert("orzcc_var_list_push_int", orzcc_var_list_push_int);
+        self.insert("orzcc_var_list_push_float", orzcc_var_list_push_float);
+        self.insert("orzcc_var_list_push_ptr", orzcc_var_list_push_ptr);
+        self.insert("orzcc_var_list_get_int", orzcc_var_list_get_int);
+        self.insert("orzcc_var_list_get_float", orzcc_var_list_get_float);
+        self.insert("orzcc_var_list_get_ptr", orzcc_var_list_get_ptr);
+        self.insert("orzcc_var_list_get_start", orzcc_var_list_get_start);
+        self.insert("orzcc_var_list_get_end", orzcc_var_list_get_end);
+        self.insert("orzcc_var_list_ret_int", orzcc_var_list_ret_int);
+        self.insert("orzcc_var_list_ret_float", orzcc_var_list_ret_float);
+        self.insert("orzcc_parallel_for", orzcc_parallel_for);
+        self.insert(
+            "orzcc_parallel_for_reduce_add_int",
+            orzcc_parallel_for_reduce_add_int,
+        );
+        self.insert(
+            "orzcc_parallel_for_reduce_add_float",
+            orzcc_parallel_for_reduce_add_float,
+        );
+    }
 }
 
 impl CompUnit {
@@ -623,6 +719,7 @@ impl CompUnit {
         let mut symtable = SymbolTable::default();
         symtable.enter_scope();
         symtable.register_sysylib();
+        symtable.register_orzcclib();
 
         for item in self.items.iter_mut() {
             item.type_check(&mut symtable);

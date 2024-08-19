@@ -281,10 +281,10 @@ impl PassManager {
             changed = false;
             for pass_name in &pipeline.passes {
                 let iter = self.run_transform(pass_name, ctx, local_max_iter);
-                println!(
-                    "[ pipeline ] running {:>20} : {:^2} iterations",
-                    pass_name, iter
-                );
+                // println!(
+                //     "[ pipeline ] running {:>20} : {:^2} iterations",
+                //     pass_name, iter
+                // );
                 if iter > 1 {
                     changed = true;
                 }

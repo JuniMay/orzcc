@@ -28,4 +28,6 @@ impl DeepCloneMap {
     }
 
     pub fn remove_value(&mut self, old: Value) { self.value_map.remove(&old); }
+
+    pub fn remove_block(&mut self, old: Block) { self.block_map.remove(&old); }
 }

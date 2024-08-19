@@ -42,6 +42,7 @@ use orzcc::{
             },
             legalize::{Legalize, LEGALIZE},
             loops::{
+                AutoParallelize,
                 DeadLoopElim,
                 IndvarOffset,
                 IndvarReduce,
@@ -52,6 +53,7 @@ use orzcc::{
                 LoopSimplify,
                 LoopStrengthReduction,
                 LoopUnroll,
+                AUTO_PARALLELIZE,
                 DEAD_LOOP_ELIM,
                 INDVAR_OFFSET,
                 INDVAR_REDUCE,
@@ -207,6 +209,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 pipe_inline.add_pass(GLOBAL_DCE);
             }
 
+            let mut pipe_parallelize = Pipeline::default();
+            {
+                pipe_parallelize.add_pass(ELIM_CONSTANT_PHI);
+                pipe_parallelize.add_pass(ADCE);
+                pipe_parallelize.add_pass(CFG_SIMPLIFY);
+                pipe_parallelize.add_pass(SIMPLE_DCE);
+                pipe_parallelize.add_pass(AUTO_PARALLELIZE);
+                pipe_parallelize.add_pass(CFG_SIMPLIFY);
+                pipe_parallelize.add_pass(SIMPLE_DCE);
+            }
+
             let mut pipe_unroll = Pipeline::default();
             {
                 pipe_unroll.add_pass(LOOP_UNROLL);
@@ -222,6 +235,44 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 passman.run_pipeline(&mut ir, &pipe_tco, 32, 8);
                 passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
+            }
+
+            // loop peeling to remove inefficient inner loop patterns.
+            {
+                // loop-peeling tend to eliminate the inner loops that will only be executed in
+                // the first trip of outer loop.
+                passman.run_transform(LOOP_PEEL, &mut ir, 1);
+                // the control indvar of the inner loop will be simplified, and passed to the
+                // original loop, as the new init.
+                passman.run_transform(INDVAR_SIMPLIFY, &mut ir, 1);
+                // there might be nested argument passing, we did not detect that in
+                // `dead-loop-elim`, but just regard it as constant phi.
+                passman.run_transform(ELIM_CONSTANT_PHI, &mut ir, 32);
+                // remove redundant inner loops.
+                passman.run_transform(DEAD_LOOP_ELIM, &mut ir, 1);
+                // remove all redundant code.
+                passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
+                // remove unnecessary control flow.
+                passman.run_transform(ADCE, &mut ir, 1);
+                passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
+                // licm, for partial impure function and operations.
+                passman.run_transform(LOOP_INVARIANT_MOTION, &mut ir, 32);
+                passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
+            }
+
+            // auto parallelize
+            {
+                // dump before parallelize
+                // ir.alloc_all_names();
+                // std::fs::write("./before.orzir", format!("{}", ir.display(true)))?;
+
+                passman.run_pipeline(&mut ir, &pipe_parallelize, 32, 1);
+
+                // dump after parallelize
+                ir.alloc_all_names();
+                // std::fs::write("./after.orzir", format!("{}",
+                // ir.display(true)))?; passman.run_pipeline(&
+                // mut ir, &pipe_basic, 32, 8);
             }
 
             // legalize to remove high level operations.
@@ -243,28 +294,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
             }
 
-            // loop peeling to remove inefficient inner loop patterns.
-            {
-                // loop-peeling tend to eliminate the inner loops that will only be executed in
-                // the first trip of outer loop.
-                passman.run_transform(LOOP_PEEL, &mut ir, 1);
-                // the control indvar of the inner loop will be simplified, and passed to the
-                // original loop, as the new init.
-                passman.run_transform(INDVAR_SIMPLIFY, &mut ir, 1);
-                // there might be nested argument passing, we did not detect that in
-                // `dead-loop-elim`, but just regard it as constant phi.
-                passman.run_transform(ELIM_CONSTANT_PHI, &mut ir, 32);
-                // remove redundant inner loops.
-                passman.run_transform(DEAD_LOOP_ELIM, &mut ir, 1);
-                // remove all redundant code.
-                passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
-                // remove unnecessary control flow.
-                passman.run_transform(ADCE, &mut ir, 1);
-                passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
-                // licm, for partial impure function and operations.
-                passman.run_transform(LOOP_INVARIANT_MOTION, &mut ir, 32);
-                passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
-            }
+            let iter = passman.run_pipeline(&mut ir, &pipe_inline, 32, 2);
+            println!("pipeline inline iterations: {}", iter);
+
+            let iter = passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
+            println!("pipeline gvn iterations: {}", iter);
+
+            let iter = passman.run_pipeline(&mut ir, &pipe_unroll, 1, 1);
+            println!("pipeline unroll iterations: {}", iter);
 
             // iterate several times, seeking more opportunities.
             for i in 0..4 {
@@ -278,12 +315,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 let iter = passman.run_pipeline(&mut ir, &pipe_inline, 32, 8);
                 println!("pipeline inline iterations: {}", iter);
-
-                let iter = passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
-                println!("pipeline gvn iterations: {}", iter);
-
-                let iter = passman.run_pipeline(&mut ir, &pipe_unroll, 1, 1);
-                println!("pipeline unroll iterations: {}", iter);
 
                 let iter = passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
                 println!("pipeline gvn iterations: {}", iter);
@@ -317,9 +348,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let iter = passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
                 println!("pipeline gvn iterations: {}", iter);
 
-                // if cmd.aggressive {
-                passman.run_transform(AGGRESSIVE_INSTCOMBINE, &mut ir, 32);
-                // }
+                if cmd.aggressive {
+                    passman.run_transform(AGGRESSIVE_INSTCOMBINE, &mut ir, 32);
+                }
 
                 passman.run_transform(ADCE, &mut ir, 1);
 
@@ -426,6 +457,7 @@ fn register_passes(passman: &mut PassManager) {
     Legalize::register(passman);
     BlockReorder::register(passman);
     SplitCriticalEdge::register(passman);
+    AutoParallelize::register(passman);
 }
 
 fn cli(passman: &mut PassManager) -> Command {

@@ -4,15 +4,7 @@ use rustc_hash::FxHashSet;
 
 use super::live_interval_analysis;
 use crate::{
-    backend::{
-        inst::MInst,
-        regs::RegDefUse,
-        riscv64::regs::display,
-        LowerConfig,
-        LowerContext,
-        LowerSpec,
-        MFunc,
-    },
+    backend::{inst::MInst, regs::RegDefUse, LowerConfig, LowerContext, LowerSpec, MFunc},
     collections::linked_list::{LinkedListContainerPtr, LinkedListNodePtr},
 };
 
@@ -59,11 +51,11 @@ impl RegisterCoalescing {
                         live_intervals.intervals.insert(from_reg, new_interval);
                         live_intervals.intervals.remove(&to_reg);
 
-                        println!(
-                            "[ reg coalescing ] Coalescing {} to {}",
-                            display(to_reg),
-                            display(from_reg),
-                        );
+                        // println!(
+                        //     "[ reg coalescing ] Coalescing {} to {}",
+                        //     display(to_reg),
+                        //     display(from_reg),
+                        // );
 
                         // replace all uses of to_reg with from_reg
                         for use_inst in reg_def_use

@@ -82,10 +82,10 @@ impl ChainGraph {
             return false;
         }
         // merge chains
-        println!(
-            "[ ph_layout ] merging chain {:?} and chain {:?}",
-            from_chain_id, to_chain_id
-        );
+        // println!(
+        //     "[ ph_layout ] merging chain {:?} and chain {:?}",
+        //     from_chain_id, to_chain_id
+        // );
         for block in self.get_chain(to_chain_id).chain.clone().iter() {
             self.get_chain_mut(from_chain_id).chain.push_back(*block);
             self.block_map.insert(*block, from_chain_id);
@@ -216,7 +216,7 @@ impl LocalPassMut for PHBlockLayout {
 
         // abort if the function is too large
         let n_blocks = func.iter(ctx).count();
-        if n_blocks > 1000 {
+        if n_blocks > 500 {
             return Ok(((), false));
         }
 
@@ -272,17 +272,17 @@ impl LocalPassMut for PHBlockLayout {
         let stationary = decomp.solve(&b, 1e-5);
 
         if stationary.is_err() {
-            println!("[ ph_layout ] stationary distribution not found");
+            // println!("[ ph_layout ] stationary distribution not found");
             return Ok(((), false));
         }
 
         let stationary_norm = stationary.unwrap();
 
-        println!(
-            "[ ph_layout ] Func {:?}: stationary distribution: {:}",
-            func.name(ctx),
-            stationary_norm
-        );
+        // println!(
+        //     "[ ph_layout ] Func {:?}: stationary distribution: {:}",
+        //     func.name(ctx),
+        //     stationary_norm
+        // );
 
         let mut chain_graph = ChainGraph::default();
         let mut edges = Vec::new();

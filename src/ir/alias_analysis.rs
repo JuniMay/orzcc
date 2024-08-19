@@ -21,7 +21,12 @@ impl fmt::Display for AliasAnalysisResult {
 pub struct AliasAnalysis {}
 
 impl AliasAnalysis {
-    pub fn analyze(ctx: &Context, a: Value, b: Value) -> AliasAnalysisResult {
+    pub fn analyze(
+        ctx: &Context,
+        a: Value,
+        b: Value,
+        restrict_as_default: bool,
+    ) -> AliasAnalysisResult {
         if !a.ty(ctx).is_ptr(ctx) || !b.ty(ctx).is_ptr(ctx) {
             panic!("Alias analysis is only supported for pointers.");
         }
@@ -41,24 +46,31 @@ impl AliasAnalysis {
         let a_inst = a.def_inst(ctx);
         let b_inst = b.def_inst(ctx);
 
-        // if we meet both of them being block parameter, we can't analyze
-        if a_inst.is_none() && b_inst.is_none() {
-            return AliasAnalysisResult::MayAlias;
-        } else if a_inst.is_none() {
-            if matches!(b_inst.unwrap().kind(ctx), InstKind::StackSlot(_)) {
-                // if a is block parameter, and b is stack slot, then they must not alias
+        if restrict_as_default {
+            // if restrict_as_default is true, then we assume block args won't alias
+            if a_inst.is_none() || b_inst.is_none() {
                 return AliasAnalysisResult::NoAlias;
-            } else {
-                // if a is block parameter, and b is not stack slot, then we can't analyze
-                return AliasAnalysisResult::MayAlias;
             }
-        } else if b_inst.is_none() {
-            if matches!(a_inst.unwrap().kind(ctx), InstKind::StackSlot(_)) {
-                // if b is block parameter, and a is stack slot, then they must not alias
-                return AliasAnalysisResult::NoAlias;
-            } else {
-                // if b is block parameter, and a is not stack slot, then we can't analyze
+        } else {
+            // if we meet both of them being block parameter, we can't analyze
+            if a_inst.is_none() && b_inst.is_none() {
                 return AliasAnalysisResult::MayAlias;
+            } else if a_inst.is_none() {
+                if matches!(b_inst.unwrap().kind(ctx), InstKind::StackSlot(_)) {
+                    // if a is block parameter, and b is stack slot, then they must not alias
+                    return AliasAnalysisResult::NoAlias;
+                } else {
+                    // if a is block parameter, and b is not stack slot, then we can't analyze
+                    return AliasAnalysisResult::MayAlias;
+                }
+            } else if b_inst.is_none() {
+                if matches!(a_inst.unwrap().kind(ctx), InstKind::StackSlot(_)) {
+                    // if b is block parameter, and a is stack slot, then they must not alias
+                    return AliasAnalysisResult::NoAlias;
+                } else {
+                    // if b is block parameter, and a is not stack slot, then we can't analyze
+                    return AliasAnalysisResult::MayAlias;
+                }
             }
         }
 
@@ -71,7 +83,7 @@ impl AliasAnalysis {
                 let (a_base, a_offset) = AliasAnalysis::offset_decompose(ctx, a);
                 let (b_base, b_offset) = AliasAnalysis::offset_decompose(ctx, b);
                 // first check the base ptr
-                match AliasAnalysis::analyze(ctx, a_base, b_base) {
+                match AliasAnalysis::analyze(ctx, a_base, b_base, restrict_as_default) {
                     // if the base ptr must not alias, then the whole ptr must not alias
                     AliasAnalysisResult::NoAlias => AliasAnalysisResult::NoAlias,
                     // if the base ptr may alias, then the whole ptr may alias
@@ -130,7 +142,7 @@ impl AliasAnalysis {
                 // decompose the offset instruction
                 let (a_base, a_offset) = AliasAnalysis::offset_decompose(ctx, a);
                 // first check the base ptr
-                match AliasAnalysis::analyze(ctx, a_base, b) {
+                match AliasAnalysis::analyze(ctx, a_base, b, restrict_as_default) {
                     // if the base ptr must not alias, then the whole ptr must not alias
                     AliasAnalysisResult::NoAlias => AliasAnalysisResult::NoAlias,
                     // if the base ptr may alias, then the whole ptr may alias
@@ -170,7 +182,7 @@ impl AliasAnalysis {
                 // decompose the offset instruction
                 let (b_base, b_offset) = AliasAnalysis::offset_decompose(ctx, b);
                 // first check the base ptr
-                match AliasAnalysis::analyze(ctx, a, b_base) {
+                match AliasAnalysis::analyze(ctx, a, b_base, restrict_as_default) {
                     // if the base ptr must not alias, then the whole ptr must not alias
                     AliasAnalysisResult::NoAlias => AliasAnalysisResult::NoAlias,
                     // if the base ptr may alias, then the whole ptr may alias

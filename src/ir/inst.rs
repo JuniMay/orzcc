@@ -514,26 +514,6 @@ impl InstData {
     pub fn self_ptr(&self) -> Inst { self.self_ptr }
 }
 
-impl PartialEq for InstData {
-    fn eq(&self, other: &Self) -> bool {
-        self.results.is_empty()
-            && other.results.is_empty()
-            && self.kind == other.kind
-            && self
-                .operands
-                .iter()
-                .map(|op| op.inner())
-                .eq(other.operands.iter().map(|op| op.inner()))
-            && self
-                .successors
-                .iter()
-                .map(|succ| succ.block())
-                .eq(other.successors.iter().map(|succ| succ.block()))
-            // TODO: this is conservative.
-            && self.successors.iter().all(|succ| succ.args().is_empty())
-            && other.successors.iter().all(|succ| succ.args().is_empty())
-    }
-}
 
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
 pub struct Inst(BaseArenaPtr<InstData>);
@@ -585,6 +565,40 @@ impl Inst {
 
         inst.deref_mut(ctx).operands = operands;
         inst
+    }
+
+    pub fn ctx_eq(self, ctx: &Context, other: Self) -> bool {
+        let lhs = self.deref(ctx);
+        let rhs = other.deref(ctx);
+
+        lhs.results.is_empty()
+            && rhs.results.is_empty()
+            && lhs.kind == rhs.kind
+            && lhs
+                .operands
+                .iter()
+                .map(|op| op.inner())
+                .eq(rhs.operands.iter().map(|op| op.inner()))
+            && lhs.successors.iter().zip(rhs.successors.iter()).all(|(succ_0, succ_1)| {
+                let block_0 = succ_0.block();
+                let block_1 = succ_1.block();
+
+                if block_0 == block_1 {
+                    let params = block_0.params(ctx).to_vec();
+                    
+                    for param in params {
+                        let arg_0 = succ_0.get_arg(param);
+                        let arg_1 = succ_1.get_arg(param);
+
+                        if arg_0 != arg_1 {
+                            return false;
+                        }
+                    }
+                    true
+                } else {
+                    false
+                }
+            })
     }
 
     /// Add successor to the instruction.
@@ -1453,6 +1467,63 @@ impl Inst {
 
         for (old_result, new_result) in self.results(ctx).iter().zip(inst.results(ctx).iter()) {
             map.insert_value(*old_result, *new_result);
+        }
+
+        inst
+    }
+
+    pub fn deep_clone_sync(self, ctx: &mut Context, map: &mut DeepCloneMap, sync_map: &mut DeepCloneMap) -> Inst {
+        let kind = self.kind(ctx).clone();
+
+        let opds = self
+            .operands(ctx)
+            .into_iter()
+            .map(|opd| map.get_value_or_old(opd))
+            .collect::<Vec<_>>();
+
+        let result_tys = self
+            .results(ctx)
+            .iter()
+            .map(|r| r.ty(ctx))
+            .collect::<Vec<_>>();
+
+        let inst = Self::new(ctx, kind, result_tys, opds);
+
+        // succs
+        let blocks = self
+            .deref(ctx)
+            .successors
+            .iter()
+            .map(|succ| {
+                let old_block = succ.block();
+                let new_block = map.get_block_or_old(old_block);
+
+                let args = old_block
+                    .params(ctx)
+                    .iter()
+                    .zip(new_block.params(ctx).iter())
+                    .map(|(old_param, new_param)| {
+                        let old_arg = succ.get_arg(*old_param).unwrap();
+                        let new_arg = map.get_value_or_old(old_arg);
+                        (*new_param, new_arg)
+                    })
+                    .collect::<FxHashMap<_, _>>();
+
+                (new_block, args)
+            })
+            .collect::<Vec<_>>();
+
+        for (block, args) in blocks {
+            let mut new_succ = Successor::new(Operand::new(ctx, block, inst));
+            for (param, arg) in args {
+                new_succ.add_arg(param, Operand::new(ctx, arg, inst));
+            }
+            inst.add_successor(ctx, new_succ);
+        }
+
+        for (old_result, new_result) in self.results(ctx).iter().zip(inst.results(ctx).iter()) {
+            map.insert_value(*old_result, *new_result);
+            sync_map.insert_value(*old_result, *new_result);
         }
 
         inst

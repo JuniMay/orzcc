@@ -112,8 +112,8 @@ impl Default for Instcombine {
                 rem_one_elim(),
                 shl_zero_elim(), // not tested
                 shr_zero_elim(), // not tested
-                redistribute_const(), // aggressive
-                // reassociate() // 
+                redistribute_const(), /* aggressive
+                                  * reassociate() // */
             ],
         }
     }
@@ -2141,7 +2141,7 @@ const fn redistribute_const() -> Rule {
 /// Associate more.
 ///
 /// (x +- c1) +- (y +- c2) => (x +- y) +- (c1 +- c2)
-const fn reassociate() -> Rule {
+const fn _reassociate() -> Rule {
     Rule {
         rewriter: |ctx, inst| {
             if let Ik::IBinary(op) = inst.kind(ctx) {

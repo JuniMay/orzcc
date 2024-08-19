@@ -12,7 +12,6 @@ use crate::{
         Inst,
         InstKind,
         Value,
-        ValueKind,
     },
     utils::{
         cfg::{CfgInfo, CfgNode},
@@ -182,25 +181,7 @@ impl ScevAnalysis {
                 continue;
             }
 
-            // get the most initial start value.
-            let mut init = start.unwrap();
-            // the start can be a block param in the preheader, so get the def block of the
-            // start value, if the start is a block param and there is only one predecessor,
-            // get the incoming value.
-            while let ValueKind::BlockParam { block, .. } = init.kind(ctx) {
-                if block.preds(ctx).len() == 1 {
-                    // one predecessor -> one inst & one succ in the inst -> just get the 0-th user
-                    if let Some(succ) = block.users(ctx)[0].succ_to(ctx, *block).next() {
-                        init = succ.get_arg(init).unwrap();
-                        break;
-                    }
-                } else {
-                    // multiple predecessors, we cannot determine the start value, just use the
-                    // block param as the start value.
-                    break;
-                }
-            }
-
+            let init = start.unwrap();
             let evolving = evolving.unwrap();
 
             // secondly, find the induction operation.

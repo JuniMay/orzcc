@@ -1,0 +1,98 @@
+decl @orzcc_var_list_get_float(ptr, i32) -> f32
+decl @_sysy_starttime(i32) -> void
+decl @orzcc_var_list_get_int(ptr, i32) -> i32
+decl @orzcc_var_list_ret_int(ptr, i32) -> void
+decl @getfloat() -> f32
+decl @orzcc_init_var_list(i32) -> ptr
+decl @orzcc_var_list_push_ptr(ptr, ptr) -> void
+decl @putfarray(i32, ptr) -> void
+decl @orzcc_var_list_push_int(ptr, i32) -> void
+decl @putfloat(f32) -> void
+decl @orzcc_parallel_for_reduce_add_int(i32, i32, ptr, ptr, i32) -> i32
+decl @getfarray(ptr) -> i32
+decl @getch() -> i32
+decl @orzcc_parallel_for(i32, i32, ptr, ptr) -> void
+decl @orzcc_var_list_get_start(ptr) -> i32
+decl @putch(i32) -> void
+decl @putint(i32) -> void
+decl @getarray(ptr) -> i32
+decl @orzcc_var_list_push_float(ptr, f32) -> void
+decl @orzcc_var_list_ret_float(ptr, f32) -> void
+decl @orzcc_free_var_list(ptr) -> void
+decl @memcpy(ptr, ptr, i32) -> void
+decl @getint() -> i32
+decl @orzcc_var_list_get_ptr(ptr, i32) -> ptr
+decl @orzcc_var_list_get_end(ptr) -> i32
+decl @memset(ptr, i32, i32) -> void
+decl @putarray(i32, ptr) -> void
+decl @_sysy_stoptime(i32) -> void
+func @test /* 0 */ (ptr) -> void {
+^bb0 /* 0 */ (%__PARAM_test_arg: ptr /* 0, no.0 */):
+    %__SLOT_VAR_test_i_0 /* 10, uses: 5 */ = stack_slot 4 : ptr
+    %__SLOT_VAR_test_sum_0 /* 8, uses: 4 */ = stack_slot 4 : ptr
+    %__SLOT_VAR_test_end_0 /* 6, uses: 2 */ = stack_slot 4 : ptr
+    %__SLOT_VAR_test_start_0 /* 4, uses: 2 */ = stack_slot 4 : ptr
+    %__SLOT_VAR_test_hello_0 /* 1, uses: 1 */ = stack_slot 4 : ptr
+    %v0 /* 2, uses: 1 */ = iconst 0x0i32 : i32
+    %v1 /* 3, uses: 1 */ = call @orzcc_var_list_get_int(%__PARAM_test_arg, %v0) : i32
+    /* no result */ store %v1, %__SLOT_VAR_test_hello_0
+    %v2 /* 5, uses: 1 */ = call @orzcc_var_list_get_start(%__PARAM_test_arg) : i32
+    /* no result */ store %v2, %__SLOT_VAR_test_start_0
+    %v3 /* 7, uses: 1 */ = call @orzcc_var_list_get_end(%__PARAM_test_arg) : i32
+    /* no result */ store %v3, %__SLOT_VAR_test_end_0
+    %v4 /* 9, uses: 1 */ = iconst 0x0i32 : i32
+    /* no result */ store %v4, %__SLOT_VAR_test_sum_0
+    %v5 /* 11, uses: 1 */ = load %__SLOT_VAR_test_start_0 : i32
+    /* no result */ store %v5, %__SLOT_VAR_test_i_0
+
+^while.entry_0 /* 2 */ :
+    %v6 /* 12, uses: 1 */ = load %__SLOT_VAR_test_i_0 : i32
+    %v7 /* 13, uses: 1 */ = load %__SLOT_VAR_test_end_0 : i32
+    %v8 /* 14, uses: 1 */ = icmp.slt %v6, %v7 : i1
+    /* no result */ br %v8, ^while.body_0, ^while.exit_0
+
+^while.body_0 /* 4 */ :
+    %v9 /* 15, uses: 1 */ = load %__SLOT_VAR_test_sum_0 : i32
+    %v10 /* 16, uses: 1 */ = load %__SLOT_VAR_test_i_0 : i32
+    %v11 /* 17, uses: 1 */ = add %v9, %v10 : i32
+    /* no result */ store %v11, %__SLOT_VAR_test_sum_0
+    %v12 /* 18, uses: 1 */ = load %__SLOT_VAR_test_i_0 : i32
+    %v13 /* 19, uses: 1 */ = iconst 0x1i32 : i32
+    %v14 /* 20, uses: 1 */ = add %v12, %v13 : i32
+    /* no result */ store %v14, %__SLOT_VAR_test_i_0
+    /* no result */ jump ^while.entry_0
+
+^while.exit_0 /* 3 */ :
+    %v15 /* 21, uses: 1 */ = load %__SLOT_VAR_test_sum_0 : i32
+    /* no result */ call @orzcc_var_list_ret_int(%__PARAM_test_arg, %v15)
+
+^bb1 /* 1 */ :
+    /* no result */ ret void
+
+}
+func @main /* 1 */ () -> i32 {
+^bb2 /* 5 */ :
+    %__SLOT_VAR_test_main_sum_0 /* 26, uses: 2 */ = stack_slot 4 : ptr
+    %__RET_test_main /* 23, uses: 3 */ = stack_slot 4 : ptr
+    %c1 = iconst 0x1i32 : i32
+    %arg = call @orzcc_init_var_list(%c1) : ptr
+    %v16 /* 24, uses: 1 */ = iconst 0x0i32 : i32
+    /* no result */ store %v16, %__RET_test_main
+    %v17 /* 25, uses: 1 */ = iconst 0x1bf52i32 : i32
+    /* no result */ call @orzcc_var_list_push_int(%arg, %v17)
+    %func = get_global @test : ptr
+    %end = iconst 0x2710i32 : i32
+    %v18 /* 27, uses: 1 */ = call @orzcc_parallel_for_reduce_add_int(%v16, %end, %func, %arg, %v16) : i32
+    /* no result */ store %v18, %__SLOT_VAR_test_main_sum_0
+    /* no result */ call @orzcc_free_var_list(%arg)
+    %v19 /* 28, uses: 1 */ = load %__SLOT_VAR_test_main_sum_0 : i32
+    /* no result */ call @putint(%v19)
+    %v20 /* 29, uses: 1 */ = iconst 0x0i32 : i32
+    /* no result */ store %v20, %__RET_test_main
+    /* no result */ jump ^bb3
+
+^bb3 /* 6 */ :
+    %v21 /* 30, uses: 1 */ = load %__RET_test_main : i32
+    /* no result */ ret %v21
+
+}

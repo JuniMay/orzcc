@@ -264,6 +264,8 @@ impl Ty {
         matches!(self.deref(ctx), TyData::Float32 | TyData::Float64)
     }
 
+    pub fn is_int32(&self, ctx: &Context) -> bool { matches!(self.deref(ctx), TyData::I32) }
+
     pub fn is_float32(&self, ctx: &Context) -> bool { matches!(self.deref(ctx), TyData::Float32) }
 
     pub fn is_float64(&self, ctx: &Context) -> bool { matches!(self.deref(ctx), TyData::Float64) }
