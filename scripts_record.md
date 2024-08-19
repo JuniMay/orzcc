@@ -22,9 +22,9 @@ python3 ./scripts/execute.py     --timeout 600     --testcase-dir ./tests/sysy/e
 ## special cases
 The cases that faced a diff between the stdout and out, the reason is clang(float -> double -> float, so the precision is different). So I add 'f' behind the float number in .fsc files.
 
-- 08
-- 18
-- 25
+- 08(passed)
+- 18(error-opt1)
+- 25(error-opt1)
 
 ## time cost
 
