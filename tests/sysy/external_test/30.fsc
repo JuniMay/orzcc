@@ -1,0 +1,99 @@
+#include <stdio.h>
+// Mälardalen WCET Benchmarks: selection sort
+float arr[20];
+
+void swap(int i, int j) {
+    float temp = arr[i];
+    arr[i] = arr[j];
+    arr[j] = temp;
+}
+
+float select(int k, int n) {
+    int i, ir, j, l, mid;
+    float a;
+    int flag, flag2;
+
+    l = 0;
+    ir = n - 1;
+    flag = 0;
+
+    while (flag == 0) {
+        if (ir <= l + 1) {
+            if (ir == l + 1) {
+                if (arr[ir] < arr[l]) {
+                    swap(l, ir);
+                }
+            }
+            flag = 1;
+        } else {
+            mid = (l + ir) / 2;
+            swap(mid, l + 1);
+            if (arr[l + 1] > arr[ir]) {
+                swap(l + 1, ir);
+            }
+            if (arr[l] > arr[ir]) {
+                swap(l, ir);
+            }
+            if (arr[l + 1] > arr[l]) {
+                swap(l + 1, l);
+            }
+            i = l + 1;
+            j = ir;
+            a = arr[l];
+            flag2 = 0;
+
+            while (flag2 == 0) {
+                i = i + 1;
+                while (arr[i] < a) {
+                    i = i + 1;
+                }
+                j = j - 1;
+                while (arr[j] > a) {
+                    j = j - 1;
+                }
+                if (j < i) {
+                    flag2 = 1;
+                }
+                if (flag2 == 0) {
+                    swap(i, j);
+                }
+            }
+            arr[l] = arr[j];
+            arr[j] = a;
+            if (j >= k) {
+                ir = j - 1;
+            }
+            if (j <= k) {
+                l = i;
+            }
+        }
+    }
+    return arr[k];
+}
+
+int main() {
+    arr[0] = 5;
+    arr[1] = 4;
+    arr[2] = 10.3;
+    arr[3] = 1.1;
+    arr[4] = 5.7;
+    arr[5] = 100;
+    arr[6] = 231;
+    arr[7] = 111;
+    arr[8] = 49.5;
+    arr[9] = 99;
+    arr[10] = 10;
+    arr[11] = 150;
+    arr[12] = 222.22;
+    arr[13] = 101;
+    arr[14] = 77;
+    arr[15] = 44;
+    arr[16] = 35;
+    arr[17] = 20.54;
+    arr[18] = 99.99;
+    arr[19] = 888.88;
+
+    printf("%a",select(10, 20));
+
+    return 0;
+}
