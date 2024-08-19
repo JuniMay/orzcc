@@ -868,48 +868,58 @@ const fn remove_load_after_store() -> Peephole2<RvInst> {
 fn remove_redundant_jump(mctx: &mut MContext<RvInst>) -> bool {
     let mut changed = false;
 
-    let funcs = mctx
-        .funcs
-        .iter_mut()
-        .map(|(_, func_data)| func_data.self_ptr())
-        .collect::<Vec<_>>();
+    loop {
+        let mut local_changed = false;
 
-    for func in funcs {
-        if func.is_external(mctx) {
-            continue;
-        }
+        let funcs = mctx
+            .funcs
+            .iter_mut()
+            .map(|(_, func_data)| func_data.self_ptr())
+            .collect::<Vec<_>>();
 
-        let mut cursor = func.cursor();
-        while let Some(block) = cursor.next(mctx) {
-            if let Some(tail) = block.tail(mctx) {
-                if let RvInstKind::J { block: succ } = tail.kind(mctx) {
-                    if block.next(mctx) == Some(*succ) {
-                        // remove redundant jump
-                        tail.remove(mctx);
-                        changed = true;
-                    } else {
-                        let mut can_remove = true;
-                        let mut next = block.next(mctx);
-                        while let Some(block) = next {
-                            if block.size(mctx) == 0 {
-                                // the block is empty, continue to search.
-                                next = block.next(mctx);
-                            } else if block == *succ {
-                                // we found the target block, remove the jump
-                                break;
-                            } else {
-                                can_remove = false;
-                                break;
-                            }
-                        }
+        for func in funcs {
+            if func.is_external(mctx) {
+                continue;
+            }
 
-                        if can_remove {
+            let mut cursor = func.cursor();
+            while let Some(block) = cursor.next(mctx) {
+                if let Some(tail) = block.tail(mctx) {
+                    if let RvInstKind::J { block: succ } = tail.kind(mctx) {
+                        if block.next(mctx) == Some(*succ) {
+                            // remove redundant jump
                             tail.remove(mctx);
-                            changed = true;
+                            local_changed = true;
+                        } else {
+                            let mut can_remove = true;
+                            let mut next = block.next(mctx);
+                            while let Some(block) = next {
+                                if block.size(mctx) == 0 {
+                                    // the block is empty, continue to search.
+                                    next = block.next(mctx);
+                                } else if block == *succ {
+                                    // we found the target block, remove the jump
+                                    break;
+                                } else {
+                                    can_remove = false;
+                                    break;
+                                }
+                            }
+
+                            if can_remove {
+                                tail.remove(mctx);
+                                local_changed = true;
+                            }
                         }
                     }
                 }
             }
+        }
+
+        if !local_changed {
+            break;
+        } else {
+            changed = true;
         }
     }
 
@@ -984,9 +994,6 @@ pub fn remove_redundant_labels(mctx: &mut MContext<RvInst>) -> bool {
                             inst.unlink(mctx);
                             prev.push_back(mctx, inst);
                         }
-                        cursor.next(mctx);
-                        block.remove(mctx);
-                        local_changed = true;
                     }
                 }
                 // rule 2: if the block is empty, remove it, then retarget all jumps to it to the
@@ -999,9 +1006,17 @@ pub fn remove_redundant_labels(mctx: &mut MContext<RvInst>) -> bool {
                         match inst.kind(mctx) {
                             RvInstKind::J { .. } => {
                                 inst.redirect_branch(mctx, block.next(mctx).unwrap());
+                                label_usage
+                                    .entry(block.next(mctx).unwrap().label(mctx).clone())
+                                    .or_insert_with(FxHashSet::default)
+                                    .insert(inst);
                             }
                             RvInstKind::Br { .. } => {
                                 inst.redirect_branch(mctx, block.next(mctx).unwrap());
+                                label_usage
+                                    .entry(block.next(mctx).unwrap().label(mctx).clone())
+                                    .or_insert_with(FxHashSet::default)
+                                    .insert(inst);
                             }
                             RvInstKind::Li { .. }
                             | RvInstKind::AluRR { .. }
@@ -1018,7 +1033,14 @@ pub fn remove_redundant_labels(mctx: &mut MContext<RvInst>) -> bool {
                             | RvInstKind::LoadAddr { .. } => unreachable!(),
                         }
                     }
-                    cursor.next(mctx);
+                }
+            }
+
+            // remove empty blocks
+            let mut curr_block = func.head(mctx);
+            while let Some(block) = curr_block {
+                curr_block = block.next(mctx);
+                if block.size(mctx) == 0 {
                     block.remove(mctx);
                     local_changed = true;
                 }

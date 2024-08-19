@@ -19,8 +19,12 @@ use orzcc::{
                 BlockReorder,
                 CfgCanonicalize,
                 CfgSimplify,
+                PHBlockLayout,
+                SplitCriticalEdge,
                 BLOCK_REORDER,
                 CFG_SIMPLIFY,
+                PH_BLOCK_LAYOUT,
+                SPLIT_CRITICAL_EDGE,
             },
             fold::{ConstantFolding, CONSTANT_FOLDING},
             gcm::{Gcm, GCM},
@@ -44,6 +48,7 @@ use orzcc::{
                 IndvarReduce,
                 IndvarSimplify,
                 Lcssa,
+                LoopInvariantMotion,
                 LoopPeel,
                 LoopSimplify,
                 LoopStrengthReduction,
@@ -53,12 +58,14 @@ use orzcc::{
                 INDVAR_OFFSET,
                 INDVAR_REDUCE,
                 INDVAR_SIMPLIFY,
+                LOOP_INVARIANT_MOTION,
                 LOOP_PEEL,
                 LOOP_STRENGTH_REDUCTION,
                 LOOP_UNROLL,
             },
             mem2reg::{Mem2reg, MEM2REG},
             simple_dce::{SimpleDce, SIMPLE_DCE},
+            static_branch_prediction::{StaticBranchPrediction, STATIC_BRANCH_PREDICTION},
             tco::{Tco, TCO},
         },
         passman::{PassManager, Pipeline, TransformPass},
@@ -228,9 +235,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 passman.run_pipeline(&mut ir, &pipe_tco, 32, 8);
                 passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
+            }
 
-                passman.run_pipeline(&mut ir, &pipe_inline, 32, 8);
-                passman.run_pipeline(&mut ir, &pipe_basic, 32, 8);
+            // auto parallelize
+            {
+                // dump before parallelize
+                // ir.alloc_all_names();
+                // std::fs::write("./before.orzir", format!("{}", ir.display(true)))?;
+
+                passman.run_pipeline(&mut ir, &pipe_parallelize, 32, 1);
+
+                // dump after parallelize
+                ir.alloc_all_names();
+                // std::fs::write("./after.orzir", format!("{}",
+                // ir.display(true)))?; passman.run_pipeline(&
+                // mut ir, &pipe_basic, 32, 8);
             }
 
             // auto parallelize
@@ -282,7 +301,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 passman.run_transform(DEAD_LOOP_ELIM, &mut ir, 1);
                 // remove all redundant code.
                 passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
+                // remove unnecessary control flow.
+                passman.run_transform(ADCE, &mut ir, 1);
+                passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
+                // licm, for partial impure function and operations.
+                passman.run_transform(LOOP_INVARIANT_MOTION, &mut ir, 32);
+                passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
             }
+
+            let iter = passman.run_pipeline(&mut ir, &pipe_inline, 32, 2);
+            println!("pipeline inline iterations: {}", iter);
+
+            let iter = passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
+            println!("pipeline gvn iterations: {}", iter);
+
+            let iter = passman.run_pipeline(&mut ir, &pipe_unroll, 1, 1);
+            println!("pipeline unroll iterations: {}", iter);
 
             // iterate several times, seeking more opportunities.
             for i in 0..4 {
@@ -296,12 +330,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 let iter = passman.run_pipeline(&mut ir, &pipe_inline, 32, 8);
                 println!("pipeline inline iterations: {}", iter);
-
-                let iter = passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
-                println!("pipeline gvn iterations: {}", iter);
-
-                let iter = passman.run_pipeline(&mut ir, &pipe_unroll, 1, 1);
-                println!("pipeline unroll iterations: {}", iter);
 
                 let iter = passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
                 println!("pipeline gvn iterations: {}", iter);
@@ -335,15 +363,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let iter = passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
                 println!("pipeline gvn iterations: {}", iter);
 
+                if cmd.aggressive {
+                    passman.run_transform(AGGRESSIVE_INSTCOMBINE, &mut ir, 32);
+                }
+
                 passman.run_transform(ADCE, &mut ir, 1);
 
                 let iter = passman.run_pipeline(&mut ir, &pipe_gvn, 32, 8);
                 println!("pipeline gvn iterations: {}", iter);
-
-                if cmd.aggressive {
-                    passman.run_transform(AGGRESSIVE_INSTCOMBINE, &mut ir, 32);
-                }
             }
+
+            // reorder
+            passman.run_transform(STATIC_BRANCH_PREDICTION, &mut ir, 1);
+            passman.run_transform(SIMPLE_DCE, &mut ir, 32);
+            passman.run_transform(BRANCH_CONDITION_SINK, &mut ir, 1);
+            passman.run_transform(BLOCK_REORDER, &mut ir, 1);
+            passman.run_transform(SPLIT_CRITICAL_EDGE, &mut ir, 1);
+            passman.run_transform(PH_BLOCK_LAYOUT, &mut ir, 1);
         } else {
             passman.run_transform(LEGALIZE, &mut ir, 1);
         }
@@ -425,13 +461,17 @@ fn register_passes(passman: &mut PassManager) {
     LoopStrengthReduction::register(passman);
     IndvarOffset::register(passman);
     IndvarReduce::register(passman);
+    LoopInvariantMotion::register(passman);
 
     GlobalValueNumbering::register(passman);
     Gcm::register(passman);
     BranchConditionSink::register(passman);
+    StaticBranchPrediction::register(passman);
+    PHBlockLayout::register(passman);
 
     Legalize::register(passman);
     BlockReorder::register(passman);
+    SplitCriticalEdge::register(passman);
     AutoParallelize::register(passman);
 }
 

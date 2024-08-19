@@ -1323,6 +1323,45 @@ impl Inst {
         }
     }
 
+    pub fn replace_single_succ_with_args(
+        self,
+        ctx: &mut Context,
+        old_idx: usize,
+        new: Block,
+        args: Vec<Value>
+    ) {
+        if !self.is_terminator(ctx) {
+            panic!("instruction is not a terminator");
+        }
+
+        let new_params = new.params(ctx).to_vec();
+        let successor = self.deref_mut(ctx).successors.get_mut(old_idx).unwrap();
+
+        let old_block = successor.block();
+        let set = successor.block.set_inner_if_eq(old_block, new);
+        assert!(set);
+
+        let mut args_to_drop = Vec::new();
+
+        for (_, arg) in successor.args.drain() {
+            args_to_drop.push(arg);
+        }
+
+        let mut new_args = FxHashMap::default();
+        for (param, arg) in new_params.iter().zip(args) {
+            new_args.insert(*param, Operand::new(ctx, arg, self));
+        }
+
+        self.deref_mut(ctx).successors.get_mut(old_idx).unwrap().args = new_args;
+
+        for arg in args_to_drop {
+            arg.drop(ctx);
+        }
+
+        old_block.remove_user(ctx, self);
+        new.add_user(ctx, self);
+    }
+
     /// Replace all the arguments passed to the `param` with the `arg`.
     pub fn replace_args(self, ctx: &mut Context, param: Value, arg: Value) {
         let mut operands_to_drop = Vec::new();
@@ -1536,6 +1575,14 @@ impl Inst {
 
     pub fn is_store(self, ctx: &Context) -> bool { matches!(self.deref(ctx).kind, InstKind::Store) }
 
+    pub fn is_load_elem(self, ctx: &Context) -> bool {
+        matches!(self.deref(ctx).kind, InstKind::LoadElem { .. })
+    }
+
+    pub fn is_store_elem(self, ctx: &Context) -> bool {
+        matches!(self.deref(ctx).kind, InstKind::StoreElem { .. })
+    }
+
     pub fn is_commutative(self, ctx: &Context) -> bool {
         use InstKind as Ik;
 
@@ -1601,6 +1648,14 @@ impl Inst {
         } else {
             None
         }
+    }
+
+    pub fn inverse_br(self, ctx: &mut Context) {
+        if !self.is_br(ctx) {
+            panic!("instruction is not a branch instruction");
+        }
+
+        self.deref_mut(ctx).successors.swap(0, 1);
     }
 }
 

@@ -32,11 +32,7 @@ use crate::{
         Ty,
         Value,
     },
-    utils::{
-        cfg::CfgNode,
-        def_use::User,
-        loop_info::{Loop, LoopWithDepth},
-    },
+    utils::{cfg::CfgNode, def_use::User, loop_info::Loop},
 };
 
 pub const LOOP_UNROLL: &str = "loop-unroll";
@@ -88,7 +84,7 @@ impl LoopUnroll {
 
         // iterate the indvars, check if we can unroll the loop
 
-        println!("[ loop-unroll ] start: {:?}", start);
+        // println!("[ loop-unroll ] start: {:?}", start);
 
         let mut start_const = None;
         if let Some(inst) = start.def_inst(ctx) {
@@ -142,23 +138,41 @@ impl LoopUnroll {
             None
         };
 
-        println!("[ loop-unroll (const) ] start: {:?}", start_const);
-        println!("[ loop-unroll (const) ] step: {:?}", step_const);
-        println!("[ loop-unroll (const) ] bound: {:?}", bound_const);
-        println!("[ loop-unroll (const) ] trip count: {:?}", trip_count_const);
+        // println!("[ loop-unroll (const) ] start: {:?}", start_const);
+        // println!("[ loop-unroll (const) ] step: {:?}", step_const);
+        // println!("[ loop-unroll (const) ] bound: {:?}", bound_const);
+        // println!("[ loop-unroll (const) ] trip count: {:?}", trip_count_const);
 
-        if let Some(_trip_count) = trip_count_const {
-            changed |= self.unroll_const(
-                ctx,
-                lp,
-                *repr,
-                start_const.unwrap(),
-                step_const.unwrap(),
-                bound_const.unwrap(),
-                trip_count_const.unwrap(),
-            );
+        if let Some(trip_count) = trip_count_const {
+            if trip_count > 32 {
+                println!(
+                    "[ loop-unroll ] fallback const to dynamic unroll, count: {}",
+                    trip_count
+                );
+                // dynamic unroll
+                #[allow(clippy::single_match)]
+                match (op, cmp_cond, reversed) {
+                    (InductionOp::Add, LoopBoundCond::Sle | LoopBoundCond::Slt, false) => {
+                        changed |=
+                            self.unroll_dynamic(ctx, lp, *repr, *start, *step, *bound, *cmp_cond);
+                    }
+                    _ => {}
+                }
+            } else {
+                println!("[ loop-unroll ] unrolling with {}", trip_count);
+                changed |= self.unroll_const(
+                    ctx,
+                    lp,
+                    *repr,
+                    start_const.unwrap(),
+                    step_const.unwrap(),
+                    bound_const.unwrap(),
+                    trip_count_const.unwrap(),
+                );
+            }
         } else {
             // dynamic unrolling
+            println!("[ loop-unroll ] dynamic unrolling");
             #[allow(clippy::single_match)]
             match (op, cmp_cond, reversed) {
                 (InductionOp::Add, LoopBoundCond::Sle | LoopBoundCond::Slt, false) => {
@@ -432,7 +446,7 @@ impl LoopUnroll {
 
         let insn: usize = blocks.iter().map(|bb| bb.insn(ctx)).sum();
 
-        if insn * trip_count > 4096 {
+        if insn * trip_count > 512 {
             return false;
         }
 
@@ -451,7 +465,7 @@ impl LoopUnroll {
         jumps_to_modify.push(preheader.tail(ctx).unwrap());
 
         while loop_param <= bound {
-            println!("[ loop-unroll (const) ] loop param: {}", loop_param);
+            // println!("[ loop-unroll (const) ] loop param: {}", loop_param);
 
             let iconst = Inst::iconst(ctx, loop_param, repr.ty(ctx));
 
@@ -553,23 +567,14 @@ impl LocalPassMut for LoopUnroll {
     fn run(&mut self, ctx: &mut Context, func: Func) -> PassResult<(Self::Output, bool)> {
         let scevs = LocalPass::run(&mut self.scev, ctx, func)?;
 
-        ctx.alloc_all_names();
-        println!("{}", scevs.display(ctx));
-
-        let mut loops = Vec::new();
+        // ctx.alloc_all_names();
+        // println!("{}", scevs.display(ctx));
 
         for lp in self.scev.loops.loops() {
-            let depth = lp.depth(&self.scev.loops);
-            loops.push(LoopWithDepth { lp, depth });
-        }
-
-        loops.sort();
-        loops.reverse();
-
-        for LoopWithDepth { lp, .. } in loops {
-            if self.process_loop(ctx, lp, &scevs) {
-                return Ok(((), true));
+            if !lp.children(&self.scev.loops).is_empty() {
+                continue;
             }
+            self.process_loop(ctx, lp, &scevs);
         }
 
         Ok(((), false))

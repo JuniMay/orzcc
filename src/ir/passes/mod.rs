@@ -15,4 +15,5 @@ pub mod legalize;
 pub mod loops;
 pub mod mem2reg;
 pub mod simple_dce;
+pub mod static_branch_prediction;
 pub mod tco;

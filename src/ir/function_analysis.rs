@@ -4,19 +4,23 @@ use super::{Context, Func, InstKind, Value};
 use crate::collections::linked_list::LinkedListContainerPtr;
 
 #[derive(Default, Clone)]
-pub struct FunctionAnalysisResulf {
+pub struct FunctionAnalysisResult {
     /// Whether this function is pure (i.e., has no side effects).
     is_pure: bool,
+    /// If this is a load-only operation.
+    is_partial: bool,
     /// TODO: Global values that may be clobbered by this function.
     _may_clobber: Vec<Value>,
     /// TODO: Global values that may be read by this function.
     _may_read: Vec<Value>,
 }
 
-impl FunctionAnalysisResulf {
+impl FunctionAnalysisResult {
     pub fn new() -> Self { Self::default() }
 
     pub fn is_pure(&self) -> bool { self.is_pure }
+
+    pub fn is_partial(&self) -> bool { self.is_partial }
 
     pub fn may_clobber(&self) -> &[Value] {
         unimplemented!("May clobber information is not implemented")
@@ -27,7 +31,7 @@ impl FunctionAnalysisResulf {
 
 #[derive(Default)]
 pub struct FunctionAnalysis {
-    result: HashMap<Func, FunctionAnalysisResulf>,
+    result: HashMap<Func, FunctionAnalysisResult>,
     visited: HashSet<Func>,
 }
 
@@ -42,7 +46,7 @@ impl FunctionAnalysis {
         }
     }
 
-    pub fn analyze_func(&mut self, ctx: &Context, func: Func) -> FunctionAnalysisResulf {
+    pub fn analyze_func(&mut self, ctx: &Context, func: Func) -> FunctionAnalysisResult {
         if let Some(result) = self.result.get(&func) {
             return result.clone();
         }
@@ -51,8 +55,9 @@ impl FunctionAnalysis {
             // If we are already visiting this function, but no result is
             // available, it means that there is a mutual recursion.
             // In this case, we assume that the function is impure.
-            return FunctionAnalysisResulf {
+            return FunctionAnalysisResult {
                 is_pure: false,
+                is_partial: false,
                 _may_clobber: vec![],
                 _may_read: vec![],
             };
@@ -61,8 +66,9 @@ impl FunctionAnalysis {
         // Mark the function as visited.
         self.visited.insert(func);
 
-        let mut result = FunctionAnalysisResulf::new();
+        let mut result = FunctionAnalysisResult::new();
         result.is_pure = true;
+        result.is_partial = true;
 
         'outer: for block in func.iter(ctx) {
             for inst in block.iter(ctx) {
@@ -78,8 +84,9 @@ impl FunctionAnalysis {
                             Some(called_func) => self.analyze_func(ctx, called_func),
                             // If the function is not found, (probably an external function), we
                             // assume it is impure.
-                            None => FunctionAnalysisResulf {
+                            None => FunctionAnalysisResult {
                                 is_pure: false,
+                                is_partial: false,
                                 _may_clobber: vec![],
                                 _may_read: vec![],
                             },
@@ -88,17 +95,26 @@ impl FunctionAnalysis {
                         if !called_func_result.is_pure() {
                             result.is_pure = false;
                         }
+                        if !called_func_result.is_partial() {
+                            result.is_partial = false;
+                        }
                     }
                     InstKind::Store | InstKind::StoreElem { .. } => {
                         // If there is a store instruction, then this function is not pure.
                         // TODO: Check if the store instruction is to a global variable.
                         result.is_pure = false;
+                        result.is_partial = false;
                         break 'outer;
                     }
                     InstKind::Load | InstKind::LoadElem { .. } => {
                         // If there is a load instruction, then this function is not pure.
                         // TODO: Check if the load instruction is from a global variable.
                         result.is_pure = false;
+                    }
+                    InstKind::CallIndirect(_) => {
+                        // If there is an indirect call, then this function is not pure.
+                        result.is_pure = false;
+                        result.is_partial = false;
                         break 'outer;
                     }
                     // TODO: Handle other instructions.
@@ -114,7 +130,6 @@ impl FunctionAnalysis {
                     | InstKind::Offset
                     | InstKind::Jump
                     | InstKind::Br
-                    | InstKind::CallIndirect(_)
                     | InstKind::Ret
                     | InstKind::GetGlobal(_) => {}
                 }
@@ -126,7 +141,9 @@ impl FunctionAnalysis {
         result
     }
 
-    pub fn result(&self, func: Func) -> &FunctionAnalysisResulf { self.result.get(&func).unwrap() }
+    pub fn result(&self, func: Func) -> &FunctionAnalysisResult { self.result.get(&func).unwrap() }
 
     pub fn is_pure(&self, func: Func) -> bool { self.result(func).is_pure() }
+
+    pub fn is_partial(&self, func: Func) -> bool { self.result(func).is_partial() }
 }
