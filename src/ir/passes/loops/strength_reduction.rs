@@ -30,11 +30,13 @@ impl LoopStrengthReduction {
         let preheader = lp.get_preheader(ctx, &self.scev.loops).unwrap();
         let header = lp.header(&self.scev.loops);
 
-        let body = lp.get_blocks(ctx, &self.scev.loops);
+        let header_preds = header.preds(ctx);
+        assert_eq!(header_preds.len(), 2); // preheader and the backedge.
 
-        if body.len() != 2 {
-            return false;
-        }
+        let backedge = *header_preds
+            .iter()
+            .find(|&&pred| pred != preheader)
+            .unwrap();
 
         let mut changed = false;
 
@@ -54,6 +56,15 @@ impl LoopStrengthReduction {
             };
 
             for user in block_param.users(ctx) {
+                if !self
+                    .scev
+                    .dominance
+                    .dominates(user.container(ctx).unwrap(), backedge)
+                {
+                    // user must dominate the backedge block, so the induction is correct.
+                    continue;
+                }
+
                 if let InstKind::IBinary(IBinaryOp::Mul) = user.kind(ctx) {
                     let lhs = user.operand(ctx, 0);
                     let rhs = user.operand(ctx, 1);
