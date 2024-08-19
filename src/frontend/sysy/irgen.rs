@@ -1032,8 +1032,48 @@ impl IrGen for Decl {
                         },
                     );
 
-                    if let ExprKind::Const(Cv::Undef(_)) = init.kind {
+                    if let ExprKind::Const(Cv::Undef(ref ty)) = init.kind {
                         // we don't need to store anything for undefined slot.
+                        // but, SysY implicitly requires uninitialized local variables to be zero.
+                        if ty.is_int() {
+                            let ir_ty = irgen.gen_type(ty);
+                            let ctx = &mut irgen.ctx;
+                            let zero = ir::Inst::iconst(ctx, 0i32, ir_ty);
+                            let store = ir::Inst::store(
+                                ctx,
+                                zero.result(ctx, 0),
+                                stack_slot.result(ctx, 0),
+                            );
+                            curr_block.push_back(ctx, zero);
+                            curr_block.push_back(ctx, store);
+                        } else if ty.is_float() {
+                            let ir_ty = irgen.gen_type(ty);
+                            let ctx = &mut irgen.ctx;
+                            let zero = ir::Inst::fconst(ctx, 0.0f32, ir_ty);
+                            let store = ir::Inst::store(
+                                ctx,
+                                zero.result(ctx, 0),
+                                stack_slot.result(ctx, 0),
+                            );
+                            curr_block.push_back(ctx, zero);
+                            curr_block.push_back(ctx, store);
+                        } else {
+                            // memset, just in case.
+                            let ctx = &mut irgen.ctx;
+                            let int = ir::Ty::int(ctx, 32);
+                            let void = ir::Ty::void(ctx);
+                            let zero = ir::Inst::iconst(ctx, 0i32, int);
+                            curr_block.push_back(ctx, zero);
+                            let size = ir::Inst::iconst(ctx, size as i32, int);
+                            curr_block.push_back(ctx, size);
+                            let args = vec![
+                                stack_slot.result(ctx, 0),
+                                zero.result(ctx, 0),
+                                size.result(ctx, 0),
+                            ];
+                            let call = ir::Inst::call(ctx, "memset", args, vec![void]);
+                            curr_block.push_back(ctx, call);
+                        }
                     } else if init.ty().is_aggregate() {
                         // some part are not constant, we need to memcpy and
                         // set one by one
