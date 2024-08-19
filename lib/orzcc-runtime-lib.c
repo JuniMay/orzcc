@@ -23,7 +23,7 @@ typedef struct
     size_t capacity;
     int start;
     int end;
-    var_data ret;
+    int ret;
 } var_list;
 
 var_list *orzcc_init_var_list(int capacity)
@@ -87,12 +87,7 @@ int orzcc_var_list_get_end(var_list *list)
 
 void orzcc_var_list_ret_int(var_list *list, int data)
 {
-    list->ret.i = data;
-}
-
-void orzcc_var_list_ret_float(var_list *list, float data)
-{
-    list->ret.f = data;
+    list->ret = data;
 }
 
 var_list *orzcc_va_list_copy(var_list *list)
@@ -315,42 +310,7 @@ int orzcc_parallel_for_reduce_add_int(int from, int to, void *(*thread_start)(vo
 
     for (int i = 0; i < THREAD_COUNT; i++)
     {
-        init += pool->args[i]->ret.i;
-        orzcc_free_var_list(pool->args[i]);
-    }
-    orzcc_free_var_list(arg);
-
-    return init;
-}
-
-float orzcc_parallel_for_reduce_add_float(int from, int to, void *(*thread_start)(void *), var_list *arg, float init)
-{
-    int step = (to - from + THREAD_COUNT - 1) / THREAD_COUNT;
-
-    pthread_mutex_lock(&pool->lock);
-    for (int i = 0; i < THREAD_COUNT; i++)
-    {
-        int start = from + i * step;
-        int end = from + (i + 1) * step;
-        if (end > to)
-        {
-            end = to;
-        }
-
-        pool->tasks[i] = thread_start;
-        pool->args[i] = orzcc_va_list_copy(arg);
-        pool->args[i]->start = start;
-        pool->args[i]->end = end;
-        pool->task_available[i] = 1;
-    }
-    pthread_cond_broadcast(&pool->cond);
-    pthread_mutex_unlock(&pool->lock);
-
-    pthread_barrier_wait(&pool->barrier);
-
-    for (int i = 0; i < THREAD_COUNT; i++)
-    {
-        init += pool->args[i]->ret.f;
+        init += pool->args[i]->ret;
         orzcc_free_var_list(pool->args[i]);
     }
     orzcc_free_var_list(arg);

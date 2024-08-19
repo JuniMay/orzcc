@@ -323,9 +323,10 @@ impl AutoParallelize {
                 None
             };
 
-            // if reduction_val.is_some() {
-            //     return false;
-            // }
+            if reduction_val.is_some() && reduction_val.unwrap().ty(ctx).is_float(ctx) {
+                println!("[ auto_parallelize ] float unsupported for reduction");
+                return false;
+            }
 
             if reduction_val.is_some() {
                 let mut found = false;

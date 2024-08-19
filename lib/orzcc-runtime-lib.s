@@ -197,13 +197,6 @@ orzcc_var_list_ret_int:
 	ret
 	.size	orzcc_var_list_ret_int, .-orzcc_var_list_ret_int
 	.align	1
-	.globl	orzcc_var_list_ret_float
-	.type	orzcc_var_list_ret_float, @function
-orzcc_var_list_ret_float:
-	fsw	fa0,32(a0)
-	ret
-	.size	orzcc_var_list_ret_float, .-orzcc_var_list_ret_float
-	.align	1
 	.globl	orzcc_va_list_copy
 	.type	orzcc_va_list_copy, @function
 orzcc_va_list_copy:
@@ -223,18 +216,18 @@ orzcc_va_list_copy:
 	ld	a1,8(s1)
 	sd	a0,0(s0)
 	sd	s2,16(s0)
-	beq	a1,zero,.L32
+	beq	a1,zero,.L31
 	ld	a5,0(s1)
 	slli	a2,a1,3
 	mv	a4,a0
 	add	a2,a2,a5
-.L33:
+.L32:
 	ld	a3,0(a5)
 	addi	a5,a5,8
 	sd	a3,0(a4)
 	addi	a4,a4,8
-	bne	a5,a2,.L33
-.L32:
+	bne	a5,a2,.L32
+.L31:
 	ld	ra,24(sp)
 	mv	a0,s0
 	sd	a1,8(s0)
@@ -275,7 +268,7 @@ orzcc_init:
 	li	a1,0
 	call	pthread_barrier_init@plt
 	sw	zero,232(s0)
-.L41:
+.L40:
 	sext.w	a5,s1
 	slli	a0,s1,3
 	addi	a5,a5,52
@@ -288,10 +281,10 @@ orzcc_init:
 	li	a1,0
 	sw	zero,8(s0)
 	call	pthread_create@plt
-	beq	s1,s2,.L39
+	beq	s1,s2,.L38
 	ld	s0,0(s4)
-	j	.L41
-.L39:
+	j	.L40
+.L38:
 	ld	ra,40(sp)
 	ld	s0,32(sp)
 	ld	s1,24(sp)
@@ -328,7 +321,7 @@ orzcc_destroy:
 	ld	a0,0(s1)
 	addi	a0,a0,32
 	call	pthread_mutex_unlock@plt
-.L44:
+.L43:
 	slli	a4,s0,3
 	li	a1,0
 	ld	a5,0(s1)
@@ -336,7 +329,7 @@ orzcc_destroy:
 	add	a5,a5,a4
 	ld	a0,0(a5)
 	call	pthread_join@plt
-	bne	s0,s2,.L44
+	bne	s0,s2,.L43
 	ld	s0,0(s1)
 	addi	a0,s0,32
 	call	pthread_mutex_destroy@plt
@@ -399,7 +392,7 @@ orzcc_parallel_for:
 	addi	s9,a4,216
 	sd	a4,24(sp)
 	sd	a5,8(sp)
-.L51:
+.L50:
 	addw	a5,s11,s1
 	sext.w	t1,s11
 	sext.w	s11,a5
@@ -419,17 +412,17 @@ orzcc_parallel_for:
 	sd	a4,0(s10)
 	ld	a0,8(s0)
 	sd	s4,16(s10)
-	beq	a0,zero,.L49
+	beq	a0,zero,.L48
 	ld	a5,0(s0)
 	slli	a2,a0,3
 	add	a2,a2,a5
-.L50:
+.L49:
 	ld	a3,0(a5)
 	addi	a5,a5,8
 	sd	a3,0(a4)
 	addi	a4,a4,8
-	bne	a2,a5,.L50
-.L49:
+	bne	a2,a5,.L49
+.L48:
 	addi	s3,s3,8
 	addi	s9,s9,4
 	sd	a0,8(s10)
@@ -438,7 +431,7 @@ orzcc_parallel_for:
 	sd	s8,24(s10)
 	sw	a5,-4(s9)
 	ld	a5,8(sp)
-	bne	s3,a5,.L51
+	bne	s3,a5,.L50
 	ld	a5,24(sp)
 	addi	a0,a5,72
 	call	pthread_cond_broadcast@plt
@@ -451,14 +444,14 @@ orzcc_parallel_for:
 	ld	s3,0(s5)
 	addi	s1,s3,184
 	addi	s3,s3,216
-.L52:
+.L51:
 	ld	s2,0(s1)
 	addi	s1,s1,8
 	ld	a0,0(s2)
 	call	free@plt
 	mv	a0,s2
 	call	free@plt
-	bne	s3,s1,.L52
+	bne	s3,s1,.L51
 	ld	a0,0(s0)
 	call	free@plt
 	ld	s1,120(sp)
@@ -523,7 +516,7 @@ orzcc_parallel_for_reduce_add_int:
 	addi	s10,a4,216
 	sd	a4,24(sp)
 	sd	a5,8(sp)
-.L64:
+.L63:
 	ld	a5,0(sp)
 	sext.w	t3,s7
 	addw	a5,s7,a5
@@ -544,17 +537,17 @@ orzcc_parallel_for_reduce_add_int:
 	sd	a4,0(s11)
 	ld	a0,8(s0)
 	sd	s5,16(s11)
-	beq	a0,zero,.L62
+	beq	a0,zero,.L61
 	ld	a5,0(s0)
 	slli	a2,a0,3
 	add	a2,a2,a5
-.L63:
+.L62:
 	ld	a3,0(a5)
 	addi	a5,a5,8
 	sd	a3,0(a4)
 	addi	a4,a4,8
-	bne	a5,a2,.L63
-.L62:
+	bne	a5,a2,.L62
+.L61:
 	addi	s4,s4,8
 	addi	s10,s10,4
 	sd	a0,8(s11)
@@ -563,7 +556,7 @@ orzcc_parallel_for_reduce_add_int:
 	sd	s2,24(s11)
 	sw	a5,-4(s10)
 	ld	a5,8(sp)
-	bne	s4,a5,.L64
+	bne	s4,a5,.L63
 	ld	a5,24(sp)
 	addi	a0,a5,72
 	call	pthread_cond_broadcast@plt
@@ -576,7 +569,7 @@ orzcc_parallel_for_reduce_add_int:
 	ld	s4,0(s6)
 	addi	s2,s4,184
 	addi	s4,s4,216
-.L65:
+.L64:
 	ld	s3,0(s2)
 	addi	s2,s2,8
 	ld	a0,0(s3)
@@ -585,7 +578,7 @@ orzcc_parallel_for_reduce_add_int:
 	call	free@plt
 	mv	a0,s3
 	call	free@plt
-	bne	s4,s2,.L65
+	bne	s4,s2,.L64
 	ld	a0,0(s0)
 	call	free@plt
 	mv	a0,s0
@@ -607,135 +600,6 @@ orzcc_parallel_for_reduce_add_int:
 	addi	sp,sp,144
 	jr	ra
 	.size	orzcc_parallel_for_reduce_add_int, .-orzcc_parallel_for_reduce_add_int
-	.align	1
-	.globl	orzcc_parallel_for_reduce_add_float
-	.type	orzcc_parallel_for_reduce_add_float, @function
-orzcc_parallel_for_reduce_add_float:
-	addi	sp,sp,-160
-	sd	s5,104(sp)
-	lla	s5,.LANCHOR0
-	ld	a5,0(s5)
-	sd	s11,56(sp)
-	mv	s11,a0
-	addi	a0,a5,32
-	sd	s0,144(sp)
-	mv	s0,a3
-	sd	s1,136(sp)
-	sd	s2,128(sp)
-	li	s2,-1
-	sd	s3,120(sp)
-	srli	s2,s2,32
-	sd	s4,112(sp)
-	sd	s6,96(sp)
-	mv	s6,a1
-	sd	s7,88(sp)
-	sd	s9,72(sp)
-	fsd	fs0,40(sp)
-	fmv.s	fs0,fa0
-	sd	ra,152(sp)
-	sd	s8,80(sp)
-	sd	s10,64(sp)
-	sd	a2,16(sp)
-	call	pthread_mutex_lock@plt
-	subw	a5,s6,s11
-	sext.w	s11,s11
-	addiw	a5,a5,3
-	sraiw	s1,a5,31
-	srliw	s1,s1,30
-	ld	a4,0(s5)
-	addw	s1,s1,a5
-	lw	s4,16(s0)
-	addi	a5,a4,184
-	sraiw	s1,s1,2
-	slli	s7,s4,3
-	addi	s3,a4,152
-	addi	s9,a4,216
-	sd	a4,24(sp)
-	sd	a5,8(sp)
-.L77:
-	addw	a5,s11,s1
-	sext.w	t1,s11
-	sext.w	s11,a5
-	and	t1,t1,s2
-	ld	a4,16(sp)
-	li	a0,40
-	ble s11,s6,1f; mv a5,s6; 1: # movcc
-	slli	a5,a5,32
-	sd	a4,0(s3)
-	or	s8,t1,a5
-	call	malloc@plt
-	mv	s10,a0
-	mv	a0,s7
-	call	malloc@plt
-	sd	zero,8(s10)
-	mv	a4,a0
-	sd	a4,0(s10)
-	ld	a0,8(s0)
-	sd	s4,16(s10)
-	beq	a0,zero,.L75
-	ld	a5,0(s0)
-	slli	a2,a0,3
-	add	a2,a2,a5
-.L76:
-	ld	a3,0(a5)
-	addi	a5,a5,8
-	sd	a3,0(a4)
-	addi	a4,a4,8
-	bne	a5,a2,.L76
-.L75:
-	addi	s3,s3,8
-	addi	s9,s9,4
-	sd	a0,8(s10)
-	li	a5,1
-	sd	s10,24(s3)
-	sd	s8,24(s10)
-	sw	a5,-4(s9)
-	ld	a5,8(sp)
-	bne	s3,a5,.L77
-	ld	a5,24(sp)
-	addi	a0,a5,72
-	call	pthread_cond_broadcast@plt
-	ld	a0,0(s5)
-	addi	a0,a0,32
-	call	pthread_mutex_unlock@plt
-	ld	a0,0(s5)
-	addi	a0,a0,120
-	call	pthread_barrier_wait@plt
-	ld	s3,0(s5)
-	addi	s1,s3,184
-	addi	s3,s3,216
-.L78:
-	ld	s2,0(s1)
-	addi	s1,s1,8
-	ld	a0,0(s2)
-	flw	fa5,32(s2)
-	fadd.s	fs0,fs0,fa5
-	call	free@plt
-	mv	a0,s2
-	call	free@plt
-	bne	s3,s1,.L78
-	ld	a0,0(s0)
-	call	free@plt
-	mv	a0,s0
-	call	free@plt
-	ld	s0,144(sp)
-	ld	ra,152(sp)
-	fmv.s	fa0,fs0
-	ld	s1,136(sp)
-	ld	s2,128(sp)
-	ld	s3,120(sp)
-	ld	s4,112(sp)
-	ld	s5,104(sp)
-	ld	s6,96(sp)
-	ld	s7,88(sp)
-	ld	s8,80(sp)
-	ld	s9,72(sp)
-	ld	s10,64(sp)
-	ld	s11,56(sp)
-	fld	fs0,40(sp)
-	addi	sp,sp,160
-	jr	ra
-	.size	orzcc_parallel_for_reduce_add_float, .-orzcc_parallel_for_reduce_add_float
 	.bss
 	.align	3
 	.set	.LANCHOR0,. + 0
