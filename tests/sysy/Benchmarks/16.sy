@@ -1,0 +1,69 @@
+// polybench-c-4.2 linear-algebra/blas/syrk
+const int M = 1000;
+const int N = 1200;
+
+float C[N][N] = {};
+float A[N][M] = {};
+float alpha;
+float beta;
+
+void init() {
+    alpha = 1.5;
+    beta = 1.2;
+
+    int i = 0;
+    int j = 0;
+
+    while (i < N) {
+        j = 0;
+        while (j < M) {
+            A[i][j] = (i * j + 1) % N * 1.0 / N;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+
+    i = 0;
+    while (i < N) {
+        j = 0;
+        while (j < N) {
+            C[i][j] = (i * j + 2) % M * 1.0 / M;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+}
+
+void kernel_syrk() {
+    int i = 0;
+    int j = 0;
+    int k = 0;
+
+    while (i < N) {
+        j = 0;
+        while (j <= i) {
+            C[i][j] = C[i][j] * beta;
+            j = j + 1;
+        }
+
+        k = 0;
+        while (k < M) {
+            j = 0;
+            while (j <= i) {
+                C[i][j] = C[i][j] + alpha * A[i][k] * A[j][k];
+                j = j + 1;
+            }
+            k = k + 1;
+        }
+        i = i + 1;
+    }
+}
+
+int main() {
+    init();
+    starttime();
+    kernel_syrk();
+    stoptime();
+    putfloat(C[0][0]+C[1][0]+C[2][0]+C[3][0]);
+    return 0;
+}

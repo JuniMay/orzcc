@@ -1,0 +1,44 @@
+// polybench-c-4.2 linear-algebra/solvers/trisolv
+#include <stdio.h>
+const int n = 4000;
+float L[4000][4000];
+float x[4000];
+float b[4000];
+void kernel_trisolv(int n, float L[][4000], float x[], float b[]) {
+    int i = 0, j = 0;
+
+    while (i < n) {
+        x[i] = b[i];
+        j = 0;
+        while (j < i) {
+            x[i] = x[i] - L[i][j] * x[j];
+            j = j + 1;
+        }
+        x[i] = x[i] / L[i][i];
+        i = i + 1;
+    }
+}
+
+void init_array(int n, float L[][4000], float x[], float b[]) {
+    int i = 0, j = 0;
+    
+    while (i < n) {
+        x[i] = -999;
+        b[i] = i;
+        j = 0;
+        while (j <= i) {
+            L[i][j] = (i + n - j + 1) * 2.0 / n;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+}
+
+int main() {
+
+    init_array(n, L, x, b);
+    kernel_trisolv(n, L, x, b);
+    printf("%a", x[0]+x[1]+x[2]+x[3]+x[4]+1);
+
+    return 0;
+}

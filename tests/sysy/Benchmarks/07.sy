@@ -1,0 +1,77 @@
+// polybench-c-4.2: datamining.covariance
+const int N = 100;
+const int M = 100;
+
+float data[100][100] = {};
+float cov[100][100] = {};
+float mean[100] = {};
+float float_n;
+
+void init() {
+
+    float_n = N;
+
+    int i = 0;
+    int j = 0;
+
+    while (i < N) {
+        j = 0;
+        while (j < M) {
+            data[i][j] = (i * j) / M;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+}
+
+void kernel_covariance() {
+    int i, j, k;
+
+    j = 0;
+    while (j < M) {
+        mean[j] = 0.0;
+        i = 0;
+        while (i < N) {
+            mean[j] = mean[j] + data[i][j];
+            i = i + 1;
+        }
+        mean[j] = mean[j] / float_n;
+        j = j + 1;
+    }
+
+    i = 0;
+    while (i < N) {
+        j = 0;
+        while (j < M) {
+            data[i][j] = data[i][j] - mean[j];
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+
+    i = 0;
+    while (i < M) {
+        j = i;
+        while (j < M) {
+            cov[i][j] = 0.0;
+            k = 0;
+            while (k < N) {
+                cov[i][j] = cov[i][j] + (data[k][i] * data[k][j]);
+                k = k + 1;
+            }
+            cov[i][j] = cov[i][j] / (float_n - 1.0);
+            cov[j][i] = cov[i][j];
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+}
+
+int main() {
+    init();
+    starttime();
+    kernel_covariance();
+    stoptime();
+    putfloat(cov[0][0] + cov[1][1] + cov[2][2] + cov[3][3] + cov[4][4] + cov[5][5] + cov[6][6] + cov[7][7] + cov[8][8] + cov[9][9]);
+    return 0; 
+}

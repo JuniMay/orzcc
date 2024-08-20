@@ -1,0 +1,74 @@
+// polybench-c-4.2 linear-algebra/kernels/doitgen
+const int NR = 140;
+const int NQ = 140;
+const int NP = 160;
+
+float A[140][140][160] = {};
+float C4[160][160] = {};
+float sum[160] = {};
+
+void init() {
+    int i = 0, j = 0, k = 0;
+
+    while (i < NR) {
+        j = 0;
+        while (j < NQ) {
+            k = 0;
+            while (k < NP) {
+                A[i][j][k] = (i * j + k) % NP * 1.0 / NP;
+                k = k + 1;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+
+    i = 0;
+    while (i < NP) {
+        j = 0;
+        while (j < NP) {
+            C4[i][j] = (i * j % NP) * 1.0 / NP;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+}
+
+void kernel_doitgen() {
+    int r = 0, q = 0, p = 0, s = 0;
+
+    r = 0;
+    while (r < NR) {
+        q = 0;
+        while (q < NQ) {
+            p = 0;
+            while (p < NP) {
+                sum[p] = 0.0;
+                s = 0;
+                while (s < NP) {
+                    sum[p] = sum[p] + A[r][q][s] * C4[s][p];
+                    s = s + 1;
+                }
+                p = p + 1;
+            }
+
+            p = 0;
+            while (p < NP) {
+                A[r][q][p] = sum[p];
+                p = p + 1;
+            }
+
+            q = q + 1;
+        }
+        r = r + 1;
+    }
+}
+
+int main() {
+    init();
+    starttime();
+    kernel_doitgen();
+    stoptime();
+    putfloat(A[0][0][0]+A[1][1][1]+A[2][2][2]+A[3][3][3] + 88);
+    return 0;
+}

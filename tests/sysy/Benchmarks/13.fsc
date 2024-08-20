@@ -1,0 +1,57 @@
+// polybench-c-4.2 linear-algebra/blas/gesummv
+#include <stdio.h>
+const int N = 13000;
+
+float A[N][N] = {};
+float B[N][N] = {};
+float tmp[N] = {};
+float x[N] = {};
+float y[N] = {};
+float alpha;
+float beta;
+
+void init() {
+    int n = N;
+    alpha = 1.5;
+    beta = 1.2;
+
+    int i = 0;
+    int j = 0;
+    while (i < n) {
+        x[i] = i % n * 1.0 / n;
+        j = 0;
+        while (j < n) {
+            A[i][j] = (i * j + 1) % n * 1.0 / n;
+            B[i][j] = (i * j + 2) % n * 1.0 / n;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+}
+
+void kernel_gesummv() {
+    int i = 0;
+    int j = 0;
+    int n = N;
+
+    i = 0;
+    while (i < n) {
+        tmp[i] = 0.0;
+        y[i] = 0.0;
+        j = 0;
+        while (j < n) {
+            tmp[i] = A[i][j] * x[j] + tmp[i];
+            y[i] = B[i][j] * x[j] + y[i];
+            j = j + 1;
+        }
+        y[i] = alpha * tmp[i] + beta * y[i];
+        i = i + 1;
+    }
+}
+
+int main() {
+    init();
+    kernel_gesummv();
+    printf("%a",y[0]+y[1]+y[2]+y[3]+y[4]+A[0][0]+B[0][0]+x[0]);
+    return 0;
+}

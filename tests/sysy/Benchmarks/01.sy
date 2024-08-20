@@ -1,0 +1,44 @@
+// ICCG
+const int n = 88888; 
+int loop = 500; 
+// the length of x and v should be bigger than n + [n/2]
+int x[2 * n] = {}; 
+int v[2 * n]  = {};
+int ii, ipnt, ipntp, i;
+
+void kernel2() {
+    int l = 1;
+    while (l <= loop) {
+        ii = n;
+        ipntp = 0;
+        while (ii > 0) {
+            ipnt = ipntp;
+            ipntp = ipntp + ii;
+            ii = ii / 2;
+            i = ipntp - 1;
+
+            int k = ipnt + 1;
+            while (k < ipntp) {
+                i = i + 1;
+                x[i] = x[k] - v[k] * x[k - 1] - v[k + 1] * x[k + 1];
+                k = k + 2;
+            }
+        }
+        l = l + 1;
+    }
+}
+
+int main() {
+
+    int j = 0;
+    while (j < n) {
+        x[j] = j + 1;  
+        v[j] = j;      
+        j = j + 1;
+    }
+    starttime();
+    kernel2();
+    stoptime();
+    putint(x[0]);
+    return 0; // this should be equal to const n
+}

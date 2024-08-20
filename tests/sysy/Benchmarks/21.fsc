@@ -1,0 +1,61 @@
+// polybench-c-4.2 linear-algebra/kernels/bicg
+#include <stdio.h>
+const int M = 19000;
+const int N = 21000;
+
+float A[N][M] = {};
+float s[M] = {};
+float q[N] = {};
+float p[M] = {};
+float r[N] = {};
+
+void init() {
+    int i = 0;
+    int j = 0;
+
+    while (i < M) {
+        p[i] = (i % M) * 1.0 / M;
+        i = i + 1;
+    }
+
+    i = 0;
+    while (i < N) {
+        r[i] = (i % N) * 1.0 / N;
+        j = 0;
+        while (j < M) {
+            A[i][j] = (i * (j + 1) % N) * 1.0 / N;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+}
+
+void kernel_bicg() {
+    int i = 0;
+    int j = 0;
+
+    i = 0;
+    while (i < M) {
+        s[i] = 0.0;
+        i = i + 1;
+    }
+
+    i = 0;
+    while (i < N) {
+        q[i] = 0.0;
+        j = 0;
+        while (j < M) {
+            s[j] = s[j] + r[i] * A[i][j];
+            q[i] = q[i] + A[i][j] * p[j];
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+}
+
+int main() {
+    init();
+    kernel_bicg();
+    printf("%a", q[0] + s[0] + s[512]);
+    return 0;
+}

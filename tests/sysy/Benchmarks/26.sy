@@ -1,0 +1,94 @@
+// polybench-c-4.2 linear-algebra/solvers/gramschmidt
+int m = 1000;
+int n = 1000;
+float A[1000][1000];
+float R[1000][1000];
+float Q[1000][1000];
+
+float sqrt(float x) {
+    float guess = 1.0;
+    float epsilon = 0.0001;
+    int max_iter = 20;
+    int iter = 0;
+
+    while (iter < max_iter) {
+        guess = (guess + x / guess) / 2;
+        if ((guess * guess - x) < epsilon) {
+            break;
+        }
+        iter = iter + 1;
+    }
+
+    return guess;
+}
+
+void kernel_gramschmidt(int m, int n, float A[][1000], float R[][1000], float Q[][1000]) {
+    int i, j, k;
+    float nrm;
+
+    k = 0;
+    while (k < n) {
+        nrm = 0.0;
+        i = 0;
+        while (i < m) {
+            nrm = nrm + A[i][k] * A[i][k];
+            i = i + 1;
+        }
+        R[k][k] = sqrt(nrm);
+        i = 0;
+        while (i < m) {
+            Q[i][k] = A[i][k] / R[k][k];
+            i = i + 1;
+        }
+        j = k + 1;
+        while (j < n) {
+            R[k][j] = 0.0;
+            i = 0;
+            while (i < m) {
+                R[k][j] = R[k][j] + Q[i][k] * A[i][j];
+                i = i + 1;
+            }
+            i = 0;
+            while (i < m) {
+                A[i][j] = A[i][j] - Q[i][k] * R[k][j];
+                i = i + 1;
+            }
+            j = j + 1;
+        }
+        k = k + 1;
+    }
+}
+
+void init_array(int m, int n, float A[][1000], float R[][1000], float Q[][1000]) {
+    int i, j;
+    i = 0;
+    while (i < m) {
+        j = 0;
+        while (j < n) {
+            A[i][j] = (((i * j) % m) * 1.0 / m) * 100 + 10;
+            Q[i][j] = 0.0;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    i = 0;
+    while (i < n) {
+        j = 0;
+        while (j < n) {
+            R[i][j] = 0.0;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+}
+
+int main() {
+
+    init_array(m, n, A, R, Q);
+    starttime();
+    kernel_gramschmidt(m, n, A, R, Q);
+    stoptime();
+
+    putfloat(Q[0][0]+ Q[1][1]+ Q[2][2]+ Q[3][3]+ Q[4][4]);
+    return 0;
+}

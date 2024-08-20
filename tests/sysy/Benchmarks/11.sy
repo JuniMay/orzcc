@@ -1,0 +1,80 @@
+// polybench-c-4.2 linear-algebra/blas/gemm
+const int NI = 100;
+const int NJ = 100;
+const int NK = 100;
+
+float C[100][100] = {}; 
+float A[100][100] = {}; 
+float B[100][100] = {}; 
+float alpha;
+float beta;
+
+void init() {
+    alpha = 1.5;
+    beta = 1.2;
+    int i = 0;
+    int j = 0;
+
+    while (i < NI) {
+        j = 0;
+        while (j < NJ) {
+            C[i][j] = (i * j + 1) % NI * 1.0 / NI;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+
+    i = 0;
+    while (i < NI) {
+        j = 0;
+        while (j < NK) {
+            A[i][j] = (i * j + 1) % NK * 1.0 / NK;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+
+    i = 0;
+    while (i < NK) {
+        j = 0;
+        while (j < NJ) {
+            B[i][j] = (i * j + 2) % NJ * 1.0 / NJ ;
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+}
+
+void kernel_gemm() {
+    int i = 0;
+    int j = 0;
+    int k = 0;
+
+    while (i < NI) {
+        j = 0;
+        while (j < NJ) {
+            C[i][j] = C[i][j] * beta;
+            j = j + 1;
+        }
+
+        k = 0;
+        while (k < NK) {
+            j = 0;
+            while (j < NJ) {
+                C[i][j] = C[i][j] + alpha * A[i][k] * B[k][j];
+                j = j + 1;
+            }
+            k = k + 1;
+        }
+        i = i + 1;
+    }
+}
+
+int main() {
+    init();       
+    starttime(); 
+    kernel_gemm();
+    stoptime();
+    putfloat(C[0][0]+C[0][1]+C[0][2]+C[0][3]+C[0][4]+C[88][88]+A[0][0]+A[1][1]+A[2][2]+20);
+    return 0;  
+}
