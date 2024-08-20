@@ -3,7 +3,7 @@
 /.idea/*
 
 /.vscode/*
-# !settings.json
+!settings.json
 
 /tests/sysy/*
 !/tests/sysy/sysy-runtime-lib
@@ -23,5 +23,3 @@
 /scripts/__pycache__/*
 
 lcov.info
-
-polybench-c-4.2/*

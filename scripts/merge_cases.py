@@ -3,32 +3,32 @@ import shutil
 
 # merge all performance cases (include the final performance cases) into one directory
 # source_dirs = [
-#     '/Users/fengsicheng/Desktop/orzcc/tests/testcases/2023/performance',
-#     '/Users/fengsicheng/Desktop/orzcc/tests/testcases/2022/performance',
-#     '/Users/fengsicheng/Desktop/orzcc/tests/testcases/2021/performance_test2021-private',
-#     '/Users/fengsicheng/Desktop/orzcc/tests/testcases/2021/performance_test2021-public',
-#     '/Users/fengsicheng/Desktop/orzcc/tests/testcases/2021/2021初赛所有用例/performance',
-#     '/Users/fengsicheng/Desktop/orzcc/tests/testcases/2020/section1/performance_test',
-#     '/Users/fengsicheng/Desktop/orzcc/tests/testcases/2020/section2/performance_test',
-#     '/Users/fengsicheng/Desktop/orzcc/tests/testcases/2023/final_performance',
-#     '/Users/fengsicheng/Desktop/orzcc/tests/testcases/2022/final_performance',
+#     './tests/testcases/2023/performance',
+#     './tests/testcases/2022/performance',
+#     './tests/testcases/2021/performance_test2021-private',
+#     './tests/testcases/2021/performance_test2021-public',
+#     './tests/testcases/2021/2021初赛所有用例/performance',
+#     './tests/testcases/2020/section1/performance_test',
+#     './tests/testcases/2020/section2/performance_test',
+#     './tests/testcases/2023/final_performance',
+#     './tests/testcases/2022/final_performance',
 # ]
-# output_dir = '/Users/fengsicheng/Desktop/orzcc/tests/testcases/union/performance'
+# output_dir = './tests/testcases/union/performance'
 
 # merge all functional cases into one directory
 source_dirs = [
-    '/Users/fengsicheng/Desktop/orzcc/tests/testcases/2023/functional',
-    '/Users/fengsicheng/Desktop/orzcc/tests/testcases/2023/hidden_functional',
-    '/Users/fengsicheng/Desktop/orzcc/tests/testcases/2022/functional',
-    '/Users/fengsicheng/Desktop/orzcc/tests/testcases/2022/hidden_functional',
-    '/Users/fengsicheng/Desktop/orzcc/tests/testcases/2021/function_test2020',
-    '/Users/fengsicheng/Desktop/orzcc/tests/testcases/2021/function_test2021',
-    '/Users/fengsicheng/Desktop/orzcc/tests/testcases/2021/2021初赛所有用例/functional',
-    '/Users/fengsicheng/Desktop/orzcc/tests/testcases/2021/2021初赛所有用例/h_functional',
-    '/Users/fengsicheng/Desktop/orzcc/tests/testcases/2020/section1/functional_test',
+    './tests/testcases/2023/functional',
+    './tests/testcases/2023/hidden_functional',
+    './tests/testcases/2022/functional',
+    './tests/testcases/2022/hidden_functional',
+    './tests/testcases/2021/function_test2020',
+    './tests/testcases/2021/function_test2021',
+    './tests/testcases/2021/2021初赛所有用例/functional',
+    './tests/testcases/2021/2021初赛所有用例/h_functional',
+    './tests/testcases/2020/section1/functional_test',
 ]
 
-output_dir = '/Users/fengsicheng/Desktop/orzcc/tests/testcases/union/function'
+output_dir = './tests/testcases/union/function'
 
 
 # 创建输出目录如果它不存在
