@@ -10,7 +10,7 @@
 !/tests/sysy/sysy-runtime-lib-fix
 !/tests/sysy/functional
 !/tests/sysy/hidden-functional
-!/tests/sysy/external_test
+!/tests/sysy/Benchmarks
 
 /tests/testcases/*
 
