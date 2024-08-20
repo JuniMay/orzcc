@@ -561,7 +561,8 @@ fn parse_args(passman: &mut PassManager) -> CliCommand {
         combine_stack_adjustments,
     };
 
-    let aggressive = matches.get_count("aggressive") > 0;
+    // let aggressive = matches.get_count("aggressive") > 0;
+    let aggressive = true;
 
     CliCommand {
         output,
