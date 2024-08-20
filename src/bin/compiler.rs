@@ -383,7 +383,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         lower_ctx.lower();
 
         if cmd.opt > 0 {
-            riscv64::run_peephole(lower_ctx.mctx_mut(), &cmd.lower_cfg, cmd.aggressive);
+            riscv64::run_peephole(lower_ctx.mctx_mut(), &cmd.lower_cfg, true);
             SimplifyCfg::run(lower_ctx.mctx_mut(), &cmd.lower_cfg);
             RegisterCoalescing::run::<RvLowerSpec>(&mut lower_ctx, &cmd.lower_cfg);
             schedule(lower_ctx.mctx_mut(), &cmd.lower_cfg, Some(128));
@@ -561,8 +561,7 @@ fn parse_args(passman: &mut PassManager) -> CliCommand {
         combine_stack_adjustments,
     };
 
-    // let aggressive = matches.get_count("aggressive") > 0;
-    let aggressive = true;
+    let aggressive = matches.get_count("aggressive") > 0;
 
     CliCommand {
         output,
